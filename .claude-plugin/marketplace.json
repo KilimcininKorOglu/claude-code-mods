@@ -61,6 +61,19 @@
         "prompt-cache",
         "cost"
       ]
+    },
+    {
+      "name": "prompt-time",
+      "source": "./plugins/prompt-time",
+      "description": "Draws the time under each of your messages and each text block of the model's replies in the transcript, the time alone for today and the date too for older ones, also for the messages of a resumed session. Display only: nothing reaches the model.",
+      "category": "productivity",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "transcript",
+        "ui"
+      ]
     }
   ]
 }

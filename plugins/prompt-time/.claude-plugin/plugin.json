@@ -1,0 +1,11 @@
+{
+  "name": "prompt-time",
+  "version": "0.1.0",
+  "description": "Draws the time under each of your messages and each text block of the model's replies in the transcript, also for a resumed session. Display only: nothing reaches the model. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}
