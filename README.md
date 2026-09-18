@@ -1,0 +1,50 @@
+# claude-code-mods
+
+Claude Mods for Claude Code. A Claude Mod is a Claude Code plugin whose `hooks/hooks.json` names a TypeScript module. The module exports `register(on)`, and each hook is `on("event", matcher, async ($, e, next) => result)`. `$` is the engine interface, `e` is the event, and `next(e)` runs every hook beneath and then the engine.
+
+Function hooks are early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` is set, and the API can change between releases.
+
+## Install
+
+```sh
+claude plugin marketplace add KilimcininKorOglu/claude-code-mods
+claude plugin install <mod>@kilimcininkoroglu-mods
+```
+
+## Mods
+
+None yet.
+
+## Layout
+
+```
+.claude-plugin/marketplace.json   marketplace manifest, one entry per mod
+plugins/<mod>/                    one directory per mod
+  .claude-plugin/plugin.json      plugin manifest
+  hooks/hooks.json                names the module: "modules": ["./register.ts"]
+  hooks/register.ts               exports register(on)
+  tests/register.test.ts          tests with claude-code/testing
+  tsconfig.json
+  README.md                       validator output and threat model
+templates/mod/                    the template that make new-mod copies
+```
+
+## Development
+
+```sh
+make new-mod NAME=my-mod DESC='One sentence about what it does.'
+make validate
+make test
+```
+
+Load a mod for one session:
+
+```sh
+CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/<mod>
+```
+
+Run `/plugin-types` inside that session to write `.claude/types/` for type checking. The directory is version-specific and git-ignored.
+
+## License
+
+MIT. See `LICENSE`.

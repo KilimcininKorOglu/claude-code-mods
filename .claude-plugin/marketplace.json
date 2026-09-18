@@ -1,0 +1,10 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "kilimcininkoroglu-mods",
+  "description": "Claude Mods (function-hooks plugins) for Claude Code.",
+  "owner": {
+    "name": "KilimcininKorOglu",
+    "url": "https://github.com/KilimcininKorOglu"
+  },
+  "plugins": []
+}
