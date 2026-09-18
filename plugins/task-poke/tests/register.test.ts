@@ -7,13 +7,22 @@ import type {
   SessionStartInput,
   ToolUseSummary,
   TurnCompleteInput,
+  TurnCompleteReason,
 } from 'claude-code'
 
 tier('user')
 
 const session: SessionStartInput = { surface: 'terminal', isInteractive: true, cwd: '/work' }
-const turn = (over: Partial<TurnCompleteInput> = {}): TurnCompleteInput =>
-  ({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer', ...over }) as TurnCompleteInput
+// Every reason but 'refusal', which needs a refusal payload. No test drives a refused turn.
+type TurnOver = { reason?: Exclude<TurnCompleteReason, 'refusal'>; isAborted?: boolean; agentId?: string }
+const turn = (over: TurnOver = {}): TurnCompleteInput => ({
+  answer: 'done',
+  durationMs: 10,
+  isAborted: false,
+  turnId: 't1',
+  reason: 'answer',
+  ...over,
+})
 const typed = (): PromptSubmitInput => ({ text: 'go on', wait: false, origin: { kind: 'composer' } })
 const run = (args: string): CommandRunInput => ({
   command: 'task-poke',
@@ -44,18 +53,18 @@ function world(on: On): World {
     messages = m
   }
   mock.store(on, {})
-  on('session.start', ($, e) => ({ cwd: e.cwd }))
-  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.messages', () => ({ value: messages }))
-  on('ui.log', ($, e) => {
+  on('ui.log', (_, e) => {
     w.logs.push(e.text)
     return { value: undefined }
   })
-  on('prompt.submit', ($, e) => {
+  on('prompt.submit', (_, e) => {
     w.submitted.push(e.text)
     return { text: e.text }
   })
-  on('turn.complete', ($, e) => ({ text: e.answer }))
+  on('turn.complete', (_, e) => ({ text: e.answer }))
   return w
 }
 

@@ -52,7 +52,7 @@ export const register: Register = on => {
   })
 
   // Only the origin is read. The prompt text passes through untouched. This hook never sees its own pokes.
-  on('prompt.submit', async ($, e, next) => {
+  on('prompt.submit', async (_, e, next) => {
     const r = await next(e)
     if (USER_ORIGINS.includes(e.origin.kind)) resetCount()
     return r
