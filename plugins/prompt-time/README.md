@@ -60,7 +60,8 @@ Reach L1, reads the transcript.
 
 - A mod loaded in the middle of a session shows no time under the messages that were already on the screen, because it reads the transcript only at session start.
 - A user row takes the prompt's time by matching text. The engine draws a new prompt twice, first as `placeholder` and then under its stored id, so every new row with the prompt's text takes the time until the next prompt. A notification row with a different text does not.
-- A reply block takes its time when it is first drawn during a turn. In the live check the last block of a turn was drawn before `turn.complete`. A block first drawn after its turn has ended shows no time until the session is resumed.
+- A reply block takes its time when it is first drawn during a turn. The engine can draw the last block of a turn for the first time a few milliseconds after `turn.complete` (seen on 2.1.277), so the first new block whose text equals the turn's final text takes the time the turn ended. Any other block first drawn after its turn has ended shows no time until the session is resumed.
+- A thinking block shows no time. Claude Code 2.1.277 has no `ui.render` site for thinking, only for the text blocks of a reply (`AssistantMessage`).
 - The time is the local time of the machine that runs Claude Code.
 - The test engine of `claude plugin test` cannot raise `classic.SessionStart`. The transcript read is covered by unit tests of `indexTranscript` and by a live resume check.
 

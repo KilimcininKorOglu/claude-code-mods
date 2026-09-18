@@ -14,6 +14,12 @@ interface State {
   pending: { at: number; text: string } | null
   /** Turns running now; a reply block first drawn while one runs is being written. */
   turns: Set<string>
+  /**
+   * The final text of the last main-loop turn and when it ended. The engine
+   * can draw that block for the first time just after `turn.complete`, so the
+   * first unknown block with this text takes this time.
+   */
+  ended: { at: number; text: string } | null
 }
 
 /** Sources whose transcript already holds the messages the session shows. */
@@ -50,12 +56,21 @@ function sentAt(state: State, id: string, text: string): number | undefined {
   return state.pending.at
 }
 
-/** The time of a reply block; a block first drawn while a turn runs is written now. */
-function writtenAt(state: State, id: string, now: number): number | undefined {
+/**
+ * The time of a reply block: a block first drawn while a turn runs is written
+ * now, and the turn's final block first drawn after it ended takes its end.
+ */
+function writtenAt(state: State, id: string, text: string, now: number): number | undefined {
   const known = state.times.get(id)
-  if (known !== undefined || state.turns.size === 0) return known
-  state.times.set(id, now)
-  return now
+  if (known !== undefined) return known
+  let at: number | undefined
+  if (state.turns.size > 0) at = now
+  else if (state.ended !== null && state.ended.text === text.trim()) {
+    at = state.ended.at
+    state.ended = null
+  }
+  if (at !== undefined) state.times.set(id, at)
+  return at
 }
 
 /** The engine's drawing with the time in a dim line beneath it. */
@@ -70,7 +85,7 @@ function stamped($: EngineInterface, e: RenderInput, drawn: RenderElement, at: n
 }
 
 export const register: Register = on => {
-  const state: State = { times: new Map(), seen: new Set(), pending: null, turns: new Set() }
+  const state: State = { times: new Map(), seen: new Set(), pending: null, turns: new Set(), ended: null }
 
   on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
@@ -91,11 +106,14 @@ export const register: Register = on => {
 
   on('turn.start', async (_, e, next) => {
     state.turns.add(e.turnId)
+    state.ended = null
     return next(e)
   })
 
-  on('turn.complete', async (_, e, next) => {
+  on('turn.complete', async ($, e, next) => {
     state.turns.delete(e.turnId)
+    // A subagent's final text is not a block of the main transcript.
+    if (e.agentId === undefined) state.ended = { at: await $.clock.now(), text: e.answer.trim() }
     return next(e)
   })
 
@@ -108,7 +126,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const drawn = await next(e)
     const now = await $.clock.now()
-    const at = writtenAt(state, e.requestId, now)
+    const at = writtenAt(state, e.requestId, e.props.text, now)
     return at === undefined ? drawn : stamped($, e, drawn, at, now)
   })
 }

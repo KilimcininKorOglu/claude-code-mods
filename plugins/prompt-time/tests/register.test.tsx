@@ -118,4 +118,21 @@ describe('prompt-time', () => {
     const ui = await reply($, 'a1', 'old reply')
     expect(await ui.drawn()).toMatchObject({ type: 'Text' })
   })
+
+  test('the final block first drawn just after its turn ended takes the time, once', async ($, on) => {
+    world(on)
+    await $.turn.start({ text: 'hello', turnId: 't1' })
+    await $.turn.complete({ ...done('t1'), answer: 'Last block.\n' })
+    const last = await reply($, 'a1', 'Last block.')
+    expect(await last.find({ type: 'Text', text: LABEL })).toBeDefined()
+    const again = await reply($, 'a2', 'Last block.')
+    expect(await again.drawn()).toMatchObject({ type: 'Text' })
+  })
+
+  test('a subagent\'s final text gives no time to a block of the main transcript', async ($, on) => {
+    world(on)
+    await $.turn.complete({ ...done('t2'), answer: 'Found it.', agentId: 'a9' })
+    const ui = await reply($, 'a1', 'Found it.')
+    expect(await ui.drawn()).toMatchObject({ type: 'Text' })
+  })
 })
