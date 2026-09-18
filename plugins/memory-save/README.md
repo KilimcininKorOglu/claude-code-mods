@@ -46,7 +46,7 @@ The project name is the primary repository name, also inside a git worktree, els
 
 `MEMORY.md` has exactly these sections, in this order: `## CRITICAL RULES`, `## Architecture & Config Facts`, `## Active Warnings`, `## Topic Files`. A new file starts from this skeleton.
 
-A file without `## CRITICAL RULES` is in an older format. For such a file the fork writes the whole new file once. The mod keeps the old file as `MEMORY.pre-migration.md` next to it.
+A file without exactly these four sections in this order is in another format: an older file, a missing section, an extra `## ` section or a changed order. For such a file the fork writes the whole new file once. The mod keeps the old file as `MEMORY.pre-migration.md` next to it; a later migration replaces that copy. A file in the format is never rewritten whole.
 
 ## What is checked before a write
 

@@ -151,11 +151,14 @@ describe('apply', () => {
     expect(again.text.split('history.md')).toHaveLength(2)
   })
 
-  test('allows a rewrite only for a file without CRITICAL RULES', async () => {
+  test('allows a rewrite only for a file without the four sections in order', async () => {
     const old = '# demo\n\n## Overview\n\n- Old fact.\n'
-    const migrated = apply('demo', old, reply({ rewrite: skeleton('demo') }))
-    if (!migrated.ok || !migrated.changed) throw new Error('expected a change')
-    expect(migrated.changes.migrated).toBe(true)
+    const noWarnings = FILE.replace('## Active Warnings\n\n- None yet.\n\n', '')
+    for (const current of [old, noWarnings, `${FILE}\n## Notes\n`]) {
+      const migrated = apply('demo', current, reply({ rewrite: skeleton('demo') }))
+      if (!migrated.ok || !migrated.changed) throw new Error('expected a change')
+      expect(migrated.changes.migrated).toBe(true)
+    }
     expect(apply('demo', FILE, reply({ rewrite: skeleton('demo') })).ok).toBe(false)
     expect(apply('demo', undefined, reply({ rewrite: skeleton('demo') })).ok).toBe(false)
   })
@@ -193,7 +196,18 @@ describe('buildPrompt', () => {
   test('asks for a rewrite of a file in the old format', async () => {
     const p = buildPrompt('demo', '# demo\n\n## Overview\n')
     expect(p).toContain('MANDATORY MIGRATION')
+    expect(p).toContain('(found: Overview)')
     expect(p).toContain('{"rewrite": "<the whole new MEMORY.md>"')
+  })
+
+  test('asks for a rewrite of a file with CRITICAL RULES but another template', async () => {
+    const noWarnings = FILE.replace('## Active Warnings\n\n- None yet.\n\n', '')
+    const swapped = FILE.replace('## CRITICAL RULES', '## TMP').replace('## Active Warnings', '## CRITICAL RULES').replace('## TMP', '## Active Warnings')
+    for (const current of [noWarnings, `${FILE}\n## Notes\n`, swapped]) {
+      const p = buildPrompt('demo', current)
+      expect(p).toContain('MANDATORY MIGRATION')
+      expect(p).toContain('{"rewrite": "<the whole new MEMORY.md>"')
+    }
   })
 
   test('asks for an offload near the limit and names long bullets', async () => {

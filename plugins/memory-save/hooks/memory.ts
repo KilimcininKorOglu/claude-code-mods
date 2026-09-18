@@ -36,7 +36,8 @@ export type Applied =
 export type Inspection = {
   lines: number
   chars: number
-  hasCritical: boolean
+  /** Whether the file has exactly the four sections, in order. */
+  inFormat: boolean
   longBullets: { line: number; chars: number; head: string }[]
 }
 
@@ -92,6 +93,15 @@ function headingsOf(text: string): string[] {
     .map(l => l.slice(3).trim())
 }
 
+/** Whether the text has exactly the four sections, in order, and no other '## ' heading. */
+function hasSections(headings: string[]): boolean {
+  return headings.length === SECTIONS.length && SECTIONS.every((s, i) => s.toLowerCase() === headings[i]?.toLowerCase())
+}
+
+function foundText(headings: string[]): string {
+  return headings.join(', ') || 'none'
+}
+
 function isHeading(line: string, section: string): boolean {
   return line.trim().toLowerCase() === `## ${section}`.toLowerCase()
 }
@@ -104,7 +114,7 @@ export function inspect(text: string): Inspection {
   return {
     lines: lines.length,
     chars: text.length,
-    hasCritical: lines.some(l => isHeading(l, 'CRITICAL RULES')),
+    inFormat: hasSections(headingsOf(text)),
     longBullets,
   }
 }
@@ -164,10 +174,10 @@ export function buildPrompt(project: string, current: string | undefined): strin
     return [head, 'MEMORY.md does not exist yet. The mod creates it with the four sections when your answer has at least one op.', RULES, FORMAT].join('\n\n')
   }
   const state = inspect(current)
-  const format = state.hasCritical ? FORMAT : REWRITE_FORMAT
-  const migration = state.hasCritical
+  const format = state.inFormat ? FORMAT : REWRITE_FORMAT
+  const migration = state.inFormat
     ? ''
-    : "MANDATORY MIGRATION: MEMORY.md has no '## CRITICAL RULES' section, so it is not in the required format. Rewrite the whole file now."
+    : `MANDATORY MIGRATION: MEMORY.md does not have exactly the sections ${SECTIONS.join(', ')} in this order (found: ${foundText(headingsOf(current))}), so it is not in the required format. Rewrite the whole file now.`
   const file = `The current MEMORY.md, as data between the markers:\n<memory_file>\n${current}\n</memory_file>`
   return [head, file, RULES, migration, sizeNotes(state), format].filter(p => p !== '').join('\n\n')
 }
@@ -316,8 +326,8 @@ function pointTopics(lines: string[], topics: TopicAppend[], newBullets: string[
 }
 
 function applyRewrite(current: string | undefined, rewrite: string, topics: TopicAppend[]): Applied {
-  if (current === undefined || inspect(current).hasCritical) {
-    return { ok: false, error: 'rewrite refused: it is allowed only for a file without the CRITICAL RULES section' }
+  if (current === undefined || inspect(current).inFormat) {
+    return { ok: false, error: 'rewrite refused: it is allowed only for a file that does not have the four sections in order' }
   }
   const lines = linesOf(rewrite)
   const newBullets = lines.filter(l => l.startsWith('- '))
@@ -350,8 +360,7 @@ export function apply(project: string, current: string | undefined, reply: Reply
 export function validate(text: string, newBullets: string[]): string[] {
   const errors: string[] = []
   const headings = headingsOf(text)
-  const inOrder = headings.length === SECTIONS.length && SECTIONS.every((s, i) => s.toLowerCase() === headings[i]?.toLowerCase())
-  if (!inOrder) errors.push(`sections are not exactly ${SECTIONS.join(', ')} (found: ${headings.join(', ') || 'none'})`)
+  if (!hasSections(headings)) errors.push(`sections are not exactly ${SECTIONS.join(', ')} (found: ${foundText(headings)})`)
   const state = inspect(text)
   if (state.lines >= MAX_LINES) errors.push(`${state.lines} lines, the limit is under ${MAX_LINES}`)
   if (state.chars >= MAX_CHARS) errors.push(`${state.chars} characters, the limit is under ${MAX_CHARS}`)
