@@ -9,6 +9,11 @@ It reads both task formats:
 
 A later `TodoWrite` replaces any state built from the Task tools.
 
+## Requirements
+
+- Claude Code offers the task-tracking tools only on Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6 and Haiku 4.5. Set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` for every other model, because without a task tool the mod has nothing to count and never pokes.
+- `CLAUDE_CODE_ENABLE_TASKS=false` replaces the Task tools with `TodoWrite`. The mod reads both.
+
 ## When it does not poke
 
 - The turn was interrupted, refused, or ended on an API error (`reason` is not `answer`).
