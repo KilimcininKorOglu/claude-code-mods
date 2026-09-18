@@ -35,6 +35,19 @@
         "statusline",
         "pane"
       ]
+    },
+    {
+      "name": "memory-save",
+      "source": "./plugins/memory-save",
+      "description": "Saves project learnings to ~/.cli-tweaks/memory/<project>/MEMORY.md after every main-loop turn through a tool-less $.model.fork in the background, so the stop is never blocked and no memory edit reaches the transcript. Shows the result on its status line.",
+      "category": "productivity",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "memory",
+        "background"
+      ]
     }
   ]
 }

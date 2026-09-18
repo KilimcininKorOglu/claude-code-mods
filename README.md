@@ -17,6 +17,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 |---|---|---|
 | [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 5 times in a row. | L2 |
 | [limit-watch](plugins/limit-watch) | Shows the 5-hour and 7-day usage limits under the prompt with a reset countdown and a forecast, opens a `/limits` pane, and warns at 80% and 95%. | L0 |
+| [memory-save](plugins/memory-save) | Saves project learnings to `MEMORY.md` after every turn through a tool-less fork in the background, without blocking the stop. | L2 |
 
 ## Layout
 
