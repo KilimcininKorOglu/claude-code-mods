@@ -42,7 +42,7 @@ function applyUse(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
     case 'TaskCreate':
       return withCreate(tasks, use)
     case 'TaskUpdate':
-      return withUpdate(tasks, use.input)
+      return withUpdate(tasks, use)
     default:
       return tasks
   }
@@ -67,9 +67,12 @@ function withCreate(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
 }
 
 // Claude Code repairs id and task_id to taskId before it runs the tool, but the transcript keeps the raw input.
-function withUpdate(tasks: Tasks | null, input: Record<string, unknown>): Tasks | null {
+// A failed update (an unknown taskId) is not an error result: its record is { success: false, error }.
+function withUpdate(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
+  const input = use.input
   const id = input.taskId ?? input.id ?? input.task_id
   if (input.status === undefined || id === undefined) return tasks
+  if (field(use.result, 'success') === false) return tasks
   const next = new Map(tasks ?? [])
   if (input.status === 'deleted') next.delete(String(id))
   else next.set(String(id), parseStatus(input.status))

@@ -106,6 +106,20 @@ describe('task-poke', () => {
     expect(w.submitted).toHaveLength(0)
   })
 
+  test('ignores a TaskUpdate that failed on an unknown taskId', async ($, on) => {
+    const w = world(on)
+    const failed = use(
+      'TaskUpdate',
+      { taskId: '99', status: 'in_progress' },
+      { success: false, taskId: '99', updatedFields: [], error: 'Task not found' },
+    )
+    w.setMessages([assistant(created('1')), assistant(updated('1', 'completed'), failed)])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(0)
+  })
+
   test('a later TodoWrite replaces the Task tools state', async ($, on) => {
     const w = world(on)
     w.setMessages([assistant(created('1')), todoWrite('completed')])
