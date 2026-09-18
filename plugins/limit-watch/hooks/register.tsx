@@ -1,0 +1,146 @@
+import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
+import {
+  barCells,
+  barColor,
+  clockText,
+  durationText,
+  forecast,
+  forecastText,
+  markWarned,
+  newThresholds,
+  pace,
+  paceText,
+  parseTracks,
+  percentText,
+  profile,
+  record,
+  resetTime,
+  statusLine,
+  warningText,
+  type Tracks,
+} from './limits.ts'
+
+const PANE_ID = 'limit-watch'
+const TRACKS_KEY = 'tracks'
+const TICK_MS = 60_000
+/** The most body rows one limit takes in the pane: heading, bar, reset, pace, forecast, blank line. */
+const ROWS_PER_LIMIT = 6
+
+type Elements = ReturnType<EngineInterface['ui']['resolve']>
+
+/** What the hooks share: the last reading, the tracks kept in the store, and the last timer error. */
+type State = { limits: readonly SessionRateLimit[]; tracks: Tracks; lastError?: string }
+
+/** Logs each threshold the last sample passed for the first time in its cycle, and marks it. */
+function warn($: EngineInterface, state: State, now: number): void {
+  for (const limit of state.limits) {
+    const track = state.tracks[limit.kind]
+    const levels = track === undefined ? [] : newThresholds(track, limit.percentUsed)
+    const top = levels.at(0)
+    if (top === undefined) continue
+    $.ui.log(warningText(limit, top, now))
+    state.tracks = markWarned(state.tracks, limit.kind, levels)
+  }
+}
+
+/** Reads the limits, records a sample, raises new warnings, stores the tracks and redraws. */
+async function sample($: EngineInterface, state: State): Promise<void> {
+  const usage = await $.session.usage()
+  const now = await $.clock.now()
+  state.limits = usage.rateLimits
+  state.tracks = record(state.tracks, state.limits, now)
+  warn($, state, now)
+  await $.store.set(TRACKS_KEY, state.tracks)
+  $.ui.status(statusLine(state.limits, state.tracks, now))
+  $.ui.invalidate('ui.render')
+}
+
+/** A timer sample has no hook to fail, so its error is logged. The same error is logged once. */
+function sampleOnTick($: EngineInterface, state: State): void {
+  sample($, state).then(
+    () => {
+      state.lastError = undefined
+    },
+    (err: unknown) => {
+      const text = err instanceof Error ? err.message : String(err)
+      if (text !== state.lastError) $.ui.log(`cannot read the usage limits: ${text}`)
+      state.lastError = text
+    },
+  )
+}
+
+export const register: Register = on => {
+  const state: State = { limits: [], tracks: {} }
+
+  on('session.start', async ($, e, next) => {
+    const r = await next(e)
+    const stored = parseTracks(await $.store.get(TRACKS_KEY))
+    if (stored === undefined) $.ui.log('the stored samples have an unknown shape, so the pace starts over')
+    state.tracks = stored ?? {}
+    await $.command.register({
+      name: 'limits',
+      description: 'Open or close the usage limits pane (limit-watch)',
+      immediate: true,
+    })
+    await sample($, state)
+    // A -p run draws nothing, so only an interactive session samples on a timer.
+    if (e.isInteractive) $.clock.every(TICK_MS, () => sampleOnTick($, state))
+    return r
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId === undefined) await sample($, state)
+    return r
+  })
+
+  // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
+  on('command.run', { command: 'limits' }, async $ => {
+    const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
+    if (isOpen) {
+      await $.ui.close({ id: PANE_ID })
+      return { text: 'pane closed' }
+    }
+    await sample($, state)
+    await $.ui.open({ id: PANE_ID, title: 'Usage limits', rows: Math.max(2, state.limits.length * ROWS_PER_LIMIT) })
+    return { text: 'pane open. /limits closes it.' }
+  })
+
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId !== PANE_ID) return next(e)
+    const els = $.ui.resolve(e)
+    const now = await $.clock.now()
+    const width = Math.max(10, e.props.bodyColumns - 2)
+    if (state.limits.length === 0) {
+      return <els.Text dimColor>No usage limits reported yet. An API key session reports none.</els.Text>
+    }
+    return (
+      <els.Box flexDirection="column">
+        {state.limits.map(limit => limitBlock(els, limit, state.tracks, now, width))}
+      </els.Box>
+    )
+  })
+}
+
+function limitBlock(els: Elements, limit: SessionRateLimit, tracks: Tracks, now: number, width: number) {
+  const { Box, Text } = els
+  const p = pace(tracks[limit.kind], limit.kind, now)
+  const f = forecast(limit, p, now)
+  const bar = barCells(limit.percentUsed, width)
+  const reset = resetTime(limit)
+  return (
+    <Box key={limit.kind} flexDirection="column" marginBottom={1}>
+      <Text bold>{`${profile(limit.kind).name} · ${percentText(limit.percentUsed)} used`}</Text>
+      <Text>
+        <Text color={barColor(limit.percentUsed)}>{bar.filled}</Text>
+        <Text dimColor>{bar.empty}</Text>
+      </Text>
+      <Text dimColor>
+        {reset === undefined ? 'no reset time reported' : `resets ${clockText(reset, now)}, in ${durationText(reset - now)}`}
+      </Text>
+      <Text dimColor>{paceText(p)}</Text>
+      {/* While the pace is measured, the pace line above already says so. */}
+      {f.kind === 'measuring' ? null : <Text dimColor>{`forecast: ${forecastText(f, now)}`}</Text>}
+    </Box>
+  )
+}

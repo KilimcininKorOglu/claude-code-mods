@@ -16,6 +16,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 | Mod | What it does | Reach |
 |---|---|---|
 | [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 5 times in a row. | L2 |
+| [limit-watch](plugins/limit-watch) | Shows the 5-hour and 7-day usage limits under the prompt with a reset countdown and a forecast, opens a `/limits` pane, and warns at 80% and 95%. | L0 |
 
 ## Layout
 

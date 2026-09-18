@@ -20,6 +20,21 @@
         "tasks",
         "automation"
       ]
+    },
+    {
+      "name": "limit-watch",
+      "source": "./plugins/limit-watch",
+      "description": "Shows the subscription usage limits under the prompt with a reset countdown and a projection, opens a /limits pane, and logs once when a limit passes 80% and 95%.",
+      "category": "productivity",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "rate-limit",
+        "usage",
+        "statusline",
+        "pane"
+      ]
     }
   ]
 }
