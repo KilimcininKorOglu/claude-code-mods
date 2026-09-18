@@ -35,7 +35,6 @@ The project name is the primary repository name, also inside a git worktree, els
     memory-save: +2 -1 · 14:32
     memory-save: +3 -1 ~3 topic: history · 14:32
     memory-save: no change · 14:32
-    memory-save: migrated · 14:32
     memory-save: error: reply has no JSON object · 14:32
 
 **One line in the transcript** when a save changed a file. The line is not sent to the model:
@@ -46,7 +45,11 @@ The project name is the primary repository name, also inside a git worktree, els
 
 `MEMORY.md` has exactly these sections, in this order: `## CRITICAL RULES`, `## Architecture & Config Facts`, `## Active Warnings`, `## Topic Files`. A new file starts from this skeleton.
 
-A file without exactly these four sections in this order is in another format: an older file, a missing section, an extra `## ` section or a changed order. For such a file the fork writes the whole new file once. The mod keeps the old file as `MEMORY.pre-migration.md` next to it; a later migration replaces that copy. A file in the format is never rewritten whole.
+The template is never broken. At every load (startup, resume, `/clear`, compaction) and before every save, a file without exactly these four sections in this order is put into the template by the mod itself, without the fork: the sections go in order, a repeated section is merged into one, a missing section is added as `- None yet.`, and every other `## ` section moves to the end of `## Architecture & Config Facts` under a `### Unsorted: <heading>` line. No line is dropped. The next save tells the fork to move each unsorted bullet to the section it belongs in, or history to a topic file, and to remove the `### Unsorted:` line once it is empty. The old file is kept as `MEMORY.pre-migration.md` next to it (a later repair replaces that copy), and one line in the transcript says so:
+
+    memory-save: MEMORY.md: put into the four sections (old copy: MEMORY.pre-migration.md)
+
+A save whose result is not in the template is never written.
 
 ## What is checked before a write
 
@@ -77,7 +80,7 @@ Load it from a local checkout for one session:
 Validated with `claude plugin validate` on Claude Code 2.1.277:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
-    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via save, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save), $.ui.status (via report)
+    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save, templated), $.ui.status (via report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 

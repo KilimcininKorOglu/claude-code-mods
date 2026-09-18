@@ -10,6 +10,7 @@ import {
   isProjectName,
   parseReply,
   projectNameFrom,
+  repairSections,
   skeleton,
   topicFiles,
   validate,
@@ -90,10 +91,6 @@ describe('parseReply', () => {
     }
   })
 
-  test('refuses a rewrite together with ops', async () => {
-    const r = parseReply('{"rewrite":"x","ops":[{"op":"remove","line":"- a"}]}')
-    expect(r).toEqual({ ok: false, error: 'rewrite and ops together' })
-  })
 })
 
 describe('apply', () => {
@@ -112,7 +109,7 @@ describe('apply', () => {
     expect(r.text).toContain('- Run `make test` before a commit.\n- Use pnpm.\n\n## Architecture')
     expect(r.text).toContain('## Active Warnings\n\n- The cache is stale after a rebase.\n\n## Topic Files')
     expect(r.text).not.toContain('## Active Warnings\n\n- None yet.')
-    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false, migrated: false })
+    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false })
   })
 
   test('removes and replaces exact lines', async () => {
@@ -151,16 +148,48 @@ describe('apply', () => {
     expect(again.text.split('history.md')).toHaveLength(2)
   })
 
-  test('allows a rewrite only for a file without the four sections in order', async () => {
-    const old = '# demo\n\n## Overview\n\n- Old fact.\n'
-    const noWarnings = FILE.replace('## Active Warnings\n\n- None yet.\n\n', '')
-    for (const current of [old, noWarnings, `${FILE}\n## Notes\n`]) {
-      const migrated = apply('demo', current, reply({ rewrite: skeleton('demo') }))
-      if (!migrated.ok || !migrated.changed) throw new Error('expected a change')
-      expect(migrated.changes.migrated).toBe(true)
+})
+
+describe('repairSections', () => {
+  test('adds a missing section, puts the sections in order and merges a repeated one', async () => {
+    const broken = '# demo\n\n## Topic Files\n\n- `a.md`.\n\n## CRITICAL RULES\n\n- One.\n\n## critical rules\n\n- Two.\n'
+    expect(repairSections('demo', broken)).toBe(
+      '# demo\n\n## CRITICAL RULES\n\n- One.\n\n- Two.\n\n## Architecture & Config Facts\n\n- None yet.\n\n## Active Warnings\n\n- None yet.\n\n## Topic Files\n\n- `a.md`.\n',
+    )
+  })
+
+  test('keeps a section outside the template as an unsorted part of Architecture & Config Facts', async () => {
+    const r = repairSections('demo', '# demo\n\n## Architecture & Config Facts\n\n- Fact.\n\n## Overview\n\n### Sub\n- Old.\n')
+    expect(r).toContain('## Architecture & Config Facts\n\n- Fact.\n\n### Unsorted: Overview\n\n### Sub\n- Old.\n\n## Active Warnings')
+  })
+
+  test('asks the fork to sort the unsorted parts, and only when there are some', async () => {
+    const r = repairSections('demo', `${FILE}\n## Overview\n\n- Old.\n`)
+    expect(buildPrompt('demo', r)).toContain("MANDATORY SORT: the mod moved sections outside the template under these headings: ### Unsorted: Overview.")
+    expect(buildPrompt('demo', FILE)).not.toContain('MANDATORY SORT')
+  })
+
+  test('the fork can remove an unsorted heading once its bullets moved', async () => {
+    const r = repairSections('demo', `${FILE}\n## Overview\n\n- Old.\n`)
+    const sorted = apply('demo', r, reply({
+      ops: [
+        { op: 'remove', line: '- Old.' },
+        { op: 'add', section: 'Active Warnings', text: '- Old.' },
+        { op: 'remove', line: '### Unsorted: Overview' },
+      ],
+    }))
+    if (!sorted.ok || !sorted.changed) throw new Error('expected a change')
+    expect(sorted.text).not.toContain('Unsorted')
+    expect(validate(sorted.text, sorted.newBullets)).toEqual([])
+  })
+
+  test('gives a file without a title the project title, and every result passes the section check', async () => {
+    for (const text of ['', '- stray\n', FILE, `${FILE}\n## Notes\n\n- n\n`, '## Active Warnings\n\n- w\n']) {
+      const r = repairSections('demo', text)
+      expect(inspect(r).inFormat, text).toBe(true)
+      expect(validate(r, [])).toEqual([])
     }
-    expect(apply('demo', FILE, reply({ rewrite: skeleton('demo') })).ok).toBe(false)
-    expect(apply('demo', undefined, reply({ rewrite: skeleton('demo') })).ok).toBe(false)
+    expect(repairSections('demo', '## Topic Files\n')).toMatch(/^# demo\n\n## CRITICAL RULES/)
   })
 })
 
@@ -190,24 +219,6 @@ describe('buildPrompt', () => {
     const p = buildPrompt('demo', FILE)
     expect(p).toContain('<memory_file>\n# demo')
     expect(p).toContain('{"ops": [...], "topics": [...]}')
-    expect(p).not.toContain('MANDATORY MIGRATION')
-  })
-
-  test('asks for a rewrite of a file in the old format', async () => {
-    const p = buildPrompt('demo', '# demo\n\n## Overview\n')
-    expect(p).toContain('MANDATORY MIGRATION')
-    expect(p).toContain('(found: Overview)')
-    expect(p).toContain('{"rewrite": "<the whole new MEMORY.md>"')
-  })
-
-  test('asks for a rewrite of a file with CRITICAL RULES but another template', async () => {
-    const noWarnings = FILE.replace('## Active Warnings\n\n- None yet.\n\n', '')
-    const swapped = FILE.replace('## CRITICAL RULES', '## TMP').replace('## Active Warnings', '## CRITICAL RULES').replace('## TMP', '## Active Warnings')
-    for (const current of [noWarnings, `${FILE}\n## Notes\n`, swapped]) {
-      const p = buildPrompt('demo', current)
-      expect(p).toContain('MANDATORY MIGRATION')
-      expect(p).toContain('{"rewrite": "<the whole new MEMORY.md>"')
-    }
   })
 
   test('asks for an offload near the limit and names long bullets', async () => {
@@ -247,14 +258,14 @@ describe('texts', () => {
   })
 
   test('changeText and changeShort name every change', async () => {
-    const changes = { added: 12, removed: 1, replaced: 0, created: false, migrated: false }
+    const changes = { added: 12, removed: 1, replaced: 0, created: false }
     const topics = [{ file: 'history.md', append: 'x' }]
     expect(changeText(changes, topics)).toBe('MEMORY.md: 12 added, 1 removed; appended to history.md')
     expect(changeShort(changes, topics)).toBe('+12 -1 topic: history')
   })
 
   test('changeShort names at most three topic files and counts the rest', async () => {
-    const changes = { added: 0, removed: 0, replaced: 2, created: false, migrated: false }
+    const changes = { added: 0, removed: 0, replaced: 2, created: false }
     const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
     expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
   })

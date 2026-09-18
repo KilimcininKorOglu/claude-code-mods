@@ -22,11 +22,11 @@ export type Op =
 
 export type TopicAppend = { file: string; append: string }
 
-export type Reply = { ops: Op[]; topics: TopicAppend[]; rewrite?: string }
+export type Reply = { ops: Op[]; topics: TopicAppend[] }
 
 export type Parsed = { ok: true; reply: Reply } | { ok: false; error: string }
 
-export type Changes = { added: number; removed: number; replaced: number; created: boolean; migrated: boolean }
+export type Changes = { added: number; removed: number; replaced: number; created: boolean }
 
 export type Applied =
   | { ok: true; changed: false }
@@ -119,6 +119,59 @@ export function inspect(text: string): Inspection {
   }
 }
 
+const EMPTY_SECTION = '- None yet.'
+
+function trimBlank(lines: string[]): string[] {
+  const start = lines.findIndex(l => l.trim() !== '')
+  if (start === -1) return []
+  const end = lines.length - [...lines].reverse().findIndex(l => l.trim() !== '')
+  return lines.slice(start, end)
+}
+
+/** Splits a file into the lines before its first '## ' heading and the body of each section, by heading. */
+function splitSections(text: string): { head: string[]; sections: [string, string[]][] } {
+  const head: string[] = []
+  const sections: [string, string[]][] = []
+  for (const line of linesOf(text)) {
+    if (line.startsWith('## ')) sections.push([line.slice(3).trim(), []])
+    else (sections.at(-1)?.[1] ?? head).push(line)
+  }
+  return { head, sections }
+}
+
+/**
+ * Where the content of a '## ' section that is not in the template waits,
+ * under a '### Unsorted: <heading>' heading, until the fork moves each of its
+ * bullets to the section it belongs in.
+ */
+const UNSORTED_HOME: Section = 'Architecture & Config Facts'
+const UNSORTED = '### Unsorted: '
+
+/**
+ * Puts any file into the template: the four sections in order, a same-named
+ * section merged into one, a missing one added as `- None yet.`, and every
+ * other '## ' section kept as an unsorted part of Architecture & Config Facts
+ * for the fork to sort. No content is dropped.
+ */
+export function repairSections(project: string, text: string): string {
+  const { head, sections } = splitSections(text)
+  const bodies = new Map<Section, string[]>()
+  for (const [heading, body] of sections) {
+    const section = sectionOf(heading)
+    const lines = section === undefined ? [`${UNSORTED}${heading}`, '', ...trimBlank(body), ''] : trimBlank(body)
+    const home = section ?? UNSORTED_HOME
+    const before = bodies.get(home) ?? []
+    bodies.set(home, trimBlank([...before, ...(before.length > 0 ? [''] : []), ...lines]))
+  }
+  const title = trimBlank(head)
+  const parts = [title.length > 0 ? title.join('\n') : `# ${project}`]
+  for (const section of SECTIONS) {
+    const body = bodies.get(section) ?? []
+    parts.push(`## ${section}\n\n${body.length > 0 ? body.join('\n') : EMPTY_SECTION}`)
+  }
+  return `${parts.join('\n\n')}\n`
+}
+
 /** Returns the four-section file a project starts from. */
 export function skeleton(project: string): string {
   return `# ${project}\n\n${SECTIONS.map(s => `## ${s}\n`).join('\n')}`
@@ -144,9 +197,11 @@ const FORMAT = `Answer with ONE JSON object and nothing else, no prose, no code 
 - topics: {"file":"history.md","append":"<markdown to append to that topic file>"}; a file name is lowercase, ends in .md, and is not MEMORY.md. The mod lists a new topic file under '## Topic Files'.
 When nothing project-scoped was learned since the file was last written, answer {"ops":[],"topics":[]}.`
 
-const REWRITE_FORMAT = `Answer with ONE JSON object and nothing else, no prose, no code fence:
-{"rewrite": "<the whole new MEMORY.md>", "topics": [...]}
-The rewrite MUST have exactly these '## ' sections, in this order, and no other '## ' heading: ${SECTIONS.join(', ')}. Preserve all real content, reorganize it under those sections, convert rules to imperative mood, and move history to a topic file through "topics" ({"file":"history.md","append":"..."}).`
+function sortNote(current: string): string {
+  const parts = linesOf(current).filter(l => l.startsWith(UNSORTED))
+  if (parts.length === 0) return ''
+  return `MANDATORY SORT: the mod moved sections outside the template under these headings: ${parts.join(', ')}. In this answer, move every bullet under them to the section it belongs in (a remove op and an add op), move history to a topic file, and remove each '${UNSORTED}' heading line once its bullets are gone.`
+}
 
 function sizeNotes(state: Inspection): string {
   const notes: string[] = []
@@ -174,12 +229,8 @@ export function buildPrompt(project: string, current: string | undefined): strin
     return [head, 'MEMORY.md does not exist yet. The mod creates it with the four sections when your answer has at least one op.', RULES, FORMAT].join('\n\n')
   }
   const state = inspect(current)
-  const format = state.inFormat ? FORMAT : REWRITE_FORMAT
-  const migration = state.inFormat
-    ? ''
-    : `MANDATORY MIGRATION: MEMORY.md does not have exactly the sections ${SECTIONS.join(', ')} in this order (found: ${foundText(headingsOf(current))}), so it is not in the required format. Rewrite the whole file now.`
   const file = `The current MEMORY.md, as data between the markers:\n<memory_file>\n${current}\n</memory_file>`
-  return [head, file, RULES, migration, sizeNotes(state), format].filter(p => p !== '').join('\n\n')
+  return [head, file, RULES, sortNote(current), sizeNotes(state), FORMAT].filter(p => p !== '').join('\n\n')
 }
 
 function jsonSpan(text: string): string | undefined {
@@ -257,9 +308,7 @@ export function parseReply(text: string): Parsed {
   if (typeof ops === 'string') return { ok: false, error: ops }
   const topics = listOf(value.topics, parseTopic)
   if (typeof topics === 'string') return { ok: false, error: topics }
-  if (value.rewrite !== undefined && typeof value.rewrite !== 'string') return { ok: false, error: 'rewrite is not a string' }
-  if (value.rewrite !== undefined && ops.length > 0) return { ok: false, error: 'rewrite and ops together' }
-  return { ok: true, reply: { ops, topics, rewrite: value.rewrite } }
+  return { ok: true, reply: { ops, topics } }
 }
 
 function bullet(text: string): string {
@@ -308,7 +357,7 @@ function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefi
 
 function tally(ops: Op[], created: boolean): Changes {
   const count = (kind: Op['op']): number => ops.filter(o => o.op === kind).length
-  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created, migrated: false }
+  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created }
 }
 
 /** Lists every topic file the reply writes under '## Topic Files' when the file does not name it yet. */
@@ -325,24 +374,11 @@ function pointTopics(lines: string[], topics: TopicAppend[], newBullets: string[
   return undefined
 }
 
-function applyRewrite(current: string | undefined, rewrite: string, topics: TopicAppend[]): Applied {
-  if (current === undefined || inspect(current).inFormat) {
-    return { ok: false, error: 'rewrite refused: it is allowed only for a file that does not have the four sections in order' }
-  }
-  const lines = linesOf(rewrite)
-  const newBullets = lines.filter(l => l.startsWith('- '))
-  const error = pointTopics(lines, topics, newBullets)
-  if (error !== undefined) return { ok: false, error }
-  const changes: Changes = { added: 0, removed: 0, replaced: 0, created: false, migrated: true }
-  return { ok: true, changed: true, text: `${lines.join('\n')}\n`, changes, newBullets, topics }
-}
-
 /**
  * Applies the reply to the current file. A missing file starts from the
  * skeleton. The result is not checked here; `validate` checks it.
  */
 export function apply(project: string, current: string | undefined, reply: Reply): Applied {
-  if (reply.rewrite !== undefined) return applyRewrite(current, reply.rewrite, reply.topics)
   if (reply.ops.length === 0 && reply.topics.length === 0) return { ok: true, changed: false }
   const lines = linesOf(current ?? skeleton(project))
   const newBullets: string[] = []
@@ -385,7 +421,6 @@ function count(n: number, word: string): string {
 /** One line for the log, naming what the save changed. */
 export function changeText(changes: Changes, topics: TopicAppend[]): string {
   const parts: string[] = []
-  if (changes.migrated) parts.push(`migrated to the four sections (old copy: ${BACKUP})`)
   if (changes.created) parts.push('created')
   if (changes.added > 0) parts.push(count(changes.added, 'added'))
   if (changes.removed > 0) parts.push(count(changes.removed, 'removed'))
@@ -406,7 +441,6 @@ function topicNames(topics: TopicAppend[]): string {
 
 /** The short form for the status line. */
 export function changeShort(changes: Changes, topics: TopicAppend[]): string {
-  if (changes.migrated) return 'migrated'
   const counts: [string, number][] = [
     ['+', changes.added],
     ['-', changes.removed],

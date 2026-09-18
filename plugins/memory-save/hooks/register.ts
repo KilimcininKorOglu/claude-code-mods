@@ -8,9 +8,11 @@ import {
   changeText,
   clockText,
   contextText,
+  inspect,
   isProjectName,
   parseReply,
   projectNameFrom,
+  repairSections,
   topicFiles,
   validate,
   type Reply,
@@ -83,6 +85,22 @@ async function readFile($: EngineInterface, path: string): Promise<string | unde
   }
 }
 
+/**
+ * Returns MEMORY.md, first put into the template when it is not: the old file
+ * is kept as the backup and one line in the transcript says so. Undefined when
+ * the file does not exist.
+ */
+async function templated($: EngineInterface, project: string, dir: string): Promise<string | undefined> {
+  const file = `${dir}/MEMORY.md`
+  const current = await readFile($, file)
+  if (current === undefined || inspect(current).inFormat) return current
+  const repaired = repairSections(project, current)
+  await $.fs.write(`${dir}/${BACKUP}`, current)
+  await $.fs.write(file, repaired)
+  $.ui.log(`MEMORY.md: put into the four sections (old copy: ${BACKUP})`)
+  return repaired
+}
+
 async function writeTopics($: EngineInterface, project: string, dir: string, topics: TopicAppend[]): Promise<void> {
   for (const t of topics) {
     const path = `${dir}/${t.file}`
@@ -111,7 +129,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
   const { project, dir } = state
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved yet')
   const file = `${dir}/MEMORY.md`
-  const current = await readFile($, file)
+  const current = await templated($, project, dir)
   const result = apply(project, current, await ask($, project, current))
   if (!result.ok) throw new Error(result.error)
   if (!result.changed) return report($, 'no change')
@@ -119,7 +137,6 @@ async function save($: EngineInterface, state: State): Promise<void> {
   if (errors.length > 0) throw new Error(`not written: ${errors.join('; ')}`)
   if ((await readFile($, file)) !== current) throw new Error('not written: MEMORY.md changed during the save')
   await writeTopics($, project, dir, result.topics)
-  if (result.changes.migrated && current !== undefined) await $.fs.write(`${dir}/${BACKUP}`, current)
   await $.fs.write(file, result.text)
   $.ui.log(changeText(result.changes, result.topics))
   await report($, changeShort(result.changes, result.topics))
@@ -129,7 +146,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
 async function memoryContext($: EngineInterface, state: State): Promise<string | undefined> {
   const { project, dir } = state
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved')
-  const memory = await readFile($, `${dir}/MEMORY.md`)
+  const memory = await templated($, project, dir)
   if (memory === undefined) return undefined
   const files = (await $.fs.list(dir)).filter(f => f.kind === 'file').map(f => f.name)
   return contextText(project, dir, memory, topicFiles(files))

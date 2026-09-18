@@ -115,17 +115,19 @@ describe('memory-save', () => {
     expect(w.statuses.at(-1)).toMatch(/^no change · /)
   })
 
-  test('keeps the old file when a migration rewrites it', async ($, on) => {
-    const legacy = '# app\n\n## Overview\n\n- Old fact.\n'
+  test('puts a file out of the template into it before the fork reads it, and keeps the old file', async ($, on) => {
+    const legacy = '# app\n\n## CRITICAL RULES\n\n- Run `make test`.\n\n## Overview\n\n- Old fact.\n\n## Topic Files\n'
     const w = world(on, { [FILE]: legacy })
-    const rewrite = OLD.replace('## Architecture & Config Facts\n', '## Architecture & Config Facts\n\n- Old fact.\n')
-    w.replies.push(JSON.stringify({ rewrite }))
+    w.replies.push('{"ops":[{"op":"add","section":"Active Warnings","text":"- New warning."}]}')
     await $.session.start(session)
     await $.turn.complete(turn())
     await settled(w, 1)
     expect(w.files.get(`${DIR}/MEMORY.pre-migration.md`)).toBe(legacy)
-    expect(w.files.get(FILE)).toBe(rewrite)
-    expect(w.statuses.at(-1)).toMatch(/^migrated · /)
+    expect(w.logs[0]).toBe('MEMORY.md: put into the four sections (old copy: MEMORY.pre-migration.md)')
+    expect(w.prompts[0]).toContain('## Architecture & Config Facts\n\n### Unsorted: Overview\n\n- Old fact.\n\n## Active Warnings')
+    expect(w.prompts[0]).toContain('MANDATORY SORT')
+    expect(w.files.get(FILE)).toContain('## Active Warnings\n\n- New warning.\n\n## Topic Files')
+    expect(w.statuses.at(-1)).toMatch(/^\+1 · /)
   })
 
   test('appends to a topic file and lists it', async ($, on) => {
