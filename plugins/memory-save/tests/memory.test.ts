@@ -236,6 +236,12 @@ describe('texts', () => {
     const changes = { added: 12, removed: 1, replaced: 0, created: false, migrated: false }
     const topics = [{ file: 'history.md', append: 'x' }]
     expect(changeText(changes, topics)).toBe('MEMORY.md: 12 added, 1 removed; appended to history.md')
-    expect(changeShort(changes, topics)).toBe('+12 -1 +1 topic')
+    expect(changeShort(changes, topics)).toBe('+12 -1 topic: history')
+  })
+
+  test('changeShort names at most three topic files and counts the rest', async () => {
+    const changes = { added: 0, removed: 0, replaced: 2, created: false, migrated: false }
+    const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
+    expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
   })
 })

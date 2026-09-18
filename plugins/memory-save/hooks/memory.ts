@@ -386,6 +386,15 @@ export function changeText(changes: Changes, topics: TopicAppend[]): string {
   return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}`
 }
 
+const SHORT_TOPICS = 3
+
+/** The topic files a save appended to, without `.md`: the first three and the count of the rest. */
+function topicNames(topics: TopicAppend[]): string {
+  const names = [...new Set(topics.map(t => t.file.replace(/\.md$/, '')))]
+  const rest = names.length - SHORT_TOPICS
+  return `topic: ${names.slice(0, SHORT_TOPICS).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
+}
+
 /** The short form for the status line. */
 export function changeShort(changes: Changes, topics: TopicAppend[]): string {
   if (changes.migrated) return 'migrated'
@@ -395,7 +404,7 @@ export function changeShort(changes: Changes, topics: TopicAppend[]): string {
     ['~', changes.replaced],
   ]
   const parts = counts.filter(([, n]) => n > 0).map(([sign, n]) => `${sign}${n}`)
-  if (topics.length > 0) parts.push(`+${new Set(topics.map(t => t.file)).size} topic`)
+  if (topics.length > 0) parts.push(topicNames(topics))
   return parts.join(' ') || 'saved'
 }
 

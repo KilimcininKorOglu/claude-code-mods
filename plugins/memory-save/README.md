@@ -33,6 +33,7 @@ The project name is the primary repository name, also inside a git worktree, els
 **A status line under the prompt** after every save:
 
     memory-save: +2 -1 · 14:32
+    memory-save: +3 -1 ~3 topic: history · 14:32
     memory-save: no change · 14:32
     memory-save: migrated · 14:32
     memory-save: error: reply has no JSON object · 14:32
