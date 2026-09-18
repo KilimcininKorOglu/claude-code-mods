@@ -163,21 +163,6 @@ export function clockText(at: number, now: number): string {
   return date.toDateString() === new Date(now).toDateString() ? time : `${WEEKDAYS[date.getDay()]} ${time}`
 }
 
-export function forecastText(f: Forecast, now: number): string {
-  switch (f.kind) {
-    case 'reached':
-      return 'limit reached'
-    case 'measuring':
-      return 'measuring the pace'
-    case 'flat':
-      return 'not rising'
-    case 'reset-first':
-      return 'resets before 100%'
-    case 'full-at':
-      return `100% at ${clockText(f.at, now)} (in ${durationText(f.at - now)})`
-  }
-}
-
 /** One status line part per limit, as `5h 23%, reset in 46m`. */
 function limitPart(limit: SessionRateLimit, now: number): string {
   const reset = resetTime(limit)

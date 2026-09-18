@@ -23,9 +23,8 @@ An API key session reports no limits. The status line then reads `no usage limit
     ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
     resets 22:40, in 2h36m
     pace +4.2%/h over the last 38m
-    forecast: resets before 100%
 
-The bar fills the width of the pane. It is green below 80%, yellow from 80% and red from 95%. While the pace is measured, the pace line says how much more sampling it needs, and the forecast line is left out.
+The bar fills the width of the pane. It is green below 80%, yellow from 80% and red from 95%. While the pace is measured, the pace line says how much more sampling it needs.
 
 **A warning in the transcript** when a limit passes 80% and again when it passes 95%:
 
@@ -39,7 +38,7 @@ Each warning comes once per limit cycle. A new session in the same cycle does no
 - Every reading is one sample `{ at, percent }`, kept in `$.store` so that a restart keeps the pace.
 - The pace is the change in percent between the first and the last sample of a recent span, per hour. The span is the last hour for the 5-hour limit and the last 24 hours for the 7-day and spend limits, so the pace follows how you work now and not how you worked earlier in the cycle.
 - A pace is shown only when its samples span at least 10 minutes (5-hour limit) or 2 hours (7-day and spend limits). A shorter span gives a pace that one step of the percentage can double.
-- The forecast is `(100 - percent) / pace`. When the limit resets before that time, the forecast says `resets before 100%`. A pace of zero or less says `not rising`.
+- The status line tail uses `(100 - percent) / pace` as the time to 100%. A limit that resets before that time does not count as filling.
 - A new cycle starts when `resetsAt` moves by more than 5 minutes, or, for a limit without `resetsAt`, when the percentage falls by more than half a point. A new cycle clears the samples and the warnings of that limit.
 - A stored value of an unknown shape is reported with one log line, and the samples start over.
 

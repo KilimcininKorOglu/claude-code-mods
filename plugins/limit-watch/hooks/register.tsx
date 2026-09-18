@@ -4,8 +4,6 @@ import {
   barColor,
   clockText,
   durationText,
-  forecast,
-  forecastText,
   markWarned,
   newThresholds,
   pace,
@@ -23,8 +21,8 @@ import {
 const PANE_ID = 'limit-watch'
 const TRACKS_KEY = 'tracks'
 const TICK_MS = 60_000
-/** The most body rows one limit takes in the pane: heading, bar, reset, pace, forecast, blank line. */
-const ROWS_PER_LIMIT = 6
+/** Body rows one limit takes in the pane: heading, bar, reset, pace, blank line. */
+const ROWS_PER_LIMIT = 5
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -125,7 +123,6 @@ export const register: Register = on => {
 function limitBlock(els: Elements, limit: SessionRateLimit, tracks: Tracks, now: number, width: number) {
   const { Box, Text } = els
   const p = pace(tracks[limit.kind], limit.kind, now)
-  const f = forecast(limit, p, now)
   const bar = barCells(limit.percentUsed, width)
   const reset = resetTime(limit)
   return (
@@ -139,8 +136,6 @@ function limitBlock(els: Elements, limit: SessionRateLimit, tracks: Tracks, now:
         {reset === undefined ? 'no reset time reported' : `resets ${clockText(reset, now)}, in ${durationText(reset - now)}`}
       </Text>
       <Text dimColor>{paceText(p)}</Text>
-      {/* While the pace is measured, the pace line above already says so. */}
-      {f.kind === 'measuring' ? null : <Text dimColor>{`forecast: ${forecastText(f, now)}`}</Text>}
     </Box>
   )
 }

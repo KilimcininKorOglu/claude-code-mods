@@ -119,7 +119,7 @@ describe('limit-watch', () => {
     expect(w.statuses).toHaveLength(before)
   })
 
-  test('the pane draws a block per limit with its bar, reset, pace and forecast', async ($, on) => {
+  test('the pane draws a block per limit with its bar, reset and pace, and no forecast', async ($, on) => {
     const w = world(on)
     w.setLimits([fiveHour(50)])
     await $.session.start(session)
@@ -143,10 +143,10 @@ describe('limit-watch', () => {
     expect(text).toContain('░░░░░░░░░░')
     expect(text).toContain('in 3h00m')
     expect(text).toContain('pace: measuring')
-    expect(text).not.toContain('forecast:')
+    expect(text).not.toContain('forecast')
   })
 
-  test('the pane shows the forecast once the pace is measured', async ($, on) => {
+  test('the pane shows the measured pace and still no forecast', async ($, on) => {
     const stored = { five_hour: { resetsAt: RESET, samples: [{ at: T0 - 30 * 60_000, percent: 40 }], warned: [] } }
     const w = world(on, { tracks: stored })
     w.setLimits([fiveHour(60)])
@@ -166,8 +166,7 @@ describe('limit-watch', () => {
     })
     const text = JSON.stringify(tree)
     expect(text).toContain('pace +40.0%/h over the last 30m')
-    expect(text).toContain('forecast: 100% at ')
-    expect(text).toContain('(in 1h00m)')
+    expect(text).not.toContain('forecast')
   })
 
   test('/limits opens the pane and closes it on the second run', async ($, on) => {
