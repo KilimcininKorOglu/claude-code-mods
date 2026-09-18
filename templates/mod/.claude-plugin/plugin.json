@@ -2,6 +2,10 @@
   "name": "MOD_NAME",
   "version": "0.1.0",
   "description": "MOD_DESCRIPTION Needs function hooks (early access).",
-  "author": { "name": "KilimcininKorOglu" },
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
   "license": "MIT"
 }

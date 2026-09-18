@@ -3,8 +3,9 @@
   "name": "kilimcininkoroglu-mods",
   "description": "Claude Mods (function-hooks plugins) for Claude Code.",
   "owner": {
-    "name": "KilimcininKorOglu",
-    "url": "https://github.com/KilimcininKorOglu"
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
   },
   "plugins": [
     {
