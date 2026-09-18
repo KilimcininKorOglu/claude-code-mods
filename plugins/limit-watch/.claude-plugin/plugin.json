@@ -1,6 +1,6 @@
 {
   "name": "limit-watch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows the subscription usage limits under the prompt with a reset countdown and a projection, opens a /limits pane, and logs once when a limit passes 80% and 95%. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

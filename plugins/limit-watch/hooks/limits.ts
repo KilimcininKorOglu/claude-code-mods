@@ -144,13 +144,13 @@ export function percentText(percent: number): string {
   return `${Number(percent.toFixed(1))}%`
 }
 
-/** A duration as `<1m`, `45m`, `2h05m` or `5d 11h`. */
+/** A duration as `<1m`, `45m`, `2h 5m` or `5d 11h`. */
 export function durationText(ms: number): string {
   const minutes = Math.floor(Math.max(0, ms) / MINUTE)
   if (minutes < 1) return '<1m'
   if (minutes < 60) return `${minutes}m`
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h${String(minutes % 60).padStart(2, '0')}m`
+  if (hours < 24) return minutes % 60 > 0 ? `${hours}h ${minutes % 60}m` : `${hours}h`
   return `${Math.floor(hours / 24)}d ${hours % 24}h`
 }
 

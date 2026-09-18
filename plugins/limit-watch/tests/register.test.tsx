@@ -68,7 +68,7 @@ describe('limit-watch', () => {
     const w = world(on)
     w.setLimits([fiveHour(23), { kind: 'seven_day', percentUsed: 8, resetsAt: '2026-09-20T00:00:00Z' }])
     await $.session.start(session)
-    expect(w.statuses.at(-1)).toBe('5h 23%, reset in 3h00m · 7d 8%, reset in 1d 12h · measuring the pace')
+    expect(w.statuses.at(-1)).toBe('5h 23%, reset in 3h · 7d 8%, reset in 1d 12h · measuring the pace')
   })
 
   test('says so when the account reports no limits', async ($, on) => {
@@ -88,7 +88,7 @@ describe('limit-watch', () => {
     const warnings = w.logs.filter(l => l.includes('passed'))
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('5-hour limit passed 80% (now 82%), resets ')
-    expect(warnings[0]).toContain('(in 3h00m)')
+    expect(warnings[0]).toContain('(in 3h)')
 
     w.setLimits([fiveHour(81, '2026-09-18T20:00:00Z')])
     await $.turn.complete(turn())
@@ -141,7 +141,7 @@ describe('limit-watch', () => {
     expect(text).toContain('50%')
     expect(text).toContain('██████████')
     expect(text).toContain('░░░░░░░░░░')
-    expect(text).toContain('in 3h00m')
+    expect(text).toContain('in 3h')
     expect(text).toContain('pace: measuring')
     expect(text).not.toContain('forecast')
   })

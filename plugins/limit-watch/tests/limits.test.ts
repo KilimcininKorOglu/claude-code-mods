@@ -120,7 +120,8 @@ describe('text', () => {
   test('formats durations', async () => {
     expect(durationText(20_000)).toBe('<1m')
     expect(durationText(46 * MINUTE)).toBe('46m')
-    expect(durationText(125 * MINUTE)).toBe('2h05m')
+    expect(durationText(125 * MINUTE)).toBe('2h 5m')
+    expect(durationText(180 * MINUTE)).toBe('3h')
     expect(durationText(5 * 24 * HOUR + 11 * HOUR + 59 * MINUTE)).toBe('5d 11h')
   })
 
@@ -130,7 +131,7 @@ describe('text', () => {
       [30, 60],
     ])
     const now = T0 + 30 * MINUTE
-    expect(statusLine([fiveHour(60)], tracks, now)).toBe('5h 60%, reset in 2h30m · 5h hits 100% in ~1h00m')
+    expect(statusLine([fiveHour(60)], tracks, now)).toBe('5h 60%, reset in 2h 30m · 5h hits 100% in ~1h')
   })
 
   test('the status line says so when no limit is reported', async () => {
