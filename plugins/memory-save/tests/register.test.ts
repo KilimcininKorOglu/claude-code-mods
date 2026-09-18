@@ -3,7 +3,7 @@ import type { On, SessionStartInput, TurnCompleteInput } from 'claude-code'
 
 tier('user')
 
-const DIR = '/home/u/.cli-tweaks/memory/app'
+const DIR = '/Users/u/.cli-tweaks/memory/app'
 const FILE = `${DIR}/MEMORY.md`
 const OLD = `# app
 
@@ -40,7 +40,7 @@ type World = {
 function world(on: On, files: Record<string, string> = {}): World {
   const clock = mock.clock(on, { now: Date.parse('2026-09-18T12:00:00Z') })
   const w: World = { files: new Map(Object.entries(files)), replies: [], prompts: [], logs: [], statuses: [], clock }
-  mock.env(on, { HOME: '/home/u' })
+  mock.env(on, { HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('process.run', (_, e) => ({
