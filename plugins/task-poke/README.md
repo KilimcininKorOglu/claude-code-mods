@@ -53,7 +53,7 @@ Reach L2, drives Claude. Reads the transcript.
     2. Runs:     one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 5 in a row
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) in $.store
-    5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status or a TaskCreate result without task.id throws, and the engine skips the hook for that turn
+    5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status or a TaskCreate result without task.id stops the pokes, and one log line names the error until the error changes
 
 ## Limits
 

@@ -1,5 +1,5 @@
 import type { Register } from 'claude-code'
-import { asksUser, taskState, unfinishedCount } from './tasks.ts'
+import { readTurn } from './tasks.ts'
 
 const MAX_POKES = 5
 const ENABLED_KEY = 'enabled'
@@ -21,6 +21,7 @@ export const register: Register = on => {
   let enabled = true
   let pokes = 0
   let limitLogged = false
+  let lastError: string | undefined
 
   const resetCount = (): void => {
     pokes = 0
@@ -60,8 +61,16 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     if (!enabled || e.agentId !== undefined || e.reason !== 'answer') return r
-    const messages = await $.session.messages()
-    const decision = decide(unfinishedCount(taskState(messages)), asksUser(messages), pokes)
+    const reading = readTurn(await $.session.messages())
+    // The parser reads the whole transcript on every turn, so a bad record fails every later turn too.
+    // Log each distinct error once, and send no poke while the task list is unreadable.
+    if (!reading.ok) {
+      if (reading.error !== lastError) $.ui.log(`task-poke: cannot read the task list, no poke is sent: ${reading.error}`)
+      lastError = reading.error
+      return r
+    }
+    lastError = undefined
+    const decision = decide(reading.open, reading.askedUser, pokes)
     if (decision.kind === 'poke') {
       pokes += 1
       $.ui.log(`task-poke: ${decision.open} unfinished tasks, poke ${pokes}/${MAX_POKES}`)

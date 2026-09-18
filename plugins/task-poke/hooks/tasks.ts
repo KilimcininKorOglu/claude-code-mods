@@ -28,6 +28,21 @@ export function unfinishedCount(tasks: Tasks | null): number {
   return count
 }
 
+export type Reading = { ok: true; open: number; askedUser: boolean } | { ok: false; error: string }
+
+/**
+ * Reads the unfinished task count and the AskUserQuestion state from the transcript.
+ * A transcript the parser cannot read returns the parser's error instead of a count,
+ * so the caller can report it rather than guess a count.
+ */
+export function readTurn(messages: readonly SessionMessage[]): Reading {
+  try {
+    return { ok: true, open: unfinishedCount(taskState(messages)), askedUser: asksUser(messages) }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
 /** True when the last assistant message asked the user a question through AskUserQuestion. */
 export function asksUser(messages: readonly SessionMessage[]): boolean {
   const last = messages.findLast(m => m.role === 'assistant')
