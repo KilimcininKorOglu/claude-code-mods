@@ -5,11 +5,13 @@ import {
   buildPrompt,
   changeShort,
   changeText,
+  contextText,
   inspect,
   isProjectName,
   parseReply,
   projectNameFrom,
   skeleton,
+  topicFiles,
   validate,
   type Reply,
 } from '../hooks/memory.ts'
@@ -204,6 +206,23 @@ describe('buildPrompt', () => {
 
   test('says so when the file does not exist', async () => {
     expect(buildPrompt('demo', undefined)).toContain('MEMORY.md does not exist yet')
+  })
+})
+
+describe('session context', () => {
+  test('carries the whole file under a project heading and no instruction to write it', async () => {
+    const text = contextText('demo', '/m/demo', FILE, [])
+    expect(text).toBe(`[PROJECT MEMORY: demo]\n${FILE.trim()}`)
+    expect(text).not.toMatch(/write|save/i)
+  })
+
+  test('names the topic files and their directory', async () => {
+    expect(contextText('demo', '/m/demo', FILE, ['history.md', 'api.md'])).toEndWith('\n\nTopic files in /m/demo: history.md, api.md')
+  })
+
+  test('topicFiles keeps other markdown files, sorted, without MEMORY.md and the migration backup', async () => {
+    const names = ['MEMORY.md', 'history.md', 'MEMORY.pre-migration.md', 'notes.txt', 'api.md']
+    expect(topicFiles(names)).toEqual(['api.md', 'history.md'])
   })
 })
 

@@ -399,6 +399,20 @@ export function changeShort(changes: Changes, topics: TopicAppend[]): string {
   return parts.join(' ') || 'saved'
 }
 
+/** Returns the topic files among a directory's entries: every other `.md` file but the migration backup. */
+export function topicFiles(names: readonly string[]): string[] {
+  return names.filter(n => n.endsWith('.md') && n !== 'MEMORY.md' && n !== BACKUP).sort()
+}
+
+/**
+ * The text the session starts with: the whole MEMORY.md and the topic files
+ * next to it. The file holds no instruction to write it, because the mod does.
+ */
+export function contextText(project: string, dir: string, memory: string, topics: readonly string[]): string {
+  const head = `[PROJECT MEMORY: ${project}]\n${memory.trim()}`
+  return topics.length === 0 ? head : `${head}\n\nTopic files in ${dir}: ${topics.join(', ')}`
+}
+
 export function clockText(ms: number): string {
   const d = new Date(ms)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`

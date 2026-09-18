@@ -39,7 +39,7 @@
     {
       "name": "memory-save",
       "source": "./plugins/memory-save",
-      "description": "Saves project learnings to ~/.cli-tweaks/memory/<project>/MEMORY.md after every main-loop turn through a tool-less $.model.fork in the background, so the stop is never blocked and no memory edit reaches the transcript. Shows the result on its status line.",
+      "description": "Loads ~/.cli-tweaks/memory/<project>/MEMORY.md into the session at startup, /clear and compaction, and saves project learnings to it after every main-loop turn through a tool-less $.model.fork in the background, so the stop is never blocked and no memory edit reaches the transcript. Shows the result on its status line.",
       "category": "productivity",
       "tags": [
         "mods",

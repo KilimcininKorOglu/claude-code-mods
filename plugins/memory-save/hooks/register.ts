@@ -7,20 +7,29 @@ import {
   changeShort,
   changeText,
   clockText,
+  contextText,
   isProjectName,
   parseReply,
   projectNameFrom,
+  topicFiles,
   validate,
   type Reply,
   type TopicAppend,
 } from './memory.ts'
 
 /**
- * What the hooks share: the project and its memory directory from session
- * start, why they could not be resolved, and the save queue: one save runs at
- * a time, and a turn that ends during it asks for one more.
+ * What the hooks share: the project and its memory directory, the promise that
+ * resolves them, why they could not be resolved, and the save queue: one save
+ * runs at a time, and a turn that ends during it asks for one more.
  */
-type State = { project?: string; dir?: string; error?: string; running: boolean; pending: boolean }
+type State = {
+  project?: string
+  dir?: string
+  error?: string
+  located?: Promise<void>
+  running: boolean
+  pending: boolean
+}
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -53,6 +62,15 @@ async function locate($: EngineInterface, state: State, cwd: string): Promise<vo
   }
   state.project = project
   state.dir = `${home}/.cli-tweaks/memory/${project}`
+}
+
+/**
+ * Starts the project lookup once. `classic.SessionStart` runs inside the
+ * `next(e)` of `session.start`, so both hooks share the one lookup.
+ */
+function ensureLocated($: EngineInterface, state: State, cwd: string): Promise<void> {
+  state.located ??= locate($, state, cwd)
+  return state.located
 }
 
 /** Returns the file's text, undefined when it does not exist; a read error rejects. */
@@ -89,6 +107,7 @@ async function ask($: EngineInterface, project: string, current: string | undefi
 
 /** Asks the fork what to remember, then writes MEMORY.md and its topic files. */
 async function save($: EngineInterface, state: State): Promise<void> {
+  await state.located
   const { project, dir } = state
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved yet')
   const file = `${dir}/MEMORY.md`
@@ -104,6 +123,27 @@ async function save($: EngineInterface, state: State): Promise<void> {
   await $.fs.write(file, result.text)
   $.ui.log(changeText(result.changes, result.topics))
   await report($, changeShort(result.changes, result.topics))
+}
+
+/** Returns the session's memory context, or undefined when the project has no MEMORY.md. */
+async function memoryContext($: EngineInterface, state: State): Promise<string | undefined> {
+  const { project, dir } = state
+  if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved')
+  const memory = await readFile($, `${dir}/MEMORY.md`)
+  if (memory === undefined) return undefined
+  const files = (await $.fs.list(dir)).filter(f => f.kind === 'file').map(f => f.name)
+  return contextText(project, dir, memory, topicFiles(files))
+}
+
+/** Adds the memory context to the classic SessionStart result; a failure shows on the status line and adds nothing. */
+async function withMemory<R extends { additionalContext?: string[] }>($: EngineInterface, state: State, r: R): Promise<R> {
+  try {
+    const text = await memoryContext($, state)
+    return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
+  } catch (err) {
+    await report($, `error: memory not loaded: ${message(err)}`)
+    return r
+  }
 }
 
 /** Runs saves one at a time; a failed save shows its error on the status line and the queue goes on. */
@@ -127,9 +167,19 @@ export const register: Register = on => {
   const state: State = { running: false, pending: false }
 
   on('session.start', async ($, e, next) => {
+    // A new start (a reload, an enable) looks the project up again.
+    state.located = locate($, state, e.cwd)
     const r = await next(e)
-    await locate($, state, e.cwd)
+    await state.located
     return r
+  })
+
+  // The memory enters the context at startup, resume, /clear and compaction.
+  on('classic.SessionStart', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agent_id !== undefined) return r
+    await ensureLocated($, state, e.cwd)
+    return withMemory($, state, r)
   })
 
   on('turn.complete', async ($, e, next) => {

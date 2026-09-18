@@ -1,8 +1,21 @@
 # memory-save
 
-A Claude Code Mod that keeps a per-project `MEMORY.md` up to date without blocking the stop. After every main-loop turn it asks a tool-less fork of the session what the project must remember, and writes the answer itself. The main conversation never sees a memory edit: no blocked stop, no Read or Edit of `MEMORY.md`, no extra turn.
+A Claude Code Mod that keeps a per-project `MEMORY.md` up to date without blocking the stop, and loads it into the session. After every main-loop turn it asks a tool-less fork of the session what the project must remember, and writes the answer itself. The main conversation never sees a memory edit: no blocked stop, no Read or Edit of `MEMORY.md`, no extra turn.
 
 ## What it does
+
+### Loads the memory
+
+At startup, resume, `/clear` and compaction, the `classic.SessionStart` hook adds one context block:
+
+    [PROJECT MEMORY: <project>]
+    <the whole MEMORY.md>
+
+    Topic files in ~/.cli-tweaks/memory/<project>: history.md
+
+The topic line is present only when topic files exist. A project without `MEMORY.md` gets no block. The block holds no instruction to write the file, because the mod writes it. The memory is not repeated between these events, so it does not grow the context turn by turn.
+
+### Saves the memory
 
 After every main-loop turn that ended with an answer or an interruption:
 
@@ -60,24 +73,26 @@ Load it from a local checkout for one session:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.276:
+Validated with `claude plugin validate` on Claude Code 2.1.277:
 
-    ❯ ./register.ts hooks: session.start, turn.complete
-    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.read (via readFile), $.fs.write (via save, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save), $.ui.status (via report)
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
+    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via save, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save), $.ui.status (via report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 
 Reach L2, writes files, runs git and drives Claude.
 
-    1. Reads:    HOME; MEMORY.md and its topic files under ~/.cli-tweaks/memory/<project>/; the session transcript, through the fork
+    1. Reads:    HOME; MEMORY.md, its topic files and the directory listing under ~/.cli-tweaks/memory/<project>/; the session transcript, through the fork
     2. Runs:     git rev-parse, twice per session, to name the project; one tool-less $.model.fork per main-loop turn
-    3. Sends:    the fork message (the writing rules and the current MEMORY.md) to the session's own API client, on top of the session's transcript
+    3. Sends:    MEMORY.md as session context at startup, resume, /clear and compaction; the fork message (the writing rules and the current MEMORY.md) to the session's own API client, on top of the session's transcript
     4. Persists: MEMORY.md, MEMORY.pre-migration.md and topic files under ~/.cli-tweaks/memory/<project>/
     5. Hostile input: the fork's reply is untrusted text; only the documented JSON shape is applied, topic file names are checked, and the result must pass every check before a write
 
 ## Limits
 
 - The fork has no tools. It knows only the transcript and the current file.
+- A mod loaded in the middle of a session (`/reload-plugins`, an enable) loads the memory at the next `/clear`, compaction or session.
+- The test engine of `claude plugin test` cannot raise `classic.SessionStart`. The load is covered by unit tests of its text and by a live session check.
 - Every main-loop turn costs one fork: the transcript as cache reads, the current file and the rules as input, and the answer as output.
 - A save that fails is not retried. The next turn saves again.
 - A fork can come back empty on a cold cache snapshot or an API error. The status line then shows the error.
