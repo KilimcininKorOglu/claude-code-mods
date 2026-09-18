@@ -11,7 +11,7 @@
     {
       "name": "task-poke",
       "source": "./plugins/task-poke",
-      "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 5 times in a row. Reach L2: one $.prompt.submit per turn, reads the transcript, stores one boolean.",
+      "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 5 times in a row. Turns the task tools on for every model unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set. Reach L2: one $.prompt.submit per turn, reads the transcript, sets one env variable, stores one boolean.",
       "category": "productivity",
       "tags": [
         "mods",

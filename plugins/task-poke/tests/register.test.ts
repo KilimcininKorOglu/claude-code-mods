@@ -44,15 +44,20 @@ const todoWrite = (...statuses: string[]): SessionMessage =>
 const created = (id: string): ToolUseSummary => use('TaskCreate', { subject: id, description: id }, { task: { id, subject: id } })
 const updated = (taskId: string, status: string): ToolUseSummary => use('TaskUpdate', { taskId, status })
 
-type World = { submitted: string[]; logs: string[]; setMessages: (m: SessionMessage[]) => void }
+type World = { submitted: string[]; logs: string[]; envSets: string[]; setMessages: (m: SessionMessage[]) => void }
 
-function world(on: On): World {
-  const w: World = { submitted: [], logs: [], setMessages: () => undefined }
+function world(on: On, env: Record<string, string> = {}, store: Record<string, unknown> = {}): World {
+  const w: World = { submitted: [], logs: [], envSets: [], setMessages: () => undefined }
   let messages: SessionMessage[] = []
   w.setMessages = m => {
     messages = m
   }
-  mock.store(on, {})
+  mock.store(on, store)
+  mock.env(on, env)
+  on('env.set', (_, e) => {
+    w.envSets.push(`${e.name}=${e.value}`)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.messages', () => ({ value: messages }))
@@ -165,6 +170,24 @@ describe('task-poke', () => {
     await $.turn.complete(turn())
     await flush()
     expect(w.submitted).toHaveLength(0)
+  })
+
+  test('turns the task tools on when the user did not set the variable', async ($, on) => {
+    const w = world(on)
+    await $.session.start(session)
+    expect(w.envSets).toEqual(['CLAUDE_CODE_ENABLE_TODO_TOOLS=1'])
+  })
+
+  test('keeps the value the user set for the task tools', async ($, on) => {
+    const w = world(on, { CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' })
+    await $.session.start(session)
+    expect(w.envSets).toEqual([])
+  })
+
+  test('does not turn the task tools on while task-poke is off', async ($, on) => {
+    const w = world(on, {}, { enabled: false })
+    await $.session.start(session)
+    expect(w.envSets).toEqual([])
   })
 
   test('/task-poke off stops the pokes', async ($, on) => {

@@ -9,10 +9,14 @@ It reads both task formats:
 
 A later `TodoWrite` replaces any state built from the Task tools.
 
-## Requirements
+## Task tools on every model
 
-- Claude Code offers the task-tracking tools only on Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6 and Haiku 4.5. Set `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` for every other model, because without a task tool the mod has nothing to count and never pokes.
-- `CLAUDE_CODE_ENABLE_TASKS=false` replaces the Task tools with `TodoWrite`. The mod reads both.
+Claude Code offers the task-tracking tools only on Claude 3.x, Opus 4.0 to 4.7, Sonnet 4.0 to 4.6 and Haiku 4.5. On every other model the mod has nothing to count. So at `session.start` the mod sets `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` for the Claude Code process, and Claude Code then offers the task tools on every model.
+
+- The mod does not change a value you set yourself. `CLAUDE_CODE_ENABLE_TODO_TOOLS=0` keeps the task tools off.
+- The mod does not set the variable while `/task-poke off` is stored. `/task-poke off` takes effect on the task tools from the next session.
+- The variable also reaches every Bash command and MCP server the session starts.
+- `CLAUDE_CODE_ENABLE_TASKS=false` replaces the Task tools with `TodoWrite`. The mod reads both formats.
 
 ## When it does not poke
 
@@ -47,17 +51,19 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.275:
+Validated with `claude plugin validate` on Claude Code 2.1.276:
 
-    > ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
-    > ./register.ts calls: $.command.register, $.prompt.submit, $.session.messages, $.store.get, $.store.set, $.ui.log
+    ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
+    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit, $.session.messages, $.store.get, $.store.set, $.ui.log
+    ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
+    ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
-Reach L2, drives Claude. Reads the transcript.
+Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 
-    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate and AskUserQuestion); the origin kind of each prompt, never its text
-    2. Runs:     one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 5 in a row
+    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate and AskUserQuestion); the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
+    2. Runs:     one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 5 in a row; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
-    4. Persists: one boolean (enabled) in $.store
+    4. Persists: one boolean (enabled) in $.store; the environment variable lasts for the process only
     5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status or a TaskCreate result without task.id stops the pokes, and one log line names the error until the error changes
 
 ## Limits

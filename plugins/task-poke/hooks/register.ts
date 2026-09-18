@@ -29,8 +29,13 @@ export const register: Register = on => {
   }
 
   on('session.start', async ($, e, next) => {
-    const r = await next(e)
     enabled = (await $.store.get(ENABLED_KEY)) !== false
+    // Claude Code offers TaskCreate and TodoWrite on some models only, and without them there is nothing
+    // to count. Turn them on unless the user set the variable. It must be set before next(e).
+    if (enabled && (await $.env.get('CLAUDE_CODE_ENABLE_TODO_TOOLS')) === undefined) {
+      await $.env.set('CLAUDE_CODE_ENABLE_TODO_TOOLS', '1')
+    }
+    const r = await next(e)
     resetCount()
     await $.command.register({
       name: 'task-poke',
