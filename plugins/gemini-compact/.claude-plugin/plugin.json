@@ -1,0 +1,62 @@
+{
+  "name": "gemini-compact",
+  "version": "0.1.0",
+  "description": "Replaces the compaction summary with Gemini decisions: old tool calls and results are kept, truncated or dropped, and every message stays verbatim. /gemini-compact sets the model, the threshold, the tier and on/off. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "apiKey": {
+      "type": "string",
+      "title": "Gemini API key",
+      "description": "Leave empty to use the GEMINI_API_KEY environment variable.",
+      "sensitive": true
+    },
+    "tier": {
+      "type": "string",
+      "title": "Gemini tier",
+      "description": "free: Google may use the conversation to improve its products and human reviewers may read it. paid: a billing-enabled key. /gemini-compact free|paid overrides it.",
+      "options": ["free", "paid"],
+      "default": "free"
+    },
+    "model": {
+      "type": "string",
+      "title": "Gemini model",
+      "description": "The model that decides. /gemini-compact model <id> overrides it.",
+      "default": "gemini-3.5-flash-lite"
+    },
+    "compactAtPercent": {
+      "type": "number",
+      "title": "Automatic compaction threshold",
+      "description": "Context percentage (1-99) after which a finished turn starts a compaction; 0 turns it off. /gemini-compact at <N> overrides it.",
+      "default": 60
+    },
+    "keepRecent": {
+      "type": "number",
+      "title": "Newest messages kept whole",
+      "description": "Tool calls in the newest messages and in the first message are never sent for a decision.",
+      "default": 6
+    },
+    "minReduction": {
+      "type": "number",
+      "title": "Minimum reduction",
+      "description": "Fraction (0-1) of characters the decisions must remove; below it the built-in summary runs.",
+      "default": 0.25
+    },
+    "headChars": {
+      "type": "number",
+      "title": "Characters kept of a truncated output",
+      "description": "The head of a tool output Gemini truncates.",
+      "default": 300
+    },
+    "maxInputChars": {
+      "type": "number",
+      "title": "Maximum characters sent to Gemini",
+      "description": "Above it the longest tool outputs are cut to their head and tail before sending.",
+      "default": 400000
+    }
+  }
+}

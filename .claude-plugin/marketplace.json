@@ -74,6 +74,20 @@
         "transcript",
         "ui"
       ]
+    },
+    {
+      "name": "gemini-compact",
+      "source": "./plugins/gemini-compact",
+      "description": "Replaces the compaction summary with Gemini decisions: every older tool call and its output is kept, truncated or dropped, every message stays verbatim, and a note names each removed call. /gemini-compact sets on/off, the model, the automatic threshold and the free or paid tier.",
+      "category": "productivity",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "compaction",
+        "gemini",
+        "context"
+      ]
     }
   ]
 }
