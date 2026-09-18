@@ -1,0 +1,29 @@
+name: Cleanup artifacts
+
+# Deletes workflow run artifacts older than one day, once a day.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete artifacts older than one day
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh api --paginate "repos/$REPO/actions/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.created_at < \"$cutoff\") | .id" |
+          while read -r id; do
+            echo "Deleting artifact $id"
+            gh api -X DELETE "repos/$REPO/actions/artifacts/$id"
+          done
