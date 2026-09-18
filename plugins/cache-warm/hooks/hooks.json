@@ -1,0 +1,4 @@
+{
+  "description": "cache-warm: session.start, classic.SessionStart, command.run{command=cache-warm|cache-status}, turn.step, turn.complete, session.compact. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.ts"]
+}
