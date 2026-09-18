@@ -34,7 +34,9 @@ describe('durations', () => {
 
   test('format minutes, hours and days', async () => {
     expect(fmtDuration(7 * MIN)).toBe('7m')
-    expect(fmtDuration(150 * MIN)).toBe('2h30m')
+    expect(fmtDuration(150 * MIN)).toBe('2h 30m')
+    expect(fmtDuration(305 * MIN)).toBe('5h 5m')
+    expect(fmtDuration(360 * MIN)).toBe('6h')
     expect(fmtDuration((15 * 24 + 9) * HOUR)).toBe('15d 9h')
     expect(fmtDuration(-MIN)).toBe('0m')
   })
@@ -128,7 +130,7 @@ describe('text', () => {
   test('the card names the always switch while off', async () => {
     const s = freshState()
     s.always = true
-    expect(card(s, NOW)).toMatch(/keep warm   off until the next session start or \/clear, which arm 6h00m \(always\)/)
+    expect(card(s, NOW)).toMatch(/keep warm   off until the next session start or \/clear, which arm 6h \(always\)/)
   })
 
   test('the card of a cold session', async () => {
@@ -137,7 +139,7 @@ describe('text', () => {
     s.ctx = 200_000
     s.lastRequestAt = NOW - 2 * HOUR
     const text = card(s, NOW)
-    expect(text).toMatch(/state       COLD, last request 2h00m ago/)
+    expect(text).toMatch(/state       COLD, last request 2h ago/)
     expect(text).toMatch(/cold cost   \$4\.00 to re-write it \(warm turn \$0\.05\)/)
     expect(text).toMatch(/session     0 cold writes paid, \$0\.00/)
   })

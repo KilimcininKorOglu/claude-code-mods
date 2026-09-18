@@ -30,7 +30,7 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
 **A status line under the prompt** while a window is armed or after a stop:
 
-    cache-warm: 5h10m left · ping in 37m · last ping read 200k $0.05
+    cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05
     cache-warm: stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone
 
 **The card** of `/cache-status`:
@@ -39,7 +39,7 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
     state       warm, 42m left
     context     200,502 tokens
     cold cost   $4.01 to re-write it (warm turn $0.05)
-    keep warm   on, 5h10m left · ping in 37m · last ping read 200k $0.05
+    keep warm   on, 5h 10m left · ping in 37m · last ping read 200k $0.05
     break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m
     session     1 cold write paid, $4.01
 

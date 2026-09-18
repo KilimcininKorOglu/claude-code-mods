@@ -65,7 +65,8 @@ export function fmtDuration(ms: number): string {
   const h = Math.floor(total / 60)
   const m = total % 60
   if (h >= 48) return `${Math.floor(h / 24)}d ${h % 24}h`
-  return h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`
+  if (h === 0) return `${m}m`
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
 export function fmtUsd(usd: number | null): string {
