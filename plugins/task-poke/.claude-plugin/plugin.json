@@ -1,0 +1,7 @@
+{
+  "name": "task-poke",
+  "version": "0.1.0",
+  "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 5 times in a row. Needs function hooks (early access).",
+  "author": { "name": "KilimcininKorOglu" },
+  "license": "MIT"
+}

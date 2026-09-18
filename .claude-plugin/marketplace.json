@@ -6,5 +6,19 @@
     "name": "KilimcininKorOglu",
     "url": "https://github.com/KilimcininKorOglu"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "task-poke",
+      "source": "./plugins/task-poke",
+      "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 5 times in a row. Reach L2: one $.prompt.submit per turn, reads the transcript, stores one boolean.",
+      "category": "productivity",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "tasks",
+        "automation"
+      ]
+    }
+  ]
 }

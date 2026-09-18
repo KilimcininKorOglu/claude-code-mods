@@ -1,0 +1,4 @@
+{
+  "description": "task-poke (Mod): session.start, command.run{command=task-poke}, prompt.submit, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.ts"]
+}

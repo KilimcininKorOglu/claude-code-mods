@@ -13,7 +13,9 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 
 ## Mods
 
-None yet.
+| Mod | What it does | Reach |
+|---|---|---|
+| [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 5 times in a row. | L2 |
 
 ## Layout
 

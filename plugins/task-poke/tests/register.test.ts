@@ -1,0 +1,166 @@
+import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import type {
+  CommandRunInput,
+  On,
+  PromptSubmitInput,
+  SessionMessage,
+  SessionStartInput,
+  ToolUseSummary,
+  TurnCompleteInput,
+} from 'claude-code'
+
+tier('user')
+
+const session: SessionStartInput = { surface: 'terminal', isInteractive: true, cwd: '/work' }
+const turn = (over: Partial<TurnCompleteInput> = {}): TurnCompleteInput =>
+  ({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer', ...over }) as TurnCompleteInput
+const typed = (): PromptSubmitInput => ({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+const run = (args: string): CommandRunInput => ({
+  command: 'task-poke',
+  args,
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: false, columns: 80 },
+})
+
+const use = (tool: string, input: Record<string, unknown>, result?: unknown): ToolUseSummary => ({
+  tool_use_id: `${tool}-${JSON.stringify(input)}`,
+  tool,
+  input,
+  result,
+})
+const assistant = (...toolUses: ToolUseSummary[]): SessionMessage => ({ role: 'assistant', text: '', toolUses })
+
+const todoWrite = (...statuses: string[]): SessionMessage =>
+  assistant(use('TodoWrite', { todos: statuses.map((status, i) => ({ content: `t${i}`, status, activeForm: `t${i}` })) }))
+const created = (id: string): ToolUseSummary => use('TaskCreate', { subject: id, description: id }, { task: { id, subject: id } })
+const updated = (taskId: string, status: string): ToolUseSummary => use('TaskUpdate', { taskId, status })
+
+type World = { submitted: string[]; logs: string[]; setMessages: (m: SessionMessage[]) => void }
+
+function world(on: On): World {
+  const w: World = { submitted: [], logs: [], setMessages: () => undefined }
+  let messages: SessionMessage[] = []
+  w.setMessages = m => {
+    messages = m
+  }
+  mock.store(on, {})
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
+  on('command.register', ($, e) => ({ value: { command: e.name } }))
+  on('session.messages', () => ({ value: messages }))
+  on('ui.log', ($, e) => {
+    w.logs.push(e.text)
+    return { value: undefined }
+  })
+  on('prompt.submit', ($, e) => {
+    w.submitted.push(e.text)
+    return { text: e.text }
+  })
+  on('turn.complete', ($, e) => ({ text: e.answer }))
+  return w
+}
+
+const flush = async (): Promise<void> => {
+  for (let i = 0; i < 5; i += 1) await Promise.resolve()
+}
+
+describe('task-poke', () => {
+  test('pokes while a TodoWrite list has unfinished tasks', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('completed', 'in_progress', 'pending')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(1)
+    expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/5')
+  })
+
+  test('stays idle when every TodoWrite task is completed', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending'), todoWrite('completed', 'completed')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(0)
+  })
+
+  test('tracks Task tools by the id in the TaskCreate result', async ($, on) => {
+    const w = world(on)
+    w.setMessages([assistant(created('1'), created('2')), assistant(updated('1', 'completed'))])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.logs.at(-1)).toContain('1 unfinished tasks')
+
+    w.setMessages([assistant(created('1'), created('2')), assistant(updated('1', 'completed'), updated('2', 'deleted'))])
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(1)
+  })
+
+  test('reads the raw id key that Claude Code repairs to taskId', async ($, on) => {
+    const w = world(on)
+    w.setMessages([assistant(created('7')), assistant(use('TaskUpdate', { id: '7', status: 'completed' }))])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(0)
+  })
+
+  test('a later TodoWrite replaces the Task tools state', async ($, on) => {
+    const w = world(on)
+    w.setMessages([assistant(created('1')), todoWrite('completed')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(0)
+  })
+
+  test('stops after five pokes and a user prompt resets the count', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    for (let i = 0; i < 7; i += 1) {
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(w.submitted).toHaveLength(5)
+    expect(w.logs.filter(l => l.includes('stopped after 5 pokes'))).toHaveLength(1)
+
+    await $.prompt.submit(typed())
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(6)
+  })
+
+  test('does not poke after an interrupted turn, a subagent turn or a question to the user', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    await $.turn.complete(turn({ reason: 'aborted', isAborted: true }))
+    await $.turn.complete(turn({ agentId: 'a1' }))
+    w.setMessages([todoWrite('pending'), assistant(use('AskUserQuestion', { questions: [] }))])
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(0)
+  })
+
+  test('/task-poke off stops the pokes', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    const { text } = await $.command.run(run('off'))
+    await $.turn.complete(turn())
+    await flush()
+    expect(text).toContain('task-poke is off')
+    expect(w.submitted).toHaveLength(0)
+  })
+
+  test('an unknown status fails loudly instead of counting as done', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('weird')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(0)
+  })
+})
