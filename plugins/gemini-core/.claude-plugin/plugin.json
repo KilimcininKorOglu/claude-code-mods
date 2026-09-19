@@ -1,0 +1,27 @@
+{
+  "name": "gemini-core",
+  "version": "0.1.0",
+  "description": "One place for the Gemini key, tier, model and thinking level of every Gemini mod: adds $.gemini, which builds each mod's request and reads Gemini's answer. /gemini-core sets the tier and, per mod, the model and the thinking level. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "apiKey": {
+      "type": "string",
+      "title": "Gemini API key",
+      "description": "Leave empty to use the GEMINI_API_KEY environment variable. Every Gemini mod uses this key.",
+      "sensitive": true
+    },
+    "tier": {
+      "type": "string",
+      "title": "Gemini tier",
+      "description": "free: Google may use what the Gemini mods send to improve its products and human reviewers may read it. paid: a billing-enabled key. /gemini-core free|paid overrides it.",
+      "options": ["free", "paid"],
+      "default": "free"
+    }
+  }
+}

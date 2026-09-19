@@ -22,6 +22,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 | [prompt-time](plugins/prompt-time) | Draws the time under each of your messages and each text block of the model's replies, also for a resumed session. | L1 |
 | [gemini-compact](plugins/gemini-compact) | Moves compaction from Claude to Gemini: a Gemini summary with the newest messages verbatim, or Gemini decisions that keep, cut or drop older tool calls. | L3 |
 | [gemini-advisor](plugins/gemini-advisor) | Gives the model a Gemini advisor tool it calls by itself: Gemini reads the conversation and the model's message and answers with a second opinion. | L3 |
+| [gemini-core](plugins/gemini-core) | Keeps the Gemini key and tier of every Gemini mod, and each mod's model and thinking level, in one place, and builds their Gemini requests. | L1 |
 | [gemini-review](plugins/gemini-review) | Has Gemini review every commit the model makes, from the diff and the conversation, and stops a commit with a blocking finding. | L3 |
 
 ## Layout

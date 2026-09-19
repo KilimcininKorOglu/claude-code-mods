@@ -116,6 +116,19 @@
         "gemini",
         "git"
       ]
+    },
+    {
+      "name": "gemini-core",
+      "source": "./plugins/gemini-core",
+      "description": "One place for the Gemini settings of every Gemini mod: the key and the tier for all, the model and the thinking level for each. Adds $.gemini, which builds each mod's Gemini request and reads the answer. /gemini-core sets them.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "gemini",
+        "settings"
+      ]
     }
   ]
 }
