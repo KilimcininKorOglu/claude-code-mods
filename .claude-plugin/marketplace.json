@@ -120,7 +120,7 @@
     {
       "name": "gemini-core",
       "source": "./plugins/gemini-core",
-      "description": "One place for the Gemini settings of every Gemini mod: the key and the tier for all, the model and the thinking level for each. Adds $.gemini, which builds each mod's Gemini request and reads the answer. /gemini-core sets them.",
+      "description": "One place for the Gemini settings of every Gemini mod: the keys and the tier for all, the model and the thinking level for each. Adds $.gemini, which builds each mod's Gemini request, reads the answer and moves to the next key after a quota or key error. /gemini-core sets them and picks a model from Google's model list.",
       "category": "development",
       "tags": [
         "mods",

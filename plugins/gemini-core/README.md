@@ -23,13 +23,23 @@ The Gemini docs say Gemini 3.1 Pro takes no `minimal` either.
 
 ## Command
 
-    /gemini-core                                    tier, whether a key is set, each enrolled mod's model and thinking level
+    /gemini-core                                    tier, how many keys are set, each enrolled mod's model and thinking level
     /gemini-core free | paid                        the tier of every Gemini mod; free prints the warning below
-    /gemini-core model <mod> <id>                   for example: model review gemini-3.7-flash
+    /gemini-core models [refresh]                   the Gemini text models the key lists
+    /gemini-core model <mod>                        a pane to pick the mod's model from that list
+    /gemini-core model <mod> <id>                   for example: model review gemini-3.7-flash; an id the list lacks is refused
     /gemini-core thinking <mod> <level|default>     for example: thinking compact low; default drops the level
     /gemini-core reset                              the tier from the plugin option, each mod its default model and no level
 
 A mod is named in full (`gemini-review`) or without `gemini-` (`review`). The settings are kept across sessions and take effect at the next request. A mod may hook `gemini.configure` to follow a change.
+
+## Model list
+
+The list comes from Google's `models.list` (`GET /v1beta/models`, the key in the `x-goog-api-key` header), asked once per session, again with `models refresh`. When a key fails, the next key is asked. It keeps the models that take `generateContent` and whose id starts with `gemini-`, and leaves out ids with `tts` or `image`, which answer with speech or pictures. On the checked key Google listed 58 models and 21 stayed (measured on 2.1.278). The filter reads names only, so a new model of another kind whose name does not say so stays in the list; Gemini's own error then reaches the mod that asks.
+
+`/gemini-core model <mod>` opens a pane with a `Select` of the list, the mod's current model selected; Enter sets the pick, shows it in a toast and closes the pane, and Esc closes it with no change. In the terminal the Select draws a scrolling list of ten rows. A surface without a `Select` (mobile) shows the list and the command that sets one. An id given with the command is refused when the list lacks it, with the three closest ids:
+
+    gemini-9-flash is not a Gemini text model this key lists; closest: gemini-2.5-flash, gemini-3.5-flash, gemini-3.6-flash.
 
 ## Several keys
 
@@ -87,16 +97,16 @@ for (let attempt = 1; ; attempt++) {
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ types ./types/index.d.ts declares on $: $.gemini
-    ❯ ./register.ts hooks: engine.create, session.start, command.run{command=gemini-core}
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.gemini.configure (via runCommand), $.gemini.settings (via statusOf), $.store.delete, $.store.get, $.store.set
+    ❯ ./register.ts hooks: engine.create, session.start, command.run{command=gemini-core}, ui.render{component=Pane}, ui.close
+    ❯ ./register.ts calls: $.command.register, $.env.get, $.gemini.configure (via applyChange, pickModel), $.gemini.settings (via openPicker, statusOf), $.http.fetch (via listModels), $.store.delete, $.store.get, $.store.set, $.ui.close (via pickModel), $.ui.open (via openPicker), $.ui.resolve, $.ui.toast
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: GEMINI_API_KEY
 
-Reach L1: it reads the environment and its own store and sends nothing. The request it builds carries the key to the mod that sends it.
+Reach L3, reaches the network: `/gemini-core models` and a model change ask Google for the model list. The generateContent requests it builds carry the key to the mod that sends them.
 
     1. Reads:    GEMINI_API_KEY or the apiKey option; its own $.store
-    2. Runs:     no process
-    3. Sends:    nothing; the Gemini mods send the requests it builds, with the key in their x-goog-api-key header
+    2. Runs:     no process; it opens one pane for a model pick
+    3. Sends:    the model list request (GET generativelanguage.googleapis.com/v1beta/models, no conversation), once per session and on refresh, with the key in the x-goog-api-key header; the Gemini mods send the requests it builds
     4. Persists: in $.store, the tier, the enrolled mods with their default models, and each mod's model and thinking level
     5. Hostile input: a mod that calls $.gemini.request receives the key, so only install Gemini mods you trust; a model id must match [a-z0-9.-] because it goes into the URL path; the response text is read as JSON and never run
 

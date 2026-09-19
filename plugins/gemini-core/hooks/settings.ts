@@ -31,13 +31,26 @@ export function resolveConsumer(name: string, enrolled: readonly string[]): stri
   return enrolled.find(c => c === name || c === `gemini-${name}`)
 }
 
-export type Command = { kind: 'status' } | { kind: 'change'; change: GeminiChange } | { kind: 'error'; text: string }
+export type Command =
+  | { kind: 'status' }
+  | { kind: 'change'; change: GeminiChange }
+  | { kind: 'models'; refresh: boolean }
+  | { kind: 'pick'; consumer: string }
+  | { kind: 'error'; text: string }
 
-export const USAGE = 'expects free, paid, model <mod> <id>, thinking <mod> <minimal|low|medium|high|default>, or reset'
+export const USAGE = 'expects free, paid, models [refresh], model <mod> [id], thinking <mod> <minimal|low|medium|high|default>, or reset'
 
+/** `model <mod>` opens the picker; `model <mod> <id>` sets the id, checked against the list before it is stored. */
 function modelCommand(consumer: string | undefined, id: string | undefined): Command {
-  if (consumer === undefined || id === undefined || !MODEL_ID.test(id)) return { kind: 'error', text: 'model takes a mod and a Gemini model id, for example: model review gemini-3.8-flash' }
+  if (consumer === undefined) return { kind: 'error', text: 'model takes a mod, and a model id or nothing to pick from the list, for example: model review' }
+  if (id === undefined) return { kind: 'pick', consumer }
+  if (!MODEL_ID.test(id)) return { kind: 'error', text: `${id} is not a Gemini model id` }
   return { kind: 'change', change: { consumer, model: id } }
+}
+
+function modelsCommand(word: string | undefined, rest: number): Command {
+  if (rest > 0 || (word !== undefined && word !== 'refresh')) return { kind: 'error', text: 'models takes nothing, or refresh to ask Google again' }
+  return { kind: 'models', refresh: word === 'refresh' }
 }
 
 function thinkingCommand(consumer: string | undefined, level: string | undefined): Command {
@@ -57,6 +70,7 @@ const WORDS: Record<string, Command> = {
 /** Reads the argument of /gemini-core; the mod name is taken as typed and resolved by `configure`. */
 export function parseCommand(args: string): Command {
   const [first = '', second, third, ...rest] = args.trim().split(/\s+/).filter(Boolean)
+  if (first === 'models') return modelsCommand(second, rest.length + (third === undefined ? 0 : 1))
   if (rest.length > 0) return { kind: 'error', text: USAGE }
   if (first === 'model') return modelCommand(second, third)
   if (first === 'thinking') return thinkingCommand(second, third)

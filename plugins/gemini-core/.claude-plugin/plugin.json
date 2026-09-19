@@ -1,7 +1,7 @@
 {
   "name": "gemini-core",
   "version": "0.2.0",
-  "description": "One place for the Gemini key, tier, model and thinking level of every Gemini mod: adds $.gemini, which builds each mod's request and reads Gemini's answer. /gemini-core sets the tier and, per mod, the model and the thinking level. Needs function hooks (early access).",
+  "description": "One place for the Gemini key, tier, model and thinking level of every Gemini mod: adds $.gemini, which builds each mod's request and reads Gemini's answer. /gemini-core sets the tier and, per mod, the model (picked from Google's model list) and the thinking level. Several keys are tried in turn. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

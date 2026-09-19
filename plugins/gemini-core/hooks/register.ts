@@ -2,6 +2,8 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiSettings, GeminiTier } from '../types/index.d.ts'
 import { buildHttp, MODEL_ID, withThinking } from './api.ts'
 import { parseKeys, readWithKeys, type KeyState } from './keys.ts'
+import { modelsRequest, modelsText, parseModels, unknownModel, type ModelInfo } from './models.ts'
+import { listTree, PANE_ID, paneRows, pickerTree, type Pick } from './picker.tsx'
 import { consumersOf, FREE_WARNING, isThinking, isTier, KEYS, parseCommand, resolveConsumer, statusText, type ConsumerLine } from './settings.ts'
 
 /**
@@ -135,12 +137,68 @@ async function statusOf($: EngineInterface, config: Config): Promise<string> {
   return statusText(isTier(tier) ? tier : config.tier, keys.length, lines)
 }
 
-async function runCommand($: EngineInterface, config: Config, args: string): Promise<string> {
+/** What the command keeps for the session: the model list, fetched once, and the pick the pane is open for. */
+type Session = { models?: ModelInfo[]; pick?: Pick }
+
+/** The text models the keys list, from memory unless `refresh`; each key is asked in turn until one answers. */
+async function listModels($: EngineInterface, config: Config, session: Session, refresh: boolean): Promise<ModelInfo[]> {
+  if (session.models !== undefined && !refresh) return session.models
+  const keys = config.apiKeys.length > 0 ? config.apiKeys : parseKeys(await $.env.get('GEMINI_API_KEY'))
+  if (keys.length === 0) throw new Error(NO_KEY)
+  const failures: string[] = []
+  for (const [i, key] of keys.entries()) {
+    const request = modelsRequest(key)
+    const r = await $.http.fetch(request.url, request.init)
+    try {
+      session.models = parseModels(r.status, r.ok, r.text)
+      return session.models
+    } catch (err) {
+      failures.push(`key ${i + 1}: ${errorText(err)}`)
+    }
+  }
+  throw new Error(failures.join('; '))
+}
+
+/** Opens the pane that lists the models for one mod. */
+async function openPicker($: EngineInterface, config: Config, session: Session, name: string): Promise<string> {
+  const names = Object.keys(consumersOf(await $.store.get(KEYS.consumers)))
+  const consumer = resolveConsumer(name, names)
+  if (consumer === undefined) return `no Gemini mod named ${name}; enrolled: ${names.join(', ') || 'none'}`
+  const models = await listModels($, config, session, false)
+  if (models.length === 0) return modelsText(models)
+  session.pick = { consumer, models, current: (await $.gemini.settings({ consumer })).model }
+  await $.ui.open({ id: PANE_ID, title: `Gemini model for ${consumer}`, focus: true, closeOnEscape: true, rows: paneRows(models) })
+  return `pick the model of ${consumer} in the pane; Esc closes it`
+}
+
+/** Sets the model picked in the pane and closes it. */
+async function pickModel($: EngineInterface, session: Session, model: string): Promise<void> {
+  const pick = session.pick
+  if (pick === undefined) return
+  session.pick = undefined
+  await $.ui.close({ id: PANE_ID })
+  $.ui.toast(await $.gemini.configure({ consumer: pick.consumer, model }))
+}
+
+/** A model id set by argument is checked against the list the keys give. */
+async function applyChange($: EngineInterface, config: Config, session: Session, change: GeminiChange): Promise<string> {
+  if ('model' in change) {
+    const refused = unknownModel(change.model, await listModels($, config, session, false))
+    if (refused !== undefined) return refused
+  }
+  return $.gemini.configure(change)
+}
+
+async function runCommand($: EngineInterface, config: Config, session: Session, args: string): Promise<string> {
   const command = parseCommand(args)
-  if (command.kind === 'error') return command.text
-  if (command.kind === 'status') return statusOf($, config)
   try {
-    return await $.gemini.configure(command.change)
+    switch (command.kind) {
+      case 'error': return command.text
+      case 'status': return await statusOf($, config)
+      case 'models': return modelsText(await listModels($, config, session, command.refresh))
+      case 'pick': return await openPicker($, config, session, command.consumer)
+      case 'change': return await applyChange($, config, session, command.change)
+    }
   } catch (err) {
     return errorText(err)
   }
@@ -148,6 +206,7 @@ async function runCommand($: EngineInterface, config: Config, args: string): Pro
 
 export const register: Register = (on, options) => {
   const config = configFrom(options)
+  const session: Session = {}
 
   on('engine.create', async (_, e, next) => {
     const below = await next(e)
@@ -164,11 +223,24 @@ export const register: Register = (on, options) => {
     const r = await next(e)
     await $.command.register({
       name: 'gemini-core',
-      description: 'Gemini settings of every Gemini mod: status, free, paid, model <mod> <id>, thinking <mod> <level|default>, reset (gemini-core)',
-      argumentHint: '[free | paid | model <mod> <id> | thinking <mod> <level|default> | reset]',
+      description: 'Gemini settings of every Gemini mod: status, free, paid, models, model <mod> [id], thinking <mod> <level|default>, reset (gemini-core)',
+      argumentHint: '[free | paid | models [refresh] | model <mod> [id] | thinking <mod> <level|default> | reset]',
     })
     return r
   })
 
-  on('command.run', { command: 'gemini-core' }, async ($, e) => ({ text: await runCommand($, config, String(e.args ?? '')) }))
+  on('command.run', { command: 'gemini-core' }, async ($, e) => ({ text: await runCommand($, config, session, String(e.args ?? '')) }))
+
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    const pick = session.pick
+    if (e.requestId !== PANE_ID || pick === undefined) return next(e)
+    if (e.surface === 'mobile') return listTree($.ui.resolve(e), pick)
+    return pickerTree($.ui.resolve(e), pick, model => void pickModel($, session, model).catch((err: unknown) => $.ui.toast(errorText(err))))
+  })
+
+  // Esc or the person closing the pane drops the pick.
+  on('ui.close', async (_, e, next) => {
+    if (e.id === PANE_ID) session.pick = undefined
+    return next(e)
+  })
 }
