@@ -20,7 +20,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
    ```
 
 2. Restart Claude Code. A session that was open during the install does not load the mod.
-3. For a Gemini mod, give gemini-core a Gemini API key and choose the tier. The [gemini-core README](plugins/gemini-core/README.md#after-installing) lists the steps.
+3. For a Gemini mod, give gemini-core a Gemini API key and choose the tier, then turn the mod on (`/gemini-review on`, `/gemini-advisor on`, `/gemini-compact on`). A Gemini mod is off after an install and sends nothing to Gemini until then. The [gemini-core README](plugins/gemini-core/README.md#after-installing) lists the steps.
 
 Each mod README has an "After installing" section when that mod needs more.
 
