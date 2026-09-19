@@ -1,6 +1,9 @@
 /** The review Gemini is asked for, its answer, and what the model and the user read. */
 import { SKIP_VARIABLE } from './commit.ts'
-import { post, type Answer, type Request } from './gemini.ts'
+import type { EngineInterface } from 'claude-code'
+
+/** Gemini's answer as gemini-core reads it. */
+export type Answer = Extract<Awaited<ReturnType<EngineInterface['gemini']['read']>>, { answer: unknown }>['answer']
 
 export type Severity = 'blocker' | 'minor'
 
@@ -15,10 +18,10 @@ Report problems in the diff only, never in code the diff does not change. For ea
 - minor: anything else worth saying: style, naming, a missing test, a small risk.
 Report a blocker only with evidence in the diff or the conversation; when unsure, it is minor. An empty list is the right answer for a sound commit. Write each message in the language of the conversation, in one or two sentences, naming the fix.`
 
-/** The request for findings on the diff, in a schema Gemini must follow. */
-export function buildReviewRequest(model: string, apiKey: string, transcript: string | undefined, diff: string): Request {
+/** The generateContent body asking for findings on the diff, in a schema Gemini must follow. */
+export function buildReviewBody(transcript: string | undefined, diff: string): Record<string, unknown> {
   const conversation = transcript === undefined ? 'The conversation is not available; only the diff is.' : `The conversation:\n\n${transcript}`
-  return post(model, apiKey, {
+  return {
     contents: [{ role: 'user', parts: [{ text: `${REVIEW_TASK}\n\n${conversation}\n\nThe diff the commit records:\n\n${diff}` }] }],
     generationConfig: {
       responseMimeType: 'application/json',
@@ -42,7 +45,7 @@ export function buildReviewRequest(model: string, apiKey: string, transcript: st
         required: ['findings'],
       },
     },
-  })
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,21 +1,16 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { changeText, FREE_WARNING, parseCommand } from '../hooks/command.ts'
+import { parseCommand } from '../hooks/command.ts'
 import { configFrom } from '../hooks/config.ts'
-import { retryDelay } from '../hooks/gemini.ts'
-import { buildReviewRequest, denyText, failedContext, minorContext, parseFindings, REVIEW_TASK, summaryText } from '../hooks/review.ts'
+import { buildReviewBody, denyText, failedContext, minorContext, parseFindings, REVIEW_TASK, summaryText } from '../hooks/review.ts'
 
 tier('user')
 
 const answer = (text: string, finishReason = 'STOP') => ({ text, inputTokens: 12_400, outputTokens: 900, finishReason })
 
-describe('buildReviewRequest', () => {
-  test('posts the task, the conversation and the diff with the key in a header and a findings schema', async () => {
-    const r = buildReviewRequest('gemini-3.8-flash', 'KEY', 'the talk', 'the diff')
-    expect(r.url).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent')
-    expect(r.url).not.toContain('KEY')
-    expect(r.init.headers['x-goog-api-key']).toBe('KEY')
-    const body = JSON.parse(r.init.body)
+describe('buildReviewBody', () => {
+  test('holds the task, the conversation and the diff, and a findings schema', async () => {
+    const body = JSON.parse(JSON.stringify(buildReviewBody('the talk', 'the diff')))
     expect(body.contents[0].parts[0].text).toBe(`${REVIEW_TASK}\n\nThe conversation:\n\nthe talk\n\nThe diff the commit records:\n\nthe diff`)
     expect(body.generationConfig.responseSchema.properties.findings.items.properties.severity.enum).toEqual(['blocker', 'minor'])
   })
@@ -60,13 +55,10 @@ describe('texts', () => {
 })
 
 describe('settings', () => {
-  test('reads the command, the options and the retry rule', async () => {
-    expect(parseCommand('off')).toEqual({ kind: 'set', patch: { enabled: false } })
-    expect(parseCommand('model x/y').kind).toBe('error')
-    expect(changeText({ tier: 'free' })).toBe(FREE_WARNING)
-    expect(configFrom({}).model).toBe('gemini-3.8-flash')
-    expect([1, 2, 3, 4].map(n => retryDelay(503, n, 0))).toEqual([1000, 2000, 3000, undefined])
-    expect(retryDelay(503, 1, 59_500)).toBe(undefined)
-    expect(retryDelay(500, 1, 0)).toBe(undefined)
+  test('reads the command and the options', async () => {
+    expect(parseCommand('off')).toEqual({ kind: 'set', enabled: false })
+    expect(parseCommand('model gemini-3.8-flash').kind).toBe('error')
+    expect(configFrom({}).maxInputChars).toBe(2_000_000)
+    expect(configFrom({ maxInputChars: 5 }).maxInputChars).toBe(2_000_000)
   })
 })

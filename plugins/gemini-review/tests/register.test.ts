@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionMessage } from 'claude-code'
 
 tier('user')
@@ -34,6 +34,48 @@ type World = {
   toasts: string[]
   logs: string[]
   reads: number
+  enrolled: string[]
+}
+
+/** What gemini-core holds for this mod. */
+type Core = { key?: string; tier?: 'free' | 'paid'; model?: string; thinking?: 'minimal' | 'low' | 'medium' | 'high' }
+
+/** gemini-core as an inline plugin: it adds `$.gemini`, whose calls the hooks of `seatCore` answer. */
+const CORE: Plugin = {
+  name: 'gemini-core',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), gemini: { enroll: stub, settings: stub, request: stub, read: stub, configure: stub } }))
+  },
+}
+
+/** A test with gemini-core loaded beside the plugin. */
+const it = (name: string, body: TestBody) => test(name, { plugins: [CORE] }, body)
+
+/** gemini-core's reading of a response, as far as these tests need it (gemini-core's tests cover the rest). */
+function coreRead(e: { status: number; ok: boolean; text: string; attempt: number }) {
+  const delay = [1000, 2000, 3000][e.attempt - 1]
+  if (e.status === 503 && delay !== undefined) return { retryInMs: delay }
+  const value = JSON.parse(e.text)
+  if (!e.ok) return { error: `Gemini HTTP ${e.status}: ${value.error.message}` }
+  const usage = value.usageMetadata
+  return { answer: { text: value.candidates[0].content.parts[0].text, inputTokens: usage.promptTokenCount, outputTokens: usage.candidatesTokenCount, finishReason: 'STOP' } }
+}
+
+/** gemini-core, seated beneath the plugin: `$.gemini` answered from `core`. */
+function seatCore(on: On, core: Core, enrolled: string[]): void {
+  const tierOf = core.tier ?? 'free'
+  const model = core.model ?? 'gemini-3.8-flash'
+  const thinking = core.thinking === undefined ? {} : { thinking: core.thinking }
+  on('gemini.enroll', (_, e) => { enrolled.push(`${e.consumer} ${e.defaultModel}`); return { value: undefined } })
+  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, tier: tierOf, model, ...thinking } }))
+  on('gemini.request', (_, e) => {
+    if (core.key === undefined) return { value: { error: 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option' } }
+    const body = core.thinking === undefined ? e.body : { ...e.body, generationConfig: { ...(e.body.generationConfig as object), thinkingConfig: { thinkingLevel: core.thinking } } }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+    return { value: { http: { url, init: { method: 'POST' as const, headers: { 'x-goog-api-key': core.key }, body: JSON.stringify(body) } }, model, tier: tierOf } }
+  })
+  on('gemini.read', (_, e) => ({ value: coreRead(e) }))
 }
 
 type Repo = { hasHead?: boolean; staged?: string; untracked?: string[] }
@@ -49,7 +91,7 @@ function gitAnswer(repo: Repo, argv: readonly string[]): { exitCode: number; std
 }
 
 // Beneath the plugin: a store, a transcript, a git repository, Gemini from a script, and Bash itself.
-function world(on: On, opts: { key?: string; store?: [string, unknown][]; repo?: Repo } = {}): World {
+function world(on: On, opts: Core & { store?: [string, unknown][]; repo?: Repo } = {}): World {
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
     store: new Map(opts.store ?? []),
@@ -60,8 +102,9 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][]; repo?:
     toasts: [],
     logs: [],
     reads: 0,
+    enrolled: [],
   }
-  on('env.get', (_, e) => ({ value: e.name === 'GEMINI_API_KEY' ? opts.key : undefined }))
+  seatCore(on, opts, w.enrolled)
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
@@ -90,7 +133,7 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][]; repo?:
 const reviewText = (w: World) => JSON.parse(w.requests[0]?.body ?? '{}').contents[0].parts[0].text as string
 
 describe('gemini-review', () => {
-  test('stops a commit with a blocker and tells the model what to fix and how to skip', async ($, on) => {
+  it('stops a commit with a blocker and tells the model what to fix and how to skip', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: reply([BLOCKER, MINOR]) })
     const r = await $.tool.call({ tool: 'Bash', command: 'git commit -m "feat: pay"' })
@@ -103,7 +146,7 @@ describe('gemini-review', () => {
     expect(w.logs).toEqual(['commit stopped: reviewed 1 file(s) · 1 blocker, 1 minor · 12k in, 300 out'])
   })
 
-  test('lets a commit with minor notes run and adds the notes after its result', async ($, on) => {
+  it('lets a commit with minor notes run and adds the notes after its result', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: reply([MINOR]) })
     const r = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
@@ -112,7 +155,7 @@ describe('gemini-review', () => {
     expect(r.context).toEqual([expect.stringContaining('let this commit run with 1 minor note(s):\n- pay.ts: Name the constant.')])
   })
 
-  test('an empty change asks Gemini nothing and adds nothing', async ($, on) => {
+  it('an empty change asks Gemini nothing and adds nothing', async ($, on) => {
     const w = world(on, { key: 'KEY', repo: { staged: '' } })
     const r = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
     expect(w.requests).toEqual([])
@@ -120,7 +163,7 @@ describe('gemini-review', () => {
     expect(w.commits).toHaveLength(1)
   })
 
-  test('reads what the same command stages, new files whole, in the directory it names', async ($, on) => {
+  it('reads what the same command stages, new files whole, in the directory it names', async ($, on) => {
     const w = world(on, { key: 'KEY', repo: { untracked: ['new.ts'] } })
     w.replies.push({ status: 200, text: reply([]) })
     const r = await $.tool.call({ tool: 'Bash', command: 'cd sub && git add new.ts && git commit -m x' })
@@ -137,7 +180,7 @@ describe('gemini-review', () => {
     expect(w.toasts[0]).toContain('reviewed 2 file(s)')
   })
 
-  test('a Gemini error, a missing key or a git error lets the commit run with a warning', async ($, on) => {
+  it('a Gemini error, a missing key or a git error lets the commit run with a warning', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 429, text: JSON.stringify({ error: { message: 'Resource has been exhausted' } }) })
     const r = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
@@ -146,7 +189,7 @@ describe('gemini-review', () => {
     expect(w.logs).toEqual(['commit ran without a review: Gemini HTTP 429: Resource has been exhausted'])
   })
 
-  test('without a key the commit runs, the model is told, and nothing is sent', async ($, on) => {
+  it('without a key the commit runs, the model is told, and nothing is sent', async ($, on) => {
     const w = world(on)
     const r = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
     expect(w.commits).toHaveLength(1)
@@ -155,7 +198,7 @@ describe('gemini-review', () => {
     expect(w.git).toEqual([])
   })
 
-  test('asks again after a 503, and lets the commit run after the fourth', async ($, on) => {
+  it('asks again after a 503, and lets the commit run after the fourth', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     const busy = { status: 503, text: JSON.stringify({ error: { message: 'high demand' } }) }
     w.replies.push(busy, { status: 200, text: reply([BLOCKER]) })
@@ -171,7 +214,7 @@ describe('gemini-review', () => {
     expect(w.commits).toHaveLength(1)
   })
 
-  test('the skip prefix, a subagent, a command that is no commit, and off', async ($, on) => {
+  it('the skip prefix, a subagent, a command that is no commit, and off', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     expect(await $.tool.call({ tool: 'Bash', command: 'GEMINI_REVIEW_SKIP=1 git commit -m x' })).toEqual({ result: 'ran' })
     expect(w.logs).toEqual(['commit ran without a review: the model used GEMINI_REVIEW_SKIP=1'])
@@ -189,17 +232,24 @@ describe('gemini-review', () => {
     expect(w.commits).toHaveLength(4)
   })
 
-  test('the command stores the settings and shows the status with the last review', async ($, on) => {
-    const w = world(on, { key: 'KEY' })
+  it('enrolls with gemini-core, and sends with the model, thinking level and tier it holds', async ($, on) => {
+    const w = world(on, { key: 'KEY', model: 'gemini-3.5-flash', thinking: 'low', tier: 'paid' })
     await $.session.start({ surface: null, isInteractive: false, cwd: '/src/app' })
-    expect((await $.command.run(run('model gemini-3.5-flash'))).text).toBe('model gemini-3.5-flash')
-    expect((await $.command.run(run('paid'))).text).toBe('paid tier')
+    expect(w.enrolled).toEqual(['gemini-review gemini-3.8-flash'])
     w.replies.push({ status: 200, text: reply([]) })
     await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
     expect(w.requests[0]?.url).toContain('/models/gemini-3.5-flash:generateContent')
+    expect(JSON.parse(w.requests[0]?.body ?? '{}').generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' })
     expect(w.toasts[0]).not.toContain('free tier')
-    expect((await $.command.run(run(''))).text).toBe('on · gemini-3.5-flash · paid tier · key set\nlast: reviewed 1 file(s) · 0 blocker, 0 minor · 12k in, 300 out')
-    expect((await $.command.run(run('reset'))).text).toBe('settings reset to the plugin options')
+    expect((await $.command.run(run(''))).text).toBe('on · gemini-3.5-flash · thinking low · paid tier · key set\nlast: reviewed 1 file(s) · 0 blocker, 0 minor · 12k in, 300 out')
+  })
+
+  it('the command turns the review on and off, and names /gemini-core for the rest', async ($, on) => {
+    const w = world(on, { key: 'KEY' })
+    expect((await $.command.run(run('off'))).text).toBe('off: commits run without a review')
+    expect((await $.command.run(run(''))).text).toBe('off · gemini-3.8-flash · thinking model default · free tier · key set')
+    expect((await $.command.run(run('reset'))).text).toBe('on: back to the default')
     expect([...w.store.keys()]).toEqual([])
+    expect((await $.command.run(run('paid'))).text).toBe('expects on, off, or reset; /gemini-core sets the model, the thinking level and the tier')
   })
 })

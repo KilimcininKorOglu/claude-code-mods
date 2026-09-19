@@ -1,9 +1,8 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changeText, parseCommand, STORE_KEYS, statusText, storedValue, type Settings } from './command.ts'
+import { changeText, ENABLED_KEY, parseCommand, statusText } from './command.ts'
 import { diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit.ts'
-import { configFrom, type Config } from './config.ts'
-import { parseResponse, retryDelay, type Answer, type Request } from './gemini.ts'
-import { buildReviewRequest, cleanContext, denyText, failedContext, minorContext, parseFindings, summaryText, type Finding } from './review.ts'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
+import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, summaryText, type Answer, type Finding } from './review.ts'
 import { renderTranscript } from './transcript.ts'
 
 /** The last review's line, for the status. */
@@ -11,6 +10,9 @@ type State = { last?: string }
 
 /** What the review decided: stop the commit, or let it run with a note for the model. */
 type Verdict = { deny?: string; context?: string }
+
+/** Gemini's answer and the tier it went to, or why there is none. */
+type Asked = { answer: Answer; tier: 'free' | 'paid' } | { error: string }
 
 /** At most this many new files are read into the diff. */
 const MAX_NEW_FILES = 200
@@ -22,20 +24,8 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** The plugin options with the settings /gemini-review stored on top. */
-async function loadConfig($: EngineInterface, base: Config): Promise<Config> {
-  const config: Config = { ...base }
-  for (const key of Object.keys(STORE_KEYS) as (keyof Settings)[]) {
-    const value = storedValue(key, await $.store.get(STORE_KEYS[key]))
-    if (value !== undefined) Object.assign(config, { [key]: value })
-  }
-  return config
-}
-
-async function apiKey($: EngineInterface, config: Config): Promise<string | undefined> {
-  if (config.apiKey !== undefined) return config.apiKey
-  const fromEnv = (await $.env.get('GEMINI_API_KEY'))?.trim()
-  return fromEnv === undefined || fromEnv === '' ? undefined : fromEnv
+async function isEnabled($: EngineInterface): Promise<boolean> {
+  return (await $.store.get(ENABLED_KEY)) !== false
 }
 
 /** Runs a git command and answers its output; another exit code throws with git's message. */
@@ -63,14 +53,17 @@ async function collectDiff($: EngineInterface, plan: CommitPlan, cwd: string): P
   return diff
 }
 
-/** Sends the request, again after a 503 while the retry budget allows. */
-async function fetchAnswer($: EngineInterface, request: Request): Promise<Answer> {
+/** gemini-core builds the request and reads each answer; the request is sent here, again after a 503 while it allows. */
+async function askGemini($: EngineInterface, body: Record<string, unknown>): Promise<Asked> {
+  const prepared = await $.gemini.request({ consumer: CONSUMER, body })
+  if ('error' in prepared) return prepared
   const started = await $.clock.now()
   for (let attempt = 1; ; attempt++) {
-    const response = await $.http.fetch(request.url, request.init)
-    const delay = retryDelay(response.status, attempt, (await $.clock.now()) - started)
-    if (delay === undefined) return parseResponse(response.status, response.ok, response.text)
-    await $.clock.sleep(delay)
+    const r = await $.http.fetch(prepared.http.url, prepared.http.init)
+    const read = await $.gemini.read({ status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started, deadlineMs: DEADLINE_MS })
+    if ('answer' in read) return { answer: read.answer, tier: prepared.tier }
+    if ('error' in read) return read
+    await $.clock.sleep(read.retryInMs)
   }
 }
 
@@ -80,11 +73,11 @@ function notReviewed($: EngineInterface, state: State, reason: string): Verdict 
   return { context: failedContext(reason) }
 }
 
-function verdictOf($: EngineInterface, state: State, config: Config, findings: readonly Finding[], files: number, summary: string): Verdict {
+function verdictOf($: EngineInterface, state: State, tier: 'free' | 'paid', findings: readonly Finding[], files: number, summary: string): Verdict {
   state.last = summary
   const blockers = findings.filter(f => f.severity === 'blocker')
   const minors = findings.filter(f => f.severity === 'minor')
-  $.ui.toast(config.tier === 'free' ? `${summary} · sent to Gemini free tier` : summary, { timeoutMs: 10_000 })
+  $.ui.toast(tier === 'free' ? `${summary} · sent to Gemini free tier` : summary, { timeoutMs: 10_000 })
   if (blockers.length > 0) {
     $.ui.log(`commit stopped: ${summary}`)
     return { deny: denyText(blockers, minors) }
@@ -97,17 +90,18 @@ function verdictOf($: EngineInterface, state: State, config: Config, findings: r
  * answer lets the commit run with a note, as the user chose.
  */
 async function review($: EngineInterface, state: State, config: Config, plan: CommitPlan, agentId: string | undefined): Promise<Verdict> {
-  const key = await apiKey($, config)
-  if (key === undefined) return notReviewed($, state, 'no Gemini key (set GEMINI_API_KEY or the plugin option)')
   try {
+    // Without a key no git runs and nothing is read.
+    if (!(await $.gemini.settings({ consumer: CONSUMER })).hasKey) return notReviewed($, state, 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option')
     const diff = await collectDiff($, plan, resolveDir(await $.session.cwd(), plan.cwd))
     if (diff.trim() === '') return {}
     // A subagent's call sends no conversation: which transcript it would get was not verified.
     const transcript = agentId === undefined ? renderTranscript(await $.session.messages(), config.maxInputChars) : undefined
-    const answer = await fetchAnswer($, buildReviewRequest(config.model, key, transcript, diff))
-    const findings = parseFindings(answer)
+    const asked = await askGemini($, buildReviewBody(transcript, diff))
+    if ('error' in asked) return notReviewed($, state, asked.error)
+    const findings = parseFindings(asked.answer)
     const files = fileCount(diff)
-    return verdictOf($, state, config, findings, files, summaryText(files, findings, answer))
+    return verdictOf($, state, asked.tier, findings, files, summaryText(files, findings, asked.answer))
   } catch (err) {
     return notReviewed($, state, errorText(err))
   }
@@ -119,42 +113,40 @@ function withContext(r: ToolCallResult, text: string): ToolCallResult {
   return { ...r, context: [...(r.context ?? []), text] }
 }
 
-async function runCommand($: EngineInterface, state: State, base: Config, args: string): Promise<string> {
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const command = parseCommand(args)
   if (command.kind === 'error') return command.text
   if (command.kind === 'reset') {
-    for (const key of Object.values(STORE_KEYS)) await $.store.delete(key)
-    return 'settings reset to the plugin options'
+    await $.store.delete(ENABLED_KEY)
+    return 'on: back to the default'
   }
   if (command.kind === 'set') {
-    for (const [key, value] of Object.entries(command.patch)) await $.store.set(STORE_KEYS[key as keyof Settings], value)
-    return changeText(command.patch)
+    await $.store.set(ENABLED_KEY, command.enabled)
+    return changeText(command.enabled)
   }
-  const config = await loadConfig($, base)
-  return statusText(config, (await apiKey($, config)) !== undefined, state.last)
+  return statusText(await isEnabled($), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 
 export const register: Register = (on, options) => {
-  const base = configFrom(options)
+  const config = configFrom(options)
   const state: State = {}
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
+    await $.gemini.enroll({ consumer: CONSUMER, defaultModel: DEFAULT_MODEL })
     await $.command.register({
       name: 'gemini-review',
-      description: 'Gemini commit review: status, on, off, free, paid, model <id>, reset (gemini-review)',
-      argumentHint: '[on | off | free | paid | model <id> | reset]',
+      description: 'Gemini commit review: status, on, off, reset; /gemini-core sets the model, thinking and tier (gemini-review)',
+      argumentHint: '[on | off | reset]',
     })
     return r
   })
 
-  on('command.run', { command: 'gemini-review' }, async ($, e) => ({ text: await runCommand($, state, base, String(e.args ?? '')) }))
+  on('command.run', { command: 'gemini-review' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const plan = findCommit(e.command)
-    if (plan === undefined) return next(e)
-    const config = await loadConfig($, base)
-    if (!config.enabled) return next(e)
+    if (plan === undefined || !(await isEnabled($))) return next(e)
     if (plan.skip) {
       state.last = `skipped by the model (${SKIP_VARIABLE}=1)`
       $.ui.log(`commit ran without a review: the model used ${SKIP_VARIABLE}=1`)
