@@ -28,13 +28,16 @@ const WHEN = [
   'Skip it only for simple, mechanical steps, or when the user said not to use tools. The advice can be wrong: check it against the code before you act on it, and tell the user where you disagree.',
 ]
 
-/** What the model reads about the tool: what it is, and when to call it. */
-export function toolDescription(model: string): string {
-  return [
-    `Ask Gemini (${model}), a second model, for advice. It reads the whole conversation so far, tool calls and outputs included, and your message, and answers with a second opinion.`,
-    ...WHEN,
-  ].join('\n')
-}
+/**
+ * What the model reads about the tool: what it is, and when to call it. It
+ * names no model: the engine keeps the description it first sent for the
+ * whole session (measured on 2.1.278), so a named model would go stale after
+ * a /gemini-core change.
+ */
+export const TOOL_DESCRIPTION = [
+  'Ask Gemini, a second model, for advice. It reads the whole conversation so far, tool calls and outputs included, and your message, and answers with a second opinion.',
+  ...WHEN,
+].join('\n')
 
 /**
  * The system prompt's note about the tool. The engine lists the tool behind

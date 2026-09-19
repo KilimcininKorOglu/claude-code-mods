@@ -29,7 +29,7 @@ The tool row in the transcript holds the model's message and the advice (ctrl+o)
     /gemini-advisor on | off     off: a call answers that the advisor is off
     /gemini-advisor reset        on again
 
-The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level are gemini-core's. The mod hooks `gemini.configure`, so a model change declares the tool again with the new name:
+The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level are gemini-core's, and a change applies from the next call:
 
     /gemini-core model advisor gemini-3.7-flash
     /gemini-core thinking advisor high
@@ -63,8 +63,8 @@ Version 0.2.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier`
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=gemini-advisor}, gemini.configure, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
-    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via registerTool, runCommand), $.http.fetch (via askGemini), $.session.messages (via conversation), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via runCommand), $.tool.register (via registerTool), $.ui.toast (via advise)
+    ❯ ./register.ts hooks: session.start, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
+    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via runCommand), $.http.fetch (via askGemini), $.session.messages (via conversation), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via runCommand), $.tool.register, $.ui.toast (via advise)
 
 Reach L3, reaches the network.
 
@@ -77,6 +77,7 @@ Reach L3, reaches the network.
 ## Limits
 
 - Whether the model calls the advisor is its own decision. The live check covered one kind of turn.
+- The tool description names no model. The engine keeps the description it first sent for the whole session: a tool registered again after a model change still reached the model with the old text (measured on 2.1.278). The toast and `/gemini-advisor` name the model a call went to.
 - The engine serves the tool with a 60-second MCP timeout (debug log, 2.1.277). A call that takes longer fails, and the model reads the error.
 - The note is added to the `env_info_simple` section. A setup whose system prompt has no such section gets no note, and the model sees the tool's name only. Only one setup was checked.
 - A subagent's call sends only its message, because which transcript `$.session.messages()` answers inside a subagent was not verified.

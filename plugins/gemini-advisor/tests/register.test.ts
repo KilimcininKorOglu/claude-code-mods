@@ -114,12 +114,13 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][] } = {})
 const start = { surface: null, isInteractive: false, cwd: '/src/app' } as const
 
 describe('gemini-advisor', () => {
-  it('declares the advise tool with the model gemini-core holds and when to call it', async ($, on) => {
+  it('declares the advise tool and when to call it, without a model name that a change would leave stale', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     await $.session.start(start)
     expect(w.tools).toHaveLength(1)
     expect(w.tools[0]?.name).toBe('advise')
-    expect(w.tools[0]?.description).toContain('Gemini (gemini-3.8-flash)')
+    expect(w.tools[0]?.description).toContain('Ask Gemini, a second model, for advice.')
+    expect(w.tools[0]?.description).not.toContain('gemini-3')
     expect(w.tools[0]?.description).toContain('before you tell the user the work is done')
     expect(w.tools[0]?.inputSchema).toMatchObject({ required: ['message'] })
   })
@@ -191,14 +192,16 @@ describe('gemini-advisor', () => {
     expect(w.requests).toHaveLength(6)
   })
 
-  it('declares the tool again when /gemini-core moves it to another model', async ($, on) => {
+  it('asks the model /gemini-core moves it to, and says paid without the free warning', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     await $.session.start(start)
     await $.command.run(coreRun({ tier: 'paid' }))
-    expect(w.tools).toHaveLength(1)
     await $.command.run(coreRun({ consumer: 'advisor', model: 'gemini-3.7-flash' }))
-    expect(w.tools).toHaveLength(2)
-    expect(w.tools.at(-1)?.description).toContain('Gemini (gemini-3.7-flash)')
+    w.replies.push({ status: 200, text: reply('ok') })
+    await $.tool.call({ tool: TOOL, message: 'x' })
+    expect(w.tools).toHaveLength(1)
+    expect(w.requests[0]?.url).toContain('/models/gemini-3.7-flash:generateContent')
+    expect(w.toasts).toEqual(['asked gemini-3.7-flash · 3 messages · 2k in, 40 out'])
   })
 
   it('the command turns the advisor on and off and shows what gemini-core holds', async ($, on) => {

@@ -1,11 +1,11 @@
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
-import { adviceText, buildAdviceBody, INPUT_SCHEMA, messageOf, SYSTEM_GUIDANCE, TOOL_NAME, toolDescription, usageText, type Answer } from './advice.ts'
+import { adviceText, buildAdviceBody, INPUT_SCHEMA, messageOf, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, usageText, type Answer } from './advice.ts'
 import { changeText, ENABLED_KEY, parseCommand, statusText } from './command.ts'
 import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
 import { renderTranscript } from './transcript.ts'
 
-/** The last advice's usage line, for the status, and the model the tool description names. */
-type State = { last?: string; toolModel?: string }
+/** The last advice's usage line, for the status. */
+type State = { last?: string }
 
 /** Gemini's answer, the model and the tier it went to, or why there is none. */
 type Asked = { answer: Answer; model: string; tier: 'free' | 'paid' } | { error: string }
@@ -16,14 +16,6 @@ function errorText(err: unknown): string {
 
 async function isEnabled($: EngineInterface): Promise<boolean> {
   return (await $.store.get(ENABLED_KEY)) !== false
-}
-
-/** Declares the tool with the model gemini-core holds in its description, when that model changed; again replaces it. */
-async function registerTool($: EngineInterface, state: State): Promise<void> {
-  const { model } = await $.gemini.settings({ consumer: CONSUMER })
-  if (state.toolModel === model) return
-  await $.tool.register({ name: TOOL_NAME, description: toolDescription(model), inputSchema: INPUT_SCHEMA })
-  state.toolModel = model
 }
 
 /**
@@ -94,18 +86,11 @@ export const register: Register = (on, options) => {
       description: 'Gemini advisor: status, on, off, reset; /gemini-core sets the model, thinking and tier (gemini-advisor)',
       argumentHint: '[on | off | reset]',
     })
-    await registerTool($, state)
+    await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
     return r
   })
 
   on('command.run', { command: 'gemini-advisor' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
-
-  // A /gemini-core change can move this mod to another model; the tool description names it.
-  on('gemini.configure', async ($, e, next) => {
-    const r = await next(e)
-    await registerTool($, state)
-    return r
-  })
 
   // The engine puts a plugin's tool behind ToolSearch, where the model sees
   // only its name and never the description that says when to call it
