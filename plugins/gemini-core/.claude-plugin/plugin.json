@@ -1,6 +1,6 @@
 {
   "name": "gemini-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "One place for the Gemini key, tier, model and thinking level of every Gemini mod: adds $.gemini, which builds each mod's request and reads Gemini's answer. /gemini-core sets the tier and, per mod, the model and the thinking level. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
@@ -13,7 +13,7 @@
     "apiKey": {
       "type": "string",
       "title": "Gemini API key",
-      "description": "Leave empty to use the GEMINI_API_KEY environment variable. Every Gemini mod uses this key.",
+      "description": "Leave empty to use the GEMINI_API_KEY environment variable. Every Gemini mod uses this key. Several keys separated by commas are tried in turn after a quota or key error.",
       "sensitive": true
     },
     "tier": {

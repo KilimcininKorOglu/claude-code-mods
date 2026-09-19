@@ -1,6 +1,7 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiSettings, GeminiTier } from '../types/index.d.ts'
-import { buildHttp, MODEL_ID, readResponse, withThinking } from './api.ts'
+import { buildHttp, MODEL_ID, withThinking } from './api.ts'
+import { parseKeys, readWithKeys, type KeyState } from './keys.ts'
 import { consumersOf, FREE_WARNING, isThinking, isTier, KEYS, parseCommand, resolveConsumer, statusText, type ConsumerLine } from './settings.ts'
 
 /**
@@ -15,23 +16,22 @@ export type Host = {
   envKey(): Promise<string | undefined>
 }
 
-export type Config = { apiKey?: string; tier: GeminiTier }
+/** `apiKeys` from the option, tried in order; empty when the option is unset. */
+export type Config = { apiKeys: string[]; tier: GeminiTier }
 
 const NO_KEY = 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option'
 
 export function configFrom(options: PluginOptions): Config {
-  const key = typeof options.apiKey === 'string' ? options.apiKey.trim() : ''
-  return { ...(key === '' ? {} : { apiKey: key }), tier: isTier(options.tier) ? options.tier : 'free' }
+  return { apiKeys: parseKeys(typeof options.apiKey === 'string' ? options.apiKey : undefined), tier: isTier(options.tier) ? options.tier : 'free' }
 }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-async function apiKey(host: Host, config: Config): Promise<string | undefined> {
-  if (config.apiKey !== undefined) return config.apiKey
-  const fromEnv = (await host.envKey())?.trim()
-  return fromEnv === undefined || fromEnv === '' ? undefined : fromEnv
+/** The option's keys, or else the keys of GEMINI_API_KEY; both take a comma-separated list. */
+async function apiKeys(host: Host, config: Config): Promise<string[]> {
+  return config.apiKeys.length > 0 ? config.apiKeys : parseKeys(await host.envKey())
 }
 
 async function tierOf(host: Host, config: Config): Promise<GeminiTier> {
@@ -48,8 +48,10 @@ async function settingsFor(host: Host, config: Config, consumer: string): Promis
   if (defaultModel === undefined) throw new Error(`${consumer} has not enrolled with gemini-core`)
   const model = await host.get(KEYS.model(consumer))
   const thinking = await host.get(KEYS.thinking(consumer))
+  const keys = (await apiKeys(host, config)).length
   return {
-    hasKey: (await apiKey(host, config)) !== undefined,
+    hasKey: keys > 0,
+    keys,
     tier: await tierOf(host, config),
     model: typeof model === 'string' && MODEL_ID.test(model) ? model : defaultModel,
     ...(isThinking(thinking) ? { thinking } : {}),
@@ -63,8 +65,10 @@ async function enroll(host: Host, input: GeminiEnroll): Promise<void> {
   if (mods[input.consumer] !== input.defaultModel) await host.set(KEYS.consumers, { ...mods, [input.consumer]: input.defaultModel })
 }
 
-async function request(host: Host, config: Config, consumer: string, body: Record<string, unknown>): Promise<GeminiPrepared> {
-  const key = await apiKey(host, config)
+/** The request for a mod, with the key the last request succeeded or moved on with. */
+async function request(host: Host, config: Config, state: KeyState, consumer: string, body: Record<string, unknown>): Promise<GeminiPrepared> {
+  const keys = await apiKeys(host, config)
+  const key = keys[state.preferred] ?? keys[0]
   if (key === undefined) return { error: NO_KEY }
   try {
     const s = await settingsFor(host, config, consumer)
@@ -109,11 +113,12 @@ async function configure(host: Host, change: GeminiChange): Promise<string> {
 
 /** `$.gemini`, on the nouns beneath it. */
 export function createGemini(host: Host, config: Config): Gemini {
+  const state: KeyState = { preferred: 0 }
   return {
     enroll: input => enroll(host, input),
     settings: ({ consumer }) => settingsFor(host, config, consumer),
-    request: ({ consumer, body }) => request(host, config, consumer, body),
-    read: async input => readResponse(input),
+    request: ({ consumer, body }) => request(host, config, state, consumer, body),
+    read: async input => readWithKeys(input, await apiKeys(host, config), state),
     configure: change => configure(host, change),
   }
 }
@@ -126,9 +131,8 @@ async function statusOf($: EngineInterface, config: Config): Promise<string> {
     lines.push({ consumer, model: s.model, ...(s.thinking === undefined ? {} : { thinking: s.thinking }) })
   }
   const tier = await $.store.get(KEYS.tier)
-  const envKey = (await $.env.get('GEMINI_API_KEY'))?.trim()
-  const hasKey = config.apiKey !== undefined || (envKey !== undefined && envKey !== '')
-  return statusText(isTier(tier) ? tier : config.tier, hasKey, lines)
+  const keys = config.apiKeys.length > 0 ? config.apiKeys : parseKeys(await $.env.get('GEMINI_API_KEY'))
+  return statusText(isTier(tier) ? tier : config.tier, keys.length, lines)
 }
 
 async function runCommand($: EngineInterface, config: Config, args: string): Promise<string> {

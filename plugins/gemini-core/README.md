@@ -6,7 +6,7 @@ A Claude Code Mod that keeps the Gemini settings of every Gemini mod in one plac
 
 1. Each Gemini mod enrolls at session start with its plugin name and its default model.
 2. When a mod asks Gemini, `$.gemini.request` builds the `generateContent` request from the mod's body: the key in the `x-goog-api-key` header, never in the URL, the mod's model, and its thinking level in `generationConfig.thinkingConfig.thinkingLevel`. Without a level the body is sent as it is, so the model uses its own default.
-3. The mod sends the request with its own `$.http.fetch`, and `$.gemini.read` reads the answer: the text and the token counts, Gemini's error message, or a wait before the same request goes again after an HTTP 503 (1 s, 2 s, 3 s, at most four attempts, no attempt once the mod's deadline has passed).
+3. The mod sends the request with its own `$.http.fetch`, and `$.gemini.read` reads the answer: the text and the token counts, Gemini's error message, or a wait before the same request goes again after an HTTP 503 (1 s, 2 s, 3 s, at most four attempts, no attempt once the mod's deadline has passed). After an HTTP 429 or a key error it answers the same request with the next key, which the mod sends at once.
 
 A method on a plugin's noun must answer within 10 seconds (measured on 2.1.278: a 14-second fetch inside one was refused with `did not answer within 10000ms`). A Gemini request can take longer, so the request is sent by the mod and not inside `$.gemini`.
 
@@ -29,7 +29,20 @@ The Gemini docs say Gemini 3.1 Pro takes no `minimal` either.
     /gemini-core thinking <mod> <level|default>     for example: thinking compact low; default drops the level
     /gemini-core reset                              the tier from the plugin option, each mod its default model and no level
 
-A mod is named in full (`gemini-review`) or without `gemini-` (`review`). The settings are kept across sessions and take effect at the next request. A mod may hook `gemini.configure` to follow a change; `gemini-advisor` does, so its tool description names the new model.
+A mod is named in full (`gemini-review`) or without `gemini-` (`review`). The settings are kept across sessions and take effect at the next request. A mod may hook `gemini.configure` to follow a change.
+
+## Several keys
+
+The `apiKey` option and `GEMINI_API_KEY` take a comma-separated list; the option wins when it is set. The keys are tried in order:
+
+- An HTTP 429 (quota), 401, 403, or 400 "API key not valid" sends the same request with the next key at once. The last key wraps to the first, and each key is tried once per request.
+- When every key failed, the error names each key's failure by its place in the list (`all 2 keys failed: key 1: Gemini HTTP 400: API key not valid...; key 2: ...`), never the key.
+- The next request starts at the key the last one succeeded or moved on with, so a key whose daily quota is used up is not asked first every time. This place is kept in memory and starts over when the module reloads.
+- An HTTP 503 is the model's load, the same for every key, so it stays on the same key and waits as above.
+
+In a live check on 2.1.278 with an invalid key first and a working key second, the first review got HTTP 400 in 0.4 s and HTTP 200 from the second key; the next review asked the second key only.
+
+Google applies the rate limits per project, not per key ("Rate limits are applied per project, not per API key", Gemini API rate limits), so two keys of one project share one quota. Keys of several projects used to add up free quota go against the Google APIs Terms of Service: "You agree to, and will not attempt to circumvent, such limitations documented with each API." A second key is for a key that stops working, or a paid key beside a free one. All keys share the one tier setting.
 
 ## Free tier or paid tier
 
@@ -48,7 +61,7 @@ A Gemini mod lists `gemini-core` in its `dependencies`, so installing one instal
 
 | Option | Default | What it sets |
 |---|---|---|
-| `apiKey` | `GEMINI_API_KEY` | The Gemini API key of every Gemini mod, stored as a secret |
+| `apiKey` | `GEMINI_API_KEY` | The Gemini API key of every Gemini mod, or several separated by commas, stored as a secret |
 | `tier` | `free` | `free` or `paid`; `/gemini-core free\|paid` overrides it |
 
 ## For a mod author
@@ -59,11 +72,13 @@ The contract is `types/index.d.ts`. A mod that uses it:
 const prepared = await $.gemini.request({ consumer: 'my-mod', body })
 if ('error' in prepared) return fail(prepared.error)
 const started = await $.clock.now()
+let http = prepared.http
 for (let attempt = 1; ; attempt++) {
-  const r = await $.http.fetch(prepared.http.url, prepared.http.init)
-  const read = await $.gemini.read({ status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started })
-  if (!('retryInMs' in read)) return read
-  await $.clock.sleep(read.retryInMs)
+  const r = await $.http.fetch(http.url, http.init)
+  const read = await $.gemini.read({ http, status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started })
+  if ('answer' in read || 'error' in read) return read
+  if ('next' in read) http = read.next
+  else await $.clock.sleep(read.retryInMs)
 }
 ```
 

@@ -39,13 +39,14 @@ function coreRead(e: { status: number; ok: boolean; text: string; attempt: numbe
 
 function seatCore(on: On, core: Core): void {
   on('gemini.enroll', (_, e) => { core.enrolled.push(`${e.consumer} ${e.defaultModel}`); return { value: undefined } })
-  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, tier: core.tier, model: core.model } }))
+  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, keys: core.key === undefined ? 0 : 1, tier: core.tier, model: core.model } }))
   on('gemini.request', (_, e) => {
     if (core.key === undefined) return { value: { error: 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option' } }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${core.model}:generateContent`
     return { value: { http: { url, init: { method: 'POST' as const, headers: { 'x-goog-api-key': core.key }, body: JSON.stringify(e.body) } }, model: core.model, tier: core.tier } }
   })
-  on('gemini.read', (_, e) => ({ value: coreRead(e) }))
+  // With the key KEY1, gemini-core holds a second key, KEY2, that a 429 moves to.
+  on('gemini.read', (_, e) => ({ value: e.status === 429 && e.http.init.headers['x-goog-api-key'] === 'KEY1' ? { next: { ...e.http, init: { ...e.http.init, headers: { ...e.http.init.headers, 'x-goog-api-key': 'KEY2' } } } } : coreRead(e) }))
   on('gemini.configure', (_, e) => {
     if ('model' in e) core.model = e.model
     if ('tier' in e) core.tier = e.tier
@@ -176,6 +177,14 @@ describe('gemini-compact', () => {
     await $.session.compact({ trigger: 'manual', messages: MESSAGES })
     expect(w.requests).toEqual([])
     expect(w.logs).toEqual(['built-in summary: no Gemini key (set GEMINI_API_KEY or the gemini-core apiKey option)'])
+  })
+
+  it('sends the same request with the next key at once after a 429', async ($, on) => {
+    const w = world(on, { key: 'KEY1' })
+    w.replies.push({ status: 429, text: JSON.stringify({ error: { message: 'quota' } }) }, { status: 200, text: answer([{ id: 'c1', action: 'drop' }]) })
+    expect((await $.session.compact({ trigger: 'manual', messages: MESSAGES })).messages).toHaveLength(8)
+    expect(w.requests.map(r => r.key)).toEqual(['KEY1', 'KEY2'])
+    expect(w.requests[1]?.body).toBe(w.requests[0]?.body)
   })
 
   it('asks again after a 503, and falls back once gemini-core allows no more attempts', async ($, on) => {

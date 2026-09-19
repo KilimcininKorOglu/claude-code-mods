@@ -28,7 +28,7 @@ type World = {
   clock: MockClock
   store: Map<string, unknown>
   git: { argv: readonly string[]; cwd: string | undefined }[]
-  requests: { url: string; body: string }[]
+  requests: { url: string; body: string; key: string | undefined }[]
   replies: { status: number; text: string }[]
   commits: string[]
   toasts: string[]
@@ -68,14 +68,15 @@ function seatCore(on: On, core: Core, enrolled: string[]): void {
   const model = core.model ?? 'gemini-3.8-flash'
   const thinking = core.thinking === undefined ? {} : { thinking: core.thinking }
   on('gemini.enroll', (_, e) => { enrolled.push(`${e.consumer} ${e.defaultModel}`); return { value: undefined } })
-  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, tier: tierOf, model, ...thinking } }))
+  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, keys: core.key === undefined ? 0 : 1, tier: tierOf, model, ...thinking } }))
   on('gemini.request', (_, e) => {
     if (core.key === undefined) return { value: { error: 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option' } }
     const body = core.thinking === undefined ? e.body : { ...e.body, generationConfig: { ...(e.body.generationConfig as object), thinkingConfig: { thinkingLevel: core.thinking } } }
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
     return { value: { http: { url, init: { method: 'POST' as const, headers: { 'x-goog-api-key': core.key }, body: JSON.stringify(body) } }, model, tier: tierOf } }
   })
-  on('gemini.read', (_, e) => ({ value: coreRead(e) }))
+  // With the key KEY1, gemini-core holds a second key, KEY2, that a 429 moves to.
+  on('gemini.read', (_, e) => ({ value: e.status === 429 && e.http.init.headers['x-goog-api-key'] === 'KEY1' ? { next: { ...e.http, init: { ...e.http.init, headers: { ...e.http.init.headers, 'x-goog-api-key': 'KEY2' } } } } : coreRead(e) }))
 }
 
 type Repo = { hasHead?: boolean; staged?: string; untracked?: string[] }
@@ -115,7 +116,7 @@ function world(on: On, opts: Core & { store?: [string, unknown][]; repo?: Repo }
     return { value: gitAnswer(opts.repo ?? {}, e.argv) }
   })
   on('http.fetch', (_, e) => {
-    w.requests.push({ url: e.url, body: String(e.init?.body ?? '') })
+    w.requests.push({ url: e.url, body: String(e.init?.body ?? ''), key: e.init?.headers?.['x-goog-api-key'] })
     const r = w.replies.shift() ?? { status: 500, text: '{}' }
     return { value: { status: r.status, ok: r.status < 300, headers: {}, text: r.text } }
   })
@@ -196,6 +197,14 @@ describe('gemini-review', () => {
     expect(r.context?.[0]).toContain('no Gemini key')
     expect(w.requests).toEqual([])
     expect(w.git).toEqual([])
+  })
+
+  it('sends the same request with the next key at once after a 429', async ($, on) => {
+    const w = world(on, { key: 'KEY1' })
+    w.replies.push({ status: 429, text: JSON.stringify({ error: { message: 'quota' } }) }, { status: 200, text: reply([BLOCKER]) })
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })).deny).toContain('A live Stripe key')
+    expect(w.requests.map(r => r.key)).toEqual(['KEY1', 'KEY2'])
+    expect(w.requests[1]?.body).toBe(w.requests[0]?.body)
   })
 
   it('asks again after a 503, and lets the commit run after the fourth', async ($, on) => {

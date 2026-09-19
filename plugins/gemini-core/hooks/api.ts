@@ -86,7 +86,7 @@ export function parseResponse(status: number, ok: boolean, text: string): Gemini
 }
 
 /** The answer, the error, or the wait before the same request is sent again. */
-export function readResponse(r: GeminiResponse): GeminiRead {
+export function readResponse(r: Omit<GeminiResponse, 'http'>): GeminiRead {
   const delay = retryDelay(r.status, r.attempt, r.elapsedMs, r.deadlineMs)
   if (delay !== undefined) return { retryInMs: delay }
   try {

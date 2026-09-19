@@ -62,6 +62,7 @@ describe('the command', () => {
     expect(resolveConsumer('review', ['gemini-review'])).toBe('gemini-review')
     expect(resolveConsumer('gemini-review', ['gemini-review'])).toBe('gemini-review')
     expect(resolveConsumer('compact', ['gemini-review'])).toBe(undefined)
-    expect(statusText('free', false, [])).toBe('free tier · no key: set GEMINI_API_KEY or the gemini-core apiKey option\nno Gemini mod has enrolled yet')
+    expect(statusText('paid', 2, [])).toBe('paid tier · 2 keys, tried in turn\nno Gemini mod has enrolled yet')
+    expect(statusText('free', 0, [])).toBe('free tier · no key: set GEMINI_API_KEY or the gemini-core apiKey option\nno Gemini mod has enrolled yet')
   })
 })

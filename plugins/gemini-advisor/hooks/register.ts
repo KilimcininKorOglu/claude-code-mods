@@ -29,17 +29,23 @@ async function conversation($: EngineInterface, config: Config, e: ToolCallInput
   return { text: renderTranscript(messages, config.maxInputChars), count: messages.length }
 }
 
-/** gemini-core builds the request and reads each answer; the request is sent here, again after a 503 while it allows. */
+/**
+ * gemini-core builds the request and reads each answer; the request is sent
+ * here, again after a 503 while it allows, and with the next key after a 429
+ * or a key error.
+ */
 async function askGemini($: EngineInterface, body: Record<string, unknown>): Promise<Asked> {
   const prepared = await $.gemini.request({ consumer: CONSUMER, body })
   if ('error' in prepared) return prepared
   const started = await $.clock.now()
+  let http = prepared.http
   for (let attempt = 1; ; attempt++) {
-    const r = await $.http.fetch(prepared.http.url, prepared.http.init)
-    const read = await $.gemini.read({ status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started, deadlineMs: DEADLINE_MS })
+    const r = await $.http.fetch(http.url, http.init)
+    const read = await $.gemini.read({ http, status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started, deadlineMs: DEADLINE_MS })
     if ('answer' in read) return { answer: read.answer, model: prepared.model, tier: prepared.tier }
     if ('error' in read) return read
-    await $.clock.sleep(read.retryInMs)
+    if ('next' in read) http = read.next
+    else await $.clock.sleep(read.retryInMs)
   }
 }
 

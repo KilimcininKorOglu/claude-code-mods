@@ -58,7 +58,7 @@ describe('$.gemini', () => {
     if ('error' in r) throw new Error(r.error)
     expect([r.model, r.tier]).toEqual(['gemini-3.7-flash', 'paid'])
     expect(JSON.parse(r.http.init.body).generationConfig).toEqual({ maxOutputTokens: 100, thinkingConfig: { thinkingLevel: 'low' } })
-    expect(await gemini.settings({ consumer: 'gemini-compact' })).toEqual({ hasKey: true, tier: 'paid', model: 'gemini-3.5-flash-lite' })
+    expect(await gemini.settings({ consumer: 'gemini-compact' })).toEqual({ hasKey: true, keys: 1, tier: 'paid', model: 'gemini-3.5-flash-lite' })
   })
 
   test('default and reset bring the model\'s own thinking and the default model back', async () => {
@@ -70,7 +70,7 @@ describe('$.gemini', () => {
     await gemini.configure({ consumer: 'review', model: 'gemini-3.7-flash' })
     await gemini.configure({ tier: 'paid' })
     await gemini.configure({ reset: true })
-    expect(await gemini.settings({ consumer: 'gemini-review' })).toEqual({ hasKey: true, tier: 'free', model: 'gemini-3.8-flash' })
+    expect(await gemini.settings({ consumer: 'gemini-review' })).toEqual({ hasKey: true, keys: 1, tier: 'free', model: 'gemini-3.8-flash' })
     expect([...store.keys()]).toEqual(['consumers'])
   })
 
@@ -80,6 +80,24 @@ describe('$.gemini', () => {
     const r = await gemini.request({ consumer: 'gemini-review', body: BODY })
     if ('error' in r) throw new Error(r.error)
     expect([r.http.init.headers['x-goog-api-key'], r.tier]).toEqual(['OPT', 'paid'])
+  })
+
+  test('the option\'s keys win over the environment; after a quota the next request starts at the key that moved on', async () => {
+    const { gemini } = provider({ key: 'ENV', options: { apiKey: 'K1, K2' } })
+    await gemini.enroll({ consumer: 'gemini-review', defaultModel: 'gemini-3.8-flash' })
+    expect((await gemini.settings({ consumer: 'gemini-review' })).keys).toBe(2)
+    const first = await gemini.request({ consumer: 'gemini-review', body: BODY })
+    if ('error' in first) throw new Error(first.error)
+    expect(first.http.init.headers['x-goog-api-key']).toBe('K1')
+    const quota = JSON.stringify({ error: { message: 'quota' } })
+    const read = await gemini.read({ http: first.http, status: 429, ok: false, text: quota, attempt: 1, elapsedMs: 0 })
+    expect('next' in read && read.next.init.headers['x-goog-api-key']).toBe('K2')
+    const second = await gemini.request({ consumer: 'gemini-review', body: BODY })
+    if ('error' in second) throw new Error(second.error)
+    expect(second.http.init.headers['x-goog-api-key']).toBe('K2')
+    const fromEnv = provider({ key: 'E1, E2' }).gemini
+    await fromEnv.enroll({ consumer: 'gemini-review', defaultModel: 'gemini-3.8-flash' })
+    expect((await fromEnv.settings({ consumer: 'gemini-review' })).keys).toBe(2)
   })
 
   test('says why there is no request, and refuses a bad enrollment or change', async () => {

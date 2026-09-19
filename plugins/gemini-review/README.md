@@ -74,7 +74,7 @@ Reach L3, reaches the network.
 
     1. Reads:    each Bash command; at a commit, the repository's diff and new files through git, and the conversation (messages, tool inputs and outputs); its own $.store; from gemini-core, the request with the key
     2. Runs:     read-only git by argv, no shell: rev-parse, diff, ls-files; at most 200 new files are read
-    3. Sends:    the diff and the conversation, one request per commit (up to four after a 503), to the URL gemini-core builds (generativelanguage.googleapis.com) with the key in the x-goog-api-key header, never in the URL
+    3. Sends:    the diff and the conversation, one request per commit (up to four after a 503, and once more per extra key after a 429 or a key error), to the URL gemini-core builds (generativelanguage.googleapis.com) with the key in the x-goog-api-key header, never in the URL
     4. Persists: in $.store, the on/off setting; the last review line lives in memory
     5. Hostile input: a diff or a conversation can steer Gemini's findings, so a hostile change can pass or a sound one be stopped; the model reads the findings as a denial or a note and can skip a wrong one; paths from the command reach git as argv after --, never through a shell
 

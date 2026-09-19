@@ -1,6 +1,6 @@
 {
   "name": "gemini-compact",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Moves compaction to Gemini: in summary mode Gemini summarizes the conversation and the newest messages stay; in prune mode every message stays and Gemini keeps, truncates or drops old tool calls. /gemini-compact sets the mode, the threshold and on/off; gemini-core holds the key, tier, model and thinking level. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

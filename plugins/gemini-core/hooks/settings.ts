@@ -71,8 +71,8 @@ export const FREE_WARNING =
 export type ConsumerLine = { consumer: string; model: string; thinking?: GeminiThinking }
 
 /** The status of /gemini-core. */
-export function statusText(tier: GeminiTier, hasKey: boolean, lines: readonly ConsumerLine[]): string {
-  const key = hasKey ? 'key set' : 'no key: set GEMINI_API_KEY or the gemini-core apiKey option'
+export function statusText(tier: GeminiTier, keys: number, lines: readonly ConsumerLine[]): string {
+  const key = keys === 0 ? 'no key: set GEMINI_API_KEY or the gemini-core apiKey option' : keys === 1 ? 'key set' : `${keys} keys, tried in turn`
   const mods = lines.map(l => `${l.consumer}: ${l.model} · thinking ${l.thinking ?? 'model default'}`)
   return [`${tier} tier · ${key}`, ...(mods.length === 0 ? ['no Gemini mod has enrolled yet'] : mods)].join('\n')
 }

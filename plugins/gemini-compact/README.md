@@ -114,7 +114,7 @@ Reach L3, reaches the network.
 
     1. Reads:    the conversation at each compaction (messages, tool inputs and outputs); the context fill after each main-loop turn; its own $.store; from gemini-core, the request with the key
     2. Runs:     no process; one $.session.compact after a turn that ends over the threshold, at most once until the context was under it again
-    3. Sends:    the conversation (summary: all but the newest messages; prune: all of it), one request per compaction (up to four after a 503), to the URL gemini-core builds (generativelanguage.googleapis.com) with the key in the x-goog-api-key header, never in the URL
+    3. Sends:    the conversation (summary: all but the newest messages; prune: all of it), one request per compaction (up to four after a 503, and once more per extra key after a 429 or a key error), to the URL gemini-core builds (generativelanguage.googleapis.com) with the key in the x-goog-api-key header, never in the URL
     4. Persists: in $.store, the three command settings (enabled, mode, atPercent); the last result lives in memory
     5. Hostile input: the Gemini answer is untrusted: a prune answer is applied only in the schema shape with every candidate id once; a summary becomes the text of one user message the model reads, so a hostile summary can steer the model, as text in a file it reads can; anything malformed falls back to the built-in summary
 
