@@ -46,7 +46,7 @@ With the free key used in the live check, `gemini-3.1-pro-preview` answered HTTP
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-advisor@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which the install adds. Function hooks are early access. Nothing loads without the flag, and the key comes from the gemini-core option or the environment:
+It depends on `gemini-core`, which `claude plugin install` adds. `claude plugin update` from 0.1.x does not add it (measured on 2.1.278); run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Function hooks are early access. Nothing loads without the flag, and the key comes from the gemini-core option or the environment:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GEMINI_API_KEY=... claude
 
