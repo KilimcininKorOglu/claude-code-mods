@@ -88,6 +88,20 @@
         "gemini",
         "context"
       ]
+    },
+    {
+      "name": "gemini-advisor",
+      "source": "./plugins/gemini-advisor",
+      "description": "A Gemini advisor the model calls by itself: Gemini reads the whole conversation and the model's message and answers with a second opinion as the tool result. /gemini-advisor sets on/off, the model and the free or paid tier.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "advisor",
+        "gemini",
+        "tools"
+      ]
     }
   ]
 }

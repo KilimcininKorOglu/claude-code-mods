@@ -21,6 +21,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 | [cache-warm](plugins/cache-warm) | Keeps the 1-hour prompt cache warm for a window you set with one fork per idle stretch, and shows the cache state, the cold price and this session's cold writes. | L2 |
 | [prompt-time](plugins/prompt-time) | Draws the time under each of your messages and each text block of the model's replies, also for a resumed session. | L1 |
 | [gemini-compact](plugins/gemini-compact) | Moves compaction from Claude to Gemini: a Gemini summary with the newest messages verbatim, or Gemini decisions that keep, cut or drop older tool calls. | L3 |
+| [gemini-advisor](plugins/gemini-advisor) | Gives the model a Gemini advisor tool it calls by itself: Gemini reads the conversation and the model's message and answers with a second opinion. | L3 |
 
 ## Layout
 

@@ -1,0 +1,44 @@
+{
+  "name": "gemini-advisor",
+  "version": "0.1.0",
+  "description": "A Gemini advisor the model calls by itself: Gemini reads the conversation and the model's message and answers with a second opinion. /gemini-advisor sets on/off, the model and the tier. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "apiKey": {
+      "type": "string",
+      "title": "Gemini API key",
+      "description": "Leave empty to use the GEMINI_API_KEY environment variable.",
+      "sensitive": true
+    },
+    "tier": {
+      "type": "string",
+      "title": "Gemini tier",
+      "description": "free: Google may use the conversation to improve its products and human reviewers may read it. paid: a billing-enabled key. /gemini-advisor free|paid overrides it.",
+      "options": ["free", "paid"],
+      "default": "free"
+    },
+    "model": {
+      "type": "string",
+      "title": "Gemini model",
+      "description": "The model that advises. /gemini-advisor model <id> overrides it.",
+      "default": "gemini-3.8-flash"
+    },
+    "maxInputChars": {
+      "type": "number",
+      "title": "Maximum characters sent to Gemini",
+      "description": "Above it the longest tool outputs of the conversation are cut to their head and tail before sending.",
+      "default": 2000000
+    },
+    "maxOutputTokens": {
+      "type": "number",
+      "title": "Maximum advice tokens",
+      "description": "The longest advice Gemini may write, thinking included.",
+      "default": 8192
+    }
+  }
+}
