@@ -1,8 +1,8 @@
 import type { EngineInterface, Register, SessionCompactInput, SessionMessage } from 'claude-code'
 import { actionsByUse, applyActions, sizeOf } from './apply.ts'
 import { changeText, parseCommand, STORE_KEYS, statusText, storedValue, type Settings } from './command.ts'
-import { configFrom, outcomeText, summaryOutcomeText, type Config } from './config.ts'
-import { buildRequest, buildSummaryRequest, parseResponse, type Answer, type Request } from './gemini.ts'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, outcomeText, summaryOutcomeText, type Config } from './config.ts'
+import { buildPruneBody, buildSummaryBody, type Answer } from './gemini.ts'
 import { collectCalls, parseDecisions, renderTranscript } from './prune.ts'
 import { parseSummary, summaryMessage, tailStart } from './summary.ts'
 
@@ -14,7 +14,9 @@ import { parseSummary, summaryMessage, tailStart } from './summary.ts'
  */
 type State = { compacting: boolean; armed: boolean; last?: string }
 
-type Outcome = { messages: SessionMessage[]; ratio: number; text: string }
+type Tier = 'free' | 'paid'
+
+type Outcome = { messages: SessionMessage[]; ratio: number; text: string; tier: Tier }
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -30,15 +32,21 @@ async function loadConfig($: EngineInterface, base: Config): Promise<Config> {
   return config
 }
 
-async function apiKey($: EngineInterface, config: Config): Promise<string | undefined> {
-  if (config.apiKey !== undefined) return config.apiKey
-  const fromEnv = (await $.env.get('GEMINI_API_KEY'))?.trim()
-  return fromEnv === undefined || fromEnv === '' ? undefined : fromEnv
-}
-
-async function ask($: EngineInterface, request: Request): Promise<Answer> {
-  const response = await $.http.fetch(request.url, request.init)
-  return parseResponse(response.status, response.ok, response.text)
+/**
+ * gemini-core builds the request and reads each answer; the request is sent
+ * here, again after a 503 while it allows. The answer carries the tier it went to.
+ */
+async function askGemini($: EngineInterface, body: Record<string, unknown>): Promise<Answer & { tier: Tier }> {
+  const prepared = await $.gemini.request({ consumer: CONSUMER, body })
+  if ('error' in prepared) throw new Error(prepared.error)
+  const started = await $.clock.now()
+  for (let attempt = 1; ; attempt++) {
+    const r = await $.http.fetch(prepared.http.url, prepared.http.init)
+    const read = await $.gemini.read({ status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started, deadlineMs: DEADLINE_MS })
+    if ('answer' in read) return { ...read.answer, tier: prepared.tier }
+    if ('error' in read) throw new Error(read.error)
+    await $.clock.sleep(read.retryInMs)
+  }
 }
 
 /** The fraction of characters the compaction removed. */
@@ -48,36 +56,36 @@ function reduction(before: readonly SessionMessage[], after: readonly SessionMes
 }
 
 /** Asks Gemini about every call outside the pinned messages and applies its answer. */
-async function prune($: EngineInterface, config: Config, key: string, e: SessionCompactInput): Promise<Outcome> {
+async function prune($: EngineInterface, config: Config, e: SessionCompactInput): Promise<Outcome> {
   const calls = collectCalls(e.messages, config.keepRecent)
   const ids = calls.filter(c => !c.pinned).map(c => c.id)
   if (ids.length === 0) throw new Error('no tool call outside the newest messages')
   const transcript = renderTranscript(e.messages, calls, config.maxInputChars)
-  const answer = await ask($, buildRequest(config.model, key, transcript, ids, e.instructions))
+  const answer = await askGemini($, buildPruneBody(transcript, ids, e.instructions))
   const actions = actionsByUse(calls, parseDecisions(answer.text, ids))
   const messages = applyActions(e.messages, actions, config.headChars)
   const ratio = reduction(e.messages, messages)
   const tally = { kept: messages.length, total: e.messages.length, ratio, actions: actions.values(), ...answer }
-  return { messages, ratio, text: outcomeText(tally) }
+  return { messages, ratio, text: outcomeText(tally), tier: answer.tier }
 }
 
 /** Has Gemini summarize everything before the newest messages, which stay as they are. */
-async function summarize($: EngineInterface, config: Config, key: string, e: SessionCompactInput): Promise<Outcome> {
+async function summarize($: EngineInterface, config: Config, e: SessionCompactInput): Promise<Outcome> {
   const start = tailStart(e.messages, config.keepRecent)
   const head = e.messages.slice(0, start)
   if (head.length === 0) throw new Error('nothing to summarize before the newest messages')
   const transcript = renderTranscript(head, collectCalls(head, 0), config.summaryMaxInputChars, true)
-  const answer = await ask($, buildSummaryRequest(config.model, key, transcript, config.summaryMaxOutputTokens, e.instructions))
+  const answer = await askGemini($, buildSummaryBody(transcript, config.summaryMaxOutputTokens, e.instructions))
   const messages = [summaryMessage(parseSummary(answer.text, answer.finishReason)), ...e.messages.slice(start)]
   const ratio = reduction(e.messages, messages)
-  return { messages, ratio, text: summaryOutcomeText({ kept: messages.length, total: e.messages.length, ratio, ...answer }) }
+  return { messages, ratio, text: summaryOutcomeText({ kept: messages.length, total: e.messages.length, ratio, ...answer }), tier: answer.tier }
 }
 
 /** One line in the transcript (not sent to the model) and a toast; free tier adds its warning to the toast. */
-function report($: EngineInterface, state: State, config: Config, text: string): void {
+function report($: EngineInterface, state: State, tier: Tier, text: string): void {
   state.last = text
   $.ui.log(text)
-  $.ui.toast(config.tier === 'free' ? `${text} · sent to Gemini free tier` : text, { timeoutMs: 15_000 })
+  $.ui.toast(tier === 'free' ? `${text} · sent to Gemini free tier` : text, { timeoutMs: 15_000 })
 }
 
 /**
@@ -91,21 +99,21 @@ function refusal(config: Config, ratio: number): string | undefined {
 }
 
 async function compactWithGemini($: EngineInterface, state: State, config: Config, e: SessionCompactInput): Promise<SessionMessage[] | undefined> {
-  const key = await apiKey($, config)
-  if (key === undefined) {
-    report($, state, config, 'built-in summary: no Gemini key (set GEMINI_API_KEY or the plugin option)')
+  const settings = await $.gemini.settings({ consumer: CONSUMER })
+  if (!settings.hasKey) {
+    report($, state, settings.tier, 'built-in summary: no Gemini key (set GEMINI_API_KEY or the gemini-core apiKey option)')
     return undefined
   }
   try {
-    const outcome = config.mode === 'summary' ? await summarize($, config, key, e) : await prune($, config, key, e)
+    const outcome = config.mode === 'summary' ? await summarize($, config, e) : await prune($, config, e)
     const refused = refusal(config, outcome.ratio)
     if (refused === undefined) {
-      report($, state, config, outcome.text)
+      report($, state, outcome.tier, outcome.text)
       return outcome.messages
     }
-    report($, state, config, `built-in summary: ${refused} (${outcome.text})`)
+    report($, state, outcome.tier, `built-in summary: ${refused} (${outcome.text})`)
   } catch (err) {
-    report($, state, config, `built-in summary: ${message(err)}`)
+    report($, state, settings.tier, `built-in summary: ${message(err)}`)
   }
   return undefined
 }
@@ -121,8 +129,7 @@ async function runCommand($: EngineInterface, state: State, base: Config, args: 
     for (const [key, value] of Object.entries(command.patch)) await $.store.set(STORE_KEYS[key as keyof Settings], value)
     return changeText(command.patch)
   }
-  const config = await loadConfig($, base)
-  return statusText(config, (await apiKey($, config)) !== undefined, state.last)
+  return statusText(await loadConfig($, base), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 
 /** Starts a compaction when the context passed the threshold; not awaited, so the next prompt is not held. */
@@ -156,10 +163,11 @@ export const register: Register = (on, options) => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
+    await $.gemini.enroll({ consumer: CONSUMER, defaultModel: DEFAULT_MODEL })
     await $.command.register({
       name: 'gemini-compact',
-      description: 'Gemini compaction: status, on, off, mode summary|prune, free, paid, model <id>, at <1-99>, at off, reset (gemini-compact)',
-      argumentHint: '[on | off | mode summary|prune | free | paid | model <id> | at <N> | at off | reset]',
+      description: 'Gemini compaction: status, on, off, mode summary|prune, at <1-99>, at off, reset; /gemini-core sets the model, thinking and tier (gemini-compact)',
+      argumentHint: '[on | off | mode summary|prune | at <N> | at off | reset]',
     })
     return r
   })

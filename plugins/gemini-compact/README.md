@@ -24,6 +24,8 @@ Use summary mode to save the most Claude usage. Use prune mode when the exact wo
 5. The conversation becomes one user message (a note, then the summary) followed by the kept messages, which go back as the engine's own messages.
 6. The built-in summary runs, and one line says why, when there is no key, Gemini fails, the summary is under 200 characters or cut at the output limit (32,768 tokens), or the result is not smaller than the conversation.
 
+In both modes gemini-core builds the request with the key, the model and the thinking level it holds for `gemini-compact`, and reads the answer. After an HTTP 503 ("high demand") the mod asks again after 1 s, 2 s and 3 s, at most four times, and starts no attempt once 60 s have passed.
+
 In a live check on 2.1.277, `/compact` took 2.6 seconds with `gemini-3.5-flash-lite`, Claude sent no compaction request, and after it the model named a word and a file that appeared only in the summarized part.
 
 ## Prune mode
@@ -53,22 +55,24 @@ On the free tier the toast adds `· sent to Gemini free tier`.
 
 ## Command
 
-    /gemini-compact              on or off, mode, model, threshold, tier, whether a key is set, the last result
+    /gemini-compact              on or off, mode, the model and thinking level gemini-core holds, threshold, tier, whether a key is set, the last result
     /gemini-compact on | off     off leaves every compaction to the built-in summary
     /gemini-compact mode summary | mode prune
-    /gemini-compact free | paid  the tier; free prints the warning below
-    /gemini-compact model <id>   for example gemini-3.5-flash
     /gemini-compact at <1-99>    compact after a turn that ends with the context over this percentage
     /gemini-compact at off       no automatic compaction; /compact and the engine's own compaction still ask Gemini
     /gemini-compact reset        back to the plugin options
 
 The command settings are kept across sessions and take effect at once. After a compaction it started, the mod starts no other one until a turn ends with the context under the threshold, so a context that stays over it does not compact after every turn.
 
+The key, the tier, the model (default `gemini-3.5-flash-lite`) and the thinking level are gemini-core's:
+
+    /gemini-core model compact gemini-3.5-flash
+    /gemini-core thinking compact low
+    /gemini-core paid
+
 ## Free tier or paid tier
 
-A Gemini API key from Google AI Studio works on the free tier. The Gemini API Additional Terms say about the free tier: "Google uses the content you submit to the Services and any generated responses to provide, improve, and develop Google products and services", "human reviewers may read, annotate, and process your API input and output", and "Do not submit sensitive, confidential, or personal information to the Unpaid Services."
-
-The conversation holds your prompts, the commands the model ran and the contents of the files it read. On a project you would not show to Google, use a key with billing enabled and set `/gemini-compact paid`. The mod cannot tell which tier a key is on; the `tier` setting only chooses the warning.
+The conversation holds your prompts, the commands the model ran and the contents of the files it read. On the free tier Google may use them and human reviewers may read them; the gemini-core README quotes the Gemini API Additional Terms. On a project you would not show to Google, use a key with billing enabled and set `/gemini-core paid`. No mod can tell which tier a key is on; the tier setting only chooses the warning.
 
 The free tier limits per model are shown in Google AI Studio, not in the documentation. They were not measured. A summary of a long conversation is one large request, so a per-minute token limit can refuse it with HTTP 429; the built-in summary then runs.
 
@@ -77,22 +81,21 @@ The free tier limits per model are shown in Google AI Studio, not in the documen
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-compact@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag, and the key comes from the plugin option or the environment:
+It depends on `gemini-core`, which the install adds. Function hooks are early access. Nothing loads without the flag, and the key comes from the gemini-core option or the environment:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GEMINI_API_KEY=... claude
 
-Load it from a local checkout for one session:
+Load it from a local checkout for one session, with gemini-core beside it:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/gemini-compact
+    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/gemini-core --plugin-dir plugins/gemini-compact
+
+Version 0.3.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-compact free|paid|model` stored before are no longer read.
 
 ## Options
 
 | Option | Default | What it sets |
 |---|---|---|
-| `apiKey` | `GEMINI_API_KEY` | The Gemini API key, stored as a secret |
 | `mode` | `summary` | `summary` or `prune`; `/gemini-compact mode` overrides it |
-| `tier` | `free` | `free` or `paid`; `/gemini-compact free\|paid` overrides it |
-| `model` | `gemini-3.5-flash-lite` | `/gemini-compact model` overrides it |
 | `compactAtPercent` | `60` | The automatic threshold; 0 turns it off; `/gemini-compact at` overrides it |
 | `keepRecent` | `6` | Newest messages kept verbatim (summary) or whose calls are never sent for a decision (prune) |
 | `minReduction` | `0.25` | Prune mode: below this fraction the built-in summary runs |
@@ -102,20 +105,18 @@ Load it from a local checkout for one session:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.277:
+Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=gemini-compact}, session.compact, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get (via apiKey), $.http.fetch (via ask), $.session.compact (via maybeCompact), $.session.usage (via maybeCompact), $.store.delete (via runCommand), $.store.get (via loadConfig), $.store.set (via runCommand), $.ui.log, $.ui.toast (via report)
-    ❯ ./register.ts env writes: nothing
-    ❯ ./register.ts env reads: GEMINI_API_KEY
+    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via compactWithGemini, runCommand), $.http.fetch (via askGemini), $.session.compact (via maybeCompact), $.session.usage (via maybeCompact), $.store.delete (via runCommand), $.store.get (via loadConfig), $.store.set (via runCommand), $.ui.log, $.ui.toast (via report)
 
 Reach L3, reaches the network.
 
-    1. Reads:    the conversation at each compaction (messages, tool inputs and outputs); GEMINI_API_KEY; the context fill after each main-loop turn; its own $.store
+    1. Reads:    the conversation at each compaction (messages, tool inputs and outputs); the context fill after each main-loop turn; its own $.store; from gemini-core, the request with the key
     2. Runs:     no process; one $.session.compact after a turn that ends over the threshold, at most once until the context was under it again
-    3. Sends:    the conversation (summary: all but the newest messages; prune: all of it), one request per compaction, to generativelanguage.googleapis.com with the key in the x-goog-api-key header, never in the URL
-    4. Persists: in $.store, the five command settings (enabled, mode, tier, model, atPercent); the last result lives in memory
-    5. Hostile input: the Gemini answer is untrusted: a prune answer is applied only in the schema shape with every candidate id once; a summary becomes the text of one user message the model reads, so a hostile summary can steer the model, as text in a file it reads can; anything malformed falls back to the built-in summary; a model id must match [a-z0-9.-] because it goes into the URL path
+    3. Sends:    the conversation (summary: all but the newest messages; prune: all of it), one request per compaction (up to four after a 503), to the URL gemini-core builds (generativelanguage.googleapis.com) with the key in the x-goog-api-key header, never in the URL
+    4. Persists: in $.store, the three command settings (enabled, mode, atPercent); the last result lives in memory
+    5. Hostile input: the Gemini answer is untrusted: a prune answer is applied only in the schema shape with every candidate id once; a summary becomes the text of one user message the model reads, so a hostile summary can steer the model, as text in a file it reads can; anything malformed falls back to the built-in summary
 
 ## Limits
 

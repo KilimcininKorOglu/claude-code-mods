@@ -4,7 +4,6 @@ import { storedValue, type Settings } from './command.ts'
 import type { Action } from './prune.ts'
 
 export type Config = Settings & {
-  apiKey?: string
   keepRecent: number
   minReduction: number
   headChars: number
@@ -13,11 +12,16 @@ export type Config = Settings & {
   summaryMaxOutputTokens: number
 }
 
-export const DEFAULTS: Omit<Config, 'apiKey'> = {
+/** The plugin name gemini-core knows this mod by, and the model it uses until /gemini-core sets another. */
+export const CONSUMER = 'gemini-compact'
+export const DEFAULT_MODEL = 'gemini-3.5-flash-lite'
+
+/** No new Gemini attempt starts once this much has passed. */
+export const DEADLINE_MS = 60_000
+
+export const DEFAULTS: Config = {
   enabled: true,
   mode: 'summary',
-  tier: 'free',
-  model: 'gemini-3.5-flash-lite',
   atPercent: 60,
   keepRecent: 6,
   minReduction: 0.25,
@@ -34,12 +38,9 @@ function numberOption(options: PluginOptions, key: string, fallback: number, min
 
 /** The plugin options, each out-of-range or missing one replaced by its default. */
 export function configFrom(options: PluginOptions): Config {
-  const apiKey = typeof options.apiKey === 'string' && options.apiKey.trim() !== '' ? options.apiKey.trim() : undefined
   return {
     enabled: DEFAULTS.enabled,
     mode: storedValue('mode', options.mode) ?? DEFAULTS.mode,
-    tier: storedValue('tier', options.tier) ?? DEFAULTS.tier,
-    model: storedValue('model', options.model) ?? DEFAULTS.model,
     atPercent: numberOption(options, 'compactAtPercent', DEFAULTS.atPercent, 0, 99),
     keepRecent: numberOption(options, 'keepRecent', DEFAULTS.keepRecent, 0, 1000),
     minReduction: numberOption(options, 'minReduction', DEFAULTS.minReduction, 0, 1),
@@ -47,7 +48,6 @@ export function configFrom(options: PluginOptions): Config {
     maxInputChars: numberOption(options, 'maxInputChars', DEFAULTS.maxInputChars, 10_000, 4_000_000),
     summaryMaxInputChars: numberOption(options, 'summaryMaxInputChars', DEFAULTS.summaryMaxInputChars, 10_000, 4_000_000),
     summaryMaxOutputTokens: DEFAULTS.summaryMaxOutputTokens,
-    ...(apiKey === undefined ? {} : { apiKey }),
   }
 }
 

@@ -1,7 +1,59 @@
-import { describe, expect, mock, test, tier, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionMessage, TurnCompleteInput } from 'claude-code'
 
 tier('user')
+
+/** gemini-core as an inline plugin: it adds `$.gemini`, whose calls the hooks of `seatCore` answer. */
+const CORE: Plugin = {
+  name: 'gemini-core',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), gemini: { enroll: stub, settings: stub, request: stub, read: stub, configure: stub } }))
+  },
+}
+
+/** gemini-core's /gemini-core, which calls `$.gemini.configure`; the args are the change as JSON. */
+const CORE_COMMAND: Plugin = {
+  name: 'gemini-core-command',
+  register(on) {
+    on('command.run', { command: 'gemini-core' }, async ($, e) => ({ text: await $.gemini.configure(JSON.parse(String(e.args))) }))
+  },
+}
+
+/** A test with gemini-core loaded beside the plugin. */
+const it = (name: string, body: TestBody) => test(name, { plugins: [CORE, CORE_COMMAND] }, body)
+
+/** What gemini-core holds for this mod; `/gemini-core` changes reach it through `gemini.configure`. */
+type Core = { key?: string; tier: 'free' | 'paid'; model: string; enrolled: string[] }
+
+/** gemini-core's reading of a response, as far as these tests need it (gemini-core's tests cover the rest). */
+function coreRead(e: { status: number; ok: boolean; text: string; attempt: number }) {
+  const delay = [1000, 2000, 3000][e.attempt - 1]
+  if (e.status === 503 && delay !== undefined) return { retryInMs: delay }
+  const value = JSON.parse(e.text)
+  if (!e.ok) return { error: `Gemini HTTP ${e.status}: ${value.error.message}` }
+  const c = value.candidates[0]
+  const answer = { text: c.content.parts[0].text, inputTokens: value.usageMetadata.promptTokenCount, outputTokens: value.usageMetadata.candidatesTokenCount }
+  return { answer: c.finishReason === undefined ? answer : { ...answer, finishReason: c.finishReason } }
+}
+
+function seatCore(on: On, core: Core): void {
+  on('gemini.enroll', (_, e) => { core.enrolled.push(`${e.consumer} ${e.defaultModel}`); return { value: undefined } })
+  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, tier: core.tier, model: core.model } }))
+  on('gemini.request', (_, e) => {
+    if (core.key === undefined) return { value: { error: 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option' } }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${core.model}:generateContent`
+    return { value: { http: { url, init: { method: 'POST' as const, headers: { 'x-goog-api-key': core.key }, body: JSON.stringify(e.body) } }, model: core.model, tier: core.tier } }
+  })
+  on('gemini.read', (_, e) => ({ value: coreRead(e) }))
+  on('gemini.configure', (_, e) => {
+    if ('model' in e) core.model = e.model
+    if ('tier' in e) core.tier = e.tier
+    return { value: 'changed' }
+  })
+}
+
+const coreRun = (change: object): CommandRunInput => ({ ...run(JSON.stringify(change)), command: 'gemini-core' })
 
 const BIG = 'x'.repeat(5000)
 
@@ -31,6 +83,7 @@ const turn = (over: Partial<TurnCompleteInput> = {}): TurnCompleteInput =>
 
 type World = {
   clock: MockClock
+  core: Core
   store: Map<string, unknown>
   requests: { url: string; body: string; key: string | undefined }[]
   replies: { status: number; text: string }[]
@@ -45,13 +98,14 @@ const SUMMARY_TEXT = 'The user asked to fix the bug. The assistant read big.log 
 const summarized = (text: string, finishReason = 'STOP') =>
   JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason }], usageMetadata: { promptTokenCount: 1500, candidatesTokenCount: 20 } })
 
-// Beneath the plugin: a store, Gemini answering from a script, and the
-// engine's own compaction, which answers with a one-message summary. The
-// stored mode is prune unless a test names another; `mode: null` stores none.
+// Beneath the plugin: gemini-core, a store, Gemini answering from a script,
+// and the engine's own compaction, which answers with a one-message summary.
+// The stored mode is prune unless a test names another; `mode: null` stores none.
 function world(on: On, opts: { key?: string; store?: [string, unknown][]; mode?: string | null } = {}): World {
   const mode = opts.mode === undefined ? 'prune' : opts.mode
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
+    core: { ...(opts.key === undefined ? {} : { key: opts.key }), tier: 'free', model: 'gemini-3.5-flash-lite', enrolled: [] },
     store: new Map([...(mode === null ? [] : [['mode', mode] as [string, unknown]]), ...(opts.store ?? [])]),
     requests: [],
     replies: [],
@@ -60,7 +114,7 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][]; mode?:
     builtIn: [],
     percent: 10,
   }
-  mock.env(on, opts.key === undefined ? {} : { GEMINI_API_KEY: opts.key })
+  seatCore(on, w.core)
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
@@ -80,7 +134,7 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][]; mode?:
 }
 
 describe('gemini-compact', () => {
-  test('replaces the summary with the conversation less what Gemini dropped', async ($, on) => {
+  it('replaces the summary with the conversation less what Gemini dropped', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: answer([{ id: 'c1', action: 'drop' }]) })
     const r = await $.session.compact({ trigger: 'manual', messages: MESSAGES })
@@ -98,7 +152,7 @@ describe('gemini-compact', () => {
     expect(w.toasts[0]).toMatch(/ · sent to Gemini free tier$/)
   })
 
-  test('falls back to the built-in summary when the decisions remove too little', async ($, on) => {
+  it('falls back to the built-in summary when the decisions remove too little', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: answer([{ id: 'c1', action: 'keep' }]) })
     const r = await $.session.compact({ trigger: 'auto', messages: MESSAGES })
@@ -107,7 +161,7 @@ describe('gemini-compact', () => {
     expect(w.logs[0]).toMatch(/^built-in summary: under 25% smaller \(kept 9\/9 messages · 0% smaller/)
   })
 
-  test('falls back on a Gemini error, a bad answer and a missing key, and says why', async ($, on) => {
+  it('falls back on a Gemini error, a bad answer and a missing key, and says why', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 429, text: JSON.stringify({ error: { message: 'Resource has been exhausted' } }) })
     w.replies.push({ status: 200, text: answer([]) })
@@ -117,14 +171,30 @@ describe('gemini-compact', () => {
     expect(w.logs).toEqual(['built-in summary: Gemini HTTP 429: Resource has been exhausted', 'built-in summary: no decision for c1'])
   })
 
-  test('without a key it asks nothing and uses the built-in summary', async ($, on) => {
+  it('without a key it asks nothing and uses the built-in summary', async ($, on) => {
     const w = world(on)
     await $.session.compact({ trigger: 'manual', messages: MESSAGES })
     expect(w.requests).toEqual([])
-    expect(w.logs).toEqual(['built-in summary: no Gemini key (set GEMINI_API_KEY or the plugin option)'])
+    expect(w.logs).toEqual(['built-in summary: no Gemini key (set GEMINI_API_KEY or the gemini-core apiKey option)'])
   })
 
-  test('leaves a subagent compaction and a compaction while off to the engine', async ($, on) => {
+  it('asks again after a 503, and falls back once gemini-core allows no more attempts', async ($, on) => {
+    const w = world(on, { key: 'KEY' })
+    const busy = { status: 503, text: JSON.stringify({ error: { message: 'high demand' } }) }
+    w.replies.push(busy, { status: 200, text: answer([{ id: 'c1', action: 'drop' }]) })
+    const first = $.session.compact({ trigger: 'manual', messages: MESSAGES })
+    await w.clock.advance(1000)
+    expect((await first).messages).toHaveLength(8)
+    w.replies.push(busy, busy, busy, busy)
+    const second = $.session.compact({ trigger: 'manual', messages: MESSAGES })
+    for (const ms of [1000, 2000, 3000]) await w.clock.advance(ms)
+    await second
+    expect(w.requests).toHaveLength(6)
+    expect(w.builtIn).toEqual(['manual'])
+    expect(w.logs[1]).toBe('built-in summary: Gemini HTTP 503: high demand')
+  })
+
+  it('leaves a subagent compaction and a compaction while off to the engine', async ($, on) => {
     const w = world(on, { key: 'KEY', store: [['enabled', false]] })
     await $.session.compact({ trigger: 'manual', messages: MESSAGES })
     w.store.delete('enabled')
@@ -133,23 +203,27 @@ describe('gemini-compact', () => {
     expect(w.builtIn).toEqual(['manual', 'auto'])
   })
 
-  test('uses the model and the tier the command stored, and says paid without the free warning', async ($, on) => {
+  it('enrolls with gemini-core, uses the model and tier it holds, and says paid without the free warning', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     await $.session.start({ surface: null, isInteractive: false, cwd: '/src/app' })
-    expect((await $.command.run(run('model gemini-3.5-flash'))).text).toBe('model gemini-3.5-flash')
-    expect((await $.command.run(run('paid'))).text).toBe('paid tier')
+    expect(w.core.enrolled).toEqual(['gemini-compact gemini-3.5-flash-lite'])
+    await $.command.run(coreRun({ consumer: 'gemini-compact', model: 'gemini-3.5-flash' }))
+    await $.command.run(coreRun({ tier: 'paid' }))
     w.replies.push({ status: 200, text: answer([{ id: 'c1', action: 'drop' }]) })
     await $.session.compact({ trigger: 'manual', messages: MESSAGES })
     expect(w.requests[0]?.url).toContain('/models/gemini-3.5-flash:generateContent')
+    expect(w.requests[0]?.key).toBe('KEY')
     expect(w.toasts[0]).not.toContain('free tier')
     const status = (await $.command.run(run(''))).text
-    expect(status).toMatch(/^on · prune · gemini-3\.5-flash · automatic at 60% · paid tier · key set\nlast: kept 8\/9/)
+    expect(status).toMatch(/^on · prune · gemini-3\.5-flash · thinking model default · automatic at 60% · paid tier · key set\nlast: kept 8\/9/)
+    expect((await $.command.run(run('mode summary'))).text).toContain('mode summary')
     expect((await $.command.run(run('reset'))).text).toBe('settings reset to the plugin options')
     expect([...w.store.keys()]).toEqual([])
     expect((await $.command.run(run('at 150'))).text).toContain('1 to 99')
+    expect((await $.command.run(run('paid'))).text).toContain('/gemini-core sets the model')
   })
 
-  test('a finished turn over the threshold starts a compaction without holding the turn', async ($, on) => {
+  it('a finished turn over the threshold starts a compaction without holding the turn', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.percent = 59
     await $.turn.complete(turn())
@@ -165,7 +239,7 @@ describe('gemini-compact', () => {
     expect(w.builtIn).toHaveLength(1)
   })
 
-  test('does not compact again until the context was under the threshold', async ($, on) => {
+  it('does not compact again until the context was under the threshold', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.percent = 70
     await $.turn.complete(turn())
@@ -181,7 +255,7 @@ describe('gemini-compact', () => {
     expect(w.builtIn).toHaveLength(2)
   })
 
-  test('by default Gemini summarizes the older part and the newest messages stay as the engine\'s own', async ($, on) => {
+  it('by default Gemini summarizes the older part and the newest messages stay as the engine\'s own', async ($, on) => {
     const w = world(on, { key: 'KEY', mode: null })
     w.replies.push({ status: 200, text: summarized(SUMMARY_TEXT) })
     const r = await $.session.compact({ trigger: 'auto', messages: MESSAGES })
@@ -198,7 +272,7 @@ describe('gemini-compact', () => {
     expect(w.logs[0]).toMatch(/^summary: 9 → 7 messages · 9\d% smaller · 2k in, 20 out$/)
   })
 
-  test('a summary cut at the output limit or too short falls back to the built-in summary', async ($, on) => {
+  it('a summary cut at the output limit or too short falls back to the built-in summary', async ($, on) => {
     const w = world(on, { key: 'KEY', mode: 'summary' })
     w.replies.push({ status: 200, text: summarized(SUMMARY_TEXT, 'MAX_TOKENS') })
     w.replies.push({ status: 200, text: summarized('Fixed the bug.') })
@@ -208,7 +282,7 @@ describe('gemini-compact', () => {
     expect(w.logs).toEqual(['built-in summary: the summary hit the output token limit', 'built-in summary: the summary is too short (14 chars)'])
   })
 
-  test('takes a summary that is only a little smaller, and refuses one that is not smaller', async ($, on) => {
+  it('takes a summary that is only a little smaller, and refuses one that is not smaller', async ($, on) => {
     const w = world(on, { key: 'KEY', mode: 'summary' })
     const small: SessionMessage[] = [
       { role: 'user', text: 'a'.repeat(500), toolUses: [], handle: 'h0' },
@@ -223,7 +297,7 @@ describe('gemini-compact', () => {
     expect(w.logs[1]).toMatch(/^built-in summary: the summary is not smaller \(summary: 7 → 7 messages · -\d+% smaller/)
   })
 
-  test('at off stops the automatic compaction', async ($, on) => {
+  it('at off stops the automatic compaction', async ($, on) => {
     const w = world(on, { key: 'KEY', store: [['atPercent', 0]] })
     w.percent = 95
     await $.turn.complete(turn())

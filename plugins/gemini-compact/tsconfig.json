@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": [".claude/types", "hooks", "tests"]
+  "include": [".claude/types", "../gemini-core/types", "hooks", "tests"]
 }

@@ -1,16 +1,10 @@
-/** The Gemini generateContent request and the reading of its response. */
+/** The generateContent bodies this mod sends; gemini-core builds the request around them and reads the answer. */
+import type { EngineInterface } from 'claude-code'
 import { ACTIONS } from './prune.ts'
 import { SUMMARY_TASK } from './summary.ts'
 
-const API = 'https://generativelanguage.googleapis.com/v1beta/models'
-
-/** A model id is placed in the URL path, so only a plain id is taken. */
-export const MODEL_ID = /^[a-z0-9][a-z0-9.-]{0,79}$/
-
-export type Request = { url: string; init: { method: 'POST'; headers: Record<string, string>; body: string } }
-
-/** `finishReason` is Gemini's, such as `STOP` or `MAX_TOKENS`; absent when it gave none. */
-export type Answer = { text: string; inputTokens: number; outputTokens: number; finishReason?: string }
+/** Gemini's answer as gemini-core reads it; `finishReason` is Gemini's, such as `STOP` or `MAX_TOKENS`. */
+export type Answer = Extract<Awaited<ReturnType<EngineInterface['gemini']['read']>>, { answer: unknown }>['answer']
 
 const TASK = `You decide which tool calls of a Claude Code conversation can leave its context, because the context is being compacted. Every message stays; only tool calls and their outputs can go.
 
@@ -26,24 +20,17 @@ function prompt(task: string, transcript: string, instructions: string | undefin
   return `${task}${focus}\n\nThe conversation:\n\n${transcript}`
 }
 
-function post(model: string, apiKey: string, body: unknown): Request {
+/** The body that asks for a plain-text summary of the conversation. */
+export function buildSummaryBody(transcript: string, maxOutputTokens: number, instructions?: string): Record<string, unknown> {
   return {
-    url: `${API}/${model}:generateContent`,
-    init: { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body) },
+    contents: [{ role: 'user', parts: [{ text: prompt(SUMMARY_TASK, transcript, instructions) }] }],
+    generationConfig: { maxOutputTokens },
   }
 }
 
-/** The request that asks for a plain-text summary of the conversation. */
-export function buildSummaryRequest(model: string, apiKey: string, transcript: string, maxOutputTokens: number, instructions?: string): Request {
-  return post(model, apiKey, {
-    contents: [{ role: 'user', parts: [{ text: prompt(SUMMARY_TASK, transcript, instructions) }] }],
-    generationConfig: { maxOutputTokens },
-  })
-}
-
-/** The request that asks for one action per candidate id, in a schema Gemini must follow. */
-export function buildRequest(model: string, apiKey: string, transcript: string, ids: readonly string[], instructions?: string): Request {
-  const body = {
+/** The body that asks for one action per candidate id, in a schema Gemini must follow. */
+export function buildPruneBody(transcript: string, ids: readonly string[], instructions?: string): Record<string, unknown> {
+  return {
     contents: [{ role: 'user', parts: [{ text: prompt(TASK, transcript, instructions) }] }],
     generationConfig: {
       responseMimeType: 'application/json',
@@ -65,57 +52,5 @@ export function buildRequest(model: string, apiKey: string, transcript: string, 
         required: ['decisions'],
       },
     },
-  }
-  return post(model, apiKey, body)
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function errorText(value: unknown, fallback: string): string {
-  const error = isRecord(value) ? value.error : undefined
-  const message = isRecord(error) && typeof error.message === 'string' ? error.message : fallback
-  return message.replace(/\s+/g, ' ').slice(0, 200)
-}
-
-/** The answer text: the first part that is text and not a thought. */
-function answerText(value: Record<string, unknown>): string | undefined {
-  const candidate = Array.isArray(value.candidates) ? value.candidates[0] : undefined
-  const content = isRecord(candidate) ? candidate.content : undefined
-  const parts = isRecord(content) && Array.isArray(content.parts) ? content.parts : []
-  const part = parts.find(p => isRecord(p) && typeof p.text === 'string' && p.thought !== true)
-  return isRecord(part) ? (part.text as string) : undefined
-}
-
-function finishReason(value: Record<string, unknown>): string | undefined {
-  const candidate = Array.isArray(value.candidates) ? value.candidates[0] : undefined
-  const reason = isRecord(candidate) ? candidate.finishReason : undefined
-  return typeof reason === 'string' ? reason : undefined
-}
-
-function count(usage: unknown, key: string): number {
-  const n = isRecord(usage) ? usage[key] : undefined
-  return typeof n === 'number' ? n : 0
-}
-
-/** Reads a generateContent response; an HTTP error, a blocked or empty answer throws. */
-export function parseResponse(status: number, ok: boolean, text: string): Answer {
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch {
-    throw new Error(ok ? 'Gemini answered with no JSON' : `Gemini HTTP ${status}`)
-  }
-  if (!ok) throw new Error(`Gemini HTTP ${status}: ${errorText(value, 'no message')}`)
-  if (!isRecord(value)) throw new Error('Gemini answered with no object')
-  const answer = answerText(value)
-  if (answer === undefined) throw new Error(`Gemini gave no answer (${errorText(value, 'blocked or empty')})`)
-  const reason = finishReason(value)
-  return {
-    text: answer,
-    inputTokens: count(value.usageMetadata, 'promptTokenCount'),
-    outputTokens: count(value.usageMetadata, 'candidatesTokenCount') + count(value.usageMetadata, 'thoughtsTokenCount'),
-    ...(reason === undefined ? {} : { finishReason: reason }),
   }
 }
