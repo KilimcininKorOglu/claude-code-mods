@@ -165,6 +165,25 @@ describe('memory-save', () => {
     expect(w.files.get(FILE)).toBe(OLD)
   })
 
+  test('skips a misquoted line, saves the rest, and names the line to the next fork', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    w.replies.push(
+      '{"ops":[{"op":"remove","line":"- **Run `make test` before a commit.**"},{"op":"add","section":"Active Warnings","text":"- New."}]}',
+      '{"ops":[{"op":"remove","line":"- **Gone.**"}]}',
+    )
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await settled(w, 2)
+    expect(w.files.get(FILE)).toContain('- New.')
+    expect(w.statuses.at(-1)).toMatch(/^\+1 1 skipped · /)
+    expect(w.logs).toEqual(['MEMORY.md: 1 added; 1 skipped, not in the file: - **Run `make test` before a commit.**'])
+    await $.turn.complete(turn())
+    await settled(w, 4)
+    expect(w.prompts[1]).toContain('MANDATORY EXACT COPY')
+    expect(w.statuses.at(-1)).toMatch(/^no change, 1 skipped · /)
+    expect(w.logs.at(-1)).toBe('MEMORY.md: no change; 1 skipped, not in the file: - **Gone.**')
+  })
+
   test('shows the error when the fork gets no reply', async ($, on) => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push(null)

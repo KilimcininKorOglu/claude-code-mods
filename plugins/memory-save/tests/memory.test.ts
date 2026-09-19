@@ -95,7 +95,7 @@ describe('parseReply', () => {
 
 describe('apply', () => {
   test('reports no change for an empty reply', async () => {
-    expect(apply('demo', FILE, reply({}))).toEqual({ ok: true, changed: false })
+    expect(apply('demo', FILE, reply({}))).toEqual({ ok: true, changed: false, skipped: [] })
   })
 
   test('adds a bullet at the end of its section and replaces the placeholder', async () => {
@@ -109,7 +109,7 @@ describe('apply', () => {
     expect(r.text).toContain('- Run `make test` before a commit.\n- Use pnpm.\n\n## Architecture')
     expect(r.text).toContain('## Active Warnings\n\n- The cache is stale after a rebase.\n\n## Topic Files')
     expect(r.text).not.toContain('## Active Warnings\n\n- None yet.')
-    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false })
+    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false, skipped: [] })
   })
 
   test('removes and replaces exact lines', async () => {
@@ -131,14 +131,32 @@ describe('apply', () => {
     expect(r.text).not.toContain('probe scripts')
     const twice = `${withParagraph}\n- \`scripts/test_*.py\` are probe scripts.\n`
     expect(apply('demo', twice, reply({ ops: [{ op: 'remove', line: '* `scripts/test_*.py` are probe scripts.' }] }))).toEqual({
-      ok: false,
-      error: 'remove: line not found: * `scripts/test_*.py` are probe scripts.',
+      ok: true,
+      changed: false,
+      skipped: ['* `scripts/test_*.py` are probe scripts.'],
     })
   })
 
-  test('refuses an op whose line is not in the file', async () => {
-    const r = apply('demo', FILE, reply({ ops: [{ op: 'remove', line: '- Not there.' }] }))
-    expect(r).toEqual({ ok: false, error: 'remove: line not found: - Not there.' })
+  test('skips a remove or replace whose line is not in the file, applies the rest, and names it', async () => {
+    const r = apply('demo', FILE, reply({
+      ops: [
+        { op: 'remove', line: '- **Run `make test` before a commit.**' },
+        { op: 'add', section: 'Active Warnings', text: '- New warning.' },
+      ],
+    }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).toContain('- Run `make test` before a commit.')
+    expect(r.text).toContain('- New warning.')
+    expect(r.changes).toEqual({ added: 1, removed: 0, replaced: 0, created: false, skipped: ['- **Run `make test` before a commit.**'] })
+    expect(changeText(r.changes, [])).toBe('MEMORY.md: 1 added; 1 skipped, not in the file: - **Run `make test` before a commit.**')
+    expect(changeShort(r.changes, [])).toBe('+1 1 skipped')
+  })
+
+  test('names the skipped lines to the next fork and asks for an exact copy', async () => {
+    const prompt = buildPrompt('demo', FILE, ['- **Walk a backfill.**'])
+    expect(prompt).toContain('MANDATORY EXACT COPY')
+    expect(prompt).toContain('  - - **Walk a backfill.**')
+    expect(buildPrompt('demo', FILE)).not.toContain('MANDATORY EXACT COPY')
   })
 
   test('starts a missing file from the skeleton', async () => {
@@ -270,14 +288,14 @@ describe('texts', () => {
   })
 
   test('changeText and changeShort name every change', async () => {
-    const changes = { added: 12, removed: 1, replaced: 0, created: false }
+    const changes = { added: 12, removed: 1, replaced: 0, created: false, skipped: [] }
     const topics = [{ file: 'history.md', append: 'x' }]
     expect(changeText(changes, topics)).toBe('MEMORY.md: 12 added, 1 removed; appended to history.md')
     expect(changeShort(changes, topics)).toBe('+12 -1 topic: history')
   })
 
   test('changeShort names at most three topic files and counts the rest', async () => {
-    const changes = { added: 0, removed: 0, replaced: 2, created: false }
+    const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [] }
     const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
     expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
   })

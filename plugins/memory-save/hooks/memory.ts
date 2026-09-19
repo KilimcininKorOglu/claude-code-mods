@@ -26,10 +26,11 @@ export type Reply = { ops: Op[]; topics: TopicAppend[] }
 
 export type Parsed = { ok: true; reply: Reply } | { ok: false; error: string }
 
-export type Changes = { added: number; removed: number; replaced: number; created: boolean }
+/** `skipped` holds the lines of remove and replace ops the file has no line for. */
+export type Changes = { added: number; removed: number; replaced: number; created: boolean; skipped: string[] }
 
 export type Applied =
-  | { ok: true; changed: false }
+  | { ok: true; changed: false; skipped: string[] }
   | { ok: true; changed: true; text: string; changes: Changes; newBullets: string[]; topics: TopicAppend[] }
   | { ok: false; error: string }
 
@@ -219,18 +220,25 @@ function sizeNotes(state: Inspection): string {
   return notes.join('\n')
 }
 
+function skippedNote(skipped: readonly string[]): string {
+  if (skipped.length === 0) return ''
+  const list = skipped.map(l => `  - ${l}`).join('\n')
+  return `MANDATORY EXACT COPY: the last save skipped these remove or replace lines, because MEMORY.md has no line equal to them. Copy the "line" of a remove or replace op character for character from the file above, with its markup: do not add or drop a list marker, bold, italics or backticks. Skipped:\n${list}`
+}
+
 /**
  * Builds the one message the fork answers. The current file rides along as
- * data, because the fork has no tools and cannot read it.
+ * data, because the fork has no tools and cannot read it. `skipped` names the
+ * lines the last save could not find.
  */
-export function buildPrompt(project: string, current: string | undefined): string {
+export function buildPrompt(project: string, current: string | undefined, skipped: readonly string[] = []): string {
   const head = `You are the memory-save step of this session, not the assistant. Do not answer the user and do not use tools. Review the conversation above and decide what project "${project}" must remember in its MEMORY.md.`
   if (current === undefined) {
     return [head, 'MEMORY.md does not exist yet. The mod creates it with the four sections when your answer has at least one op.', RULES, FORMAT].join('\n\n')
   }
   const state = inspect(current)
   const file = `The current MEMORY.md, as data between the markers:\n<memory_file>\n${current}\n</memory_file>`
-  return [head, file, RULES, sortNote(current), sizeNotes(state), FORMAT].filter(p => p !== '').join('\n\n')
+  return [head, file, RULES, sortNote(current), sizeNotes(state), skippedNote(skipped), FORMAT].filter(p => p !== '').join('\n\n')
 }
 
 function jsonSpan(text: string): string | undefined {
@@ -368,9 +376,9 @@ function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefi
   return undefined
 }
 
-function tally(ops: Op[], created: boolean): Changes {
+function tally(ops: Op[], created: boolean, skipped: string[]): Changes {
   const count = (kind: Op['op']): number => ops.filter(o => o.op === kind).length
-  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created }
+  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created, skipped }
 }
 
 /** Lists every topic file the reply writes under '## Topic Files' when the file does not name it yet. */
@@ -389,20 +397,35 @@ function pointTopics(lines: string[], topics: TopicAppend[], newBullets: string[
 
 /**
  * Applies the reply to the current file. A missing file starts from the
- * skeleton. The result is not checked here; `validate` checks it.
+ * skeleton. A remove or replace whose line the file lacks is skipped and
+ * named, and the rest is applied: the line is already gone or the fork misquoted
+ * it, and neither is a reason to lose the other ops. The result is not checked
+ * here; `validate` checks it.
  */
 export function apply(project: string, current: string | undefined, reply: Reply): Applied {
-  if (reply.ops.length === 0 && reply.topics.length === 0) return { ok: true, changed: false }
   const lines = linesOf(current ?? skeleton(project))
   const newBullets: string[] = []
+  const done: Op[] = []
+  const skipped: string[] = []
   for (const op of reply.ops) {
+    if (op.op !== 'add' && indexOfLine(lines, op.line) === -1) {
+      skipped.push(op.line)
+      continue
+    }
     const error = applyOp(lines, op, newBullets)
     if (error !== undefined) return { ok: false, error }
+    done.push(op)
   }
+  if (done.length === 0 && reply.topics.length === 0) return { ok: true, changed: false, skipped }
   const error = pointTopics(lines, reply.topics, newBullets)
   if (error !== undefined) return { ok: false, error }
-  const changes = tally(reply.ops, current === undefined)
+  const changes = tally(done, current === undefined, skipped)
   return { ok: true, changed: true, text: `${lines.join('\n')}\n`, changes, newBullets, topics: reply.topics }
+}
+
+/** `2 skipped, not in the file: - Walk a backfill…; - Old note…` */
+export function skippedText(skipped: readonly string[]): string {
+  return `${skipped.length} skipped, not in the file: ${skipped.map(l => (l.length > 60 ? `${l.slice(0, 60)}…` : l)).join('; ')}`
 }
 
 /** Returns why the new file must not be written, or an empty list. */
@@ -440,7 +463,8 @@ export function changeText(changes: Changes, topics: TopicAppend[]): string {
   if (changes.replaced > 0) parts.push(count(changes.replaced, 'replaced'))
   const files = [...new Set(topics.map(t => t.file))]
   const topicPart = files.length > 0 ? `; appended to ${files.join(', ')}` : ''
-  return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}`
+  const skippedPart = changes.skipped.length > 0 ? `; ${skippedText(changes.skipped)}` : ''
+  return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}${skippedPart}`
 }
 
 const SHORT_TOPICS = 3
@@ -461,6 +485,7 @@ export function changeShort(changes: Changes, topics: TopicAppend[]): string {
   ]
   const parts = counts.filter(([, n]) => n > 0).map(([sign, n]) => `${sign}${n}`)
   if (topics.length > 0) parts.push(topicNames(topics))
+  if (changes.skipped.length > 0) parts.push(`${changes.skipped.length} skipped`)
   return parts.join(' ') || 'saved'
 }
 
