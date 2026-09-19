@@ -239,6 +239,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "i18n-watch",
+      "source": "./plugins/i18n-watch",
+      "description": "Tells the model when an edit uses translation keys that one or more locale files lack.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
