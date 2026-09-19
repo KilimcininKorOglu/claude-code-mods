@@ -26,7 +26,7 @@ After every main-loop turn that ended with an answer or an interruption:
 
 The save runs in the background. The next prompt is not held while the fork runs. One save runs at a time; a turn that ends during a save asks for one more save after it.
 
-The project name is the primary repository name, also inside a git worktree, else the git top level, else the working directory. It is the same name `~/.claude/hooks/project.py` resolves, so the classic hooks read the same directory.
+The project name is the primary repository name, also inside a git worktree, else the git top level, else the working directory.
 
 ## What it shows
 
@@ -75,9 +75,21 @@ Load it from a local checkout for one session:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/memory-save
 
+To keep the flag on, add this to `~/.claude/settings.json`:
+
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+
+## After installing
+
+1. Remove every other hook, `CLAUDE.md` line or skill that tells the model to edit `MEMORY.md`. The mod writes the file, and a model edit while the fork runs makes that save stop with an error.
+2. To keep a memory file you already have, copy it to `~/.cli-tweaks/memory/<project>/MEMORY.md`. At the next load the mod puts it into the four sections and keeps the old copy as `MEMORY.pre-migration.md`. A project without the file gets one after its first save; the mod creates the directory.
+3. Restart Claude Code. The memory loads at startup, resume, `/clear` and compaction.
+
+The mod has no command. To stop the saves, disable it: `claude plugin disable memory-save@kilimcininkoroglu-mods`.
+
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.277:
+Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save, templated), $.ui.status (via report)
