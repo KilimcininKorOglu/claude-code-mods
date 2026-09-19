@@ -178,17 +178,40 @@ export function skeleton(project: string): string {
   return `# ${project}\n\n${SECTIONS.map(s => `## ${s}\n`).join('\n')}`
 }
 
-const RULES = `Record only project-scoped learnings. A learning is project-scoped only when it changes future behavior for this repository's code, commands, architecture, configuration, deployment, tests, or product preferences. Do NOT record global Claude Code behavior, shared skill workflow rules, general agent preferences, or cross-project policies. If the scope is unclear, do not record it.
-Writing rules for MEMORY.md and for every topic file alike:
-1. Write an active project-scoped rule in imperative mood under '## CRITICAL RULES'. Put stable technical context under '## Architecture & Config Facts', and pitfalls and recurring mistakes under '## Active Warnings'.
-2. NEVER write commit hashes, dated fix histories, completed-work records, or any archival narrative to MEMORY.md. Historical detail goes to a topic file only: history.md by default, or a dedicated subject file for a large topic.
-3. MEMORY.md holds ONLY durable rules, patterns, and stable facts, each as ONE focused bullet of at most ${MAX_BULLET} characters. Keep the file under ${MAX_LINES} lines AND under ${MAX_CHARS} characters.
-4. Write in English ONLY.
-5. Write to ASD-STE100 (Simplified Technical English): short sentences, active voice, simple tenses, ONE instruction per sentence, the SAME term for the same thing throughout. Keep a short 'because' or 'so that' clause when dropping it would let the rule be applied wrongly.
-6. Name the fact directly. NEVER invent a metaphor or a figurative phrase, and NEVER present an invented phrase as if it were an established term, because a reader months later cannot tell which fact it encodes.
-7. NEVER hedge a fact that was measured. When something was NOT verified, say exactly that, so that a guess is never read back as a fact.
-8. Reproduce identifiers, file names, config keys and trigger phrases exactly as they appear in the codebase, including non-English ones. Never translate them.
-9. Do not add a bullet that repeats one already in the file. Remove or replace a bullet that the conversation proved wrong or obsolete.`
+/*
+ * The rule texts below are the user's own, copied word for word from the classic memory-save Stop hook.
+ * Only the parts about stopping are left out ("before stopping", "just stop", "this session"), because
+ * the fork does not stop: it answers with JSON. Do not reword them.
+ */
+
+/** The writing rules for a project that has a MEMORY.md. */
+const existingRules = (dir: string): string => `MANDATORY — these are HARD rules, not suggestions; apply each:
+1. If you learned an ACTIVE PROJECT-SCOPED RULE that changes future behavior for this repository's code, commands, architecture, configuration, deployment, tests, or product preferences, you MUST record it in ${dir}/MEMORY.md in imperative mood — under '## CRITICAL RULES' when it is a behavior rule. Do NOT write global Claude Code behavior, shared skill workflow rules, general agent preferences, or cross-project policies to this project MEMORY.md; put those in the appropriate global instruction or shared skill file instead. If the scope is unclear, do not write it here.
+2. NEVER write commit hashes, dated fix histories, completed-slice/feature DONE-records, or any archival narrative to MEMORY.md — these are FORBIDDEN there. ALL historical detail goes to a topic file ONLY — history.md by default, or a dedicated subject file when a topic grows large enough to warrant its own (list any new topic file under '## Topic Files'). Enforce this at WRITE time, not merely as an afterthought.
+3. MEMORY.md holds ONLY durable rules, patterns, and stable facts, each as ONE focused bullet — strip narrative, examples, dated context, and completed-work detail to a topic file (history.md, or a dedicated subject file for a large topic). TWO caps BOTH apply: keep it under 200 lines AND under 50000 characters. Do NOT cram multiple ideas into one long line to dodge the line cap — the character cap catches that. If either is exceeded, move the oldest/least-critical entries to history.md.
+4. Write in English ONLY. Rules 4 to 8 apply to MEMORY.md and to every topic file alike.
+5. Write every entry to ASD-STE100 (Simplified Technical English): short sentences, active voice, simple tenses, ONE INSTRUCTION per sentence, and the SAME term for the same thing throughout. A reason clause is not a second instruction: keep the short 'because' or 'so that' clause whenever dropping it would let the rule be applied wrongly.
+6. Name the fact directly. NEVER invent a metaphor or a figurative phrase, and NEVER present an invented phrase as if it were an established term. An invented phrase is unrecoverable months later, because the reader cannot tell which fact it encodes.
+7. NEVER hedge a fact you measured. When you have NOT verified something, say exactly that instead of softening the claim, so a guess is never read back as a fact.
+8. Reproduce identifiers, file names, config keys and trigger phrases exactly as they appear in the codebase, including non-English ones. Never translate them.`
+
+const TEMPLATE = `MEMORY.md MUST use exactly these four sections, in this order:
+  ## CRITICAL RULES        - non-negotiable project-scoped active rules, imperative mood
+  ## Architecture & Config Facts - project-scoped stable technical context, not rules
+  ## Active Warnings       - project-scoped pitfalls and recurring mistakes
+  ## Topic Files           - pointers to detail files (e.g. history.md)
+Only record project-scoped learnings in this project MEMORY.md. A learning is project-scoped only when it changes future behavior for this repository's code, commands, architecture, configuration, deployment, tests, or product preferences. Do not write global Claude Code behavior, shared skill workflow rules, general agent preferences, or cross-project policies to this project MEMORY.md. Put global rules in the appropriate global instruction or shared skill file instead. If the scope is unclear, do not write it here. Keep each bullet to ONE focused project rule or fact; strip narrative, examples, and dated context to a topic file (history.md, or a dedicated subject file for a large topic, listed under '## Topic Files'). TWO caps BOTH apply (under 200 lines AND under 50000 characters), so keep bullets concise and do NOT pad them into long single lines.`
+
+/** The writing rules for a project without a MEMORY.md, followed by the template. */
+const newProjectRules = (dir: string): string => `MANDATORY — this is a new project with no memory yet. You MUST create ${dir}/MEMORY.md following the template below, with project-scoped rules in imperative mood. Record only learnings that change future behavior for this repository's code, commands, architecture, configuration, deployment, tests, or product preferences. Do NOT write global Claude Code behavior, shared skill workflow rules, general agent preferences, or cross-project policies to this project MEMORY.md; put those in the appropriate global instruction or shared skill file instead. If the scope is unclear, do not write it here. NEVER write commit hashes or dated history to MEMORY.md — historical detail goes to a topic file only (history.md by default, or a dedicated subject file for a large topic). Keep it lean — bounded by BOTH a line cap (under 200) and a character cap (under 50000) — and in English ONLY. Every writing rule here applies to MEMORY.md and to every topic file alike. Each bullet is ONE focused project rule or fact; no narrative or padding. Write every entry to ASD-STE100 (Simplified Technical English): short sentences, active voice, simple tenses, ONE INSTRUCTION per sentence, and the SAME term for the same thing throughout; a reason clause is not a second instruction, so keep the short 'because' or 'so that' clause whenever dropping it would let the rule be applied wrongly. Name the fact directly: NEVER invent a metaphor or a figurative phrase, and never present an invented phrase as if it were an established term, because an invented phrase is unrecoverable months later. NEVER hedge a fact you measured, and when you have NOT verified something say exactly that instead of softening the claim, so a guess is never read back as a fact. Reproduce identifiers, file names, config keys and trigger phrases exactly as they appear in the codebase, including non-English ones, and never translate them. Skip this ONLY if the session was genuinely trivial with nothing project-scoped worth remembering.
+${TEMPLATE}`
+
+const MIGRATION = `MANDATORY MIGRATION: MEMORY.md is MISSING the '## CRITICAL RULES' section, so it is NOT in the required format. You MUST restructure the whole file into the four-section template, in this exact order:
+  ## CRITICAL RULES        - non-negotiable project-scoped active rules, imperative mood
+  ## Architecture & Config Facts - project-scoped stable technical context, not rules
+  ## Active Warnings       - project-scoped pitfalls and recurring mistakes
+  ## Topic Files           - pointers to detail files (e.g. history.md)
+Preserve all real content, reorganize it under those sections, and convert rules to imperative mood.`
 
 const FORMAT = `Answer with ONE JSON object and nothing else, no prose, no code fence:
 {"ops": [...], "topics": [...]}
@@ -208,13 +231,13 @@ function sizeNotes(state: Inspection): string {
   const notes: string[] = []
   if (state.lines >= SOFT_LINES || state.chars >= SOFT_CHARS) {
     notes.push(
-      `MANDATORY OFFLOAD: MEMORY.md is ${state.lines} lines / ${state.chars} characters, at or near a limit. Move the oldest or least critical entries (resolved warnings, superseded facts, dated notes) to a topic file in this answer.`,
+      `MANDATORY OFFLOAD: MEMORY.md is now ${state.lines} lines / ${state.chars} characters — at or near a cap (BOTH limits apply: keep under 200 lines AND under 50000 characters). You MUST move the oldest/least-critical entries (resolved warnings, superseded facts, dated notes, completed-work records) to a topic file (history.md, or a dedicated subject file when a topic is large), leaving MEMORY.md a lean index of ACTIVE rules and current architecture facts.`,
     )
   }
   if (state.longBullets.length > 0) {
     const list = state.longBullets.map(b => `  - line ${b.line} (${b.chars} chars): ${b.head}...`).join('\n')
     notes.push(
-      `MANDATORY BULLET SPLIT: these bullets exceed ${MAX_BULLET} characters. Replace each with focused bullets, or move its detail to a topic file and keep the rule as a short line with a '(detail in <topic>.md)' pointer. Prefer splitting in '## CRITICAL RULES', because a rule must stay in MEMORY.md; prefer moving the detail for architecture facts. Keep a safety rule whole when its detail is the rule itself, such as an exact regex or command:\n${list}`,
+      `MANDATORY BULLET SPLIT: ${state.longBullets.length} bullet(s) exceed ${MAX_BULLET} characters — a single bullet this long soft-wraps in an editor and is unscannable. Each bullet MUST be ONE focused rule or fact. Fix each by EITHER splitting it into multiple focused bullets, OR moving its detail (recipe steps, examples, multi-aspect notes) to a topic file and leaving the load-bearing rule as a lean line with a '(detail in <topic>.md)' pointer. Prefer SPLITTING for '## CRITICAL RULES' (only that section is re-injected periodically, so its detail must stay in MEMORY.md) and OFFLOADING for architecture facts. The exception is an irreducible safety rule whose detail is the rule itself (e.g. an exact regex/command) — keep it whole. Over-cap bullets:\n${list}`,
     )
   }
   return notes.join('\n')
@@ -231,14 +254,15 @@ function skippedNote(skipped: readonly string[]): string {
  * data, because the fork has no tools and cannot read it. `skipped` names the
  * lines the last save could not find.
  */
-export function buildPrompt(project: string, current: string | undefined, skipped: readonly string[] = []): string {
+export function buildPrompt(project: string, dir: string, current: string | undefined, skipped: readonly string[] = []): string {
   const head = `You are the memory-save step of this session, not the assistant. Do not answer the user and do not use tools. Review the conversation above and decide what project "${project}" must remember in its MEMORY.md.`
   if (current === undefined) {
-    return [head, 'MEMORY.md does not exist yet. The mod creates it with the four sections when your answer has at least one op.', RULES, FORMAT].join('\n\n')
+    return [head, 'MEMORY.md does not exist yet. The mod creates it with the four sections when your answer has at least one op.', newProjectRules(dir), FORMAT].join('\n\n')
   }
   const state = inspect(current)
   const file = `The current MEMORY.md, as data between the markers:\n<memory_file>\n${current}\n</memory_file>`
-  return [head, file, RULES, sortNote(current), sizeNotes(state), skippedNote(skipped), FORMAT].filter(p => p !== '').join('\n\n')
+  const migration = linesOf(current).some(l => l.trim().toLowerCase() === '## critical rules') ? '' : MIGRATION
+  return [head, file, existingRules(dir), migration, sortNote(current), sizeNotes(state), skippedNote(skipped), FORMAT].filter(p => p !== '').join('\n\n')
 }
 
 function jsonSpan(text: string): string | undefined {

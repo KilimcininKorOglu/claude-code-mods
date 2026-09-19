@@ -123,7 +123,7 @@ const FAILED_REPLY = 'memory-save.failed-reply.txt'
  * read is written to FAILED_REPLY, and the error names its output tokens.
  */
 async function ask($: EngineInterface, state: State, project: string, dir: string, current: string | undefined): Promise<Reply> {
-  const reply = await $.model.fork({ prompt: buildPrompt(project, current, state.skipped) })
+  const reply = await $.model.fork({ prompt: buildPrompt(project, dir, current, state.skipped) })
   if (reply === null) throw new Error('the fork got no reply (cold snapshot or API error)')
   const u = reply.usage
   $.ui.log(`fork usage: in ${u.input_tokens}, cache read ${u.cache_read_input_tokens}, out ${u.output_tokens}`, { to: 'debug' })

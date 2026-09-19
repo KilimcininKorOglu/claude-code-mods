@@ -22,7 +22,7 @@ The language line is there because long turns whose context was mostly English e
 After every main-loop turn that ended with an answer or an interruption:
 
 1. It reads `~/.cli-tweaks/memory/<project>/MEMORY.md`, when the file exists.
-2. It sends one message to `$.model.fork`. The fork sees the whole session transcript and shares its prompt cache, but it has no tools. The message carries the current file, the writing rules and the reply format.
+2. It sends one message to `$.model.fork`. The fork sees the whole session transcript and shares its prompt cache, but it has no tools. The message carries the current file, the writing rules and the reply format. The writing rules, the template and the MIGRATION, OFFLOAD and BULLET SPLIT notes are the texts of the classic memory-save Stop hook, word for word; only the parts about stopping are left out, because the fork does not stop.
 3. The fork answers with JSON: bullets to add, remove or replace, and text to append to topic files such as `history.md`.
 4. The mod applies the answer, checks the result and writes the files.
 

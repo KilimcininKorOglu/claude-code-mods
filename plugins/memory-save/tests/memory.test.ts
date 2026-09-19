@@ -154,10 +154,10 @@ describe('apply', () => {
   })
 
   test('names the skipped lines to the next fork and asks for an exact copy', async () => {
-    const prompt = buildPrompt('demo', FILE, ['- **Walk a backfill.**'])
+    const prompt = buildPrompt('demo', '/m/demo', FILE, ['- **Walk a backfill.**'])
     expect(prompt).toContain('MANDATORY EXACT COPY')
     expect(prompt).toContain('  - - **Walk a backfill.**')
-    expect(buildPrompt('demo', FILE)).not.toContain('MANDATORY EXACT COPY')
+    expect(buildPrompt('demo', '/m/demo', FILE)).not.toContain('MANDATORY EXACT COPY')
   })
 
   test('starts a missing file from the skeleton', async () => {
@@ -196,8 +196,8 @@ describe('repairSections', () => {
 
   test('asks the fork to sort the unsorted parts, and only when there are some', async () => {
     const r = repairSections('demo', `${FILE}\n## Overview\n\n- Old.\n`)
-    expect(buildPrompt('demo', r)).toContain("MANDATORY SORT: the mod moved sections outside the template under these headings: ### Unsorted: Overview.")
-    expect(buildPrompt('demo', FILE)).not.toContain('MANDATORY SORT')
+    expect(buildPrompt('demo', '/m/demo', r)).toContain("MANDATORY SORT: the mod moved sections outside the template under these headings: ### Unsorted: Overview.")
+    expect(buildPrompt('demo', '/m/demo', FILE)).not.toContain('MANDATORY SORT')
   })
 
   test('the fork can remove an unsorted heading once its bullets moved', async () => {
@@ -247,21 +247,35 @@ describe('validate', () => {
 
 describe('buildPrompt', () => {
   test('carries the current file and the reply format', async () => {
-    const p = buildPrompt('demo', FILE)
+    const p = buildPrompt('demo', '/m/demo', FILE)
     expect(p).toContain('<memory_file>\n# demo')
     expect(p).toContain('{"ops": [...], "topics": [...]}')
   })
 
   test('asks for an offload near the limit and names long bullets', async () => {
     const big = FILE.replace('- None yet.\n', `${'- x\n'.repeat(180)}- ${'w'.repeat(700)}\n`)
-    const p = buildPrompt('demo', big)
+    const p = buildPrompt('demo', '/m/demo', big)
     expect(p).toContain('MANDATORY OFFLOAD')
     expect(p).toContain('MANDATORY BULLET SPLIT')
     expect(inspect(big).longBullets).toHaveLength(1)
   })
 
+  test("carries the user's classic hook rules word for word, without the stop wording", async () => {
+    const p = buildPrompt('demo', '/m/demo', FILE)
+    expect(p).toContain('you MUST record it in /m/demo/MEMORY.md in imperative mood')
+    expect(p).toContain('Enforce this at WRITE time, not merely as an afterthought.')
+    expect(p).toContain('Do NOT cram multiple ideas into one long line to dodge the line cap — the character cap catches that.')
+    expect(p).toContain('4. Write in English ONLY. Rules 4 to 8 apply to MEMORY.md and to every topic file alike.')
+    expect(p).not.toMatch(/before stopping|just stop|this same session|THIS session/)
+    expect(p).not.toContain('MANDATORY MIGRATION')
+    expect(buildPrompt('demo', '/m/demo', FILE.replace('## CRITICAL RULES', '## Rules'))).toContain('MANDATORY MIGRATION: MEMORY.md is MISSING')
+    const fresh = buildPrompt('demo', '/m/demo', undefined)
+    expect(fresh).toContain('You MUST create /m/demo/MEMORY.md following the template below')
+    expect(fresh).toContain('MEMORY.md MUST use exactly these four sections, in this order:')
+  })
+
   test('says so when the file does not exist', async () => {
-    expect(buildPrompt('demo', undefined)).toContain('MEMORY.md does not exist yet')
+    expect(buildPrompt('demo', '/m/demo', undefined)).toContain('MEMORY.md does not exist yet')
   })
 })
 

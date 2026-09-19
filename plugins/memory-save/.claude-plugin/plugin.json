@@ -1,6 +1,6 @@
 {
   "name": "memory-save",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Loads MEMORY.md into the session and saves project learnings to it in the background after every turn, without blocking the stop. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
