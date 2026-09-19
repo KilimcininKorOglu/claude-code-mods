@@ -45,13 +45,17 @@ Load it from a local checkout for one session:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/task-poke
 
-To keep the flag on, add this to `~/.claude/settings.json`:
+To keep the flag on, add this to `~/.claude/settings.json` (measured on 2.1.278):
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
+## After installing
+
+Restart Claude Code. The mod turns the task tools on at session start, so on a model outside the list above the task tools come from the next session.
+
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.276:
+Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
     ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit, $.session.messages, $.store.get, $.store.set, $.ui.log
