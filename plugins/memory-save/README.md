@@ -30,8 +30,9 @@ The project name is the primary repository name, also inside a git worktree, els
 
 ## What it shows
 
-**A status line under the prompt** after every save:
+**A status line under the prompt** while a save runs, and after it:
 
+    memory-save: saving… · 14:31
     memory-save: +2 -1 · 14:32
     memory-save: +3 -1 ~3 topic: history · 14:32
     memory-save: no change · 14:32

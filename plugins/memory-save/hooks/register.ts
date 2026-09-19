@@ -180,6 +180,8 @@ async function drain($: EngineInterface, state: State): Promise<void> {
   try {
     do {
       state.pending = false
+      // The fork runs in the background; the line says so until the result replaces it.
+      await report($, 'saving…')
       await save($, state).catch((err: unknown) => report($, `error: ${message(err)}`))
     } while (state.pending)
   } finally {

@@ -90,6 +90,7 @@ describe('memory-save', () => {
     expect(w.files.get(FILE)).toContain('- Run `make test` before a commit.\n- Use pnpm.\n')
     expect(w.logs).toEqual(['MEMORY.md: 1 added'])
     expect(w.statuses.at(-1)).toMatch(/^\+1 · \d\d:\d\d$/)
+    expect(w.statuses[0]).toMatch(/^saving… · \d\d:\d\d$/)
     expect(w.prompts[0]).toContain('<memory_file>\n# app')
   })
 
