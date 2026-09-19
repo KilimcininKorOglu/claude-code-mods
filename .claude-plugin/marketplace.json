@@ -140,6 +140,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "gemini-plan-review",
+      "source": "./plugins/gemini-plan-review",
+      "description": "Has Gemini review each plan before it reaches you, and sends a plan with a blocking finding back to the model, at most twice.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

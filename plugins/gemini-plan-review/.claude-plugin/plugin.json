@@ -1,0 +1,20 @@
+{
+  "name": "gemini-plan-review",
+  "version": "0.1.0",
+  "description": "Gemini reviews each plan before the approval dialog, with the conversation, and sends a plan with a blocking finding back to the model, at most twice. /gemini-plan-review turns it on or off; gemini-core holds the key, tier, model and thinking level. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "dependencies": ["gemini-core"],
+  "userConfig": {
+    "maxInputChars": {
+      "type": "number",
+      "title": "Maximum characters of conversation sent to Gemini",
+      "description": "Above it the longest tool outputs of the conversation are cut to their head and tail before sending. The plan is always sent whole.",
+      "default": 2000000
+    }
+  }
+}
