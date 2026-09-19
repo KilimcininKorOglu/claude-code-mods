@@ -81,15 +81,21 @@ The free tier limits per model are shown in Google AI Studio, not in the documen
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-compact@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which `claude plugin install` adds. `claude plugin update` from 0.2.x does not add it (measured on 2.1.278); run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Function hooks are early access. Nothing loads without the flag, and the key comes from the gemini-core option or the environment:
+It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GEMINI_API_KEY=... claude
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 Load it from a local checkout for one session, with gemini-core beside it:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/gemini-core --plugin-dir plugins/gemini-compact
 
-Version 0.3.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-compact free|paid|model` stored before are no longer read.
+## After installing
+
+1. Set the Gemini key and the tier in gemini-core, as its [After installing](../gemini-core/README.md#after-installing) section says, then restart Claude Code.
+2. Run `/gemini-compact`. The first line reads `on · summary · <model> · thinking ... · automatic at 60% · <tier> tier · key set`.
+3. Run `/compact` once. The transcript line should start with `gemini-compact: summary:`. A line that starts with `built-in summary:` names why Gemini was not used.
+
+After an update from 0.2.x: `claude plugin update` does not add gemini-core (measured on 2.1.278), so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Version 0.3.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-compact free|paid|model` stored before are no longer read, so set them again in gemini-core. The `mode` and `at` settings stay.
 
 ## Options
 
