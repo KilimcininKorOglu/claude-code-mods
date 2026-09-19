@@ -184,6 +184,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "prompt-deck",
+      "source": "./plugins/prompt-deck",
+      "description": "Learns the short prompts you send often and draws the top five above the prompt; a digit key sends one at once.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

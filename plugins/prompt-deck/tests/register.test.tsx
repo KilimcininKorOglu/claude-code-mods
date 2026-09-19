@@ -1,0 +1,83 @@
+import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
+import type { CommandRunInput, On, PromptOrigin, PromptSubmitInput, RenderPropsOf } from 'claude-code'
+
+tier('user')
+
+const run = (args: string): CommandRunInput => ({
+  command: 'deck', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
+})
+
+const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): PromptSubmitInput => ({ text, wait: false, origin })
+
+const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['AbovePrompt']
+
+/** What reached the engine beneath the plugin. */
+type World = { entered: { text: string; origin?: PromptOrigin }[] }
+
+function world(on: On): World {
+  const w: World = { entered: [] }
+  mock.store(on, {})
+  mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  // The engine draws nothing of its own in the band.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>{''}</Text>
+  })
+  on('prompt.submit', (_, e) => {
+    w.entered.push({ text: e.text, origin: e.origin })
+    return { text: e.text, origin: e.origin }
+  })
+  return w
+}
+
+async function started($: Engine): Promise<void> {
+  await $.session.start({ surface: null, isInteractive: true, cwd: '/Users/u/app' })
+}
+
+const band = ($: Engine, props = BAND) => $.ui.mount({ plugin: 'prompt-deck', surface: 'terminal', component: 'AbovePrompt', requestId: 'above-prompt', props })
+
+describe('prompt-deck', () => {
+  test('a prompt typed three times reaches the band, and its key sends it at once and counts the press', async ($, on) => {
+    const w = world(on)
+    await started($)
+    for (let i = 0; i < 3; i++) await $.prompt.submit(typed(' commitle '))
+    await $.prompt.submit(typed('commitle', { kind: 'task-notification' }))
+    await $.prompt.submit(typed('/deck'))
+    const ui = await band($)
+    const button = await ui.find({ type: 'Button', key: 'deck:1' })
+    expect(button?.props.label).toBe('commitle')
+    expect(button?.props.hotkey).toBe('1')
+    expect((await $.command.run(run('list'))).text).toBe('on\n1. commitle (3)')
+    await ui.press({ key: 'deck:1' })
+    expect(w.entered.at(-1)?.text).toBe('commitle')
+    expect((await $.command.run(run('list'))).text).toBe('on\n1. commitle (4)')
+  })
+
+  test('the band yields to a survey, a running turn and an agent view', async ($, on) => {
+    world(on)
+    await started($)
+    for (let i = 0; i < 3; i++) await $.prompt.submit(typed('devam et'))
+    for (const [i, props] of [{ ...BAND, hasSurvey: true }, { ...BAND, isWorking: true }, { ...BAND, view: { agentId: 'a1' } }].entries()) {
+      const ui = await $.ui.mount({ plugin: 'prompt-deck', surface: 'terminal', component: 'AbovePrompt', requestId: `band-${i}`, props })
+      expect(await ui.find({ type: 'Button', key: 'deck:1' })).toBe(undefined)
+    }
+    expect(await (await band($)).find({ type: 'Button', key: 'deck:1' })).not.toBe(undefined)
+  })
+
+  test('remove, clear and off change what is counted and drawn', async ($, on) => {
+    world(on)
+    await started($)
+    for (let i = 0; i < 3; i++) await $.prompt.submit(typed('a'))
+    for (let i = 0; i < 4; i++) await $.prompt.submit(typed('b'))
+    expect((await $.command.run(run('remove 1'))).text).toBe('removed; 1 prompt(s) left')
+    expect((await $.command.run(run('remove 9'))).text).toBe('no prompt at 9; /deck list names the numbers')
+    expect((await $.command.run(run('off'))).text).toBe('off: nothing is counted or drawn; the counts stay')
+    await $.prompt.submit(typed('c'))
+    expect(await (await band($)).find({ type: 'Button', key: 'deck:1' })).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off\n1. a (3)')
+    expect((await $.command.run(run('clear'))).text).toBe('cleared: no prompt is counted')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the band), list, remove <n>, clear, on or off')
+  })
+})
