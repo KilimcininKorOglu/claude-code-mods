@@ -49,6 +49,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [gemini-plan-review](plugins/gemini-plan-review) | Has Gemini review each plan before the approval dialog, from the plan and the conversation, and sends a plan with a blocking finding back to the model, at most twice. | L3 |
 | [flaky-memory](plugins/flaky-memory) | Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code. | L2 |
 | [disk-janitor](plugins/disk-janitor) | Measures the build artifacts of the repository, shows them on the status line from 5 GB, and deletes the ones you pick in the `/janitor` pane; data directories are never listed. | L2 |
+| [contract-watch](plugins/contract-watch) | After the model changes a function signature with Edit, adds the callers ripwire finds to the Edit's result, so the model fixes them before the build does. | L2 |
 
 gemini-compact, gemini-advisor, gemini-review and gemini-plan-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 

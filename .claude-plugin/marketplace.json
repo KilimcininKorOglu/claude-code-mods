@@ -162,6 +162,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "contract-watch",
+      "source": "./plugins/contract-watch",
+      "description": "After the model changes a function signature with Edit, lists the callers ripwire finds, so the model fixes them before the build does.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
