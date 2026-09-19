@@ -23,7 +23,7 @@ The Gemini docs say Gemini 3.1 Pro takes no `minimal` either.
 
 ## Command
 
-    /gemini-core                                    tier, how many keys are set, each enrolled mod's model and thinking level
+    /gemini-core [status]                           tier, how many keys are set, each enrolled mod's model and thinking level
     /gemini-core free | paid                        the tier of every Gemini mod; free prints the warning below
     /gemini-core models [refresh]                   the Gemini text models the key lists
     /gemini-core model <mod>                        a pane to pick the mod's model from that list
@@ -63,9 +63,24 @@ The Gemini mods send the conversation, tool outputs and diffs. The Gemini API Ad
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-core@kilimcininkoroglu-mods
 
-A Gemini mod lists `gemini-core` in its `dependencies`, so installing one installs this one. Function hooks are early access. Nothing loads without the flag, and the key comes from the plugin option or the environment:
+A Gemini mod lists `gemini-core` in its `dependencies`, so installing one installs this one. Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GEMINI_API_KEY=... claude
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+
+## After installing
+
+1. Give it a key from Google AI Studio, in one of two places. Without a key every Gemini mod reports `no Gemini key`: gemini-compact runs the built-in summary, gemini-review lets the commit run unreviewed, and the advisor call fails.
+   - The environment. Add the line to your shell profile (`~/.zshrc`, `~/.bashrc`), open a new terminal, then start Claude Code from it:
+
+         export GEMINI_API_KEY="key1"
+         export GEMINI_API_KEY="key1,key2"    # several keys, tried in turn
+
+   - The plugin option, stored as a secret. It wins over the environment. Set it in the `/plugin` configure flow, or at install time with `claude plugin install gemini-core@kilimcininkoroglu-mods --config apiKey=...`, which also leaves the key in your shell history.
+2. Restart Claude Code and run `/gemini-core`. The first line names the tier and the number of keys, for example `free tier · 2 keys, tried in turn`. `no key: set GEMINI_API_KEY ...` means Claude Code did not get the key.
+3. Choose the tier. The default is `free`, and every Gemini mod then shows a free-tier warning. With a billing-enabled key run `/gemini-core paid`. When you mix a paid and a free key, put the paid key first, because one tier covers all keys.
+4. Check that each mod's model answers on your key. A free key can have no quota for a model: the free key of the live checks answered HTTP 429 for `gemini-3.8-flash`, the default of gemini-review and gemini-advisor, and HTTP 200 for `gemini-3.5-flash` (measured). Pick another model with `/gemini-core models` and `/gemini-core model <mod>`.
+
+After an update from a Gemini mod that kept its own settings (gemini-review and gemini-advisor 0.1.x, gemini-compact 0.2.x): `claude plugin update` does not add gemini-core, so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. The mod's old `apiKey`, `tier` and `model` options and its stored `free`, `paid` and `model` settings are not read, so do steps 1 to 4 again.
 
 ## Options
 
