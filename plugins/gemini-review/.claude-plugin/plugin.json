@@ -1,0 +1,38 @@
+{
+  "name": "gemini-review",
+  "version": "0.1.0",
+  "description": "Gemini reviews each git commit the model runs, with the staged diff and the conversation, and stops a commit with a serious bug, a security hole or a committed secret. /gemini-review sets on/off, the model and the tier. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "apiKey": {
+      "type": "string",
+      "title": "Gemini API key",
+      "description": "Leave empty to use the GEMINI_API_KEY environment variable.",
+      "sensitive": true
+    },
+    "tier": {
+      "type": "string",
+      "title": "Gemini tier",
+      "description": "free: Google may use the conversation and the diff to improve its products and human reviewers may read them. paid: a billing-enabled key. /gemini-review free|paid overrides it.",
+      "options": ["free", "paid"],
+      "default": "free"
+    },
+    "model": {
+      "type": "string",
+      "title": "Gemini model",
+      "description": "The model that reviews. /gemini-review model <id> overrides it.",
+      "default": "gemini-3.8-flash"
+    },
+    "maxInputChars": {
+      "type": "number",
+      "title": "Maximum characters of conversation sent to Gemini",
+      "description": "Above it the longest tool outputs of the conversation are cut to their head and tail before sending. The diff is always sent whole.",
+      "default": 2000000
+    }
+  }
+}
