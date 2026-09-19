@@ -54,8 +54,20 @@ describe('keys', () => {
     expect(first.next.init.headers['x-goog-api-key']).toBe('K1')
     const tried = ['key 3: Gemini HTTP 400: API key not valid. Please pass a valid API key.', 'key 1: Gemini HTTP 429: You exceeded your current quota']
     expect(readWithKeys(response('K2', 429, quota, tried), KEYS, state)).toEqual({
-      error: `all 3 keys failed: ${tried.join('; ')}; key 2: Gemini HTTP 429: You exceeded your current quota`,
+      error: 'all 3 keys failed: Gemini HTTP 400: API key not valid. Please pass a valid API key. (key 3); Gemini HTTP 429: You exceeded your current quota (keys 1-2)',
     })
+  })
+
+  test('names each distinct failure once with its keys, so 34 keys give a short error', async () => {
+    const keys = Array.from({ length: 34 }, (_, i) => `K${i + 1}`)
+    const tried = keys.slice(0, 33).map((_, i) => `key ${i + 1}: ${i === 4 || i === 9 ? 'Gemini HTTP 400: API key not valid.' : 'Gemini HTTP 429: quota'}`)
+    const read = readWithKeys(response('K34', 429, JSON.stringify({ error: { message: 'quota' } }), tried), keys, { preferred: 33 })
+    expect(read).toEqual({ error: 'all 34 keys failed: Gemini HTTP 429: quota (keys 1-4, 6-9, 11-34); Gemini HTTP 400: API key not valid. (keys 5, 10)' })
+  })
+
+  test('moves to no further key once the deadline has passed', async () => {
+    const late = { ...response('K1', 429, quota), elapsedMs: 40_000, deadlineMs: 40_000 }
+    expect(readWithKeys(late, KEYS, { preferred: 0 })).toEqual({ error: '1 of 3 keys failed before the deadline: Gemini HTTP 429: You exceeded your current quota (key 1)' })
   })
 
   test('one key reads as before, and a success remembers the key it came from', async () => {

@@ -45,8 +45,8 @@ The list comes from Google's `models.list` (`GET /v1beta/models`, the key in the
 
 The `apiKey` option and `GEMINI_API_KEY` take a comma-separated list; the option wins when it is set. The keys are tried in order:
 
-- An HTTP 429 (quota), 401, 403, or 400 "API key not valid" sends the same request with the next key at once. The last key wraps to the first, and each key is tried once per request.
-- When every key failed, the error names each key's failure by its place in the list (`all 2 keys failed: key 1: Gemini HTTP 400: API key not valid...; key 2: ...`), never the key.
+- An HTTP 429 (quota), 401, 403, or 400 "API key not valid" sends the same request with the next key at once. The last key wraps to the first, and each key is tried once per request. No key is tried once the mod's deadline has passed (60 s for review and compact, 40 s for the advisor).
+- When no key is left, the error names each distinct failure once with the places of the keys that got it, never a key: `all 34 keys failed: Gemini HTTP 429: quota (keys 1-4, 6-34); Gemini HTTP 400: API key not valid. (key 5)`.
 - The next request starts at the key the last one succeeded or moved on with, so a key whose daily quota is used up is not asked first every time. This place is kept in memory and starts over when the module reloads.
 - An HTTP 503 is the model's load, the same for every key, so it stays on the same key and waits as above.
 
