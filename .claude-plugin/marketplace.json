@@ -173,6 +173,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "doc-drift-watch",
+      "source": "./plugins/doc-drift-watch",
+      "description": "After each commit the model makes, tells it which doc lines that commit made stale, from ripwire doc-drift.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
