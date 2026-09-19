@@ -78,9 +78,10 @@ A Gemini mod lists `gemini-core` in its `dependencies`, so installing one instal
    - The plugin option, stored as a secret. It wins over the environment. Set it in the `/plugin` configure flow, or at install time with `claude plugin install gemini-core@kilimcininkoroglu-mods --config apiKey=...`, which also leaves the key in your shell history.
 2. Restart Claude Code and run `/gemini-core`. The first line names the tier and the number of keys, for example `free tier · 2 keys, tried in turn`. `no key: set GEMINI_API_KEY ...` means Claude Code did not get the key.
 3. Choose the tier. The default is `free`, and every Gemini mod then shows a free-tier warning. With a billing-enabled key run `/gemini-core paid`. When you mix a paid and a free key, put the paid key first, because one tier covers all keys.
-4. Check that each mod's model answers on your key. A free key can have no quota for a model: the free key of the live checks answered HTTP 429 for `gemini-3.8-flash`, the default of gemini-review and gemini-advisor, and HTTP 200 for `gemini-3.5-flash` (measured). Pick another model with `/gemini-core models` and `/gemini-core model <mod>`.
+4. Turn on each Gemini mod you want: `/gemini-review on`, `/gemini-advisor on`, `/gemini-compact on`. Each is off after an install and sends nothing to Gemini until then; `on` is refused while this mod has no key.
+5. Check that each mod's model answers on your key. A free key can have no quota for a model: the free key of the live checks answered HTTP 429 for `gemini-3.8-flash`, the default of gemini-review and gemini-advisor, and HTTP 200 for `gemini-3.5-flash` (measured). Pick another model with `/gemini-core models` and `/gemini-core model <mod>`.
 
-After an update from a Gemini mod that kept its own settings (gemini-review and gemini-advisor 0.1.x, gemini-compact 0.2.x): `claude plugin update` does not add gemini-core, so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. The mod's old `apiKey`, `tier` and `model` options and its stored `free`, `paid` and `model` settings are not read, so do steps 1 to 4 again.
+After an update from a Gemini mod that kept its own settings (gemini-review and gemini-advisor 0.1.x, gemini-compact 0.2.x): `claude plugin update` does not add gemini-core, so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. The mod's old `apiKey`, `tier` and `model` options and its stored `free`, `paid` and `model` settings are not read, so do steps 1 to 5 again.
 
 ## Options
 
