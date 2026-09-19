@@ -1,0 +1,11 @@
+{
+  "name": "flaky-memory",
+  "version": "0.1.0",
+  "description": "Remembers which tests failed on which code and tells the model when a failing test also passed on the same code, so it treats a flaky test as flaky. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

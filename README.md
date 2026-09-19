@@ -46,6 +46,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [gemini-advisor](plugins/gemini-advisor) | Gives the model a Gemini advisor tool it calls by itself: Gemini reads the conversation and the model's message and answers with a second opinion. | L3 |
 | [gemini-core](plugins/gemini-core) | Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place, builds their Gemini requests, and picks a model from Google's list. | L3 |
 | [gemini-review](plugins/gemini-review) | Has Gemini review every commit the model makes, from the diff and the conversation, and stops a commit with a blocking finding. | L3 |
+| [flaky-memory](plugins/flaky-memory) | Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code. | L2 |
 
 gemini-compact, gemini-advisor and gemini-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 

@@ -129,6 +129,17 @@
         "gemini",
         "settings"
       ]
+    },
+    {
+      "name": "flaky-memory",
+      "source": "./plugins/flaky-memory",
+      "description": "Remembers which tests failed on which code and tells the model when a failing test also passed on the same code, so it treats a flaky test as flaky.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
