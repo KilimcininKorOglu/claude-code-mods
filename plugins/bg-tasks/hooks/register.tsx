@@ -1,0 +1,131 @@
+import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
+import { byAge, endedIds, labelOf, listText, rowText, statusText, type Task } from './tasks.ts'
+
+type Elements = ReturnType<EngineInterface['ui']['resolve']>
+
+const ENABLED_KEY = 'enabled'
+
+const PANE_ID = 'bg-tasks'
+
+const USAGE = 'expects nothing (the pane), list, on or off'
+
+/** How often the status line's ages are redrawn. */
+const TICK_MS = 30_000
+
+/** The running tasks by id, the on/off setting, and the last stop's result for the pane. */
+type State = { tasks: Map<string, Task>; enabled: boolean; message?: string }
+
+/** The background task a Bash call started, by the model's `run_in_background` or the person's Ctrl+B. */
+function startedTask(r: ToolCallResult<'Bash'>): { id: string; byUser: boolean } | undefined {
+  if (r.deny !== undefined || r.isError === true) return undefined
+  const id = r.result.backgroundTaskId
+  return id === undefined ? undefined : { id, byUser: r.result.backgroundedByUser === true }
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+async function showStatus($: EngineInterface, state: State): Promise<void> {
+  $.ui.status(state.enabled ? statusText([...state.tasks.values()], await $.clock.now()) : undefined)
+}
+
+/** Redraws the status line and the pane after the task list changed. */
+async function changed($: EngineInterface, state: State): Promise<void> {
+  await showStatus($, state)
+  $.ui.invalidate('ui.render')
+}
+
+/** Stops one task through the engine's TaskStop tool, on the person's press. */
+async function stopTask($: EngineInterface, state: State, task: Task): Promise<void> {
+  try {
+    const r = await $.tool.call({ tool: 'TaskStop', task_id: task.id, consent: `The user pressed "stop" for "${task.label}" in the bg-tasks pane` })
+    if (r.deny !== undefined || r.isError === true) throw new Error(r.deny ?? r.text ?? 'TaskStop failed')
+    state.tasks.delete(task.id)
+    state.message = `stopped: ${task.label}`
+  } catch (err) {
+    state.message = `not stopped: ${task.label}: ${errorText(err)}`
+  }
+  await changed($, state)
+}
+
+async function togglePane($: EngineInterface, state: State): Promise<string> {
+  if ((await $.ui.panes()).some(p => p.id === PANE_ID)) {
+    await $.ui.close({ id: PANE_ID })
+    return 'pane closed'
+  }
+  state.message = undefined
+  const rows = Math.min(state.tasks.size + 4, 20)
+  await $.ui.open({ id: PANE_ID, title: 'Background tasks', focus: true, closeOnEscape: true, holdToasts: true, rows })
+  return 'pane open: Enter on a row stops it, Esc closes'
+}
+
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  const word = args.trim()
+  if (word === 'on' || word === 'off') {
+    await $.store.set(ENABLED_KEY, word === 'on')
+    state.enabled = word === 'on'
+    if (!state.enabled) state.tasks.clear()
+    await changed($, state)
+    return word === 'on' ? 'on: background shell tasks started from now on are listed' : 'off: background tasks are not listed'
+  }
+  if (word === 'list') return `${state.enabled ? 'on' : 'off'}\n${listText([...state.tasks.values()], await $.clock.now())}`
+  return word === '' ? togglePane($, state) : USAGE
+}
+
+function paneTree(els: Elements, state: State, now: number, onStop: (task: Task) => void) {
+  const { Box, Button, Text } = els
+  const tasks = byAge(state.tasks.values())
+  return (
+    <Box flexDirection="column">
+      {tasks.length === 0 ? <Text>No background shell task is running.</Text> : <Text dimColor>{'   age  who    command'}</Text>}
+      {tasks.map((t, i) => (
+        <Button key={`stop:${t.id}`} plain {...(i === 0 ? { autoFocus: true as const } : {})} label={`[ stop ] ${rowText(t, now)}`} onPress={() => onStop(t)} />
+      ))}
+      {state.message === undefined ? null : <Text dimColor>{state.message}</Text>}
+    </Box>
+  )
+}
+
+export const register: Register = on => {
+  const state: State = { tasks: new Map(), enabled: true }
+
+  on('session.start', async ($, e, next) => {
+    const r = await next(e)
+    await $.command.register({ name: 'bg-tasks', description: 'Background shell tasks: the pane with stop buttons, list, on, off (bg-tasks)', argumentHint: '[list | on | off]' })
+    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    $.clock.every(TICK_MS, () => void showStatus($, state))
+    return r
+  })
+
+  // The engine prints the plugin name in front of command text and the status line, so the texts do not repeat it.
+  on('command.run', { command: 'bg-tasks' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const r = await next(e)
+    const started = startedTask(r)
+    if (!state.enabled || started === undefined) return r
+    state.tasks.set(started.id, { ...started, label: labelOf(e.command), startedAt: await $.clock.now() })
+    await changed($, state)
+    return r
+  })
+
+  on('tool.call', { tool: 'TaskStop' }, async ($, e, next) => {
+    const r = await next(e)
+    const id = e.task_id ?? e.shell_id
+    if (r.deny === undefined && r.isError !== true && id !== undefined && state.tasks.delete(id)) await changed($, state)
+    return r
+  })
+
+  on('prompt.submit', { origin: { kind: 'task-notification' } }, async ($, e, next) => {
+    const ended = endedIds(e.text).filter(id => state.tasks.delete(id))
+    if (ended.length > 0) await changed($, state)
+    return next(e)
+  })
+
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId !== PANE_ID) return next(e)
+    const now = await $.clock.now()
+    return paneTree($.ui.resolve(e), state, now, task => void stopTask($, state, task))
+  })
+}

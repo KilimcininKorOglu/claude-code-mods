@@ -1,0 +1,11 @@
+{
+  "name": "bg-tasks",
+  "version": "0.1.0",
+  "description": "Shows the background shell tasks of the session on the status line, and stops one from the /bg pane. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}
