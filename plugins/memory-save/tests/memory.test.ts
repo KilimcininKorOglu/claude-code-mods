@@ -124,6 +124,18 @@ describe('apply', () => {
     expect(r.text).not.toContain('api/')
   })
 
+  test('finds a plain paragraph line the fork names as a bullet, and only when one line matches', async () => {
+    const withParagraph = FILE.replace('## Active Warnings', '`scripts/test_*.py` are probe scripts.\n\n## Active Warnings')
+    const r = apply('demo', withParagraph, reply({ ops: [{ op: 'remove', line: '- `scripts/test_*.py` are probe scripts.' }] }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).not.toContain('probe scripts')
+    const twice = `${withParagraph}\n- \`scripts/test_*.py\` are probe scripts.\n`
+    expect(apply('demo', twice, reply({ ops: [{ op: 'remove', line: '* `scripts/test_*.py` are probe scripts.' }] }))).toEqual({
+      ok: false,
+      error: 'remove: line not found: * `scripts/test_*.py` are probe scripts.',
+    })
+  })
+
   test('refuses an op whose line is not in the file', async () => {
     const r = apply('demo', FILE, reply({ ops: [{ op: 'remove', line: '- Not there.' }] }))
     expect(r).toEqual({ ok: false, error: 'remove: line not found: - Not there.' })

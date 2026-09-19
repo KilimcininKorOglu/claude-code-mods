@@ -54,7 +54,7 @@ A save whose result is not in the template is never written.
 ## What is checked before a write
 
 - The reply is one JSON object of the documented shape. Any other reply is an error, never a guess.
-- A removed or replaced line exists in the file exactly.
+- A removed or replaced line exists in the file exactly, or it differs only by a leading list marker from exactly one line. The fork writes every entry as a bullet, also one that stands in the file as a plain paragraph line.
 - A topic file name is lowercase, ends in `.md`, has no directory part and is not `memory.md`.
 - The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters.
 - No new bullet is longer than 600 characters.

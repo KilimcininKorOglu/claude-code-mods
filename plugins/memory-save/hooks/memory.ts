@@ -333,8 +333,21 @@ function addTo(lines: string[], section: string, text: string): string | undefin
   return undefined
 }
 
+function withoutMarker(line: string): string {
+  return line.trim().replace(/^[-*]\s+/, '')
+}
+
+/**
+ * The index of the line an op names: the exact line, else the one line that
+ * differs from it only by a leading list marker. The fork writes every entry
+ * as a bullet, also one that stands in the file as a plain paragraph line.
+ */
 function indexOfLine(lines: string[], line: string): number {
-  return lines.findIndex(l => l.trimEnd() === line.trimEnd())
+  const exact = lines.findIndex(l => l.trimEnd() === line.trimEnd())
+  if (exact !== -1) return exact
+  const bare = withoutMarker(line)
+  const loose = bare === '' ? [] : lines.flatMap((l, i) => (withoutMarker(l) === bare ? [i] : []))
+  return loose.length === 1 ? (loose[0] ?? -1) : -1
 }
 
 function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefined {
