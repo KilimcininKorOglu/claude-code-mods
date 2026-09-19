@@ -92,7 +92,7 @@
     {
       "name": "gemini-advisor",
       "source": "./plugins/gemini-advisor",
-      "description": "A Gemini advisor the model calls by itself: Gemini reads the whole conversation and the model's message and answers with a second opinion as the tool result. /gemini-advisor sets on/off, the model and the free or paid tier.",
+      "description": "A Gemini advisor the model calls by itself: Gemini reads the whole conversation and the model's message and answers with a second opinion as the tool result. /gemini-advisor sets on/off; gemini-core holds the key, tier, model and thinking level.",
       "category": "development",
       "tags": [
         "mods",
@@ -106,7 +106,7 @@
     {
       "name": "gemini-review",
       "source": "./plugins/gemini-review",
-      "description": "Gemini reviews each Bash git commit the model makes: the diff and the conversation. A blocker (a bug, data loss, a security hole, a committed secret) stops the commit and the model reads why; minor notes reach the model after the commit; a failed review lets the commit run with a warning. /gemini-review sets on/off, the model and the free or paid tier.",
+      "description": "Gemini reviews each Bash git commit the model makes: the diff and the conversation. A blocker (a bug, data loss, a security hole, a committed secret) stops the commit and the model reads why; minor notes reach the model after the commit; a failed review lets the commit run with a warning. /gemini-review sets on/off; gemini-core holds the key, tier, model and thinking level.",
       "category": "development",
       "tags": [
         "mods",
