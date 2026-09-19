@@ -1,10 +1,10 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { diffCommands, fileCount, findCommit, newFileDiff, splitCommand, stripHeredocs } from '../hooks/commit.ts'
+import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, splitCommand, stripHeredocs } from '../hooks/commit.ts'
 
 tier('user')
 
-const plain = { skip: false, tracked: false, untracked: false, paths: [], only: [] }
+const plain = { skip: false, tracked: false, untracked: false, paths: [], only: [], before: [] }
 
 describe('findCommit', () => {
   test('finds a plain commit and what it records', async () => {
@@ -39,6 +39,13 @@ describe('findCommit', () => {
     ].join('\n')
     expect(findCommit(heredoc)).toEqual({ ...plain, paths: ['a.ts'] })
     expect(findCommit('echo "then git commit -a"')).toBe(undefined)
+  })
+
+  test('names the commands before the commit other than cd and git add, and none after it', async () => {
+    expect(findCommit("echo '// v2' >> math.ts && git commit -am 'docs: v2'")?.before).toEqual(['echo'])
+    expect(findCommit('npm test && git status && git add -A && git commit -m x')?.before).toEqual(['npm', 'git status'])
+    expect(findCommit('cd sub && git -C .. add a.ts && git commit -m x && git push')?.before).toEqual([])
+    expect(combinedText(['sed', 'sed', 'git status'])).toContain('it runs `sed`, `git status` before git commit')
   })
 
   test('a command that records nothing is no commit', async () => {

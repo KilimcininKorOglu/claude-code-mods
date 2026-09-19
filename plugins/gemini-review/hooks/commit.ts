@@ -17,6 +17,11 @@ export type CommitPlan = {
   paths: string[]
   /** The commit's own pathspec: git then records these paths from the working tree and nothing else. */
   only: string[]
+  /**
+   * The commands before the commit other than `cd` and `git add`. They run
+   * after the review reads the diff, so a file they change is not in it.
+   */
+  before: string[]
 }
 
 export const SKIP_VARIABLE = 'GEMINI_REVIEW_SKIP'
@@ -183,23 +188,31 @@ function addArgs(args: readonly string[], into: Staged): void {
 }
 
 /** The plan for a `git commit` call, given what came before it; undefined when it records nothing. */
-function commitPlan(git: Git, staged: Staged, cwd: string | undefined): CommitPlan | undefined {
+function commitPlan(git: Git, staged: Staged, cwd: string | undefined, before: string[]): CommitPlan | undefined {
   if (!commitArgs(git.args, staged)) return undefined
   const dir = git.dir ?? cwd
-  return { ...staged, skip: git.env.includes(`${SKIP_VARIABLE}=1`), ...(dir === undefined ? {} : { cwd: dir }) }
+  return { ...staged, before, skip: git.env.includes(`${SKIP_VARIABLE}=1`), ...(dir === undefined ? {} : { cwd: dir }) }
 }
 
 /** The first `git commit` of a command and what it will record, or undefined when the command commits nothing. */
 export function findCommit(command: string): CommitPlan | undefined {
   const staged: Staged = { tracked: false, untracked: false, paths: [], only: [] }
+  const before: string[] = []
   let cwd: string | undefined
   for (const words of splitCommand(command)) {
-    if (words[0] === 'cd' && words.length === 2) cwd = words[1]
     const git = gitCall(words)
+    if (git?.sub === 'commit') return commitPlan(git, staged, cwd, before)
     if (git?.sub === 'add') addArgs(git.args, staged)
-    if (git?.sub === 'commit') return commitPlan(git, staged, cwd)
+    else if (words[0] === 'cd' && words.length === 2) cwd = words[1]
+    else before.push(git === undefined ? (words[0] ?? '') : `git ${git.sub}`)
   }
   return undefined
+}
+
+/** Why a commit that follows other commands in one call is refused, so the model commits in a call of its own. */
+export function combinedText(before: readonly string[]): string {
+  const names = [...new Set(before)].map(name => `\`${name}\``).join(', ')
+  return `gemini-review stopped this command before it ran: it runs ${names} before git commit, and the review reads the change before the command runs, so what those steps change would not be reviewed. Run those steps in one Bash call, then git commit (with cd and git add if needed) in a Bash call of its own.`
 }
 
 const DIFF = ['git', 'diff', '--no-color', '--no-ext-diff']

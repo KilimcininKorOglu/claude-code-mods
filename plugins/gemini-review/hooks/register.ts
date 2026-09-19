@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { changeText, ENABLED_KEY, parseCommand, statusText } from './command.ts'
-import { diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit.ts'
+import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit.ts'
 import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
 import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, summaryText, type Answer, type Finding } from './review.ts'
 import { renderTranscript } from './transcript.ts'
@@ -151,6 +151,10 @@ export const register: Register = (on, options) => {
       state.last = `skipped by the model (${SKIP_VARIABLE}=1)`
       $.ui.log(`commit ran without a review: the model used ${SKIP_VARIABLE}=1`)
       return next(e)
+    }
+    if (plan.before.length > 0) {
+      state.last = 'stopped: git commit came after other commands in one call'
+      return { deny: combinedText(plan.before) }
     }
     const verdict = await review($, state, config, plan, e.agentId)
     if (verdict.deny !== undefined) return { deny: verdict.deny }

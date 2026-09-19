@@ -214,6 +214,16 @@ describe('gemini-review', () => {
     expect(w.commits).toHaveLength(1)
   })
 
+  it('stops a commit that follows other commands in one call before anything runs, so the model commits alone', async ($, on) => {
+    const w = world(on, { key: 'KEY' })
+    const r = await $.tool.call({ tool: 'Bash', command: "echo '// v2' >> math.ts && git commit -am 'docs: v2'" })
+    expect(r.deny).toContain('it runs `echo` before git commit')
+    expect(r.deny).toContain('git commit (with cd and git add if needed) in a Bash call of its own')
+    expect(w.git).toEqual([])
+    expect(w.commits).toHaveLength(0)
+    expect(w.requests).toEqual([])
+  })
+
   it('the skip prefix, a subagent, a command that is no commit, and off', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     expect(await $.tool.call({ tool: 'Bash', command: 'GEMINI_REVIEW_SKIP=1 git commit -m x' })).toEqual({ result: 'ran' })
