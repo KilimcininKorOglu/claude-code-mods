@@ -52,6 +52,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [contract-watch](plugins/contract-watch) | After the model changes a function signature with Edit, adds the callers ripwire finds to the Edit's result, so the model fixes them before the build does. | L2 |
 | [doc-drift-watch](plugins/doc-drift-watch) | After each commit the model makes, adds the doc lines that commit made stale (file:line references, symbol names) to the commit's result, from ripwire doc-drift. | L2 |
 | [prompt-deck](plugins/prompt-deck) | Learns the short prompts you send often and draws the top five above the prompt; with the prompt box empty, a digit key sends one at once. | L2 |
+| [shot-inline](plugins/shot-inline) | Draws each PNG or JPG the model saves or reads (Playwright screenshot, Read, a Bash command) under its tool row, in a terminal with the kitty graphics protocol. | L2 |
 
 gemini-compact, gemini-advisor, gemini-review and gemini-plan-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 
