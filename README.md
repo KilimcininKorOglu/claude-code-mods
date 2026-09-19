@@ -11,6 +11,28 @@ claude plugin marketplace add KilimcininKorOglu/claude-code-mods
 claude plugin install <mod>@kilimcininkoroglu-mods
 ```
 
+## After installing
+
+1. Turn function hooks on for good. Add this to `~/.claude/settings.json`; without it no mod loads (measured on 2.1.278):
+
+   ```json
+   { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+   ```
+
+2. Restart Claude Code. A session that was open during the install does not load the mod.
+3. For a Gemini mod, give gemini-core a Gemini API key and choose the tier. The [gemini-core README](plugins/gemini-core/README.md#after-installing) lists the steps.
+
+Each mod README has an "After installing" section when that mod needs more.
+
+## Update
+
+```sh
+claude plugin marketplace update kilimcininkoroglu-mods
+claude plugin update <mod>@kilimcininkoroglu-mods
+```
+
+Then restart Claude Code, or run `/reload-plugins` in each open session.
+
 ## Mods
 
 | Mod | What it does | Reach |
@@ -25,7 +47,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 | [gemini-core](plugins/gemini-core) | Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place, builds their Gemini requests, and picks a model from Google's list. | L3 |
 | [gemini-review](plugins/gemini-review) | Has Gemini review every commit the model makes, from the diff and the conversation, and stops a commit with a blocking finding. | L3 |
 
-gemini-compact, gemini-advisor and gemini-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once.
+gemini-compact, gemini-advisor and gemini-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 
 ## Layout
 
