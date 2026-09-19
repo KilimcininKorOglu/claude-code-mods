@@ -261,6 +261,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "sql-concat-watch",
+      "source": "./plugins/sql-concat-watch",
+      "description": "Tells the model when an edit builds SQL by joining strings instead of passing query parameters.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
