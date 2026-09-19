@@ -57,6 +57,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [dep-sentinel](plugins/dep-sentinel) | Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one, naming the latest version. | L3 |
 | [edit-loop](plugins/edit-loop) | Adds a note to the fifth edit of one file in one turn, so the model re-reads the code path and states the root cause instead of trying again. | L0 |
 | [i18n-watch](plugins/i18n-watch) | After an edit that calls translation keys, names the keys the JSON, Laravel PHP, YAML or gettext locale files lack, and the languages that lack them. | L1 |
+| [env-sync](plugins/env-sync) | After each commit the model makes, names the env variables its added lines read that `.env.example` lacks, with the file and line of each. | L2 |
 
 gemini-compact, gemini-advisor, gemini-review and gemini-plan-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 

@@ -250,6 +250,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "env-sync",
+      "source": "./plugins/env-sync",
+      "description": "Tells the model when a commit reads env variables that .env.example lacks.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
