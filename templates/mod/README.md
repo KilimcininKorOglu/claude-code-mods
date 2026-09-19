@@ -9,7 +9,13 @@ claude plugin marketplace add KilimcininKorOglu/claude-code-mods
 claude plugin install MOD_NAME@kilimcininkoroglu-mods
 ```
 
-Function hooks are early access. Start Claude Code with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`.
+Function hooks are early access. Start Claude Code with `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1`, or keep it on in `~/.claude/settings.json`:
+
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+
+## After installing
+
+Restart Claude Code. List here every step a user must take by hand: a key, a login, a setting, another plugin to disable.
 
 ## What it can reach
 
