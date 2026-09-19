@@ -24,6 +24,12 @@ export function parseCommand(args: string): Command {
   return WORDS[args.trim()] ?? { kind: 'error', text: USAGE }
 }
 
+/** What `on` answers while gemini-core has no key; nothing is stored. */
+export const NO_KEY_ON = 'still off: gemini-core has no Gemini key. Set GEMINI_API_KEY or the gemini-core apiKey option, restart Claude Code, then run /gemini-review on'
+
+/** What `reset` answers: the review is off until it is turned on. */
+export const RESET_TEXT = 'off: back to the default; /gemini-review on turns it on'
+
 /** The line /gemini-review prints for a change. */
 export function changeText(enabled: boolean): string {
   return enabled ? 'on: every commit the model makes is reviewed' : 'off: commits run without a review'
@@ -33,6 +39,7 @@ export function changeText(enabled: boolean): string {
 export function statusText(enabled: boolean, s: GeminiSettings, last: string | undefined): string {
   const key = s.hasKey ? 'key set' : 'no key: set GEMINI_API_KEY or the gemini-core apiKey option'
   const lines = [`${enabled ? 'on' : 'off'} · ${s.model} · thinking ${s.thinking ?? 'model default'} · ${s.tier} tier · ${key}`]
+  if (!enabled) lines.push('off until /gemini-review on; the model, the thinking level and the tier are /gemini-core settings')
   if (last !== undefined) lines.push(`last: ${last}`)
   return lines.join('\n')
 }

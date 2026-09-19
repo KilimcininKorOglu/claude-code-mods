@@ -92,10 +92,11 @@ function gitAnswer(repo: Repo, argv: readonly string[]): { exitCode: number; std
 }
 
 // Beneath the plugin: a store, a transcript, a git repository, Gemini from a script, and Bash itself.
+// The store holds the review turned on unless a test gives its own.
 function world(on: On, opts: Core & { store?: [string, unknown][]; repo?: Repo } = {}): World {
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
-    store: new Map(opts.store ?? []),
+    store: new Map(opts.store ?? [['enabled', true]]),
     git: [],
     requests: [],
     replies: [],
@@ -266,9 +267,26 @@ describe('gemini-review', () => {
   it('the command turns the review on and off, and names /gemini-core for the rest', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     expect((await $.command.run(run('off'))).text).toBe('off: commits run without a review')
-    expect((await $.command.run(run(''))).text).toBe('off · gemini-3.8-flash · thinking model default · free tier · key set')
-    expect((await $.command.run(run('reset'))).text).toBe('on: back to the default')
+    expect((await $.command.run(run(''))).text).toBe('off · gemini-3.8-flash · thinking model default · free tier · key set\noff until /gemini-review on; the model, the thinking level and the tier are /gemini-core settings')
+    expect((await $.command.run(run('reset'))).text).toBe('off: back to the default; /gemini-review on turns it on')
     expect([...w.store.keys()]).toEqual([])
     expect((await $.command.run(run('paid'))).text).toBe('expects on, off, or reset; /gemini-core sets the model, the thinking level and the tier')
+  })
+
+  it('is off on a fresh install, so a commit runs and nothing is read or sent', async ($, on) => {
+    const w = world(on, { key: 'KEY', store: [] })
+    expect(await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })).toEqual({ result: 'ran' })
+    expect(w.git).toEqual([])
+    expect(w.requests).toEqual([])
+    expect((await $.command.run(run(''))).text).toContain('off until /gemini-review on')
+    expect((await $.command.run(run('on'))).text).toBe('on: every commit the model makes is reviewed')
+    expect(w.store.get('enabled')).toBe(true)
+  })
+
+  it('on is refused and stores nothing while gemini-core has no key', async ($, on) => {
+    const w = world(on, { store: [] })
+    expect((await $.command.run(run('on'))).text).toBe('still off: gemini-core has no Gemini key. Set GEMINI_API_KEY or the gemini-core apiKey option, restart Claude Code, then run /gemini-review on')
+    expect([...w.store.keys()]).toEqual([])
+    expect(await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })).toEqual({ result: 'ran' })
   })
 })

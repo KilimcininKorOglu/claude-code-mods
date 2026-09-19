@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changeText, ENABLED_KEY, parseCommand, statusText } from './command.ts'
+import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command.ts'
 import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit.ts'
 import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
 import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, summaryText, type Answer, type Finding } from './review.ts'
@@ -24,8 +24,16 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+/** Off until the user turns it on, so a fresh install sends nothing to Gemini. */
 async function isEnabled($: EngineInterface): Promise<boolean> {
-  return (await $.store.get(ENABLED_KEY)) !== false
+  return (await $.store.get(ENABLED_KEY)) === true
+}
+
+/** Stores on or off; `on` is refused while gemini-core has no key. */
+async function storeEnabled($: EngineInterface, enabled: boolean): Promise<string> {
+  if (enabled && !(await $.gemini.settings({ consumer: CONSUMER })).hasKey) return NO_KEY_ON
+  await $.store.set(ENABLED_KEY, enabled)
+  return changeText(enabled)
 }
 
 /** Runs a git command and answers its output; another exit code throws with git's message. */
@@ -124,12 +132,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   if (command.kind === 'error') return command.text
   if (command.kind === 'reset') {
     await $.store.delete(ENABLED_KEY)
-    return 'on: back to the default'
+    return RESET_TEXT
   }
-  if (command.kind === 'set') {
-    await $.store.set(ENABLED_KEY, command.enabled)
-    return changeText(command.enabled)
-  }
+  if (command.kind === 'set') return storeEnabled($, command.enabled)
   return statusText(await isEnabled($), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 

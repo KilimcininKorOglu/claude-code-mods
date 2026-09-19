@@ -33,8 +33,10 @@ A transcript line when a commit is stopped, skipped or not reviewed:
 ## Command
 
     /gemini-review              on or off, the model, thinking level and tier gemini-core holds, whether a key is set, the last review
-    /gemini-review on | off     off: commits run without a review
-    /gemini-review reset        on again
+    /gemini-review on | off     off: commits run without a review; on is refused while gemini-core has no key
+    /gemini-review reset        off again, the default
+
+The review is off after an install, so nothing is sent to Gemini before you set a key and turn it on.
 
 The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level are gemini-core's:
 
@@ -58,10 +60,11 @@ It depends on `gemini-core`, which `claude plugin install` adds. Function hooks 
 ## After installing
 
 1. Set the Gemini key and the tier in gemini-core, as its [After installing](../gemini-core/README.md#after-installing) section says, then restart Claude Code.
-2. Run `/gemini-review`. The first line reads `on · <model> · thinking ... · <tier> tier · key set`.
-3. When a commit runs with `commit ran without a review: Gemini HTTP 429`, the model has no quota on your key. Pick another with `/gemini-core model review`.
+2. Run `/gemini-review on`. Without a key it answers `still off: gemini-core has no Gemini key` and stays off.
+3. Run `/gemini-review`. The first line reads `on · <model> · thinking ... · <tier> tier · key set`.
+4. When a commit runs with `commit ran without a review: Gemini HTTP 429`, the model has no quota on your key. Pick another with `/gemini-core model review`.
 
-After an update from 0.1.x: `claude plugin update` does not add gemini-core (measured on 2.1.278), so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Version 0.2.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-review free|paid|model` stored before are no longer read, so set them again in gemini-core.
+After an update from 0.1.x: `claude plugin update` does not add gemini-core (measured on 2.1.278), so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Version 0.2.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-review free|paid|model` stored before are no longer read, so set them again in gemini-core. Version 0.3.0 made the review off by default: after an update from an earlier version it is off unless you ran `/gemini-review on` before, so run `/gemini-review on` once.
 
 ## Options
 
@@ -74,7 +77,7 @@ After an update from 0.1.x: `claude plugin update` does not add gemini-core (mea
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=gemini-review}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via review, runCommand), $.http.fetch (via askGemini), $.process.run (via collectDiff, git), $.session.cwd (via review), $.session.messages (via review), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log, $.ui.toast (via verdictOf)
+    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via review, runCommand, storeEnabled), $.http.fetch (via askGemini), $.process.run (via collectDiff, git), $.session.cwd (via review), $.session.messages (via review), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.ui.log, $.ui.toast (via verdictOf)
 
 Reach L3, reaches the network.
 
