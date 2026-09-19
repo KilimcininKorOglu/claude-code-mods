@@ -55,9 +55,19 @@ Load it from a local checkout for one session:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/limit-watch
 
+To keep the flag on, add this to `~/.claude/settings.json`:
+
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+
+## After installing
+
+1. Restart Claude Code.
+2. Sign in with a Claude subscription (`/login`). A session on an API key reports no limits, and the status line stays at `no usage limits reported yet`.
+3. Send one prompt. The limits come from the last API response, so the status line fills after the first answer. Open the pane with `/limits`.
+
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.276:
+Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limits}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
