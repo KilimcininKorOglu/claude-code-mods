@@ -64,11 +64,20 @@ Load it from a local checkout for one session:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/cache-warm
 
-Two keep-warm mods in one session send two pings per idle stretch. Keep one of them enabled.
+To keep the flag on, add this to `~/.claude/settings.json`:
+
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+
+## After installing
+
+1. Restart Claude Code.
+2. Disable every other keep-warm mod, for example `claude plugin disable cache-tax@claude-code-mods`. Two keep-warm mods in one session send two pings per idle stretch.
+3. Check once that a ping reads your cache, as "Prove it on your own session" below says.
+4. To arm a window at every session start and `/clear`, run `/cache-warm always` once. It is remembered across sessions. Without it, a window is armed only by `/cache-warm` or after a paid cold write.
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.277:
+Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log, $.ui.status (via arm, showStatus)
