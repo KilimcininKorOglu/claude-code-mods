@@ -1,0 +1,4 @@
+{
+  "description": "diagram-render: session.start, command.run, turn.complete, ui.render on AssistantMessage. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.tsx"]
+}

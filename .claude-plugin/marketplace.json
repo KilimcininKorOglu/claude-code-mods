@@ -206,6 +206,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "diagram-render",
+      "source": "./plugins/diagram-render",
+      "description": "Renders the mermaid blocks of the model replies with an installed mmdc and draws each picture under its reply.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
