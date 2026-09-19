@@ -62,6 +62,12 @@ A save whose result is not in the template is never written.
 
 A failed check writes nothing and shows the error on the status line.
 
+A reply that is not a JSON object of that shape is written to `memory-save.failed-reply.txt` in the memory directory, and the error names its output tokens and length:
+
+    memory-save: error: reply is not valid JSON (JSON Parse error: Expected '}'); 1840 output tokens, 6120 characters, kept in memory-save.failed-reply.txt · 16:27
+
+Each such error replaces the file, so it holds the last one. Read it to see whether the reply was cut short or held broken JSON. The fork reply's stop reason is not available to a mod, so the mod cannot tell the two apart itself.
+
 ## Install
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
@@ -92,7 +98,7 @@ The mod has no command. To stop the saves, disable it: `claude plugin disable me
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
-    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save, templated), $.ui.status (via report)
+    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save, templated), $.ui.status (via report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 
@@ -101,7 +107,7 @@ Reach L2, writes files, runs git and drives Claude.
     1. Reads:    HOME; MEMORY.md, its topic files and the directory listing under ~/.cli-tweaks/memory/<project>/; the session transcript, through the fork
     2. Runs:     git rev-parse, twice per session, to name the project; one tool-less $.model.fork per main-loop turn
     3. Sends:    MEMORY.md as session context at startup, resume, /clear and compaction; the fork message (the writing rules and the current MEMORY.md) to the session's own API client, on top of the session's transcript
-    4. Persists: MEMORY.md, MEMORY.pre-migration.md and topic files under ~/.cli-tweaks/memory/<project>/
+    4. Persists: MEMORY.md, MEMORY.pre-migration.md, topic files and the last unreadable fork reply (memory-save.failed-reply.txt) under ~/.cli-tweaks/memory/<project>/
     5. Hostile input: the fork's reply is untrusted text; only the documented JSON shape is applied, topic file names are checked, and the result must pass every check before a write
 
 ## Limits

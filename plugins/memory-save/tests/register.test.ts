@@ -147,7 +147,21 @@ describe('memory-save', () => {
     await $.turn.complete(turn())
     await settled(w, 1)
     expect(w.files.get(FILE)).toBe(OLD)
-    expect(w.statuses.at(-1)).toMatch(/^error: reply has no JSON object · /)
+    expect(w.statuses.at(-1)).toMatch(/^error: reply has no JSON object; 2 output tokens, 11 characters, kept in memory-save.failed-reply.txt · /)
+  })
+
+  test('keeps a reply that is not valid JSON, the last one only, so its cause can be read', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    const broken = '{"ops":[{"op":"add","section":"Active Warnings","text":"- A "quoted" word."}]}'
+    w.replies.push('{"ops":[', broken)
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await settled(w, 1)
+    await $.turn.complete(turn())
+    await settled(w, 2)
+    expect(w.files.get(`${DIR}/memory-save.failed-reply.txt`)).toBe(broken)
+    expect(w.statuses.at(-1)).toMatch(/^error: reply is not valid JSON \(.+\); 2 output tokens, \d+ characters, kept in memory-save.failed-reply.txt · /)
+    expect(w.files.get(FILE)).toBe(OLD)
   })
 
   test('shows the error when the fork gets no reply', async ($, on) => {

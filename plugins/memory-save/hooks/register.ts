@@ -112,15 +112,22 @@ async function report($: EngineInterface, text: string): Promise<void> {
   $.ui.status(`${text} · ${clockText(await $.clock.now())}`)
 }
 
-/** Asks the fork what to remember and reads its answer. */
-async function ask($: EngineInterface, project: string, current: string | undefined): Promise<Reply> {
+/** Where a reply that could not be read is kept, the last one only, so its cause can be seen. */
+const FAILED_REPLY = 'memory-save.failed-reply.txt'
+
+/**
+ * Asks the fork what to remember and reads its answer. A reply that cannot be
+ * read is written to FAILED_REPLY, and the error names its output tokens.
+ */
+async function ask($: EngineInterface, project: string, dir: string, current: string | undefined): Promise<Reply> {
   const reply = await $.model.fork({ prompt: buildPrompt(project, current) })
   if (reply === null) throw new Error('the fork got no reply (cold snapshot or API error)')
   const u = reply.usage
   $.ui.log(`fork usage: in ${u.input_tokens}, cache read ${u.cache_read_input_tokens}, out ${u.output_tokens}`, { to: 'debug' })
   const parsed = parseReply(reply.text)
-  if (!parsed.ok) throw new Error(parsed.error)
-  return parsed.reply
+  if (parsed.ok) return parsed.reply
+  await $.fs.write(`${dir}/${FAILED_REPLY}`, reply.text)
+  throw new Error(`${parsed.error}; ${u.output_tokens} output tokens, ${reply.text.length} characters, kept in ${FAILED_REPLY}`)
 }
 
 /** Asks the fork what to remember, then writes MEMORY.md and its topic files. */
@@ -130,7 +137,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved yet')
   const file = `${dir}/MEMORY.md`
   const current = await templated($, project, dir)
-  const result = apply(project, current, await ask($, project, current))
+  const result = apply(project, current, await ask($, project, dir, current))
   if (!result.ok) throw new Error(result.error)
   if (!result.changed) return report($, 'no change')
   const errors = validate(result.text, result.newBullets)
