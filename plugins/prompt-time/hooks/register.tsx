@@ -29,11 +29,23 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** Reads the send times of a transcript's messages, for a resumed session. */
+/** `$.fs.read` rejects a file over 4 MiB, and it has no ranged read. */
+const MAX_READ_BYTES = 4 * 1024 * 1024
+
+/**
+ * Reads the send times of a transcript's messages, for a resumed session. A
+ * transcript over the read limit is skipped: its rows stay without a time,
+ * and messages sent from now on still get one.
+ */
 async function loadTranscript($: EngineInterface, state: State, path: string): Promise<void> {
   let text: string
   try {
     if (!(await $.fs.exists(path))) return
+    const { size } = await $.fs.stat(path)
+    if (size > MAX_READ_BYTES) {
+      $.ui.log(`earlier messages have no time: the transcript is ${Math.round(size / 1024 / 1024)} MiB, over the 4 MiB read limit: ${path}`, { to: 'debug' })
+      return
+    }
     text = await $.fs.read(path)
   } catch (err) {
     $.ui.log(`cannot read the transcript ${path}: ${errorText(err)}`)
