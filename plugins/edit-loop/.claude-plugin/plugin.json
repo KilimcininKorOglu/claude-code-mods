@@ -1,0 +1,11 @@
+{
+  "name": "edit-loop",
+  "version": "0.1.0",
+  "description": "Tells the model when it has edited the same file five times in one turn, so it re-reads the root cause instead of trying again. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

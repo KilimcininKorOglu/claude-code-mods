@@ -228,6 +228,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "edit-loop",
+      "source": "./plugins/edit-loop",
+      "description": "Tells the model when it has edited the same file five times in one turn, so it re-reads the root cause instead of trying again.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
