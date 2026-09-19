@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionMessage, ToolSpec } from 'claude-code'
 
 import { SYSTEM_GUIDANCE, TOOL_ID } from '../hooks/advice.ts'
@@ -20,8 +20,60 @@ const run = (args: string): CommandRunInput => ({
 const reply = (text: string, finishReason = 'STOP') =>
   JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason }], usageMetadata: { promptTokenCount: 1500, candidatesTokenCount: 40 } })
 
+/** gemini-core as an inline plugin: it adds `$.gemini`, whose calls the hooks of `seatCore` answer. */
+const CORE: Plugin = {
+  name: 'gemini-core',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), gemini: { enroll: stub, settings: stub, request: stub, read: stub, configure: stub } }))
+  },
+}
+
+/** gemini-core's /gemini-core, which calls `$.gemini.configure`; the args are the change as JSON. */
+const CORE_COMMAND: Plugin = {
+  name: 'gemini-core-command',
+  register(on) {
+    on('command.run', { command: 'gemini-core' }, async ($, e) => ({ text: await $.gemini.configure(JSON.parse(String(e.args))) }))
+  },
+}
+
+/** A test with gemini-core loaded beside the plugin. */
+const it = (name: string, body: TestBody) => test(name, { plugins: [CORE, CORE_COMMAND] }, body)
+
+const coreRun = (change: object): CommandRunInput => ({ ...run(JSON.stringify(change)), command: 'gemini-core' })
+
+/** What gemini-core holds for this mod; `/gemini-core` changes reach it through `gemini.configure`. */
+type Core = { key?: string; tier: 'free' | 'paid'; model: string }
+
+/** gemini-core's reading of a response, as far as these tests need it (gemini-core's tests cover the rest). */
+function coreRead(e: { status: number; ok: boolean; text: string; attempt: number }) {
+  const delay = [1000, 2000, 3000][e.attempt - 1]
+  if (e.status === 503 && delay !== undefined) return { retryInMs: delay }
+  const value = JSON.parse(e.text)
+  if (!e.ok) return { error: `Gemini HTTP ${e.status}: ${value.error.message}` }
+  const c = value.candidates[0]
+  return { answer: { text: c.content.parts[0].text, inputTokens: value.usageMetadata.promptTokenCount, outputTokens: value.usageMetadata.candidatesTokenCount, finishReason: c.finishReason } }
+}
+
+function seatCore(on: On, core: Core): void {
+  on('gemini.enroll', () => ({ value: undefined }))
+  on('gemini.settings', () => ({ value: { hasKey: core.key !== undefined, tier: core.tier, model: core.model } }))
+  on('gemini.request', (_, e) => {
+    if (core.key === undefined) return { value: { error: 'no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option' } }
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${core.model}:generateContent`
+    return { value: { http: { url, init: { method: 'POST' as const, headers: { 'x-goog-api-key': core.key }, body: JSON.stringify(e.body) } }, model: core.model, tier: core.tier } }
+  })
+  on('gemini.read', (_, e) => ({ value: coreRead(e) }))
+  on('gemini.configure', (_, e) => {
+    if ('model' in e) core.model = e.model
+    if ('tier' in e) core.tier = e.tier
+    return { value: 'changed' }
+  })
+}
+
 type World = {
   clock: MockClock
+  core: Core
   store: Map<string, unknown>
   requests: { url: string; body: string; key: string | undefined }[]
   replies: { status: number; text: string }[]
@@ -30,10 +82,11 @@ type World = {
   reads: number
 }
 
-// Beneath the plugin: a store, a transcript, Gemini answering from a script.
+// Beneath the plugin: gemini-core, a store, a transcript, Gemini answering from a script.
 function world(on: On, opts: { key?: string; store?: [string, unknown][] } = {}): World {
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
+    core: { ...(opts.key === undefined ? {} : { key: opts.key }), tier: 'free', model: 'gemini-3.8-flash' },
     store: new Map(opts.store ?? []),
     requests: [],
     replies: [],
@@ -41,7 +94,7 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][] } = {})
     toasts: [],
     reads: 0,
   }
-  on('env.get', (_, e) => ({ value: e.name === 'GEMINI_API_KEY' ? opts.key : undefined }))
+  seatCore(on, w.core)
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
@@ -61,7 +114,7 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][] } = {})
 const start = { surface: null, isInteractive: false, cwd: '/src/app' } as const
 
 describe('gemini-advisor', () => {
-  test('declares the advise tool with the model in its description and when to call it', async ($, on) => {
+  it('declares the advise tool with the model gemini-core holds and when to call it', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     await $.session.start(start)
     expect(w.tools).toHaveLength(1)
@@ -71,7 +124,7 @@ describe('gemini-advisor', () => {
     expect(w.tools[0]?.inputSchema).toMatchObject({ required: ['message'] })
   })
 
-  test('tells the model in the system prompt when to call the tool and how to load it', async ($, on) => {
+  it('tells the model in the system prompt when to call the tool and how to load it', async ($, on) => {
     world(on)
     on('prompt.section', (_, e) => ({ text: e.text }))
     const r = await $.prompt.section({ name: 'env_info_simple', text: 'Working directory: /src' })
@@ -82,7 +135,7 @@ describe('gemini-advisor', () => {
     expect((await $.prompt.section({ name: 'env_info_simple', text: null })).text).toBe(null)
   })
 
-  test('sends the conversation and the message, and answers with the advice', async ($, on) => {
+  it('sends the conversation and the message, and answers with the advice', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: reply('Raise the timeout only after you find what is slow.') })
     const r = await $.tool.call({ tool: TOOL, message: 'I will raise the timeout to 10 s. Good idea?' })
@@ -96,7 +149,7 @@ describe('gemini-advisor', () => {
     expect(w.toasts).toEqual(['asked gemini-3.8-flash · 3 messages · 2k in, 40 out · sent to Gemini free tier'])
   })
 
-  test('a subagent\'s call sends only its message', async ($, on) => {
+  it('a subagent\'s call sends only its message', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: reply('Looks right.') })
     await $.tool.call({ tool: TOOL, message: 'Is this right?', agentId: 'a1' })
@@ -105,15 +158,15 @@ describe('gemini-advisor', () => {
     expect(w.toasts[0]).toContain('· message only ·')
   })
 
-  test('tells the model why when it is off or has no key, and asks nothing', async ($, on) => {
+  it('tells the model why when it is off or has no key, and asks nothing', async ($, on) => {
     const w = world(on, { store: [['enabled', false]] })
     expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toContain('gemini-advisor is off')
     w.store.delete('enabled')
-    expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toContain('has no Gemini key')
+    expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toBe('Gemini advisor failed: no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option')
     expect(w.requests).toEqual([])
   })
 
-  test('turns a Gemini error, a cut advice and a missing message into a denial the model reads', async ($, on) => {
+  it('turns a Gemini error, a cut advice and a missing message into a denial the model reads', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 429, text: JSON.stringify({ error: { message: 'Resource has been exhausted' } }) })
     w.replies.push({ status: 200, text: reply('Half an ans', 'MAX_TOKENS') })
@@ -123,37 +176,39 @@ describe('gemini-advisor', () => {
     expect(w.requests).toHaveLength(2)
   })
 
-  test('asks again after a 503, and gives up after the third attempt', async ($, on) => {
+  it('asks again after a 503, and gives up after the fourth attempt', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     const busy = { status: 503, text: JSON.stringify({ error: { message: 'This model is currently experiencing high demand.' } }) }
-    w.replies.push(busy, busy, { status: 200, text: reply('Fine.') })
+    w.replies.push(busy, { status: 200, text: reply('Fine.') })
     const first = $.tool.call({ tool: TOOL, message: 'x' })
-    await w.clock.advance(2000)
-    expect(w.requests).toHaveLength(2)
-    await w.clock.advance(4000)
+    await w.clock.advance(1000)
     expect((await first).result).toBe('Fine.')
-    expect(w.requests).toHaveLength(3)
-    w.replies.push(busy, busy, busy)
+    expect(w.requests).toHaveLength(2)
+    w.replies.push(busy, busy, busy, busy)
     const second = $.tool.call({ tool: TOOL, message: 'x' })
-    await w.clock.advance(2000)
-    await w.clock.advance(4000)
+    for (const ms of [1000, 2000, 3000]) await w.clock.advance(ms)
     expect((await second).deny).toContain('Gemini HTTP 503: This model is currently experiencing high demand.')
     expect(w.requests).toHaveLength(6)
   })
 
-  test('the command stores the settings, declares the tool again for a new model, and shows the status', async ($, on) => {
+  it('declares the tool again when /gemini-core moves it to another model', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     await $.session.start(start)
-    expect((await $.command.run(run('model gemini-3.1-pro-preview'))).text).toContain('model gemini-3.1-pro-preview')
-    expect(w.tools.at(-1)?.description).toContain('Gemini (gemini-3.1-pro-preview)')
-    expect((await $.command.run(run('paid'))).text).toBe('paid tier')
+    await $.command.run(coreRun({ tier: 'paid' }))
+    expect(w.tools).toHaveLength(1)
+    await $.command.run(coreRun({ consumer: 'advisor', model: 'gemini-3.7-flash' }))
+    expect(w.tools).toHaveLength(2)
+    expect(w.tools.at(-1)?.description).toContain('Gemini (gemini-3.7-flash)')
+  })
+
+  it('the command turns the advisor on and off and shows what gemini-core holds', async ($, on) => {
+    const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: reply('ok') })
     await $.tool.call({ tool: TOOL, message: 'x' })
-    expect(w.requests[0]?.url).toContain('/models/gemini-3.1-pro-preview:generateContent')
-    expect(w.toasts[0]).not.toContain('free tier')
-    expect((await $.command.run(run(''))).text).toBe('on · gemini-3.1-pro-preview · paid tier · key set\nlast: asked gemini-3.1-pro-preview · 3 messages · 2k in, 40 out')
-    expect((await $.command.run(run('reset'))).text).toBe('settings reset to the plugin options')
+    expect((await $.command.run(run(''))).text).toBe('on · gemini-3.8-flash · thinking model default · free tier · key set\nlast: asked gemini-3.8-flash · 3 messages · 2k in, 40 out')
+    expect((await $.command.run(run('off'))).text).toBe('off: the model is told the advisor is off when it calls it')
+    expect((await $.command.run(run('reset'))).text).toBe('on: back to the default')
     expect([...w.store.keys()]).toEqual([])
-    expect(w.tools.at(-1)?.description).toContain('Gemini (gemini-3.8-flash)')
+    expect((await $.command.run(run('model gemini-3.7-flash'))).text).toBe('expects on, off, or reset; /gemini-core sets the model, the thinking level and the tier')
   })
 })

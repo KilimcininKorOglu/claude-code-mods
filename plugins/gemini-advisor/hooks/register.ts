@@ -1,36 +1,29 @@
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
-import { adviceText, buildAdviceRequest, INPUT_SCHEMA, messageOf, retryDelay, SYSTEM_GUIDANCE, TOOL_NAME, toolDescription, usageText } from './advice.ts'
-import { changeText, parseCommand, STORE_KEYS, statusText, storedValue, type Settings } from './command.ts'
-import { configFrom, type Config } from './config.ts'
-import { parseResponse, type Answer, type Request } from './gemini.ts'
+import { adviceText, buildAdviceBody, INPUT_SCHEMA, messageOf, SYSTEM_GUIDANCE, TOOL_NAME, toolDescription, usageText, type Answer } from './advice.ts'
+import { changeText, ENABLED_KEY, parseCommand, statusText } from './command.ts'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
 import { renderTranscript } from './transcript.ts'
 
-/** The last advice's usage line, for the status. */
-type State = { last?: string }
+/** The last advice's usage line, for the status, and the model the tool description names. */
+type State = { last?: string; toolModel?: string }
+
+/** Gemini's answer, the model and the tier it went to, or why there is none. */
+type Asked = { answer: Answer; model: string; tier: 'free' | 'paid' } | { error: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** The plugin options with the settings /gemini-advisor stored on top. */
-async function loadConfig($: EngineInterface, base: Config): Promise<Config> {
-  const config: Config = { ...base }
-  for (const key of Object.keys(STORE_KEYS) as (keyof Settings)[]) {
-    const value = storedValue(key, await $.store.get(STORE_KEYS[key]))
-    if (value !== undefined) Object.assign(config, { [key]: value })
-  }
-  return config
+async function isEnabled($: EngineInterface): Promise<boolean> {
+  return (await $.store.get(ENABLED_KEY)) !== false
 }
 
-async function apiKey($: EngineInterface, config: Config): Promise<string | undefined> {
-  if (config.apiKey !== undefined) return config.apiKey
-  const fromEnv = (await $.env.get('GEMINI_API_KEY'))?.trim()
-  return fromEnv === undefined || fromEnv === '' ? undefined : fromEnv
-}
-
-/** Declares the tool with the model's name in its description; again replaces it. */
-async function registerTool($: EngineInterface, model: string): Promise<void> {
+/** Declares the tool with the model gemini-core holds in its description, when that model changed; again replaces it. */
+async function registerTool($: EngineInterface, state: State): Promise<void> {
+  const { model } = await $.gemini.settings({ consumer: CONSUMER })
+  if (state.toolModel === model) return
   await $.tool.register({ name: TOOL_NAME, description: toolDescription(model), inputSchema: INPUT_SCHEMA })
+  state.toolModel = model
 }
 
 /**
@@ -44,30 +37,30 @@ async function conversation($: EngineInterface, config: Config, e: ToolCallInput
   return { text: renderTranscript(messages, config.maxInputChars), count: messages.length }
 }
 
-/** Sends the request, again after a 503 while the retry budget allows. */
-async function fetchAnswer($: EngineInterface, request: Request): Promise<Answer> {
+/** gemini-core builds the request and reads each answer; the request is sent here, again after a 503 while it allows. */
+async function askGemini($: EngineInterface, body: Record<string, unknown>): Promise<Asked> {
+  const prepared = await $.gemini.request({ consumer: CONSUMER, body })
+  if ('error' in prepared) return prepared
   const started = await $.clock.now()
   for (let attempt = 1; ; attempt++) {
-    const response = await $.http.fetch(request.url, request.init)
-    const delay = retryDelay(response.status, attempt, (await $.clock.now()) - started)
-    if (delay === undefined) return parseResponse(response.status, response.ok, response.text)
-    await $.clock.sleep(delay)
+    const r = await $.http.fetch(prepared.http.url, prepared.http.init)
+    const read = await $.gemini.read({ status: r.status, ok: r.ok, text: r.text, attempt, elapsedMs: (await $.clock.now()) - started, deadlineMs: DEADLINE_MS })
+    if ('answer' in read) return { answer: read.answer, model: prepared.model, tier: prepared.tier }
+    if ('error' in read) return read
+    await $.clock.sleep(read.retryInMs)
   }
 }
 
-async function advise($: EngineInterface, state: State, base: Config, e: ToolCallInput): Promise<ToolCallResult> {
-  const config = await loadConfig($, base)
-  if (!config.enabled) return { deny: 'gemini-advisor is off; the user can turn it on with /gemini-advisor on' }
-  const key = await apiKey($, config)
-  if (key === undefined) return { deny: 'gemini-advisor has no Gemini key; the user can set GEMINI_API_KEY or the plugin option' }
+async function advise($: EngineInterface, state: State, config: Config, e: ToolCallInput): Promise<ToolCallResult> {
+  if (!(await isEnabled($))) return { deny: 'gemini-advisor is off; the user can turn it on with /gemini-advisor on' }
   try {
     const message = messageOf(e as Record<string, unknown>)
     const sent = await conversation($, config, e)
-    const request = buildAdviceRequest(config.model, key, sent?.text, message, config.maxOutputTokens)
-    const answer = await fetchAnswer($, request)
-    const advice = adviceText(answer)
-    state.last = usageText(config.model, sent?.count, answer)
-    $.ui.toast(config.tier === 'free' ? `${state.last} · sent to Gemini free tier` : state.last, { timeoutMs: 10_000 })
+    const asked = await askGemini($, buildAdviceBody(sent?.text, message, config.maxOutputTokens))
+    if ('error' in asked) throw new Error(asked.error)
+    const advice = adviceText(asked.answer)
+    state.last = usageText(asked.model, sent?.count, asked.answer)
+    $.ui.toast(asked.tier === 'free' ? `${state.last} · sent to Gemini free tier` : state.last, { timeoutMs: 10_000 })
     return { result: advice }
   } catch (err) {
     state.last = `failed: ${errorText(err)}`
@@ -75,39 +68,44 @@ async function advise($: EngineInterface, state: State, base: Config, e: ToolCal
   }
 }
 
-async function runCommand($: EngineInterface, state: State, base: Config, args: string): Promise<string> {
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const command = parseCommand(args)
   if (command.kind === 'error') return command.text
   if (command.kind === 'reset') {
-    for (const key of Object.values(STORE_KEYS)) await $.store.delete(key)
-    await registerTool($, base.model)
-    return 'settings reset to the plugin options'
+    await $.store.delete(ENABLED_KEY)
+    return 'on: back to the default'
   }
   if (command.kind === 'set') {
-    for (const [key, value] of Object.entries(command.patch)) await $.store.set(STORE_KEYS[key as keyof Settings], value)
-    if (command.patch.model !== undefined) await registerTool($, command.patch.model)
-    return changeText(command.patch)
+    await $.store.set(ENABLED_KEY, command.enabled)
+    return changeText(command.enabled)
   }
-  const config = await loadConfig($, base)
-  return statusText(config, (await apiKey($, config)) !== undefined, state.last)
+  return statusText(await isEnabled($), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 
 export const register: Register = (on, options) => {
-  const base = configFrom(options)
+  const config = configFrom(options)
   const state: State = {}
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
+    await $.gemini.enroll({ consumer: CONSUMER, defaultModel: DEFAULT_MODEL })
     await $.command.register({
       name: 'gemini-advisor',
-      description: 'Gemini advisor: status, on, off, free, paid, model <id>, reset (gemini-advisor)',
-      argumentHint: '[on | off | free | paid | model <id> | reset]',
+      description: 'Gemini advisor: status, on, off, reset; /gemini-core sets the model, thinking and tier (gemini-advisor)',
+      argumentHint: '[on | off | reset]',
     })
-    await registerTool($, (await loadConfig($, base)).model)
+    await registerTool($, state)
     return r
   })
 
-  on('command.run', { command: 'gemini-advisor' }, async ($, e) => ({ text: await runCommand($, state, base, String(e.args ?? '')) }))
+  on('command.run', { command: 'gemini-advisor' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  // A /gemini-core change can move this mod to another model; the tool description names it.
+  on('gemini.configure', async ($, e, next) => {
+    const r = await next(e)
+    await registerTool($, state)
+    return r
+  })
 
   // The engine puts a plugin's tool behind ToolSearch, where the model sees
   // only its name and never the description that says when to call it
@@ -119,5 +117,5 @@ export const register: Register = (on, options) => {
   })
 
   // A literal, so the validator names the tool; it equals TOOL_ID.
-  on('tool.call', { tool: 'mcp__gemini-advisor__advise' }, async ($, e) => advise($, state, base, e))
+  on('tool.call', { tool: 'mcp__gemini-advisor__advise' }, async ($, e) => advise($, state, config, e))
 }

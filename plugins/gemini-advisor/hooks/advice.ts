@@ -1,5 +1,8 @@
 /** The advise tool as the model sees it, and the question Gemini is asked. */
-import { post, type Answer, type Request } from './gemini.ts'
+import type { EngineInterface } from 'claude-code'
+
+/** Gemini's answer as gemini-core reads it. */
+export type Answer = Extract<Awaited<ReturnType<EngineInterface['gemini']['read']>>, { answer: unknown }>['answer']
 
 export const TOOL_NAME = 'advise'
 
@@ -54,13 +57,13 @@ Give a second opinion the agent can act on:
 - Do not state as fact anything the conversation does not show; say what the agent should check instead.
 - Answer in the language of the agent's message.`
 
-/** The request for advice on the agent's message, with the conversation when there is one. */
-export function buildAdviceRequest(model: string, apiKey: string, transcript: string | undefined, message: string, maxOutputTokens: number): Request {
+/** The generateContent body asking for advice on the agent's message, with the conversation when there is one. */
+export function buildAdviceBody(transcript: string | undefined, message: string, maxOutputTokens: number): Record<string, unknown> {
   const conversation = transcript === undefined ? 'The conversation is not available; only the agent\'s message is.' : `The conversation:\n\n${transcript}`
-  return post(model, apiKey, {
+  return {
     contents: [{ role: 'user', parts: [{ text: `${ADVISOR_TASK}\n\n${conversation}\n\nThe agent asks:\n\n${message}` }] }],
     generationConfig: { maxOutputTokens },
-  })
+  }
 }
 
 /** The advice; an empty one or one Gemini cut at its output limit throws. */
@@ -76,20 +79,6 @@ export function messageOf(input: Record<string, unknown>): string {
   const message = input.message
   if (typeof message !== 'string' || message.trim() === '') throw new Error('message is required: what you did and the question')
   return message.trim()
-}
-
-/**
- * Gemini answers 503 ("high demand") now and then and the next request often
- * works (measured). The engine serves the tool with a 60 s timeout, so no
- * new attempt starts once 30 s have passed.
- */
-export const RETRY = { attempts: 3, stepMs: 2000, budgetMs: 30_000 }
-
-/** The wait before the next attempt, or undefined when the answer stands. */
-export function retryDelay(status: number, attempt: number, elapsedMs: number): number | undefined {
-  if (status !== 503 || attempt >= RETRY.attempts) return undefined
-  const delay = RETRY.stepMs * attempt
-  return elapsedMs + delay < RETRY.budgetMs ? delay : undefined
 }
 
 function tokens(n: number): string {
