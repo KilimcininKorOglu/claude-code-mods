@@ -73,6 +73,12 @@ const MODE_TEXT: Record<Mode, string> = {
   prune: 'mode prune: every message stays and Gemini keeps, truncates or drops each old tool call',
 }
 
+/** What `on` answers while gemini-core has no key; nothing is stored. */
+export const NO_KEY_ON = 'still off: gemini-core has no Gemini key. Set GEMINI_API_KEY or the gemini-core apiKey option, restart Claude Code, then run /gemini-compact on'
+
+/** What `reset` answers: the plugin options, and off until it is turned on. */
+export const RESET_TEXT = 'settings reset to the plugin options; off until /gemini-compact on'
+
 /** The line /gemini-compact prints for a change. */
 export function changeText(patch: Patch): string {
   if (patch.enabled !== undefined) return patch.enabled ? 'on' : 'off: compaction uses the built-in summary'
@@ -85,6 +91,7 @@ export function statusText(s: Settings, g: GeminiSettings, last: string | undefi
   const at = s.atPercent === 0 ? 'automatic off' : `automatic at ${s.atPercent}%`
   const key = g.hasKey ? 'key set' : 'no key: set GEMINI_API_KEY or the gemini-core apiKey option'
   const lines = [`${s.enabled ? 'on' : 'off'} · ${s.mode} · ${g.model} · thinking ${g.thinking ?? 'model default'} · ${at} · ${g.tier} tier · ${key}`]
+  if (!s.enabled) lines.push('off until /gemini-compact on; every compaction uses the built-in summary; the model, the thinking level and the tier are /gemini-core settings')
   if (last !== undefined) lines.push(`last: ${last}`)
   return lines.join('\n')
 }

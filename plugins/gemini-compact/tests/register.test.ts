@@ -101,13 +101,14 @@ const summarized = (text: string, finishReason = 'STOP') =>
 
 // Beneath the plugin: gemini-core, a store, Gemini answering from a script,
 // and the engine's own compaction, which answers with a one-message summary.
-// The stored mode is prune unless a test names another; `mode: null` stores none.
+// The store holds the mod turned on, and the mode prune unless a test names
+// another; `mode: null` stores none.
 function world(on: On, opts: { key?: string; store?: [string, unknown][]; mode?: string | null } = {}): World {
   const mode = opts.mode === undefined ? 'prune' : opts.mode
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
     core: { ...(opts.key === undefined ? {} : { key: opts.key }), tier: 'free', model: 'gemini-3.5-flash-lite', enrolled: [] },
-    store: new Map([...(mode === null ? [] : [['mode', mode] as [string, unknown]]), ...(opts.store ?? [])]),
+    store: new Map([['enabled', true], ...(mode === null ? [] : [['mode', mode] as [string, unknown]]), ...(opts.store ?? [])]),
     requests: [],
     replies: [],
     logs: [],
@@ -206,7 +207,7 @@ describe('gemini-compact', () => {
   it('leaves a subagent compaction and a compaction while off to the engine', async ($, on) => {
     const w = world(on, { key: 'KEY', store: [['enabled', false]] })
     await $.session.compact({ trigger: 'manual', messages: MESSAGES })
-    w.store.delete('enabled')
+    w.store.set('enabled', true)
     await $.session.compact({ trigger: 'auto', agentId: 'a1', messages: MESSAGES })
     expect(w.requests).toEqual([])
     expect(w.builtIn).toEqual(['manual', 'auto'])
@@ -226,8 +227,9 @@ describe('gemini-compact', () => {
     const status = (await $.command.run(run(''))).text
     expect(status).toMatch(/^on · prune · gemini-3\.5-flash · thinking model default · automatic at 60% · paid tier · key set\nlast: kept 8\/9/)
     expect((await $.command.run(run('mode summary'))).text).toContain('mode summary')
-    expect((await $.command.run(run('reset'))).text).toBe('settings reset to the plugin options')
+    expect((await $.command.run(run('reset'))).text).toBe('settings reset to the plugin options; off until /gemini-compact on')
     expect([...w.store.keys()]).toEqual([])
+    expect((await $.command.run(run(''))).text).toContain('off · summary · gemini-3.5-flash')
     expect((await $.command.run(run('at 150'))).text).toContain('1 to 99')
     expect((await $.command.run(run('paid'))).text).toContain('/gemini-core sets the model')
   })
@@ -304,6 +306,28 @@ describe('gemini-compact', () => {
     await $.session.compact({ trigger: 'manual', messages: small })
     expect(w.builtIn).toEqual(['manual'])
     expect(w.logs[1]).toMatch(/^built-in summary: the summary is not smaller \(summary: 7 → 7 messages · -\d+% smaller/)
+  })
+
+  it('is off on a fresh install: every compaction is the built-in one, none starts by itself, and nothing is sent', async ($, on) => {
+    const w = world(on, { key: 'KEY', mode: null })
+    w.store.delete('enabled')
+    await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+    w.percent = 95
+    await $.turn.complete(turn())
+    await w.clock.settle()
+    expect(w.builtIn).toEqual(['manual'])
+    expect(w.requests).toEqual([])
+    expect((await $.command.run(run(''))).text).toContain('\noff until /gemini-compact on; every compaction uses the built-in summary')
+    expect((await $.command.run(run('on'))).text).toBe('on')
+    expect(w.store.get('enabled')).toBe(true)
+  })
+
+  it('on is refused and stores nothing while gemini-core has no key', async ($, on) => {
+    const w = world(on, { mode: null })
+    w.store.delete('enabled')
+    expect((await $.command.run(run('on'))).text).toBe('still off: gemini-core has no Gemini key. Set GEMINI_API_KEY or the gemini-core apiKey option, restart Claude Code, then run /gemini-compact on')
+    expect([...w.store.keys()]).toEqual([])
+    expect((await $.command.run(run('off'))).text).toBe('off: compaction uses the built-in summary')
   })
 
   it('at off stops the automatic compaction', async ($, on) => {

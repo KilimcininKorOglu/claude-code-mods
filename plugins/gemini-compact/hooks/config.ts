@@ -19,8 +19,9 @@ export const DEFAULT_MODEL = 'gemini-3.5-flash-lite'
 /** No new Gemini attempt starts once this much has passed. */
 export const DEADLINE_MS = 60_000
 
+/** Off until the user turns it on, so a fresh install sends nothing to Gemini. */
 export const DEFAULTS: Config = {
-  enabled: true,
+  enabled: false,
   mode: 'summary',
   atPercent: 60,
   keepRecent: 6,

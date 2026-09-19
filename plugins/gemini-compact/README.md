@@ -56,13 +56,13 @@ On the free tier the toast adds `· sent to Gemini free tier`.
 ## Command
 
     /gemini-compact              on or off, mode, the model and thinking level gemini-core holds, threshold, tier, whether a key is set, the last result
-    /gemini-compact on | off     off leaves every compaction to the built-in summary
+    /gemini-compact on | off     off leaves every compaction to the built-in summary; on is refused while gemini-core has no key
     /gemini-compact mode summary | mode prune
     /gemini-compact at <1-99>    compact after a turn that ends with the context over this percentage
     /gemini-compact at off       no automatic compaction; /compact and the engine's own compaction still ask Gemini
-    /gemini-compact reset        back to the plugin options
+    /gemini-compact reset        back to the plugin options, and off
 
-The command settings are kept across sessions and take effect at once. After a compaction it started, the mod starts no other one until a turn ends with the context under the threshold, so a context that stays over it does not compact after every turn.
+The mod is off after an install: every compaction is the built-in one, none starts on the mod's threshold, and nothing is sent to Gemini until `/gemini-compact on`. The command settings are kept across sessions and take effect at once. After a compaction it started, the mod starts no other one until a turn ends with the context under the threshold, so a context that stays over it does not compact after every turn.
 
 The key, the tier, the model (default `gemini-3.5-flash-lite`) and the thinking level are gemini-core's:
 
@@ -92,10 +92,11 @@ Load it from a local checkout for one session, with gemini-core beside it:
 ## After installing
 
 1. Set the Gemini key and the tier in gemini-core, as its [After installing](../gemini-core/README.md#after-installing) section says, then restart Claude Code.
-2. Run `/gemini-compact`. The first line reads `on · summary · <model> · thinking ... · automatic at 60% · <tier> tier · key set`.
-3. Run `/compact` once. The transcript line should start with `gemini-compact: summary:`. A line that starts with `built-in summary:` names why Gemini was not used.
+2. Run `/gemini-compact on`. Without a key it answers `still off: gemini-core has no Gemini key` and stays off.
+3. Run `/gemini-compact`. The first line reads `on · summary · <model> · thinking ... · automatic at 60% · <tier> tier · key set`.
+4. Run `/compact` once. The transcript line should start with `gemini-compact: summary:`. A line that starts with `built-in summary:` names why Gemini was not used.
 
-After an update from 0.2.x: `claude plugin update` does not add gemini-core (measured on 2.1.278), so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Version 0.3.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-compact free|paid|model` stored before are no longer read, so set them again in gemini-core. The `mode` and `at` settings stay.
+After an update from 0.2.x: `claude plugin update` does not add gemini-core (measured on 2.1.278), so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Version 0.3.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-compact free|paid|model` stored before are no longer read, so set them again in gemini-core. The `mode` and `at` settings stay. Version 0.4.0 made the mod off by default: after an update from an earlier version it is off unless you ran `/gemini-compact on` before, so run `/gemini-compact on` once.
 
 ## Options
 
@@ -114,7 +115,7 @@ After an update from 0.2.x: `claude plugin update` does not add gemini-core (mea
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=gemini-compact}, session.compact, turn.complete
-    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via compactWithGemini, runCommand), $.http.fetch (via askGemini), $.session.compact (via maybeCompact), $.session.usage (via maybeCompact), $.store.delete (via runCommand), $.store.get (via loadConfig), $.store.set (via runCommand), $.ui.log, $.ui.toast (via report)
+    ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via compactWithGemini, runCommand, storePatch), $.http.fetch (via askGemini), $.session.compact (via maybeCompact), $.session.usage (via maybeCompact), $.store.delete (via runCommand), $.store.get (via loadConfig), $.store.set (via storePatch), $.ui.log, $.ui.toast (via report)
 
 Reach L3, reaches the network.
 

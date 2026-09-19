@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, SessionCompactInput, SessionMessage } from 'claude-code'
 import { actionsByUse, applyActions, sizeOf } from './apply.ts'
-import { changeText, parseCommand, STORE_KEYS, statusText, storedValue, type Settings } from './command.ts'
+import { changeText, NO_KEY_ON, parseCommand, RESET_TEXT, STORE_KEYS, statusText, storedValue, type Patch, type Settings } from './command.ts'
 import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, outcomeText, summaryOutcomeText, type Config } from './config.ts'
 import { buildPruneBody, buildSummaryBody, type Answer } from './gemini.ts'
 import { collectCalls, parseDecisions, renderTranscript } from './prune.ts'
@@ -121,17 +121,21 @@ async function compactWithGemini($: EngineInterface, state: State, config: Confi
   return undefined
 }
 
+/** Stores a change; `on` is refused while gemini-core has no key. */
+async function storePatch($: EngineInterface, patch: Patch): Promise<string> {
+  if (patch.enabled === true && !(await $.gemini.settings({ consumer: CONSUMER })).hasKey) return NO_KEY_ON
+  for (const [key, value] of Object.entries(patch)) await $.store.set(STORE_KEYS[key as keyof Settings], value)
+  return changeText(patch)
+}
+
 async function runCommand($: EngineInterface, state: State, base: Config, args: string): Promise<string> {
   const command = parseCommand(args)
   if (command.kind === 'error') return command.text
   if (command.kind === 'reset') {
     for (const key of Object.values(STORE_KEYS)) await $.store.delete(key)
-    return 'settings reset to the plugin options'
+    return RESET_TEXT
   }
-  if (command.kind === 'set') {
-    for (const [key, value] of Object.entries(command.patch)) await $.store.set(STORE_KEYS[key as keyof Settings], value)
-    return changeText(command.patch)
-  }
+  if (command.kind === 'set') return storePatch($, command.patch)
   return statusText(await loadConfig($, base), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 

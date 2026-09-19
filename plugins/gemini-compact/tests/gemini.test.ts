@@ -75,7 +75,7 @@ describe('settings', () => {
     expect(summaryOutcomeText({ kept: 7, total: 58, ratio: 0.912, inputTokens: 312_400, outputTokens: 5200 })).toBe('summary: 58 → 7 messages · 91% smaller · 312k in, 5k out')
     const s = statusText({ enabled: true, mode: 'summary', atPercent: 0 }, { hasKey: false, keys: 0, tier: 'free', model: 'm' }, 'kept 1/2')
     expect(s).toBe('on · summary · m · thinking model default · automatic off · free tier · no key: set GEMINI_API_KEY or the gemini-core apiKey option\nlast: kept 1/2')
-    expect(statusText({ enabled: false, mode: 'prune', atPercent: 60 }, { hasKey: true, keys: 1, tier: 'paid', model: 'm', thinking: 'low' }, undefined)).toBe('off · prune · m · thinking low · automatic at 60% · paid tier · key set')
+    expect(statusText({ enabled: false, mode: 'prune', atPercent: 60 }, { hasKey: true, keys: 1, tier: 'paid', model: 'm', thinking: 'low' }, undefined)).toBe('off · prune · m · thinking low · automatic at 60% · paid tier · key set\noff until /gemini-compact on; every compaction uses the built-in summary; the model, the thinking level and the tier are /gemini-core settings')
     const line = outcomeText({ kept: 41, total: 58, ratio: 0.523, actions: ['drop', 'drop', 'truncate'], inputTokens: 31_400, outputTokens: 700 })
     expect(line).toBe('kept 41/58 messages · 52% smaller · 2 dropped, 1 truncated · 31k in, 700 out')
   })
