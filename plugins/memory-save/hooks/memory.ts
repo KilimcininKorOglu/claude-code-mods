@@ -8,8 +8,8 @@ export type Section = (typeof SECTIONS)[number]
 
 export const MAX_LINES = 200
 export const MAX_CHARS = 50_000
-export const SOFT_LINES = 180
-export const SOFT_CHARS = 45_000
+export const SOFT_LINES = 160
+export const SOFT_CHARS = 42_000
 export const MAX_BULLET = 600
 
 const PROJECT_NAME = /^[A-Za-z0-9._-]+$/
@@ -227,11 +227,23 @@ function sortNote(current: string): string {
   return `MANDATORY SORT: the mod moved sections outside the template under these headings: ${parts.join(', ')}. In this answer, move every bullet under them to the section it belongs in (a remove op and an add op), move history to a topic file, and remove each '${UNSORTED}' heading line once its bullets are gone.`
 }
 
+/** How many lines and characters this save must remove, so the result is under the caps with room to spare. */
+function mustRemove(state: Inspection): string {
+  const lines = state.lines - (SOFT_LINES - 1)
+  const chars = state.chars - (SOFT_CHARS - 1)
+  const parts = [lines > 0 ? `${lines} line(s)` : '', chars > 0 ? `${chars} character(s)` : ''].filter(p => p !== '')
+  return parts.join(' and ')
+}
+
 function sizeNotes(state: Inspection): string {
   const notes: string[] = []
   if (state.lines >= SOFT_LINES || state.chars >= SOFT_CHARS) {
+    const overCap = state.lines >= MAX_LINES || state.chars >= MAX_CHARS
+    const shrinkOnly = overCap
+      ? ` MEMORY.md is ALREADY over a hard cap, so this save is a SHRINK-ONLY save: add NO new bullet, and remove at least ${mustRemove(state)}. A save that does not make the file smaller is refused, and nothing is written.`
+      : ''
     notes.push(
-      `MANDATORY OFFLOAD: MEMORY.md is now ${state.lines} lines / ${state.chars} characters — at or near a cap (BOTH limits apply: keep under 200 lines AND under 50000 characters). You MUST move the oldest/least-critical entries (resolved warnings, superseded facts, dated notes, completed-work records) to a topic file (history.md, or a dedicated subject file when a topic is large), leaving MEMORY.md a lean index of ACTIVE rules and current architecture facts.`,
+      `MANDATORY OFFLOAD: MEMORY.md is now ${state.lines} lines / ${state.chars} characters — at or near a cap (BOTH limits apply: keep under 200 lines AND under 50000 characters). You MUST move the oldest/least-critical entries (resolved warnings, superseded facts, dated notes, completed-work records) to a topic file (history.md, or a dedicated subject file when a topic is large), leaving MEMORY.md a lean index of ACTIVE rules and current architecture facts. Remove at least ${mustRemove(state)} in THIS save.${shrinkOnly}`,
     )
   }
   if (state.longBullets.length > 0) {
@@ -452,14 +464,27 @@ export function skippedText(skipped: readonly string[]): string {
   return `${skipped.length} skipped, not in the file: ${skipped.map(l => (l.length > 60 ? `${l.slice(0, 60)}…` : l)).join('; ')}`
 }
 
-/** Returns why the new file must not be written, or an empty list. */
-export function validate(text: string, newBullets: string[]): string[] {
+/**
+ * Whether this save is a step back from a file that is already over a cap: smaller in both measures and
+ * smaller in at least one. Such a step is written, because a file over a cap can only come back in steps,
+ * and refusing it leaves the project with no save at all.
+ */
+function isShrinkStep(state: Inspection, current: string | undefined): boolean {
+  if (current === undefined) return false
+  const before = inspect(current)
+  if (before.lines < MAX_LINES && before.chars < MAX_CHARS) return false
+  return state.lines <= before.lines && state.chars <= before.chars && (state.lines < before.lines || state.chars < before.chars)
+}
+
+/** Returns why the new file must not be written, or an empty list. `current` is the file before this save. */
+export function validate(text: string, newBullets: string[], current?: string): string[] {
   const errors: string[] = []
   const headings = headingsOf(text)
   if (!hasSections(headings)) errors.push(`sections are not exactly ${SECTIONS.join(', ')} (found: ${foundText(headings)})`)
   const state = inspect(text)
-  if (state.lines >= MAX_LINES) errors.push(`${state.lines} lines, the limit is under ${MAX_LINES}`)
-  if (state.chars >= MAX_CHARS) errors.push(`${state.chars} characters, the limit is under ${MAX_CHARS}`)
+  const step = isShrinkStep(state, current)
+  if (state.lines >= MAX_LINES && !step) errors.push(`${state.lines} lines, the limit is under ${MAX_LINES}`)
+  if (state.chars >= MAX_CHARS && !step) errors.push(`${state.chars} characters, the limit is under ${MAX_CHARS}`)
   const long = newBullets.filter(b => b.length > MAX_BULLET)
   if (long.length > 0) errors.push(`${long.length} new bullet(s) over ${MAX_BULLET} characters`)
   return errors

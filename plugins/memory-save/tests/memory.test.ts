@@ -243,6 +243,16 @@ describe('validate', () => {
     expect(validate(chars, []).join()).toContain('characters, the limit is under 50000')
     expect(validate(FILE, [`- ${'z'.repeat(600)}`])).toEqual(['1 new bullet(s) over 600 characters'])
   })
+
+  test('writes a step that shrinks a file already over the line limit, and refuses one that does not', async () => {
+    const over = `${FILE}${'- x\n'.repeat(210)}`
+    const smaller = `${FILE}${'- x\n'.repeat(205)}`
+    expect(validate(smaller, [], over)).toEqual([])
+    expect(validate(over, [], over)[0]).toContain('lines, the limit is under 200')
+    expect(validate(`${FILE}${'- x\n'.repeat(215)}`, [], over)[0]).toContain('lines, the limit is under 200')
+    // A file under the caps gets no step: a result over a cap is refused as before.
+    expect(validate(`${FILE}${'- x\n'.repeat(200)}`, [], FILE)[0]).toContain('lines, the limit is under 200')
+  })
 })
 
 describe('buildPrompt', () => {
@@ -257,7 +267,14 @@ describe('buildPrompt', () => {
     const p = buildPrompt('demo', '/m/demo', big)
     expect(p).toContain('MANDATORY OFFLOAD')
     expect(p).toContain('MANDATORY BULLET SPLIT')
+    expect(p).toContain('Remove at least 38 line(s) in THIS save.')
+    expect(p).not.toContain('SHRINK-ONLY')
     expect(inspect(big).longBullets).toHaveLength(1)
+  })
+
+  test('asks for a shrink-only save when the file is already over a cap', async () => {
+    const p = buildPrompt('demo', '/m/demo', FILE.replace('- None yet.\n', '- x\n'.repeat(210)))
+    expect(p).toContain('SHRINK-ONLY save: add NO new bullet, and remove at least 67 line(s)')
   })
 
   test("carries the user's classic hook rules word for word, without the stop wording", async () => {

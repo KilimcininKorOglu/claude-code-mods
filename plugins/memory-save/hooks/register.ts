@@ -148,7 +148,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
     return report($, result.skipped.length > 0 ? `no change, ${result.skipped.length} skipped` : 'no change')
   }
   state.skipped = result.changes.skipped
-  const errors = validate(result.text, result.newBullets)
+  const errors = validate(result.text, result.newBullets, current)
   if (errors.length > 0) throw new Error(`not written: ${errors.join('; ')}`)
   if ((await readFile($, file)) !== current) throw new Error('not written: MEMORY.md changed during the save')
   await writeTopics($, project, dir, result.topics)

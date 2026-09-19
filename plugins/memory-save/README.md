@@ -59,7 +59,8 @@ A save whose result is not in the template is never written.
 - The reply is one JSON object of the documented shape. Any other reply is an error, never a guess.
 - A removed or replaced line exists in the file exactly, or it differs only by a leading list marker from exactly one line. The fork writes every entry as a bullet, also one that stands in the file as a plain paragraph line. A remove or replace whose line the file does not have is skipped, and the other ops are written: the status line counts it (`+1 1 skipped`), the transcript line names it, and the next save tells the fork to copy such a line exactly, with its markup. A misquoted line (the fork added `**` around one, for example) used to stop the whole save.
 - A topic file name is lowercase, ends in `.md`, has no directory part and is not `memory.md`.
-- The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters.
+- The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters. A file that is already at or over a cap (one written before these checks, for example) is the exception: a save that makes it smaller in both measures is written, so the file comes back under the caps in steps instead of every save failing.
+- From 160 lines or 42000 characters the fork is told how many lines and characters this save must remove. Over a cap the note becomes a shrink-only save: add no new bullet, only move entries to a topic file.
 - No new bullet is longer than 600 characters.
 - `MEMORY.md` did not change while the fork ran.
 
