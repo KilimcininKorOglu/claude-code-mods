@@ -217,6 +217,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "dep-sentinel",
+      "source": "./plugins/dep-sentinel",
+      "description": "Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
