@@ -151,6 +151,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "disk-janitor",
+      "source": "./plugins/disk-janitor",
+      "description": "Measures the build artifacts of the project, shows them on the status line above 5 GB, and deletes the ones you pick in the /janitor pane; data directories are never listed.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
