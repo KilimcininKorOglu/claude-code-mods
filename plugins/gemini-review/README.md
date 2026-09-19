@@ -51,11 +51,17 @@ Every review sends the diff and the conversation: your prompts, the commands the
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-review@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which `claude plugin install` adds. `claude plugin update` from 0.1.x does not add it (measured on 2.1.278); run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Function hooks are early access. Nothing loads without the flag, and the key comes from the gemini-core option or the environment:
+It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 GEMINI_API_KEY=... claude
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
-Version 0.2.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-review free|paid|model` stored before are no longer read.
+## After installing
+
+1. Set the Gemini key and the tier in gemini-core, as its [After installing](../gemini-core/README.md#after-installing) section says, then restart Claude Code.
+2. Run `/gemini-review`. The first line reads `on · <model> · thinking ... · <tier> tier · key set`.
+3. When a commit runs with `commit ran without a review: Gemini HTTP 429`, the model has no quota on your key. Pick another with `/gemini-core model review`.
+
+After an update from 0.1.x: `claude plugin update` does not add gemini-core (measured on 2.1.278), so run `claude plugin install gemini-core@kilimcininkoroglu-mods` once. Version 0.2.0 moved the key, tier and model to gemini-core; the `apiKey`, `tier` and `model` options and the settings `/gemini-review free|paid|model` stored before are no longer read, so set them again in gemini-core.
 
 ## Options
 
