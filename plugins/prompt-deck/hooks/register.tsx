@@ -1,35 +1,55 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { band, fit, listText, normalize, record, removeAt, type Counts } from './deck.ts'
+import { band, countsKey, fit, listText, mergeCounts, normalize, projectName, record, removeAt, type Counts } from './deck.ts'
 
-const COUNTS_KEY = 'counts'
+/** The key the mod used before the counts were split per project. */
+const LEGACY_KEY = 'counts'
 const ENABLED_KEY = 'enabled'
 
 const USAGE = 'expects nothing (the band), list, remove <n>, clear, on or off'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
-/** The counts as last read or written, so a band draw reads no store. */
-type State = { counts: Counts; enabled: boolean }
+/** The counts of this project as last read or written, so a band draw reads no store. */
+type State = { counts: Counts; enabled: boolean; project: string }
 
 /** The person's own prompts: typed at the terminal or sent from a phone. */
 function isPersons(origin: PromptOrigin): boolean {
   return origin.kind === 'composer' || origin.kind === 'bridge'
 }
 
+/** The project the session works in: the name of its git top level, else of its directory. */
+async function resolveProject($: EngineInterface): Promise<string> {
+  const cwd = await $.session.cwd()
+  const r = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 10_000 })
+  return projectName(r.exitCode === 0 ? r.stdout.trim() : cwd)
+}
+
 async function loadDeck($: EngineInterface, state: State): Promise<void> {
-  state.counts = ((await $.store.get(COUNTS_KEY)) as Counts | undefined) ?? {}
+  state.counts = ((await $.store.get(countsKey(state.project))) as Counts | undefined) ?? {}
   state.enabled = (await $.store.get(ENABLED_KEY)) !== false
 }
 
 async function saveCounts($: EngineInterface, state: State, counts: Counts): Promise<void> {
-  await $.store.set(COUNTS_KEY, counts)
+  await $.store.set(countsKey(state.project), counts)
   state.counts = counts
   $.ui.invalidate('ui.render')
 }
 
-/** Counts one use, from the stored counts, so another session's uses are kept. */
+/**
+ * Moves the counts of the one shared deck into this project, once. The first project that loads the mod
+ * after the update takes them, because the mod cannot tell where each of them was typed.
+ */
+async function adoptLegacy($: EngineInterface, state: State): Promise<void> {
+  const legacy = (await $.store.get(LEGACY_KEY)) as Counts | undefined
+  if (legacy === undefined) return
+  await saveCounts($, state, mergeCounts(state.counts, legacy))
+  await $.store.delete(LEGACY_KEY)
+  $.ui.log(`the shared deck of ${Object.keys(legacy).length} prompt(s) is now this project's (${state.project}); each project counts its own prompts from here on`)
+}
+
+/** Counts one use, from the stored counts, so another session of the same project is kept. */
 async function countUse($: EngineInterface, state: State, text: string): Promise<void> {
-  const stored = ((await $.store.get(COUNTS_KEY)) as Counts | undefined) ?? {}
+  const stored = ((await $.store.get(countsKey(state.project))) as Counts | undefined) ?? {}
   await saveCounts($, state, record(stored, text, await $.clock.now()))
 }
 
@@ -59,7 +79,7 @@ async function removeCommand($: EngineInterface, state: State, arg: string): Pro
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   await loadDeck($, state)
   const [word = '', arg = ''] = args.trim().split(/\s+/)
-  if (word === '' || word === 'list') return `${state.enabled ? 'on' : 'off'}\n${listText(state.counts)}`
+  if (word === '' || word === 'list') return `${state.enabled ? 'on' : 'off'} · project ${state.project}\n${listText(state.counts)}`
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
   if (word === 'remove') return removeCommand($, state, arg)
   if (word !== 'clear') return USAGE
@@ -79,12 +99,14 @@ function bandTree(els: Elements, prompts: readonly string[], columns: number, on
 }
 
 export const register: Register = on => {
-  const state: State = { counts: {}, enabled: true }
+  const state: State = { counts: {}, enabled: true, project: '' }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'deck', description: 'Prompts you send often, on the keys 1-5: list, remove <n>, clear, on, off (prompt-deck)', argumentHint: '[list | remove <n> | clear | on | off]' })
+    await $.command.register({ name: 'deck', description: 'Prompts you send often in this project, on the keys 1-5: list, remove <n>, clear, on, off (prompt-deck)', argumentHint: '[list | remove <n> | clear | on | off]' })
+    state.project = await resolveProject($)
     await loadDeck($, state)
+    await adoptLegacy($, state)
     $.ui.invalidate('ui.render')
     return r
   })

@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { band, fit, listText, MAX_KEPT, normalize, record, removeAt, type Counts } from '../hooks/deck.ts'
+import { band, countsKey, fit, listText, MAX_KEPT, mergeCounts, normalize, projectName, record, removeAt, type Counts } from '../hooks/deck.ts'
 
 tier('user')
 
@@ -37,5 +37,21 @@ describe('deck', () => {
     expect(fit('run the tests for the area I changed', 5, 100)).toBe('run the tests…')
     expect(fit('short', 5, 100)).toBe('short')
     expect(listText({})).toBe('no prompt counted yet; a prompt reaches the band after 3 uses')
+  })
+
+  test('names one project store key and takes the project from a path', async () => {
+    expect(countsKey('app')).toBe('counts:app')
+    expect(projectName('/Users/u/app')).toBe('app')
+    expect(projectName('/Users/u/app/')).toBe('app')
+    expect(projectName('app')).toBe('app')
+  })
+
+  test('merges two decks, keeping the higher count and the later use', async () => {
+    const merged = mergeCounts(uses([['a', 2], ['b', 5]]), { a: { n: 4, last: 9 }, c: { n: 1, last: 3 } })
+    expect(merged).toEqual({ b: { n: 5, last: 1 }, a: { n: 4, last: 9 }, c: { n: 1, last: 3 } })
+    expect(Object.keys(merged)).toEqual(['b', 'a', 'c'])
+    let big: Counts = {}
+    for (let i = 0; i < MAX_KEPT; i++) big = record(big, `p${i}`, i)
+    expect(Object.keys(mergeCounts(big, { extra: { n: 1, last: 0 } }))).toHaveLength(MAX_KEPT)
   })
 })

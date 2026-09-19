@@ -11,13 +11,18 @@ const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): Promp
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['AbovePrompt']
 
-/** What reached the engine beneath the plugin. */
-type World = { entered: { text: string; origin?: PromptOrigin }[] }
+/** What reached the engine beneath the plugin, and what the plugin kept in the store. */
+type World = { entered: { text: string; origin?: PromptOrigin }[]; store: Record<string, unknown> }
 
-function world(on: On): World {
-  const w: World = { entered: [] }
-  mock.store(on, {})
+function world(on: On, store: Record<string, unknown> = {}): World {
+  const w: World = { entered: [], store }
   mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
+  on('store.get', (_, e) => ({ value: w.store[e.key] }))
+  on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
+  on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
+  // git answers with the repository root, so the project is its last path part.
+  on('session.cwd', () => ({ value: '/Users/u/app' }))
+  on('process.run', () => ({ value: { exitCode: 0, stdout: '/Users/u/app\n', stderr: '' } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   // The engine draws nothing of its own in the band.
@@ -49,10 +54,10 @@ describe('prompt-deck', () => {
     const button = await ui.find({ type: 'Button', key: 'deck:1' })
     expect(button?.props.label).toBe('commitle')
     expect(button?.props.hotkey).toBe('1')
-    expect((await $.command.run(run('list'))).text).toBe('on\n1. commitle (3)')
+    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (3)')
     await ui.press({ key: 'deck:1' })
     expect(w.entered.at(-1)?.text).toBe('commitle')
-    expect((await $.command.run(run('list'))).text).toBe('on\n1. commitle (4)')
+    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (4)')
   })
 
   test('the band yields to a survey, a running turn and an agent view', async ($, on) => {
@@ -76,8 +81,16 @@ describe('prompt-deck', () => {
     expect((await $.command.run(run('off'))).text).toBe('off: nothing is counted or drawn; the counts stay')
     await $.prompt.submit(typed('c'))
     expect(await (await band($)).find({ type: 'Button', key: 'deck:1' })).toBe(undefined)
-    expect((await $.command.run(run(''))).text).toBe('off\n1. a (3)')
+    expect((await $.command.run(run(''))).text).toBe('off · project app\n1. a (3)')
     expect((await $.command.run(run('clear'))).text).toBe('cleared: no prompt is counted')
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the band), list, remove <n>, clear, on or off')
+  })
+
+  test('the counts of the one shared deck move into this project once, and other projects start empty', async ($, on) => {
+    const w = world(on, { counts: { 'devam et': { n: 7, last: 5 } } })
+    await started($)
+    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. devam et (7)')
+    expect(w.store['counts']).toBe(undefined)
+    expect(w.store['counts:app']).toEqual({ 'devam et': { n: 7, last: 5 } })
   })
 })
