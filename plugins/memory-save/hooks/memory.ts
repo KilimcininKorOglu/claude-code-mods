@@ -185,9 +185,9 @@ Writing rules for MEMORY.md and for every topic file alike:
 3. MEMORY.md holds ONLY durable rules, patterns, and stable facts, each as ONE focused bullet of at most ${MAX_BULLET} characters. Keep the file under ${MAX_LINES} lines AND under ${MAX_CHARS} characters.
 4. Write in English ONLY.
 5. Write to ASD-STE100 (Simplified Technical English): short sentences, active voice, simple tenses, ONE instruction per sentence, the SAME term for the same thing throughout. Keep a short 'because' or 'so that' clause when dropping it would let the rule be applied wrongly.
-6. Name the fact directly. NEVER invent a metaphor or a figurative phrase.
-7. NEVER hedge a fact that was measured. When something was NOT verified, say exactly that.
-8. Reproduce identifiers, file names, config keys and trigger phrases exactly as they appear in the codebase, including non-English ones.
+6. Name the fact directly. NEVER invent a metaphor or a figurative phrase, and NEVER present an invented phrase as if it were an established term, because a reader months later cannot tell which fact it encodes.
+7. NEVER hedge a fact that was measured. When something was NOT verified, say exactly that, so that a guess is never read back as a fact.
+8. Reproduce identifiers, file names, config keys and trigger phrases exactly as they appear in the codebase, including non-English ones. Never translate them.
 9. Do not add a bullet that repeats one already in the file. Remove or replace a bullet that the conversation proved wrong or obsolete.`
 
 const FORMAT = `Answer with ONE JSON object and nothing else, no prose, no code fence:
@@ -214,7 +214,7 @@ function sizeNotes(state: Inspection): string {
   if (state.longBullets.length > 0) {
     const list = state.longBullets.map(b => `  - line ${b.line} (${b.chars} chars): ${b.head}...`).join('\n')
     notes.push(
-      `MANDATORY BULLET SPLIT: these bullets exceed ${MAX_BULLET} characters. Replace each with focused bullets, or move its detail to a topic file:\n${list}`,
+      `MANDATORY BULLET SPLIT: these bullets exceed ${MAX_BULLET} characters. Replace each with focused bullets, or move its detail to a topic file and keep the rule as a short line with a '(detail in <topic>.md)' pointer. Prefer splitting in '## CRITICAL RULES', because a rule must stay in MEMORY.md; prefer moving the detail for architecture facts. Keep a safety rule whole when its detail is the rule itself, such as an exact regex or command:\n${list}`,
     )
   }
   return notes.join('\n')
