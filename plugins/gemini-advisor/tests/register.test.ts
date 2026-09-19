@@ -84,11 +84,12 @@ type World = {
 }
 
 // Beneath the plugin: gemini-core, a store, a transcript, Gemini answering from a script.
+// The store holds the advisor turned on unless a test gives its own.
 function world(on: On, opts: { key?: string; store?: [string, unknown][] } = {}): World {
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
     core: { ...(opts.key === undefined ? {} : { key: opts.key }), tier: 'free', model: 'gemini-3.8-flash' },
-    store: new Map(opts.store ?? []),
+    store: new Map(opts.store ?? [['enabled', true]]),
     requests: [],
     replies: [],
     tools: [],
@@ -126,9 +127,40 @@ describe('gemini-advisor', () => {
     expect(w.tools[0]?.inputSchema).toMatchObject({ required: ['message'] })
   })
 
+  it('is off on a fresh install: no tool, no system prompt note, and nothing sent', async ($, on) => {
+    const w = world(on, { key: 'KEY', store: [] })
+    on('prompt.section', (_, e) => ({ text: e.text }))
+    await $.session.start(start)
+    expect(w.tools).toEqual([])
+    expect((await $.prompt.section({ name: 'env_info_simple', text: 'Working directory: /src' })).text).toBe('Working directory: /src')
+    expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toContain('gemini-advisor is off')
+    expect(w.requests).toEqual([])
+    expect((await $.command.run(run(''))).text).toContain('off until /gemini-advisor on')
+  })
+
+  it('on declares the tool at once and keeps the system prompt as it is until /clear or the next session', async ($, on) => {
+    const w = world(on, { key: 'KEY', store: [] })
+    on('prompt.section', (_, e) => ({ text: e.text }))
+    await $.session.start(start)
+    expect((await $.command.run(run('on'))).text).toBe('on: the advise tool is available now; the system prompt note that says when to call it comes at /clear or the next session')
+    expect(w.store.get('enabled')).toBe(true)
+    expect(w.tools.map(t => t.name)).toEqual(['advise'])
+    expect((await $.prompt.section({ name: 'env_info_simple', text: 'W' })).text).toBe('W')
+    await $.session.start(start)
+    expect((await $.prompt.section({ name: 'env_info_simple', text: 'W' })).text).toBe(`W\n\n${SYSTEM_GUIDANCE}`)
+  })
+
+  it('on is refused and stores nothing while gemini-core has no key', async ($, on) => {
+    const w = world(on, { store: [] })
+    expect((await $.command.run(run('on'))).text).toBe('still off: gemini-core has no Gemini key. Set GEMINI_API_KEY or the gemini-core apiKey option, restart Claude Code, then run /gemini-advisor on')
+    expect([...w.store.keys()]).toEqual([])
+    expect(w.tools).toEqual([])
+  })
+
   it('tells the model in the system prompt when to call the tool and how to load it', async ($, on) => {
     world(on)
     on('prompt.section', (_, e) => ({ text: e.text }))
+    await $.session.start(start)
     const r = await $.prompt.section({ name: 'env_info_simple', text: 'Working directory: /src' })
     expect(r.text).toBe(`Working directory: /src\n\n${SYSTEM_GUIDANCE}`)
     expect(SYSTEM_GUIDANCE).toContain('select:mcp__gemini-advisor__advise')
@@ -163,7 +195,7 @@ describe('gemini-advisor', () => {
   it('tells the model why when it is off or has no key, and asks nothing', async ($, on) => {
     const w = world(on, { store: [['enabled', false]] })
     expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toContain('gemini-advisor is off')
-    w.store.delete('enabled')
+    w.store.set('enabled', true)
     expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toBe('Gemini advisor failed: no Gemini key: set GEMINI_API_KEY or the gemini-core apiKey option')
     expect(w.requests).toEqual([])
   })
@@ -218,8 +250,8 @@ describe('gemini-advisor', () => {
     w.replies.push({ status: 200, text: reply('ok') })
     await $.tool.call({ tool: TOOL, message: 'x' })
     expect((await $.command.run(run(''))).text).toBe('on · gemini-3.8-flash · thinking model default · free tier · key set\nlast: asked gemini-3.8-flash · 3 messages · 2k in, 40 out')
-    expect((await $.command.run(run('off'))).text).toBe('off: the model is told the advisor is off when it calls it')
-    expect((await $.command.run(run('reset'))).text).toBe('on: back to the default')
+    expect((await $.command.run(run('off'))).text).toBe('off: a call answers that the advisor is off; the note leaves at /clear or the next session, the tool at the next session')
+    expect((await $.command.run(run('reset'))).text).toBe('off: back to the default; /gemini-advisor on turns it on')
     expect([...w.store.keys()]).toEqual([])
     expect((await $.command.run(run('model gemini-3.7-flash'))).text).toBe('expects on, off, or reset; /gemini-core sets the model, the thinking level and the tier')
   })

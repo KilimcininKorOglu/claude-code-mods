@@ -1,11 +1,15 @@
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
 import { adviceText, buildAdviceBody, INPUT_SCHEMA, messageOf, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, usageText, type Answer } from './advice.ts'
-import { changeText, ENABLED_KEY, parseCommand, statusText } from './command.ts'
+import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command.ts'
 import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
 import { renderTranscript } from './transcript.ts'
 
-/** The last advice's usage line, for the status. */
-type State = { last?: string }
+/**
+ * The last advice's usage line, for the status, and whether the system prompt
+ * carries the note, fixed at a session start or /clear so a change of the
+ * setting does not change the prompt the cache holds.
+ */
+type State = { last?: string; guidance: boolean }
 
 /** Gemini's answer, the model and the tier it went to, or why there is none. */
 type Asked = { answer: Answer; model: string; tier: 'free' | 'paid' } | { error: string }
@@ -14,8 +18,21 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
+/** Off until the user turns it on, so a fresh install offers the model no tool that can only fail. */
 async function isEnabled($: EngineInterface): Promise<boolean> {
-  return (await $.store.get(ENABLED_KEY)) !== false
+  return (await $.store.get(ENABLED_KEY)) === true
+}
+
+function declareTool($: EngineInterface): Promise<unknown> {
+  return $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
+}
+
+/** Stores on or off; `on` is refused while gemini-core has no key, and declares the tool at once. */
+async function storeEnabled($: EngineInterface, enabled: boolean): Promise<string> {
+  if (enabled && !(await $.gemini.settings({ consumer: CONSUMER })).hasKey) return NO_KEY_ON
+  await $.store.set(ENABLED_KEY, enabled)
+  if (enabled) await declareTool($)
+  return changeText(enabled)
 }
 
 /**
@@ -71,18 +88,15 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   if (command.kind === 'error') return command.text
   if (command.kind === 'reset') {
     await $.store.delete(ENABLED_KEY)
-    return 'on: back to the default'
+    return RESET_TEXT
   }
-  if (command.kind === 'set') {
-    await $.store.set(ENABLED_KEY, command.enabled)
-    return changeText(command.enabled)
-  }
+  if (command.kind === 'set') return storeEnabled($, command.enabled)
   return statusText(await isEnabled($), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 
 export const register: Register = (on, options) => {
   const config = configFrom(options)
-  const state: State = {}
+  const state: State = { guidance: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -92,7 +106,15 @@ export const register: Register = (on, options) => {
       description: 'Gemini advisor: status, on, off, reset; /gemini-core sets the model, thinking and tier (gemini-advisor)',
       argumentHint: '[on | off | reset]',
     })
-    await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
+    state.guidance = await isEnabled($)
+    if (state.guidance) await declareTool($)
+    return r
+  })
+
+  // /clear arrives only through the classic seam; the note follows the setting from there.
+  on('classic.SessionStart', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agent_id === undefined) state.guidance = await isEnabled($)
     return r
   })
 
@@ -104,7 +126,7 @@ export const register: Register = (on, options) => {
   // a section every session has; the text is stable, so the cache holds.
   on('prompt.section', { name: 'env_info_simple' }, async (_, e, next) => {
     const r = await next(e)
-    return r.text === null ? r : { text: `${r.text}\n\n${SYSTEM_GUIDANCE}` }
+    return r.text === null || !state.guidance ? r : { text: `${r.text}\n\n${SYSTEM_GUIDANCE}` }
   })
 
   // A literal, so the validator names the tool; it equals TOOL_ID.
