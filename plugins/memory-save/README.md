@@ -9,11 +9,13 @@ A Claude Code Mod that keeps a per-project `MEMORY.md` up to date without blocki
 At startup, resume, `/clear` and compaction, the `classic.SessionStart` hook adds one context block:
 
     [PROJECT MEMORY: <project>]
+    Answer in the language of the user's own messages, in every reply and every progress line, also at the end of a long turn whose context (tool output, docs, this memory) is in another language. Keep technical terms and identifiers as they are.
+
     <the whole MEMORY.md>
 
     Topic files in ~/.cli-tweaks/memory/<project>: history.md
 
-The topic line is present only when topic files exist. A project without `MEMORY.md` gets no block. The block holds no instruction to write the file, because the mod writes it. The memory is not repeated between these events, so it does not grow the context turn by turn.
+The language line is there because long turns whose context was mostly English ended with English replies to prompts in another language (measured). The topic line is present only when topic files exist. A project without `MEMORY.md` gets no block. The block holds no instruction to write the file, because the mod writes it. The memory is not repeated between these events, so it does not grow the context turn by turn.
 
 ### Saves the memory
 

@@ -6,6 +6,7 @@ import {
   changeShort,
   changeText,
   contextText,
+  LANGUAGE_NOTE,
   inspect,
   isProjectName,
   parseReply,
@@ -265,9 +266,10 @@ describe('buildPrompt', () => {
 })
 
 describe('session context', () => {
-  test('carries the whole file under a project heading and no instruction to write it', async () => {
+  test('carries the reply language rule and the whole file under a project heading, and no instruction to write it', async () => {
     const text = contextText('demo', '/m/demo', FILE, [])
-    expect(text).toBe(`[PROJECT MEMORY: demo]\n${FILE.trim()}`)
+    expect(text).toBe(`[PROJECT MEMORY: demo]\n${LANGUAGE_NOTE}\n\n${FILE.trim()}`)
+    expect(LANGUAGE_NOTE).toContain('also at the end of a long turn')
     expect(text).not.toMatch(/write|save/i)
   })
 

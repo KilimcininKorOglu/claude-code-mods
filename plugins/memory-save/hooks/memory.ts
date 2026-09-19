@@ -495,11 +495,17 @@ export function topicFiles(names: readonly string[]): string[] {
 }
 
 /**
- * The text the session starts with: the whole MEMORY.md and the topic files
+ * The reply language rule. Long turns whose context is mostly English (tool output, docs, this file)
+ * ended with English replies to Turkish prompts (measured), so the rule names that case.
+ */
+export const LANGUAGE_NOTE = 'Answer in the language of the user\'s own messages, in every reply and every progress line, also at the end of a long turn whose context (tool output, docs, this memory) is in another language. Keep technical terms and identifiers as they are.'
+
+/**
+ * The text the session starts with: the reply language rule, the whole MEMORY.md and the topic files
  * next to it. The file holds no instruction to write it, because the mod does.
  */
 export function contextText(project: string, dir: string, memory: string, topics: readonly string[]): string {
-  const head = `[PROJECT MEMORY: ${project}]\n${memory.trim()}`
+  const head = `[PROJECT MEMORY: ${project}]\n${LANGUAGE_NOTE}\n\n${memory.trim()}`
   return topics.length === 0 ? head : `${head}\n\nTopic files in ${dir}: ${topics.join(', ')}`
 }
 
