@@ -40,12 +40,19 @@ type World = {
   percent: number
 }
 
+const SUMMARY_TEXT = 'The user asked to fix the bug. The assistant read big.log with cat and found the failing line. '.repeat(3)
+
+const summarized = (text: string, finishReason = 'STOP') =>
+  JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason }], usageMetadata: { promptTokenCount: 1500, candidatesTokenCount: 20 } })
+
 // Beneath the plugin: a store, Gemini answering from a script, and the
-// engine's own compaction, which answers with a one-message summary.
-function world(on: On, opts: { key?: string; store?: [string, unknown][] } = {}): World {
+// engine's own compaction, which answers with a one-message summary. The
+// stored mode is prune unless a test names another; `mode: null` stores none.
+function world(on: On, opts: { key?: string; store?: [string, unknown][]; mode?: string | null } = {}): World {
+  const mode = opts.mode === undefined ? 'prune' : opts.mode
   const w: World = {
     clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }),
-    store: new Map(opts.store ?? []),
+    store: new Map([...(mode === null ? [] : [['mode', mode] as [string, unknown]]), ...(opts.store ?? [])]),
     requests: [],
     replies: [],
     logs: [],
@@ -136,7 +143,7 @@ describe('gemini-compact', () => {
     expect(w.requests[0]?.url).toContain('/models/gemini-3.5-flash:generateContent')
     expect(w.toasts[0]).not.toContain('free tier')
     const status = (await $.command.run(run(''))).text
-    expect(status).toMatch(/^on · gemini-3\.5-flash · automatic at 60% · paid tier · key set\nlast: kept 8\/9/)
+    expect(status).toMatch(/^on · prune · gemini-3\.5-flash · automatic at 60% · paid tier · key set\nlast: kept 8\/9/)
     expect((await $.command.run(run('reset'))).text).toBe('settings reset to the plugin options')
     expect([...w.store.keys()]).toEqual([])
     expect((await $.command.run(run('at 150'))).text).toContain('1 to 99')
@@ -172,6 +179,48 @@ describe('gemini-compact', () => {
     await $.turn.complete(turn())
     await w.clock.settle()
     expect(w.builtIn).toHaveLength(2)
+  })
+
+  test('by default Gemini summarizes the older part and the newest messages stay as the engine\'s own', async ($, on) => {
+    const w = world(on, { key: 'KEY', mode: null })
+    w.replies.push({ status: 200, text: summarized(SUMMARY_TEXT) })
+    const r = await $.session.compact({ trigger: 'auto', messages: MESSAGES })
+    expect(w.builtIn).toEqual([])
+    expect(r.messages).toHaveLength(7)
+    expect(r.messages?.[0]).toMatchObject({ role: 'user', toolUses: [] })
+    expect(r.messages?.[0]?.handle).toBe(undefined)
+    expect(r.messages?.[0]?.text).toContain(SUMMARY_TEXT.trim())
+    expect(r.messages?.slice(1)).toEqual(MESSAGES.slice(3))
+    const body = JSON.parse(w.requests[0]?.body ?? '{}')
+    expect(body.generationConfig.responseSchema).toBe(undefined)
+    expect(body.contents[0].parts[0].text).toContain('[call] Bash {"command":"cat big.log"}')
+    expect(body.contents[0].parts[0].text).not.toContain('Welcome.')
+    expect(w.logs[0]).toMatch(/^summary: 9 → 7 messages · 9\d% smaller · 2k in, 20 out$/)
+  })
+
+  test('a summary cut at the output limit or too short falls back to the built-in summary', async ($, on) => {
+    const w = world(on, { key: 'KEY', mode: 'summary' })
+    w.replies.push({ status: 200, text: summarized(SUMMARY_TEXT, 'MAX_TOKENS') })
+    w.replies.push({ status: 200, text: summarized('Fixed the bug.') })
+    await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+    await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+    expect(w.builtIn).toEqual(['manual', 'manual'])
+    expect(w.logs).toEqual(['built-in summary: the summary hit the output token limit', 'built-in summary: the summary is too short (14 chars)'])
+  })
+
+  test('takes a summary that is only a little smaller, and refuses one that is not smaller', async ($, on) => {
+    const w = world(on, { key: 'KEY', mode: 'summary' })
+    const small: SessionMessage[] = [
+      { role: 'user', text: 'a'.repeat(500), toolUses: [], handle: 'h0' },
+      ...MESSAGES.slice(3),
+    ]
+    w.replies.push({ status: 200, text: summarized('b'.repeat(250)) })
+    w.replies.push({ status: 200, text: summarized('b'.repeat(900)) })
+    const taken = await $.session.compact({ trigger: 'manual', messages: small })
+    expect(taken.messages?.[0]?.text).toContain('b'.repeat(250))
+    await $.session.compact({ trigger: 'manual', messages: small })
+    expect(w.builtIn).toEqual(['manual'])
+    expect(w.logs[1]).toMatch(/^built-in summary: the summary is not smaller \(summary: 7 → 7 messages · -\d+% smaller/)
   })
 
   test('at off stops the automatic compaction', async ($, on) => {

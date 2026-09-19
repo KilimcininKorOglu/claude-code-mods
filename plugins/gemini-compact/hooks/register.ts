@@ -1,9 +1,10 @@
 import type { EngineInterface, Register, SessionCompactInput, SessionMessage } from 'claude-code'
 import { actionsByUse, applyActions, sizeOf } from './apply.ts'
 import { changeText, parseCommand, STORE_KEYS, statusText, storedValue, type Settings } from './command.ts'
-import { configFrom, outcomeText, type Config } from './config.ts'
-import { buildRequest, parseResponse, type Answer } from './gemini.ts'
+import { configFrom, outcomeText, summaryOutcomeText, type Config } from './config.ts'
+import { buildRequest, buildSummaryRequest, parseResponse, type Answer, type Request } from './gemini.ts'
 import { collectCalls, parseDecisions, renderTranscript } from './prune.ts'
+import { parseSummary, summaryMessage, tailStart } from './summary.ts'
 
 /**
  * What the hooks share: whether a compaction this mod started runs, whether
@@ -35,10 +36,15 @@ async function apiKey($: EngineInterface, config: Config): Promise<string | unde
   return fromEnv === undefined || fromEnv === '' ? undefined : fromEnv
 }
 
-async function ask($: EngineInterface, config: Config, key: string, transcript: string, ids: string[], instructions?: string): Promise<Answer> {
-  const request = buildRequest(config.model, key, transcript, ids, instructions)
+async function ask($: EngineInterface, request: Request): Promise<Answer> {
   const response = await $.http.fetch(request.url, request.init)
   return parseResponse(response.status, response.ok, response.text)
+}
+
+/** The fraction of characters the compaction removed. */
+function reduction(before: readonly SessionMessage[], after: readonly SessionMessage[]): number {
+  const size = sizeOf(before)
+  return size === 0 ? 0 : (size - sizeOf(after)) / size
 }
 
 /** Asks Gemini about every call outside the pinned messages and applies its answer. */
@@ -47,13 +53,24 @@ async function prune($: EngineInterface, config: Config, key: string, e: Session
   const ids = calls.filter(c => !c.pinned).map(c => c.id)
   if (ids.length === 0) throw new Error('no tool call outside the newest messages')
   const transcript = renderTranscript(e.messages, calls, config.maxInputChars)
-  const answer = await ask($, config, key, transcript, ids, e.instructions)
+  const answer = await ask($, buildRequest(config.model, key, transcript, ids, e.instructions))
   const actions = actionsByUse(calls, parseDecisions(answer.text, ids))
   const messages = applyActions(e.messages, actions, config.headChars)
-  const before = sizeOf(e.messages)
-  const ratio = before === 0 ? 0 : (before - sizeOf(messages)) / before
+  const ratio = reduction(e.messages, messages)
   const tally = { kept: messages.length, total: e.messages.length, ratio, actions: actions.values(), ...answer }
   return { messages, ratio, text: outcomeText(tally) }
+}
+
+/** Has Gemini summarize everything before the newest messages, which stay as they are. */
+async function summarize($: EngineInterface, config: Config, key: string, e: SessionCompactInput): Promise<Outcome> {
+  const start = tailStart(e.messages, config.keepRecent)
+  const head = e.messages.slice(0, start)
+  if (head.length === 0) throw new Error('nothing to summarize before the newest messages')
+  const transcript = renderTranscript(head, collectCalls(head, 0), config.summaryMaxInputChars, true)
+  const answer = await ask($, buildSummaryRequest(config.model, key, transcript, config.summaryMaxOutputTokens, e.instructions))
+  const messages = [summaryMessage(parseSummary(answer.text, answer.finishReason)), ...e.messages.slice(start)]
+  const ratio = reduction(e.messages, messages)
+  return { messages, ratio, text: summaryOutcomeText({ kept: messages.length, total: e.messages.length, ratio, ...answer }) }
 }
 
 /** One line in the transcript (not sent to the model) and a toast; free tier adds its warning to the toast. */
@@ -63,6 +80,16 @@ function report($: EngineInterface, state: State, config: Config, text: string):
   $.ui.toast(config.tier === 'free' ? `${text} · sent to Gemini free tier` : text, { timeoutMs: 15_000 })
 }
 
+/**
+ * Why a result goes to the built-in summary, or undefined when it is taken.
+ * A summary is taken whenever it is smaller, so the built-in summary runs only
+ * when Gemini fails; a prune must reach `minReduction`.
+ */
+function refusal(config: Config, ratio: number): string | undefined {
+  if (config.mode === 'summary') return ratio > 0 ? undefined : 'the summary is not smaller'
+  return ratio >= config.minReduction ? undefined : `under ${Math.round(config.minReduction * 100)}% smaller`
+}
+
 async function compactWithGemini($: EngineInterface, state: State, config: Config, e: SessionCompactInput): Promise<SessionMessage[] | undefined> {
   const key = await apiKey($, config)
   if (key === undefined) {
@@ -70,12 +97,13 @@ async function compactWithGemini($: EngineInterface, state: State, config: Confi
     return undefined
   }
   try {
-    const outcome = await prune($, config, key, e)
-    if (outcome.ratio >= config.minReduction) {
+    const outcome = config.mode === 'summary' ? await summarize($, config, key, e) : await prune($, config, key, e)
+    const refused = refusal(config, outcome.ratio)
+    if (refused === undefined) {
       report($, state, config, outcome.text)
       return outcome.messages
     }
-    report($, state, config, `built-in summary: under ${Math.round(config.minReduction * 100)}% smaller (${outcome.text})`)
+    report($, state, config, `built-in summary: ${refused} (${outcome.text})`)
   } catch (err) {
     report($, state, config, `built-in summary: ${message(err)}`)
   }
@@ -130,8 +158,8 @@ export const register: Register = (on, options) => {
     const r = await next(e)
     await $.command.register({
       name: 'gemini-compact',
-      description: 'Gemini compaction: status, on, off, free, paid, model <id>, at <1-99>, at off, reset (gemini-compact)',
-      argumentHint: '[on | off | free | paid | model <id> | at <N> | at off | reset]',
+      description: 'Gemini compaction: status, on, off, mode summary|prune, free, paid, model <id>, at <1-99>, at off, reset (gemini-compact)',
+      argumentHint: '[on | off | mode summary|prune | free | paid | model <id> | at <N> | at off | reset]',
     })
     return r
   })

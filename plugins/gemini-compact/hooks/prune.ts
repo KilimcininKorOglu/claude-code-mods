@@ -83,19 +83,19 @@ function outputCap(fixed: number, outputs: readonly number[], max: number): numb
   return low
 }
 
-function callLines(call: Call, cap: number): string[] {
-  const label = call.pinned ? '[fixed]' : `[${call.id}]`
+function callLines(call: Call, cap: number, plain: boolean): string[] {
+  const label = plain ? '[call]' : call.pinned ? '[fixed]' : `[${call.id}]`
   const status = call.isError ? 'error' : 'output'
   return [`  ${label} ${call.tool} ${inputText(call.input)}`, `  ${status}: ${clip(call.output, cap)}`]
 }
 
-function render(messages: readonly SessionMessage[], byUse: ReadonlyMap<string, Call>, cap: number): string {
+function render(messages: readonly SessionMessage[], byUse: ReadonlyMap<string, Call>, cap: number, plain: boolean): string {
   const lines: string[] = []
   messages.forEach((m, i) => {
     lines.push(`#${i + 1} ${m.role}: ${m.text}`)
     for (const use of m.toolUses) {
       const call = byUse.get(use.tool_use_id)
-      if (call !== undefined) lines.push(...callLines(call, cap))
+      if (call !== undefined) lines.push(...callLines(call, cap, plain))
     }
   })
   return lines.join('\n')
@@ -103,18 +103,19 @@ function render(messages: readonly SessionMessage[], byUse: ReadonlyMap<string, 
 
 /**
  * The conversation as Gemini reads it: every message in order, each call with
- * its id, input and output. When it is over `maxChars`, the longest outputs
- * are cut to one common length; a conversation over it without any output throws.
+ * its id (or `[call]` when `plain`), input and output. When it is over
+ * `maxChars`, the longest outputs are cut to one common length; a
+ * conversation over it without any output throws.
  */
-export function renderTranscript(messages: readonly SessionMessage[], calls: readonly Call[], maxChars: number): string {
+export function renderTranscript(messages: readonly SessionMessage[], calls: readonly Call[], maxChars: number, plain = false): string {
   const byUse = new Map(calls.map(c => [c.toolUseId, c]))
-  const full = render(messages, byUse, Infinity)
+  const full = render(messages, byUse, Infinity, plain)
   if (full.length <= maxChars) return full
   const outputs = calls.map(c => c.output.length)
   const fixed = full.length - outputs.reduce((a, b) => a + b, 0)
   const cap = outputCap(fixed, outputs, maxChars)
   if (cap === undefined) throw new Error(`the conversation is over ${maxChars} characters even without tool output`)
-  return render(messages, byUse, cap)
+  return render(messages, byUse, cap, plain)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

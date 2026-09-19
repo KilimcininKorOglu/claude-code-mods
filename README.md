@@ -20,7 +20,7 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 | [memory-save](plugins/memory-save) | Loads `MEMORY.md` into the session and saves project learnings to it after every turn through a tool-less fork in the background, without blocking the stop. | L2 |
 | [cache-warm](plugins/cache-warm) | Keeps the 1-hour prompt cache warm for a window you set with one fork per idle stretch, and shows the cache state, the cold price and this session's cold writes. | L2 |
 | [prompt-time](plugins/prompt-time) | Draws the time under each of your messages and each text block of the model's replies, also for a resumed session. | L1 |
-| [gemini-compact](plugins/gemini-compact) | Replaces the compaction summary with Gemini decisions: older tool calls and outputs are kept, cut or dropped, and every message stays verbatim. | L3 |
+| [gemini-compact](plugins/gemini-compact) | Moves compaction from Claude to Gemini: a Gemini summary with the newest messages verbatim, or Gemini decisions that keep, cut or drop older tool calls. | L3 |
 
 ## Layout
 

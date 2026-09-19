@@ -1,7 +1,7 @@
 {
   "name": "gemini-compact",
-  "version": "0.1.0",
-  "description": "Replaces the compaction summary with Gemini decisions: old tool calls and results are kept, truncated or dropped, and every message stays verbatim. /gemini-compact sets the model, the threshold, the tier and on/off. Needs function hooks (early access).",
+  "version": "0.2.0",
+  "description": "Moves compaction to Gemini: in summary mode Gemini summarizes the conversation and the newest messages stay; in prune mode every message stays and Gemini keeps, truncates or drops old tool calls. /gemini-compact sets the mode, the model, the threshold, the tier and on/off. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",
@@ -14,6 +14,13 @@
       "title": "Gemini API key",
       "description": "Leave empty to use the GEMINI_API_KEY environment variable.",
       "sensitive": true
+    },
+    "mode": {
+      "type": "string",
+      "title": "Compaction mode",
+      "description": "summary: Gemini summarizes the conversation and the newest messages stay verbatim. prune: every message stays and Gemini keeps, truncates or drops each old tool call. /gemini-compact mode <summary|prune> overrides it.",
+      "options": ["summary", "prune"],
+      "default": "summary"
     },
     "tier": {
       "type": "string",
@@ -54,9 +61,15 @@
     },
     "maxInputChars": {
       "type": "number",
-      "title": "Maximum characters sent to Gemini",
+      "title": "Maximum characters sent to Gemini (prune mode)",
       "description": "Above it the longest tool outputs are cut to their head and tail before sending.",
       "default": 400000
+    },
+    "summaryMaxInputChars": {
+      "type": "number",
+      "title": "Maximum characters sent to Gemini (summary mode)",
+      "description": "Above it the longest tool outputs are cut to their head and tail before sending.",
+      "default": 2000000
     }
   }
 }

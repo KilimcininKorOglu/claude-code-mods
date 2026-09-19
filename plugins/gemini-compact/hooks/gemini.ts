@@ -1,5 +1,6 @@
 /** The Gemini generateContent request and the reading of its response. */
 import { ACTIONS } from './prune.ts'
+import { SUMMARY_TASK } from './summary.ts'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 
@@ -8,7 +9,8 @@ export const MODEL_ID = /^[a-z0-9][a-z0-9.-]{0,79}$/
 
 export type Request = { url: string; init: { method: 'POST'; headers: Record<string, string>; body: string } }
 
-export type Answer = { text: string; inputTokens: number; outputTokens: number }
+/** `finishReason` is Gemini's, such as `STOP` or `MAX_TOKENS`; absent when it gave none. */
+export type Answer = { text: string; inputTokens: number; outputTokens: number; finishReason?: string }
 
 const TASK = `You decide which tool calls of a Claude Code conversation can leave its context, because the context is being compacted. Every message stays; only tool calls and their outputs can go.
 
@@ -19,11 +21,30 @@ For every call with an id such as [c7], answer one action:
 
 Calls marked [fixed] stay whatever you answer; read them as context only. The latest user messages state the current task. When unsure, answer keep.`
 
+function prompt(task: string, transcript: string, instructions: string | undefined): string {
+  const focus = instructions === undefined || instructions.trim() === '' ? '' : `\n\nThe user asked the compaction to keep in mind: ${instructions.trim()}`
+  return `${task}${focus}\n\nThe conversation:\n\n${transcript}`
+}
+
+function post(model: string, apiKey: string, body: unknown): Request {
+  return {
+    url: `${API}/${model}:generateContent`,
+    init: { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body) },
+  }
+}
+
+/** The request that asks for a plain-text summary of the conversation. */
+export function buildSummaryRequest(model: string, apiKey: string, transcript: string, maxOutputTokens: number, instructions?: string): Request {
+  return post(model, apiKey, {
+    contents: [{ role: 'user', parts: [{ text: prompt(SUMMARY_TASK, transcript, instructions) }] }],
+    generationConfig: { maxOutputTokens },
+  })
+}
+
 /** The request that asks for one action per candidate id, in a schema Gemini must follow. */
 export function buildRequest(model: string, apiKey: string, transcript: string, ids: readonly string[], instructions?: string): Request {
-  const focus = instructions === undefined || instructions.trim() === '' ? '' : `\n\nThe user asked the compaction to keep in mind: ${instructions.trim()}`
   const body = {
-    contents: [{ role: 'user', parts: [{ text: `${TASK}${focus}\n\nThe conversation:\n\n${transcript}` }] }],
+    contents: [{ role: 'user', parts: [{ text: prompt(TASK, transcript, instructions) }] }],
     generationConfig: {
       responseMimeType: 'application/json',
       responseSchema: {
@@ -45,10 +66,7 @@ export function buildRequest(model: string, apiKey: string, transcript: string, 
       },
     },
   }
-  return {
-    url: `${API}/${model}:generateContent`,
-    init: { method: 'POST', headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body) },
-  }
+  return post(model, apiKey, body)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -70,6 +88,12 @@ function answerText(value: Record<string, unknown>): string | undefined {
   return isRecord(part) ? (part.text as string) : undefined
 }
 
+function finishReason(value: Record<string, unknown>): string | undefined {
+  const candidate = Array.isArray(value.candidates) ? value.candidates[0] : undefined
+  const reason = isRecord(candidate) ? candidate.finishReason : undefined
+  return typeof reason === 'string' ? reason : undefined
+}
+
 function count(usage: unknown, key: string): number {
   const n = isRecord(usage) ? usage[key] : undefined
   return typeof n === 'number' ? n : 0
@@ -87,9 +111,11 @@ export function parseResponse(status: number, ok: boolean, text: string): Answer
   if (!isRecord(value)) throw new Error('Gemini answered with no object')
   const answer = answerText(value)
   if (answer === undefined) throw new Error(`Gemini gave no answer (${errorText(value, 'blocked or empty')})`)
+  const reason = finishReason(value)
   return {
     text: answer,
     inputTokens: count(value.usageMetadata, 'promptTokenCount'),
     outputTokens: count(value.usageMetadata, 'candidatesTokenCount') + count(value.usageMetadata, 'thoughtsTokenCount'),
+    ...(reason === undefined ? {} : { finishReason: reason }),
   }
 }
