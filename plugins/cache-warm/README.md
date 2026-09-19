@@ -10,7 +10,7 @@ The behavior follows the cache-tax mod by Karan Bansal (karanb192/claude-code-mo
 
 **Stops when the cache is gone.** A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the engine sends no ping or the fork fails.
 
-**Arms itself after a paid cold write.** When a turn re-writes at least half of a context larger than 20k tokens, the mod counts that cold write and arms a three-hour window, unless a longer window is already armed.
+**Arms itself after a paid cold write.** When a turn re-writes at least half of a context larger than 20k tokens, the mod counts that cold write and arms a six-hour window, unless a longer window is already armed.
 
 **Shows the state.** `/cache-status` prints the model, warm or cold, the context size, the cold price, the window, the break-even and this session's cold writes.
 

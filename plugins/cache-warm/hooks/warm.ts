@@ -10,7 +10,7 @@ export const PING_AFTER_MS = 50 * MIN
 /** The floor of the `every` test setting. */
 export const MIN_PING_MS = MIN
 /** The window armed after a paid cold write. */
-export const AUTO_WARM_MS = 3 * HOUR
+export const AUTO_WARM_MS = 6 * HOUR
 /** The window of a bare /cache-warm and of `always`. */
 export const DEFAULT_WINDOW_MS = 6 * HOUR
 /** Below this context a cold resume is not worth a line. */

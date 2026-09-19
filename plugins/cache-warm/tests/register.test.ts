@@ -240,28 +240,28 @@ describe('always', () => {
 })
 
 describe('cold writes', () => {
-  test('a paid cold write is scored and keeps the cache warm for three hours', async ($, on) => {
+  test('a paid cold write is scored and keeps the cache warm for six hours', async ($, on) => {
     const w = world(on, [warm])
     await $.session.start(session)
     await $.turn.complete(turn())
     await w.clock.advance(3 * HOUR)
     await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
-    expect(w.logs.at(-1)).toBe('cold write of 201k tokens paid ($4.01). Keeping the cache warm for 3h; /cache-warm off stops it.')
-    expect(w.statuses.at(-1)).toBe('3h left · ping in 50m')
+    expect(w.logs.at(-1)).toBe('cold write of 201k tokens paid ($4.01). Keeping the cache warm for 6h; /cache-warm off stops it.')
+    expect(w.statuses.at(-1)).toBe('6h left · ping in 50m')
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(1)
     const status = await $.command.run(run('cache-status'))
     expect(status.text).toMatch(/session     1 cold write paid, \$4\.01/)
-    expect(status.text).toMatch(/keep warm   on, 2h 10m left/)
+    expect(status.text).toMatch(/keep warm   on, 5h 10m left/)
   })
 
   test('a longer window already armed is kept', async ($, on) => {
     const w = world(on, [])
     await $.session.start(session)
-    await $.command.run(run('cache-warm', '6h'))
+    await $.command.run(run('cache-warm', '8h'))
     await $.turn.complete(turn())
     await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
-    expect(w.store.get('deadline:S1')).toBe(START + 6 * HOUR)
+    expect(w.store.get('deadline:S1')).toBe(START + 8 * HOUR)
     expect(w.logs).toEqual([])
   })
 
