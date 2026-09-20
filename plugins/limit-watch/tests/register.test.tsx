@@ -208,6 +208,18 @@ describe('limit-watch', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
   })
 
+  withSidebar('a limit over the top threshold is drawn red, and so is a limit already reached', async ($, on) => {
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    const w = world(on)
+    w.setLimits([fiveHour(96)])
+    await $.session.start(session)
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: '5h 96%, reset in 3h', kind: 'error' })
+    w.setLimits([fiveHour(100)])
+    await $.turn.complete(turn())
+    expect(bar.sections.at(-1)?.lines.at(-1)).toEqual({ text: '5h limit reached', kind: 'error' })
+  })
+
   withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {
     const w = world(on)
     seatSidebar(on, { open: false, sections: [] })

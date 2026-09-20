@@ -189,11 +189,28 @@ export function statusLine(limits: readonly SessionRateLimit[], tracks: Tracks, 
   return [...limits.map(l => limitPart(l, now)), statusTail(limits, tracks, now)].join(' · ')
 }
 
+/** How the sidebar colours a line. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+
+/** The colour of one limit: red over the top threshold, yellow over the first, green under both. */
+function limitTone(percent: number): Tone {
+  if (percent >= (THRESHOLDS[1] ?? 95)) return 'error'
+  return percent >= (THRESHOLDS[0] ?? 80) ? 'warn' : 'ok'
+}
+
+/** The colour of the tail: red for a limit already reached, yellow for one that fills before its reset. */
+function tailTone(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): Tone {
+  const forecasts = limits.map(l => forecast(l, pace(tracks[l.kind], l.kind, now), now))
+  if (forecasts.some(f => f.kind === 'reached')) return 'error'
+  if (forecasts.some(f => f.kind === 'full-at')) return 'warn'
+  return forecasts.every(f => f.kind === 'measuring') ? 'dim' : 'ok'
+}
+
 /** The same reading as the status line, one line per limit, for the shared sidebar. */
-export function sidebarLines(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): { text: string; kind?: 'ok' | 'warn' | 'dim' }[] {
+export function sidebarLines(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): { text: string; kind?: Tone }[] {
   if (limits.length === 0) return [{ text: 'no usage limits reported yet', kind: 'dim' }]
-  const parts = limits.map(l => ({ text: limitPart(l, now), kind: l.percentUsed >= (THRESHOLDS[0] ?? 80) ? ('warn' as const) : ('ok' as const) }))
-  return [...parts, { text: statusTail(limits, tracks, now), kind: 'dim' }]
+  const parts = limits.map(l => ({ text: limitPart(l, now), kind: limitTone(l.percentUsed) }))
+  return [...parts, { text: statusTail(limits, tracks, now), kind: tailTone(limits, tracks, now) }]
 }
 
 /** A bar of `width` cells, filled up to the percentage. A percentage above 100 fills the whole bar. */
