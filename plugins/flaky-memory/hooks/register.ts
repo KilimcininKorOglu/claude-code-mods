@@ -163,14 +163,14 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({
-      name: 'flaky',
+      name: 'flaky-memory',
       description: 'Flaky tests of this repository: the list, reset [test id], on, off (flaky-memory)',
       argumentHint: '[reset [test id] | on | off]',
     })
     return r
   })
 
-  on('command.run', { command: 'flaky' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+  on('command.run', { command: 'flaky-memory' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!isTestCommand(e.command) || !(await isEnabled($))) return next(e)

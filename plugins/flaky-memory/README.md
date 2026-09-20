@@ -21,7 +21,7 @@ While the [sidebar](../sidebar) is open, that line goes there instead, as a red 
     flaky-memory: no longer flaky
     go:TestFlip is no longer flaky: nothing in the last 7 days has it passing and failing on the same code
 
-`/flaky reset` takes the entry down without a closing line, because you asked for it. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+`/flaky-memory reset` takes the entry down without a closing line, because you asked for it. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 ### Test commands
 
@@ -48,10 +48,10 @@ Only tests that failed in the window are stored. A suite of thousands of passing
 
 ## Command
 
-    /flaky                   the flaky tests of this repository, the most failing first
-    /flaky reset             forget the runs of this repository
-    /flaky reset <test id>   forget the runs of one test, for example go:TestFlip
-    /flaky on | off          record test runs or not (on by default); off keeps the stored runs
+    /flaky-memory                   the flaky tests of this repository, the most failing first
+    /flaky-memory reset             forget the runs of this repository
+    /flaky-memory reset <test id>   forget the runs of one test, for example go:TestFlip
+    /flaky-memory on | off          record test runs or not (on by default); off keeps the stored runs
 
 The repository is the git common directory, so the worktrees of one repository share their runs.
 

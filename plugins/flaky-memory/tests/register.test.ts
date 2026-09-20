@@ -9,7 +9,7 @@ const FAIL = '=== RUN   TestX\n--- FAIL: TestX (0.00s)\nFAIL\nFAIL\texample.com/
 const PASS = '=== RUN   TestX\n--- PASS: TestX (0.00s)\nPASS\nok  \texample.com/x\t0.1s'
 
 const run = (args: string): CommandRunInput => ({
-  command: 'flaky', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
+  command: 'flaky-memory', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
 /** What Bash prints next: its text, and whether it exits non-zero. */
@@ -152,7 +152,7 @@ describe('flaky-memory', () => {
     expect(w.commands).toHaveLength(4)
   })
 
-  test('/flaky lists, forgets one test or all, and refuses other words', async ($, on) => {
+  test('/flaky-memory lists, forgets one test or all, and refuses other words', async ($, on) => {
     const w = world(on)
     w.outputs.push({ text: FAIL, failed: true }, { text: PASS })
     await $.tool.call({ tool: 'Bash', command: 'go test ./...' })

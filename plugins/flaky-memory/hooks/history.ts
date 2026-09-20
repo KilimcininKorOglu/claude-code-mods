@@ -133,7 +133,7 @@ export function sectionKey(id: string): string {
   return id.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'test'
 }
 
-/** The /flaky listing: every flaky test of the project, the most failing first. */
+/** The /flaky-memory listing: every flaky test of the project, the most failing first. */
 export function listText(h: History, now: number): string {
   const rows = Object.entries(h.tests)
     .map(([id, runs]) => ({ id, v: verdictOf(runs, now) }))
