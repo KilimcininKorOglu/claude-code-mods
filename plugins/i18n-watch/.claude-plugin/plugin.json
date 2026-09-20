@@ -7,6 +7,5 @@
     "email": "k@keremgok.tr",
     "url": "https://x.com/koroglan"
   },
-  "license": "MIT",
-  "dependencies": ["sidebar"]
+  "license": "MIT"
 }
