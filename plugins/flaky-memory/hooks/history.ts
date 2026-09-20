@@ -86,17 +86,51 @@ function times(n: number): string {
   return n === 1 ? 'once' : `${n} times`
 }
 
-/** What the model reads after a run in which a flaky test failed. */
-export function noteText(id: string, v: Verdict): string {
-  return `flaky-memory: ${id} failed ${v.failures} of ${v.runs} runs in the last 7 days and both passed and failed on the same code ${times(v.sameCode)}. It may be flaky rather than broken by this change: run it again before you change code for it.`
+/** The finding both channels carry: what the runs of one test say, without any instruction. */
+function findingText(id: string, v: Verdict): string {
+  return `${id} failed ${v.failures} of ${v.runs} runs in the last 7 days and both passed and failed on the same code ${times(v.sameCode)}`
 }
 
-/** The notes for the tests this run failed that have passed and failed on the same code. */
-export function notesFor(h: History, failed: readonly string[], now: number): string[] {
+/** What the model reads after a run in which a flaky test failed. */
+export function noteText(id: string, v: Verdict): string {
+  return `flaky-memory: ${findingText(id, v)}. It may be flaky rather than broken by this change: run it again before you change code for it.`
+}
+
+/** The transcript line: the finding alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(id: string, v: Verdict): string {
+  return findingText(id, v)
+}
+
+/** The finding as sidebar lines. */
+export function sidebarLines(id: string, v: Verdict): { text: string; kind: 'error' }[] {
+  return [{ text: findingText(id, v), kind: 'error' }]
+}
+
+/** The transcript line of a finding the window no longer holds. */
+export function doneLog(id: string): string {
+  return `${id} is no longer flaky: nothing in the last 7 days has it passing and failing on the same code`
+}
+
+export function doneLines(id: string): { text: string; kind: 'ok' }[] {
+  return [{ text: doneLog(id), kind: 'ok' }]
+}
+
+/** Whether the test still both passed and failed on one tree inside the window. */
+export function isFlaky(h: History, id: string, now: number): boolean {
+  return verdictOf(h.tests[id] ?? [], now).sameCode > 0
+}
+
+/** The tests this run failed that have passed and failed on the same code, with their verdicts. */
+export function findingsFor(h: History, failed: readonly string[], now: number): { id: string; v: Verdict }[] {
   return failed.flatMap(id => {
     const v = verdictOf(h.tests[id] ?? [], now)
-    return v.sameCode > 0 ? [noteText(id, v)] : []
+    return v.sameCode > 0 ? [{ id, v }] : []
   })
+}
+
+/** A sidebar section key: the test id cut to what the sidebar takes, so one test keeps one key. */
+export function sectionKey(id: string): string {
+  return id.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'test'
 }
 
 /** The /flaky listing: every flaky test of the project, the most failing first. */

@@ -1,14 +1,19 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { fingerprintOf, type TreeState } from './fingerprint.ts'
-import { emptyHistory, listText, notesFor, readHistory, record, type History } from './history.ts'
+import { doneLines, doneLog, emptyHistory, findingsFor, isFlaky, listText, logText, noteText, readHistory, record, sectionKey, sidebarLines, type History } from './history.ts'
 import { isTestCommand, parseOutput } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
 
 const USAGE = 'expects nothing (the flaky tests), reset, reset <test id>, on or off'
 
+const CONSUMER = 'flaky-memory'
+
 /** The repository a run belongs to, and its fingerprint before the run. */
 type Tree = { project: string; fp: string }
+
+/** The tests reported to the person and not yet closed, so each closing is written once. */
+type State = { open: Set<string> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -55,8 +60,52 @@ function finished(r: ToolCallResult<'Bash'>): boolean {
   return !r.result.interrupted && r.result.backgroundTaskId === undefined
 }
 
+/**
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line. The model's note is another channel and carries the instruction the person does not read.
+ */
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+  try {
+    if (await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(key), title, lines, until: 'stream' })) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(line)
+}
+
+/** Drops the sidebar entries of one test, so a closed finding leaves no warning behind. */
+async function dropEntry($: EngineInterface, id: string): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: CONSUMER, key: sectionKey(id) })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+}
+
+/** Closes each reported test the window no longer holds: its runs aged out, or they were forgotten. */
+async function closeResolved($: EngineInterface, state: State, h: History, now: number): Promise<void> {
+  for (const id of [...state.open]) {
+    if (isFlaky(h, id, now)) continue
+    state.open.delete(id)
+    await dropEntry($, id)
+    await toPerson($, id, 'no longer flaky', doneLines(id), doneLog(id))
+  }
+}
+
+/** Reports the flaky tests this run failed to the person, and answers the notes for the model. */
+async function tell($: EngineInterface, state: State, h: History, failed: readonly string[], now: number): Promise<string[]> {
+  const findings = findingsFor(h, failed, now)
+  for (const f of findings) {
+    state.open.add(f.id)
+    // The note goes to the model, the entry to the person: neither reads the other's channel.
+    await toPerson($, f.id, 'flaky test', sidebarLines(f.id, f.v), logText(f.id, f.v))
+  }
+  await closeResolved($, state, h, now)
+  return findings.map(f => noteText(f.id, f.v))
+}
+
 /** Records the run and answers the notes for its flaky failures. */
-async function learn($: EngineInterface, tree: Tree, command: string, r: ToolCallResult<'Bash'>): Promise<string[]> {
+async function learn($: EngineInterface, state: State, tree: Tree, command: string, r: ToolCallResult<'Bash'>): Promise<string[]> {
   const outcome = parseOutput(r.text ?? '')
   const exitedOk = r.isError !== true
   const before = await loadHistory($, tree.project)
@@ -64,7 +113,7 @@ async function learn($: EngineInterface, tree: Tree, command: string, r: ToolCal
   const now = await $.clock.now()
   const after = record(before, { now, fp: tree.fp, command, outcome, exitedOk })
   await $.store.set(`runs:${tree.project}`, after)
-  return notesFor(after, outcome.failed, now)
+  return tell($, state, after, outcome.failed, now)
 }
 
 function withNotes(r: ToolCallResult<'Bash'>, notes: string[]): ToolCallResult<'Bash'> {
@@ -72,20 +121,31 @@ function withNotes(r: ToolCallResult<'Bash'>, notes: string[]): ToolCallResult<'
   return { ...r, context: [...(r.context ?? []), notes.join('\n')] }
 }
 
+/** Takes the entries of the forgotten tests down; a forgotten test writes no closing line. */
+async function forgetEntries($: EngineInterface, state: State, id: string): Promise<void> {
+  for (const open of [...state.open]) {
+    if (id !== '' && open !== id) continue
+    state.open.delete(open)
+    await dropEntry($, open)
+  }
+}
+
 /** Forgets the runs of one test, or of the whole repository when `id` is empty. */
-async function forget($: EngineInterface, project: string, id: string): Promise<string> {
+async function forget($: EngineInterface, state: State, project: string, id: string): Promise<string> {
   if (id === '') {
     await $.store.delete(`runs:${project}`)
+    await forgetEntries($, state, '')
     return 'the runs of this repository are forgotten'
   }
   const h = await loadHistory($, project)
   if (h.tests[id] === undefined) return `no runs of ${id}`
   delete h.tests[id]
   await $.store.set(`runs:${project}`, h)
+  await forgetEntries($, state, id)
   return `the runs of ${id} are forgotten`
 }
 
-async function runCommand($: EngineInterface, args: string): Promise<string> {
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const [word = '', ...rest] = args.trim().split(/\s+/).filter(Boolean)
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
@@ -94,10 +154,12 @@ async function runCommand($: EngineInterface, args: string): Promise<string> {
   const project = await projectOf($, await $.session.cwd())
   if (project === undefined) return 'not in a git repository: no runs are recorded here'
   if (word === '') return `${(await isEnabled($)) ? 'on' : 'off'} · ${listText(await loadHistory($, project), await $.clock.now())}`
-  return word === 'reset' ? forget($, project, rest.join(' ')) : USAGE
+  return word === 'reset' ? forget($, state, project, rest.join(' ')) : USAGE
 }
 
 export const register: Register = on => {
+  const state: State = { open: new Set() }
+
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({
@@ -108,7 +170,7 @@ export const register: Register = on => {
     return r
   })
 
-  on('command.run', { command: 'flaky' }, async ($, e) => ({ text: await runCommand($, String(e.args ?? '')) }))
+  on('command.run', { command: 'flaky' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!isTestCommand(e.command) || !(await isEnabled($))) return next(e)
@@ -121,7 +183,7 @@ export const register: Register = on => {
     const r = await next(e)
     if (tree === undefined || !finished(r)) return r
     try {
-      return withNotes(r, await learn($, tree, e.command, r))
+      return withNotes(r, await learn($, state, tree, e.command, r))
     } catch (err) {
       $.ui.log(`this test run is not recorded: ${errorText(err)}`)
       return r

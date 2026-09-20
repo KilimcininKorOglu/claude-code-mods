@@ -1,6 +1,9 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { emptyHistory, listText, notesFor, readHistory, record, verdictOf, WINDOW_MS, type History } from '../hooks/history.ts'
+import { doneLog, emptyHistory, findingsFor, isFlaky, listText, noteText, readHistory, record, sectionKey, verdictOf, WINDOW_MS, type History } from '../hooks/history.ts'
+
+/** The notes for the tests one run failed, as the hooks module builds them. */
+const notesFor = (h: History, failed: string[], now: number): string[] => findingsFor(h, failed, now).map(f => noteText(f.id, f.v))
 
 tier('user')
 
@@ -20,6 +23,11 @@ describe('history', () => {
     ])
     const fixed = run(run(emptyHistory(), T0, 'A', ['go:TestY']), T0 + 1, 'B', [], ['go:TestY'])
     expect(verdictOf(fixed.tests['go:TestY'] ?? [], T0 + 1).sameCode).toBe(0)
+    // The finding closes when the window no longer holds the contradicting runs.
+    expect(isFlaky(h, 'go:TestX', T0 + 2)).toBe(true)
+    expect(isFlaky(h, 'go:TestX', T0 + 2 + WINDOW_MS)).toBe(false)
+    expect(doneLog('go:TestX')).toContain('no longer flaky')
+    expect(sectionKey('go:TestX/sub case')).toBe('go:TestX-sub-case')
   })
 
   test('the same command exiting 0 counts the tests it failed before as passed, when the output names none', async () => {

@@ -1,5 +1,7 @@
-import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
+
+import { WINDOW_MS } from '../hooks/history.ts'
 
 tier('user')
 
@@ -14,6 +16,7 @@ const run = (args: string): CommandRunInput => ({
 type Output = { text: string; failed?: boolean; interrupted?: boolean }
 
 type World = {
+  clock: MockClock
   store: Map<string, unknown>
   outputs: Output[]
   commands: string[]
@@ -39,8 +42,8 @@ function bashResult(o: Output): unknown {
 }
 
 function world(on: On, store: [string, unknown][] = []): World {
-  mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
-  const w: World = { store: new Map(store), outputs: [], commands: [], git: [], logs: [], diff: '+a', inGit: true }
+  const clock = mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
+  const w: World = { clock, store: new Map(store), outputs: [], commands: [], git: [], logs: [], diff: '+a', inGit: true }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
@@ -58,6 +61,33 @@ function world(on: On, store: [string, unknown][] = []): World {
 }
 
 const NOTE = 'flaky-memory: go:TestX failed 2 of 3 runs in the last 7 days and both passed and failed on the same code once.'
+const LINE = 'go:TestX failed 2 of 3 runs in the last 7 days and both passed and failed on the same code once'
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; title: string; lines: { text: string; kind?: string }[] }[]; cleared: string[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })) })
+    return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    bar.cleared.push((e as unknown as { key: string }).key)
+    return { value: undefined }
+  })
+  on('sidebar.isOpen', () => ({ value: bar.open }))
+}
 
 describe('flaky-memory', () => {
   test('a test that passed and failed on the same tree gets a note on its next failure', async ($, on) => {
@@ -71,6 +101,24 @@ describe('flaky-memory', () => {
     expect(third.isError).toBe(true)
     expect(w.git).toContain('git rev-parse --path-format=absolute --git-common-dir')
     expect(w.store.has('runs:/src/app/.git')).toBe(true)
+    // The person reads the finding alone, without the instruction the model reads.
+    expect(w.logs).toEqual([LINE])
+  })
+
+  withSidebar('an open sidebar takes the finding in red, and the closing in green', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.outputs.push({ text: FAIL, failed: true }, { text: PASS }, { text: FAIL, failed: true })
+    for (let i = 0; i < 3; i += 1) await $.tool.call({ tool: 'Bash', command: 'go test ./...' })
+    expect(bar.sections).toEqual([{ key: 'go:TestX', title: 'flaky test', lines: [{ text: LINE, kind: 'error' }] }])
+    expect(w.logs).toEqual([])
+    // A week later the contradicting runs are outside the window, and the next run closes the finding.
+    await w.clock.advance(WINDOW_MS + 1000)
+    w.outputs.push({ text: FAIL, failed: true })
+    await $.tool.call({ tool: 'Bash', command: 'go test ./...' })
+    expect(bar.cleared).toEqual(['go:TestX'])
+    expect(bar.sections.at(-1)).toEqual({ key: 'go:TestX', title: 'no longer flaky', lines: [{ text: expect.stringContaining('no longer flaky'), kind: 'ok' }] })
   })
 
   test('a failure after a code change is not called flaky', async ($, on) => {

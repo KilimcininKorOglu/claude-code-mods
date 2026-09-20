@@ -12,6 +12,17 @@ The model reads this note after the Bash result of a failed run:
 
     flaky-memory: go:TestFlip failed 2 of 3 runs in the last 7 days and both passed and failed on the same code once. It may be flaky rather than broken by this change: run it again before you change code for it.
 
+The same moment writes one line for you, so you see what the model was told. The line holds the finding alone, without the instruction:
+
+    flaky-memory: go:TestFlip failed 2 of 3 runs in the last 7 days and both passed and failed on the same code once
+
+While the [sidebar](../sidebar) is open, that line goes there instead, as a red entry in its stream, and the transcript stays clean. When the window no longer holds a pass and a failure of that test on one tree, the entry goes down and a green one says so:
+
+    flaky-memory: no longer flaky
+    go:TestFlip is no longer flaky: nothing in the last 7 days has it passing and failing on the same code
+
+`/flaky reset` takes the entry down without a closing line, because you asked for it. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+
 ### Test commands
 
 A Bash command is a test command when it contains one of: `go test`, `pytest`, `python -m pytest`, `jest`, `vitest`, `bun test`, `cargo test`, `cargo nextest`, `phpunit` (also `vendor/bin/phpunit`), `npm test`, `pnpm test`, `yarn test` (also with `run`), `bun run test`, `deno test`, `rspec`, `make test`, `mvn test`, `gradle test` (also `./gradlew test`), `dotnet test`. Other commands pass through untouched, and no git command runs for them.
@@ -66,13 +77,13 @@ Restart Claude Code. The mod needs no key and no setting. It records from the fi
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=flaky}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now (via learn, runCommand), $.command.register, $.process.run (via git), $.session.cwd, $.store.delete (via forget), $.store.get (via isEnabled, loadHistory), $.store.set (via forget, learn, runCommand), $.ui.log
+    ❯ ./register.ts calls: $.clock.now (via learn, runCommand), $.command.register, $.process.run (via git), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.delete (via forget), $.store.get (via isEnabled, loadHistory), $.store.set (via forget, learn, runCommand), $.ui.log
 
 Reach L2, runs git.
 
     1. Reads:    the output of each Bash test command; the working tree through git
     2. Runs:     git rev-parse, git diff HEAD and git ls-files --others, read-only, by argv, before each test command
-    3. Sends:    a note to the model after a failed run of a flaky test; nothing leaves the machine
+    3. Sends:    a note to the model after a failed run of a flaky test, and one line to you; nothing leaves the machine
     4. Persists: per repository, in $.store: each failed test's runs of the last 7 days (time, fingerprint, passed) and the tests each command failed last
     5. Hostile input: test output is untrusted text; it is matched against fixed line patterns, and a test name is only stored and echoed back, never run
 
