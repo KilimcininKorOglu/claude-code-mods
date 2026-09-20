@@ -1,7 +1,28 @@
-import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    return { value: bar.open }
+  })
+}
 
 const NOW = Date.parse('2026-09-19T12:00:00Z')
 
@@ -54,6 +75,18 @@ describe('dep-sentinel', () => {
     expect(w.asked).toEqual(['https://registry.npmjs.org/lodash', 'https://api.osv.dev/v1/query'])
     const r = await $.tool.call({ tool: 'Bash', command: 'npm i lodash-utilz-x' })
     expect(r.deny).toMatch(/^dep-sentinel stopped this install: lodash-utilz-x \(npm\) does not exist on the registry; check the name\./)
+  })
+
+  withSidebar('an open sidebar takes the unchecked and skipped packages, and the transcript stays clean', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    await $.tool.call({ tool: 'Bash', command: 'DEP_SENTINEL_SKIP=1 npm i lodash@4.17.15' })
+    expect(bar.sections.map(s => s.key)).toEqual(['unchecked', 'skipped'])
+    expect(bar.sections[1]?.lines).toEqual(['lodash'])
+    expect(w.logs).toEqual([])
   })
 
   test('finds a Go module from a package path under it', async ($, on) => {

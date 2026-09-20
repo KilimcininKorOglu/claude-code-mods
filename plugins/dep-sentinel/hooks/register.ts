@@ -1,7 +1,7 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
-import { denyText, missingReason, registryReasons, targetVersion, uncheckedLog, uncheckedNote, vulnReason } from './rules.ts'
+import { denyText, missingReason, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -78,6 +78,20 @@ async function checkOne($: EngineInterface, p: Install, now: number): Promise<Ou
   }
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, key: string, title: string, names: readonly string[], line: string): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'dep-sentinel', key, title, lines: sidebarLines(names), until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(line)
+}
+
 function withNote(r: ToolCallResult, note: string): ToolCallResult {
   if (r.deny !== undefined || r.isError === true) return r
   return { ...r, context: [...(r.context ?? []), note] }
@@ -106,7 +120,8 @@ export const register: Register = on => {
     const plan = planOf(e.command)
     if (plan.installs.length === 0 || !(await isEnabled($))) return next(e)
     if (plan.skipped) {
-      $.ui.log(`skipped on request: ${plan.installs.map(p => p.name).join(', ')}`)
+      const names = plan.installs.map(p => p.name)
+      await toPerson($, 'skipped', 'installs skipped on request', names, `skipped on request: ${names.join(', ')}`)
       return next(e)
     }
     const now = await $.clock.now()
@@ -116,8 +131,8 @@ export const register: Register = on => {
     const failures = outcomes.map(o => o.failure).filter((f): f is string => f !== undefined)
     const r = await next(e)
     if (failures.length === 0) return r
-    // The note goes to the model, the log line to the person: neither reads the other's channel.
-    $.ui.log(uncheckedLog(failures))
+    // The note goes to the model, the finding to the person: neither reads the other's channel.
+    await toPerson($, 'unchecked', 'packages the install did not check', failures, uncheckedLog(failures))
     return withNote(r, uncheckedNote(failures))
   })
 }
