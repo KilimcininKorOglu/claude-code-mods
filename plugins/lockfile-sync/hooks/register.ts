@@ -1,12 +1,18 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, isCommit, isManifest, lockCandidates, logText, noteText, sectionKey, sidebarLines, touchesDependencies, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, doneLines, doneLog, isCommit, isManifest, lockCandidates, logText, noteText, sectionKey, sidebarLines, touchesDependencies, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 
 const USAGE = 'expects nothing (the status), on or off'
 
-/** The on/off setting read at session start, and the last error logged, so the same one is logged once. */
-type State = { enabled: boolean; lastError?: string }
+/** A finding still open: the sidebar key it was written under, and the pairs it named. */
+type Open = { key: string; stale: Stale[] }
+
+/**
+ * The on/off setting read at session start, and the last error logged, so the same one is logged once.
+ * `open` holds the last finding, so a later commit that brings its lockfiles along closes it.
+ */
+type State = { enabled: boolean; lastError?: string; open?: Open }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -60,39 +66,61 @@ async function staleLock($: EngineInterface, root: string, manifest: string, cha
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, stale: readonly Stale[]): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'warn' | 'ok' }[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key: sectionKey(stale), title: 'lockfiles the commit left out', lines: sidebarLines(stale), until: 'stream' })
+    const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key, title, lines, until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
   }
-  $.ui.log(logText(stale))
+  $.ui.log(line)
+}
+
+/** Drops the sidebar entries of one finding, so a lockfile that caught up leaves no warning behind. */
+async function dropEntry($: EngineInterface, key: string): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'lockfile-sync', key })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+}
+
+/** Closes the open finding when this commit changed every lockfile it named, and reports it. */
+async function closeResolved($: EngineInterface, state: State, changed: ReadonlySet<string>): Promise<void> {
+  const open = state.open
+  if (open === undefined) return
+  const left = open.stale.filter(s => !changed.has(s.lock))
+  state.open = left.length === 0 ? undefined : { key: open.key, stale: left }
+  if (left.length > 0) return
+  await dropEntry($, open.key)
+  await toPerson($, open.key, 'lockfiles updated', doneLines(open.stale), doneLog(open.stale))
 }
 
 /** The note for the commit that moved HEAD, or undefined when every changed manifest has its lockfile along. */
-async function commitNote($: EngineInterface, before: Before): Promise<string | undefined> {
+async function commitNote($: EngineInterface, state: State, before: Before): Promise<string | undefined> {
   const head = await git($, before.root, ['rev-parse', 'HEAD'])
   if (!head.ok || head.out.trim() === before.head) return undefined
   const names = await git($, before.root, ['show', '--format=', '--name-status', '--no-renames', 'HEAD'])
   if (!names.ok) throw new Error('git show --name-status HEAD failed')
   const files = changedFiles(names.out)
   const changed = new Set(files)
+  await closeResolved($, state, changed)
   const stale: Stale[] = []
   for (const manifest of files.filter(isManifest)) {
     const s = await staleLock($, before.root, manifest, changed)
     if (s !== undefined) stale.push(s)
   }
   if (stale.length === 0) return undefined
+  state.open = { key: sectionKey(stale), stale }
   // The note goes to the model, the finding to the person: neither reads the other's channel.
-  await toPerson($, stale)
+  await toPerson($, sectionKey(stale), 'lockfiles the commit left out', sidebarLines(stale), logText(stale))
   return noteText(stale)
 }
 
 async function afterCommit($: EngineInterface, state: State, before: Before, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
   try {
-    const note = await commitNote($, before)
+    const note = await commitNote($, state, before)
     state.lastError = undefined
     return note === undefined ? r : { ...r, context: [...(r.context ?? []), note] }
   } catch (err) {

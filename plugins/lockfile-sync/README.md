@@ -44,6 +44,12 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
+7. A finding stays open until the lockfile catches up. When a later commit changes every lockfile the finding named, its sidebar entry is cleared and a new entry takes its place:
+
+       lockfile-sync: a later commit brought the lockfiles along: package-lock.json
+
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this: it committed the lockfile itself, so a note would only repeat what it just did.
+
 A git error is logged once, and the commit's result stays as it was.
 
 In the live check the model raised a `package.json` dependency, committed only that file, and quoted the note word for word.
@@ -71,7 +77,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 

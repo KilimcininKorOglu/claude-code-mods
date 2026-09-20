@@ -174,6 +174,16 @@ export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'wa
   return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'warn' }))
 }
 
+/** The transcript line of a finding a later commit closed. */
+export function doneLog(stale: readonly Stale[]): string {
+  return `a later commit brought the lockfiles along: ${stale.map(s => s.lock).join(' · ')}`
+}
+
+/** One sidebar line per lockfile a later commit updated. */
+export function doneLines(stale: readonly Stale[]): { text: string; kind: 'ok' }[] {
+  return stale.map(s => ({ text: `${s.lock} now matches ${s.manifest}`, kind: 'ok' as const }))
+}
+
 /** A sidebar section key: the manifests of this commit, cut to what the sidebar takes. */
 export function sectionKey(stale: readonly Stale[]): string {
   return stale.map(s => s.manifest).join('-').replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'

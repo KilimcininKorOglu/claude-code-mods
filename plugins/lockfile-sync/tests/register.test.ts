@@ -14,13 +14,19 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: string[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string }[] }
-    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    const s = e as unknown as { key: string; title: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text) })
     return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    const c = e as unknown as { key: string }
+    bar.cleared.push(c.key)
+    bar.sections = bar.sections.filter(s => s.key !== c.key)
+    return { value: undefined }
   })
 }
 
@@ -82,11 +88,32 @@ describe('lockfile-sync', () => {
 
   withSidebar('an open sidebar takes the pairs and the transcript stays clean', async ($, on) => {
     const w = world(on)
-    const bar: Bar = { open: true, sections: [] }
+    const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
-    expect(bar.sections).toEqual([{ key: 'package.json', lines: ['package.json but not package-lock.json'] }])
+    expect(bar.sections).toEqual([{ key: 'package.json', title: 'lockfiles the commit left out', lines: ['package.json but not package-lock.json'] }])
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a later commit that brings the lockfile clears the entry and writes a new one', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    w.names = 'M\tpackage-lock.json\n'
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m lock' })).context).toBe(undefined)
+    expect(bar.cleared).toEqual(['package.json'])
+    expect(bar.sections).toEqual([{ key: 'package.json', title: 'lockfiles updated', lines: ['package-lock.json now matches package.json'] }])
+  })
+
+  test('the transcript reads the closed finding when the sidebar is not there', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    w.names = 'M\tpackage-lock.json\n'
+    w.next = 'ccc'
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m lock' })
+    expect(w.logs[1]).toBe('a later commit brought the lockfiles along: package-lock.json')
   })
 
   test('a workspace manifest pairs with the root lockfile', async ($, on) => {
