@@ -1,7 +1,7 @@
 {
   "name": "shot-inline",
-  "version": "0.1.1",
-  "description": "Draws each PNG or JPG the model saves or reads under its tool row, in a terminal that shows pictures. Needs function hooks (early access).",
+  "version": "0.2.0",
+  "description": "Draws each PNG or JPG the model saves or reads under its tool row: pixels in kitty and Ghostty, half-block cells in every other terminal. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

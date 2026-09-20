@@ -199,7 +199,7 @@
     {
       "name": "shot-inline",
       "source": "./plugins/shot-inline",
-      "description": "Draws each PNG or JPG the model saves or reads under its tool row, in a terminal that shows pictures.",
+      "description": "Draws each PNG or JPG the model saves or reads under its tool row: pixels in kitty and Ghostty, half-block cells in every other terminal.",
       "category": "development",
       "tags": [
         "mods",

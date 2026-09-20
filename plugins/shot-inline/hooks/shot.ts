@@ -43,6 +43,24 @@ export function headBytes(base64: string, count: number): number[] {
   return bytes
 }
 
+/** Every byte of a base64 string. */
+export function allBytes(text: string): Uint8Array {
+  const out = new Uint8Array(Math.floor((text.length * 3) / 4))
+  let at = 0
+  let bits = 0
+  let value = 0
+  for (const ch of text) {
+    const n = B64.indexOf(ch)
+    if (n < 0) continue
+    value = ((value << 6) | n) >>> 0
+    bits += 6
+    if (bits < 8) continue
+    bits -= 8
+    out[at++] = (value >> bits) & 0xff
+  }
+  return out.subarray(0, at)
+}
+
 export type Size = { width: number; height: number }
 
 const u32 = (b: number[], at: number): number => (((b[at] ?? 0) << 24) >>> 0) + ((b[at + 1] ?? 0) << 16) + ((b[at + 2] ?? 0) << 8) + (b[at + 3] ?? 0)
@@ -79,7 +97,78 @@ export function cells(size: Size, maxColumns: number): { columns: number; rows: 
 
 /** A name for the PNG copy of a JPG, from its path and modification time, FNV-1a 32. */
 export function copyName(path: string, mtimeMs: number): string {
+  return `${hash(`${path}\0${mtimeMs}`)}.png`
+}
+
+/** A name for the BMP of one picture at one box of cells. */
+export function bmpName(path: string, mtimeMs: number, columns: number, rows: number): string {
+  return `${hash(`${path}\0${mtimeMs}\0${columns}x${rows}`)}.bmp`
+}
+
+function hash(text: string): string {
   let h = 0x811c9dc5
-  for (const ch of `${path}\0${mtimeMs}`) h = Math.imul(h ^ (ch.codePointAt(0) ?? 0), 0x01000193) >>> 0
-  return `${h.toString(16).padStart(8, '0')}.png`
+  for (const ch of text) h = Math.imul(h ^ (ch.codePointAt(0) ?? 0), 0x01000193) >>> 0
+  return h.toString(16).padStart(8, '0')
+}
+
+/** The terminal draws a picture only with the kitty graphics protocol (kitty, Ghostty). */
+export function hasGraphics(term: string, termProgram: string, kittyWindow: string): boolean {
+  if (kittyWindow !== '') return true
+  const name = `${term} ${termProgram}`.toLowerCase()
+  return name.includes('kitty') || name.includes('ghostty')
+}
+
+/** Upper half block: the cell's top pixel is its foreground, its bottom pixel its background. */
+const UPPER_HALF = 0x2580
+
+/** A BMP as `sips -s format bmp` writes one: 24 or 32 bits a pixel, uncompressed, BGR(A). */
+export type Bitmap = { width: number; height: number; offset: number; topDown: boolean; step: number; stride: number; bytes: Uint8Array }
+
+const u32le = (b: Uint8Array, at: number): number => (((b[at] ?? 0) | ((b[at + 1] ?? 0) << 8) | ((b[at + 2] ?? 0) << 16) | ((b[at + 3] ?? 0) << 24)) >>> 0)
+
+/** The header of an uncompressed BMP, or undefined for bytes this reader does not take. */
+export function readBmp(bytes: Uint8Array): Bitmap | undefined {
+  const bpp = (bytes[28] ?? 0) | ((bytes[29] ?? 0) << 8)
+  if (bytes[0] !== 0x42 || bytes[1] !== 0x4d || (bpp !== 24 && bpp !== 32)) return undefined
+  const signedHeight = u32le(bytes, 22) | 0
+  const width = u32le(bytes, 18)
+  const step = bpp / 8
+  if (width < 1 || signedHeight === 0) return undefined
+  return { width, height: Math.abs(signedHeight), offset: u32le(bytes, 10), topDown: signedHeight < 0, step, stride: Math.ceil((width * step) / 4) * 4, bytes }
+}
+
+/** One pixel as `0x00RRGGBB`; a point outside the picture reads its nearest edge. */
+export function pixel(bmp: Bitmap, x: number, y: number): number {
+  const col = Math.min(Math.max(x, 0), bmp.width - 1)
+  const row = Math.min(Math.max(y, 0), bmp.height - 1)
+  const at = bmp.offset + (bmp.topDown ? row : bmp.height - 1 - row) * bmp.stride + col * bmp.step
+  return ((bmp.bytes[at + 2] ?? 0) << 16) | ((bmp.bytes[at + 1] ?? 0) << 8) | (bmp.bytes[at] ?? 0)
+}
+
+/** The picture as `columns * rows` half-block cells, packed as `RasterProps.cells` takes them. */
+export function halfBlocks(bmp: Bitmap, columns: number, rows: number): string {
+  const words = new Uint32Array(columns * rows * 3)
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < columns; x++) {
+      const at = (y * columns + x) * 3
+      words[at] = UPPER_HALF
+      words[at + 1] = pixel(bmp, x, y * 2)
+      words[at + 2] = pixel(bmp, x, y * 2 + 1)
+    }
+  }
+  return base64(new Uint8Array(words.buffer))
+}
+
+/** Standard padded base64 of the bytes; a module has no Node Buffer. */
+export function base64(bytes: Uint8Array): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i] ?? 0
+    const b = bytes[i + 1]
+    const c = bytes[i + 2]
+    const word = (a << 16) | ((b ?? 0) << 8) | (c ?? 0)
+    const digit = (shift: number): string => B64[(word >> shift) & 63] ?? ''
+    out += digit(18) + digit(12) + (b === undefined ? '=' : digit(6)) + (c === undefined ? '=' : digit(0))
+  }
+  return out
 }

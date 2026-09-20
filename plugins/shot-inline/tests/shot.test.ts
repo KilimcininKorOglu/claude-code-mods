@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { absolute, cells, commandImagePaths, copyName, headBytes, pngSize, screenshotPath, sipsSize } from '../hooks/shot.ts'
+import { absolute, allBytes, base64, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, headBytes, pngSize, readBmp, screenshotPath, sipsSize } from '../hooks/shot.ts'
 
 tier('user')
 
@@ -9,6 +9,33 @@ const u32 = (n: number): number[] => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >
 /** The head of a PNG: signature, IHDR length and type, width, height. */
 const pngHead = (width: number, height: number): string =>
   btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...u32(13), ...[...'IHDR'].map(c => c.charCodeAt(0)), ...u32(width), ...u32(height), 8, 6, 0, 0, 0))
+
+const u32le = (b: Uint8Array, at: number, n: number): void => { b[at] = n & 0xff; b[at + 1] = (n >> 8) & 0xff; b[at + 2] = (n >> 16) & 0xff; b[at + 3] = (n >> 24) & 0xff }
+
+/** A 24-bit bottom-up BMP, as `sips -s format bmp` writes one but for its 32-bit pixels. */
+function bmp24(width: number, height: number, color: (x: number, y: number) => [number, number, number]): Uint8Array {
+  const stride = Math.ceil((width * 3) / 4) * 4
+  const b = new Uint8Array(54 + stride * height)
+  b[0] = 0x42
+  b[1] = 0x4d
+  u32le(b, 2, b.length)
+  u32le(b, 10, 54)
+  u32le(b, 14, 40)
+  u32le(b, 18, width)
+  u32le(b, 22, height)
+  b[26] = 1
+  b[28] = 24
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const [r, g, bl] = color(x, y)
+      const at = 54 + (height - 1 - y) * stride + x * 3
+      b[at] = bl
+      b[at + 1] = g
+      b[at + 2] = r
+    }
+  }
+  return b
+}
 
 describe('shot', () => {
   test('finds the file a screenshot result links to', async () => {
@@ -41,5 +68,36 @@ describe('shot', () => {
     expect(absolute('/abs/a.png', '/r')).toBe('/abs/a.png')
     expect(copyName('/a.jpg', 1)).toMatch(/^[0-9a-f]{8}\.png$/)
     expect(copyName('/a.jpg', 1)).not.toBe(copyName('/a.jpg', 2))
+    expect(bmpName('/a.png', 1, 10, 4)).toMatch(/^[0-9a-f]{8}\.bmp$/)
+    expect(bmpName('/a.png', 1, 10, 4)).not.toBe(bmpName('/a.png', 1, 20, 8))
+  })
+
+  test('names the terminals that draw a picture themselves', async () => {
+    expect(hasGraphics('xterm-kitty', '', '')).toBe(true)
+    expect(hasGraphics('xterm-256color', 'ghostty', '')).toBe(true)
+    expect(hasGraphics('xterm-256color', '', '3')).toBe(true)
+    for (const [term, program] of [['xterm-256color', 'vscode'], ['xterm-256color', 'Apple_Terminal'], ['xterm-256color', 'iTerm.app'], ['screen', '']]) {
+      expect(hasGraphics(term ?? '', program ?? '', ''), `${term} ${program}`).toBe(false)
+    }
+  })
+
+  test('reads a BMP header and reads a pixel from its rows', async () => {
+    const bmp = readBmp(bmp24(2, 2, (x, y) => [x * 100, y * 100, 7]))
+    expect({ ...bmp, bytes: undefined }).toEqual({ width: 2, height: 2, offset: 54, topDown: false, step: 3, stride: 8, bytes: undefined })
+    expect(readBmp(new Uint8Array([0x89, 0x50]))).toBe(undefined)
+  })
+
+  test('packs a picture into half-block cells, each cell two pixels of one column', async () => {
+    const grid = halfBlocks(readBmp(bmp24(2, 2, (x, y) => [x * 100, y * 100, 7])) ?? { width: 0, height: 0, offset: 0, topDown: true, step: 3, stride: 0, bytes: new Uint8Array() }, 2, 1)
+    const words = new Uint32Array(allBytes(grid).slice().buffer)
+    expect([...words]).toEqual([0x2580, 0x000007, 0x006407, 0x2580, 0x640007, 0x646407])
+  })
+
+  test('writes and reads standard padded base64', async () => {
+    for (const text of ['a', 'ab', 'abc', 'abcd', '']) {
+      const bytes = Uint8Array.from([...text].map(c => c.charCodeAt(0)))
+      expect(base64(bytes), text).toBe(btoa(text))
+      expect([...allBytes(btoa(text))], text).toEqual([...bytes])
+    }
   })
 })

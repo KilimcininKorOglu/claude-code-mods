@@ -15,10 +15,30 @@ const run = (args: string): CommandRunInput => ({
   command: 'shot-inline', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
+const u32le = (b: Uint8Array, at: number, n: number): void => { b[at] = n & 0xff; b[at + 1] = (n >> 8) & 0xff; b[at + 2] = (n >> 16) & 0xff; b[at + 3] = (n >> 24) & 0xff }
+
+/** A 24-bit bottom-up BMP of one colour per column, as sips writes the resized picture. */
+function bmp24(width: number, height: number): string {
+  const stride = Math.ceil((width * 3) / 4) * 4
+  const b = new Uint8Array(54 + stride * height)
+  b[0] = 0x42
+  b[1] = 0x4d
+  u32le(b, 2, b.length)
+  u32le(b, 10, 54)
+  u32le(b, 14, 40)
+  u32le(b, 18, width)
+  u32le(b, 22, height)
+  b[26] = 1
+  b[28] = 24
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) b[54 + (height - 1 - y) * stride + x * 3 + 2] = (x + 1) * 10
+  return btoa(String.fromCharCode(...b))
+}
+
 /** Files on a fake disk, the commands run, the lines logged. */
 type World = { files: Map<string, { base64: string; size: number }>; argv: string[]; logs: string[]; failNext: boolean }
 
-function world(on: On): World {
+/** The picture is drawn as pixels when the terminal takes the kitty graphics protocol. */
+function world(on: On, graphics = true): World {
   const w: World = {
     files: new Map([[`${ROOT}/.playwright-mcp/shot.png`, { base64: pngHead(1200, 1047), size: 19541 }], [`${ROOT}/photo.jpg`, { base64: '', size: 5000 }]]),
     argv: [],
@@ -29,7 +49,7 @@ function world(on: On): World {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
-  on('env.get', () => ({ value: '/tmp/t/' }))
+  on('env.get', (_, e) => ({ value: e.name === 'TMPDIR' ? '/tmp/t/' : (e.name === 'KITTY_WINDOW_ID' && graphics ? '3' : '') }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file' as const, size: w.files.get(e.path)?.size ?? 0, mtimeMs: 7, isLink: false } }))
   on('fs.read', (_, e) => ({ value: { base64: w.files.get(e.path)?.base64 ?? '' } }) as never)
@@ -37,7 +57,9 @@ function world(on: On): World {
   on('process.run', (_, e) => {
     w.argv.push(e.argv.join(' '))
     if (w.failNext) return { value: { exitCode: 1, stdout: '', stderr: 'sips: not found' } }
-    if (e.argv.includes('--out')) w.files.set(e.argv.at(-1) ?? '', { base64: '', size: 1 })
+    const out = e.argv.includes('--out') ? (e.argv.at(-1) ?? '') : ''
+    if (out.endsWith('.bmp')) w.files.set(out, { base64: bmp24(Number(e.argv[3] ?? 1), Number(e.argv[2] ?? 1)), size: 1 })
+    else if (out !== '') w.files.set(out, { base64: '', size: 1 })
     return { value: { exitCode: 0, stdout: 'pixelWidth: 640\npixelHeight: 480\n', stderr: '' } }
   })
   on('tool.call', { tool: 'Read' }, () => ({ result: 'image' }) as never)
@@ -92,5 +114,24 @@ describe('shot-inline', () => {
     await $.tool.call({ tool: 'Read', file_path: `${ROOT}/.playwright-mcp/shot.png`, tool_use_id: 't7' } as never)
     expect(await (await row($, 't7')).find({ type: 'Image' })).toBe(undefined)
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+  })
+
+  test('a terminal without the kitty protocol draws the picture as half-block cells, made once per box', async ($, on) => {
+    const w = world(on, false)
+    w.files.set(`${ROOT}/tiny.png`, { base64: pngHead(16, 16), size: 90 })
+    await started($)
+    await $.tool.call({ tool: 'Read', file_path: `${ROOT}/tiny.png`, tool_use_id: 't8' } as never)
+    const ui = await row($, 't8')
+    const raster = await ui.find({ type: 'Raster' })
+    expect(await ui.find({ type: 'Image' })).toBe(undefined)
+    expect(raster?.props.columns).toBe(2)
+    expect(raster?.props.rows).toBe(1)
+    const bytes = Uint8Array.from(atob(String(raster?.props.cells ?? '')), c => c.charCodeAt(0))
+    expect([...new Uint32Array(bytes.buffer)]).toEqual([0x2580, 0x0a0000, 0x0a0000, 0x2580, 0x140000, 0x140000])
+    const sipsRuns = w.argv.filter(a => a.includes('format bmp')).length
+    await ui.unmount()
+    await row($, 't8')
+    expect(w.argv.filter(a => a.includes('format bmp'))).toHaveLength(sipsRuns)
+    expect((await $.command.run(run(''))).text).toBe('on; 1 picture(s) this session; this terminal has no kitty graphics protocol, so a picture is drawn as half-block cells')
   })
 })

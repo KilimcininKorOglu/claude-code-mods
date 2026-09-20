@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { absolute, cells, commandImagePaths, copyName, isImagePath, isPng, pngSize, screenshotPath, sipsSize, type Size } from './shot.ts'
+import { absolute, allBytes, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, isImagePath, isPng, pngSize, readBmp, screenshotPath, sipsSize, type Size } from './shot.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -15,9 +15,20 @@ const MAX_READ_BYTES = 4 * 1024 * 1024
 const MAX_SHOTS = 200
 
 /** A picture ready to draw: the PNG the terminal reads, its pixel size, and the path the model named. */
-type Shot = { png: string; size: Size; source: string }
+type Shot = { png: string; size: Size; source: string; stamp: number }
 
-type State = { shots: Map<string, Shot>; enabled: boolean; lastError?: string }
+/** The box of cells a picture is drawn in. */
+type Box = { columns: number; rows: number }
+
+type State = {
+  shots: Map<string, Shot>
+  enabled: boolean
+  /** The half-block cells of one picture at one box, keyed by both. */
+  grids: Map<string, string>
+  /** The terminal takes the kitty graphics protocol, so the picture itself is drawn. */
+  graphics: boolean
+  lastError?: string
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -46,11 +57,8 @@ async function measure($: EngineInterface, path: string, bytes: number): Promise
 
 /** A PNG copy of a JPG under the temp directory, made once per path and modification time. */
 async function pngCopy($: EngineInterface, path: string, mtimeMs: number): Promise<string> {
-  const dir = `${((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/+$/, '')}/shot-inline`
-  const out = `${dir}/${copyName(path, mtimeMs)}`
+  const out = `${await tempDir($)}/${copyName(path, mtimeMs)}`
   if (await $.fs.exists(out)) return out
-  const made = await $.process.run(['mkdir', '-p', dir], { timeoutMs: 5_000 })
-  if (made.exitCode !== 0) throw new Error(`mkdir ${dir} failed: ${made.stderr.trim()}`)
   await sips($, ['-s', 'format', 'png', path, '--out', out])
   return out
 }
@@ -62,7 +70,40 @@ async function prepare($: EngineInterface, path: string): Promise<Shot | undefin
   if (st.kind !== 'file') return undefined
   const size = await measure($, path, st.size ?? 0)
   const png = isPng(path) ? path : await pngCopy($, path, st.mtimeMs)
-  return { png, size, source: path }
+  return { png, size, source: path, stamp: st.mtimeMs }
+}
+
+/** The temp directory the mod writes its copies into. */
+async function tempDir($: EngineInterface): Promise<string> {
+  const dir = `${((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/+$/, '')}/shot-inline`
+  const made = await $.process.run(['mkdir', '-p', dir], { timeoutMs: 5_000 })
+  if (made.exitCode !== 0) throw new Error(`mkdir ${dir} failed: ${made.stderr.trim()}`)
+  return dir
+}
+
+/** A BMP of the picture at exactly `columns * rows * 2` pixels, made once per picture and box. */
+async function bmpCopy($: EngineInterface, shot: Shot, box: Box): Promise<string> {
+  const out = `${await tempDir($)}/${bmpName(shot.png, shot.stamp, box.columns, box.rows)}`
+  if (await $.fs.exists(out)) return out
+  await sips($, ['-z', String(box.rows * 2), String(box.columns), '-s', 'format', 'bmp', shot.png, '--out', out])
+  return out
+}
+
+/** The half-block cells for one picture at one box, kept until the session ends. */
+async function gridFor($: EngineInterface, state: State, shot: Shot, box: Box, key: string): Promise<string | undefined> {
+  const kept = state.grids.get(key)
+  if (kept !== undefined) return kept
+  try {
+    const bmp = readBmp(allBytes((await $.fs.read(await bmpCopy($, shot, box), { as: 'bytes' })).base64))
+    if (bmp === undefined) throw new Error(`${shot.source}: sips wrote a BMP this reader does not take`)
+    const grid = halfBlocks(bmp, box.columns, box.rows)
+    state.grids.set(key, grid)
+    return grid
+  } catch (err) {
+    // A redraw drops the dispatch under it, so the work of the old one is not a failure.
+    if (!/\baborted\b/.test(errorText(err))) report($, state, err)
+    return undefined
+  }
 }
 
 /** Keeps the picture for a tool row and redraws the rows. */
@@ -92,16 +133,18 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     $.ui.invalidate('ui.render')
     return word === 'on' ? 'on: saved and read pictures draw under their tool row' : 'off: no picture is drawn'
   }
-  return word === '' ? `${state.enabled ? 'on' : 'off'}; ${state.shots.size} picture(s) this session; a terminal without the kitty graphics protocol shows the path instead` : USAGE
+  const how = state.graphics ? 'this terminal draws the picture itself' : 'this terminal has no kitty graphics protocol, so a picture is drawn as half-block cells'
+  return word === '' ? `${state.enabled ? 'on' : 'off'}; ${state.shots.size} picture(s) this session; ${how}` : USAGE
 }
 
 export const register: Register = on => {
-  const state: State = { shots: new Map(), enabled: true }
+  const state: State = { shots: new Map(), enabled: true, grids: new Map(), graphics: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'shot-inline', description: 'Pictures under their tool row: status, on, off (shot-inline)', argumentHint: '[on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.graphics = hasGraphics((await $.env.get('TERM')) ?? '', (await $.env.get('TERM_PROGRAM')) ?? '', (await $.env.get('KITTY_WINDOW_ID')) ?? '')
     return r
   })
 
@@ -132,12 +175,16 @@ export const register: Register = on => {
     const shot = state.enabled && e.surface === 'terminal' ? state.shots.get(e.requestId) : undefined
     if (shot === undefined || e.surface !== 'terminal') return next(e)
     const drawn = await next(e)
-    const { Box, Image } = $.ui.resolve(e)
+    const { Box, Image, Raster } = $.ui.resolve(e)
     const box = cells(shot.size, Math.min(80, Math.max(10, (e.viewport?.columns ?? 84) - 4)))
+    const key = `${e.requestId}:${box.columns}x${box.rows}`
+    const grid = state.graphics ? undefined : await gridFor($, state, shot, box, key)
     return (
       <Box flexDirection="column">
         {drawn}
-        <Image source={{ file: shot.png, format: 'png' }} columns={box.columns} rows={box.rows} alt={`picture: ${shot.source}`} />
+        {grid === undefined
+          ? <Image source={{ file: shot.png, format: 'png' }} columns={box.columns} rows={box.rows} alt={`picture: ${shot.source}`} />
+          : <Raster key={key} columns={box.columns} rows={box.rows} cells={grid} />}
       </Box>
     )
   })
