@@ -112,3 +112,13 @@ export function noteText(missing: readonly EnvRead[], reference: string): string
 export function logText(missing: readonly EnvRead[], reference: string): string {
   return `env variables ${reference} lacks: ${namedReads(missing)}`
 }
+
+/** One sidebar line per variable, so the section reads as a list. */
+export function sidebarLines(missing: readonly EnvRead[]): { text: string; kind: 'warn' }[] {
+  return namedReads(missing).split(' · ').map(text => ({ text, kind: 'warn' }))
+}
+
+/** A sidebar section key: the subject cut to what the sidebar takes, so one reference file keeps one section. */
+export function sectionKey(text: string): string {
+  return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}

@@ -1,7 +1,28 @@
-import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    return { value: bar.open }
+  })
+}
 
 const ROOT = '/Users/u/app'
 
@@ -56,6 +77,15 @@ describe('env-sync', () => {
       'git show --format= --unified=0 --no-color --no-ext-diff HEAD',
     ])
     expect(w.logs).toEqual(['env variables .env.example lacks: STRIPE_KEY (src/pay.ts:1)'])
+  })
+
+  withSidebar('an open sidebar takes the variables and the transcript stays clean', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    expect(bar.sections).toEqual([{ key: '.env.example', lines: ['STRIPE_KEY (src/pay.ts:1)'] }])
+    expect(w.logs).toEqual([])
   })
 
   test('the first commit of a repository is checked, and .env.sample is read when .env.example is missing', async ($, on) => {

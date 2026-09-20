@@ -1,11 +1,12 @@
 {
   "name": "env-sync",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Tells the model when a commit reads env variables that .env.example lacks. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",
     "url": "https://x.com/koroglan"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": ["sidebar"]
 }

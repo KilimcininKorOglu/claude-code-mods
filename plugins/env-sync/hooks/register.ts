@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, diffReads, isCommit, listedNames, logText, noteText, REFERENCE_FILES } from './env.ts'
+import { commitDir, diffReads, isCommit, listedNames, logText, noteText, REFERENCE_FILES, sectionKey, sidebarLines, type EnvRead } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -47,6 +47,20 @@ async function referenceFile($: EngineInterface, root: string): Promise<string |
   return undefined
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, missing: readonly EnvRead[], reference: string): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title: `env variables ${reference} lacks`, lines: sidebarLines(missing), until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(logText(missing, reference))
+}
+
 /** The note for the commit that moved HEAD, or undefined when it reads no variable the reference file lacks. */
 async function commitNote($: EngineInterface, before: Before): Promise<string | undefined> {
   const head = await git($, before.root, ['rev-parse', 'HEAD'])
@@ -57,8 +71,8 @@ async function commitNote($: EngineInterface, before: Before): Promise<string | 
   const listed = listedNames(await $.fs.read(`${before.root}/${reference}`))
   const missing = diffReads(diff.out).filter(r => !listed.has(r.name))
   if (missing.length === 0) return undefined
-  // The note goes to the model, the log line to the person: neither reads the other's channel.
-  $.ui.log(logText(missing, reference))
+  // The note goes to the model, the finding to the person: neither reads the other's channel.
+  await toPerson($, missing, reference)
   return noteText(missing, reference)
 }
 

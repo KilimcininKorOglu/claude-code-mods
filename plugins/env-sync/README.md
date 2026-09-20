@@ -30,6 +30,7 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
        env-sync: env variables .env.example lacks: STRIPE_KEY (src/pay.ts:12) · REDIS_URL (app/cache.py:4)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
+6. While the [sidebar](../sidebar) is open, those variables go there instead, one line per variable in a section per reference file, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -58,7 +59,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.store.get, $.store.set (via runCommand), $.ui.log (via commitNote, report)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 
