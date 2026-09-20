@@ -78,6 +78,15 @@ describe('board', () => {
     expect(ordered(board).map(s => s.id)).toEqual(['a-mod:b', 'a-mod:a', 'z-mod:a'])
   })
 
+  test("the session's sections stand above the turn's, whatever their order", () => {
+    const board = boardOf(
+      section({ consumer: 'a-mod', key: 'a', order: 1 }),
+      section({ consumer: 'z-mod', key: 'b', order: 900, until: 'session' }),
+      section({ consumer: 'm-mod', key: 'c', order: 500, until: 'session' }),
+    )
+    expect(ordered(board).map(s => s.id)).toEqual(['m-mod:c', 'z-mod:b', 'a-mod:a'])
+  })
+
   test("drops the turn's sections and keeps the session's", () => {
     const board = boardOf(section({ key: 'a' }), section({ key: 'b', until: 'session' }))
     expect(dropTurn(board)).toBe(true)

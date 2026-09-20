@@ -6,7 +6,7 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 
 1. `/sidebar` opens the pane and `/sidebar off` closes it. The choice is kept in `$.store`, so a session started later opens the sidebar again by itself.
 2. While it is open, any mod writes a section: `$.sidebar.set({ consumer, key, title, lines, buttons, until, order })` answers `true`. While it is closed nothing is kept and the call answers `false`, so the mod keeps showing its own transcript line or status line instead.
-3. A section is drawn as a bold heading (`<consumer>: <title>`), its lines (`ok` green, `warn` yellow, `dim` faint) and its buttons. Sections are ordered by `order` (100 when absent), then by consumer and key.
+3. A section is drawn as a bold heading (`<consumer>: <title>`), its lines (`ok` green, `warn` yellow, `dim` faint) and its buttons. Every `until: 'session'` section stands above every `until: 'turn'` one, whatever their `order`, so a finding that comes and goes with the turn never moves a standing one. Inside each of the two groups the order is `order` (100 when absent), then consumer, then key.
 4. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane. The mod that offers the button serves that command itself.
 5. `until: 'turn'` drops the section when the turn ends; `until: 'session'` keeps it until the mod replaces or clears it.
 
@@ -25,7 +25,7 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
       lines: findings.map(text => ({ text, kind: 'warn' })), // kind: 'ok' | 'warn' | 'dim', or absent
       buttons: [{ label: 'fix', command: 'my-mod', args: 'fix src/users.ts' }], // optional
       until: 'turn',                   // 'turn' drops it at the turn's end, 'session' keeps it
-      order: 50,                       // smaller is higher in the pane; 100 when absent
+      order: 50,                       // smaller is higher inside your group; 100 when absent
     })
     if (taken) return
   } catch {

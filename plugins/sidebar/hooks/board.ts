@@ -96,9 +96,15 @@ export function readSection(input: SidebarSection): Kept | string {
   }
 }
 
-/** The sections in drawing order: by `order`, then by consumer and key, so the pane does not jump. */
+/** A section that stays for the session sorts before one that goes at the turn's end. */
+const rank = (s: Kept): number => (s.until === 'session' ? 0 : 1)
+
+/**
+ * The sections in drawing order: the session's own first, then by `order`, then by consumer and key.
+ * A section that comes and goes with the turn never moves a standing one, so the pane does not jump.
+ */
 export function ordered(board: Board): Kept[] {
-  return [...board.values()].sort((a, b) => a.order - b.order || a.consumer.localeCompare(b.consumer) || a.key.localeCompare(b.key))
+  return [...board.values()].sort((a, b) => rank(a) - rank(b) || a.order - b.order || a.consumer.localeCompare(b.consumer) || a.key.localeCompare(b.key))
 }
 
 /** Drops every section of a turn; answers whether the board changed. */
