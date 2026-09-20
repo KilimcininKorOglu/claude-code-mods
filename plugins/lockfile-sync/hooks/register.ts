@@ -57,12 +57,12 @@ async function staleLock($: EngineInterface, root: string, manifest: string, cha
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, stale: readonly Stale[]): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key: sectionKey(stale), title: 'lockfiles the commit left out', lines: sidebarLines(stale), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key: sectionKey(stale), title: 'lockfiles the commit left out', lines: sidebarLines(stale), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

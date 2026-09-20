@@ -75,12 +75,12 @@ async function catalogOf($: EngineInterface, state: State): Promise<Catalog> {
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, key: string, lines: { text: string; kind: 'warn' }[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'i18n-watch', key: sectionKey(key), title: 'missing translation keys', lines, until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'i18n-watch', key: sectionKey(key), title: 'missing translation keys', lines, until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

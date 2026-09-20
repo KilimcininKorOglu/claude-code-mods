@@ -9,8 +9,8 @@ const USAGE = 'expects nothing (the status), on or off'
 type State = { counts: Counts; enabled: boolean }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, key: string, title: string, line: string): Promise<void> {
   try {
@@ -19,8 +19,7 @@ async function toPerson($: EngineInterface, key: string, title: string, line: st
       key: sectionKey(key),
       title,
       lines: [{ text: line, kind: 'warn' }],
-      until: 'turn',
-      order: 50,
+      until: 'stream',
     })
     if (taken) return
   } catch {

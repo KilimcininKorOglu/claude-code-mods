@@ -26,7 +26,7 @@ A Claude Code Mod that checks each package the model installs before the install
        dep-sentinel: the install ran unchecked for: lodash (api.osv.dev answered HTTP 503)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package in a section of their own, and the transcript stays clean. The sections go when the turn ends. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
+7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
 
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 

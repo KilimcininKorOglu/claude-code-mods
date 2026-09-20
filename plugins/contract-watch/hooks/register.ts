@@ -30,12 +30,12 @@ async function locate($: EngineInterface, file: string): Promise<{ root: string;
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, check: Check, line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(check.sym), title: 'changed signatures', lines: sidebarLines(check), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(check.sym), title: 'changed signatures', lines: sidebarLines(check), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

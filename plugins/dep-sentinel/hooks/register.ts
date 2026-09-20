@@ -79,12 +79,12 @@ async function checkOne($: EngineInterface, p: Install, now: number): Promise<Ou
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, key: string, title: string, names: readonly string[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'dep-sentinel', key, title, lines: sidebarLines(names), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'dep-sentinel', key, title, lines: sidebarLines(names), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

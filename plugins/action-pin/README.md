@@ -17,7 +17,7 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
        action-pin: actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those actions go there instead, one line per action in a section per edited file, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, those actions go there instead, one line per action as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 ## Command
 

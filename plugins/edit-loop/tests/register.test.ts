@@ -110,7 +110,7 @@ describe('edit-loop', () => {
     seatSidebar(on, bar)
     await started($)
     for (let i = 0; i < 5; i++) await edit($)
-    expect(bar.sections).toEqual([{ key: 'hooks-a.ts', title: 'edit loop', lines: ['5th edit of hooks/a.ts in this turn'], until: 'turn' }])
+    expect(bar.sections).toEqual([{ key: 'hooks-a.ts', title: 'edit loop', lines: ['5th edit of hooks/a.ts in this turn'], until: 'stream' }])
     expect(w.logs).toEqual([])
   })
 

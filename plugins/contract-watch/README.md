@@ -17,7 +17,7 @@ A Claude Code Mod that tells the model which callers to check after it changes a
        contract-watch: parse changed from 1 to 2 parameter(s); callers: main (main.go:5), other (main.go:9)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, that finding goes there instead, the change on the first line and one line per caller in a section per symbol, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, that finding goes there instead, the change on the first line and one line per caller, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 The note lists every caller, not only the ones ripwire proves incompatible: in a live check on Go, ripwire reported `incompatible="0"` while both callers still passed one argument (measured with ripwire on 2.1.278).
 

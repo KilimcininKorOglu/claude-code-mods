@@ -52,12 +52,12 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, added: readonly Stale[]): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'doc-drift-watch', key: sectionKey(added), title: 'doc lines the commit made stale', lines: sidebarLines(added), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'doc-drift-watch', key: sectionKey(added), title: 'doc lines the commit made stale', lines: sidebarLines(added), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

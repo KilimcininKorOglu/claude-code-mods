@@ -54,12 +54,12 @@ async function withShas($: EngineInterface, state: State, uses: readonly Unpinne
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, path: string, uses: readonly Unpinned[]): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'action-pin', key: sectionKey(path), title: 'actions by a moving ref', lines: sidebarLines(uses), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'action-pin', key: sectionKey(path), title: 'actions by a moving ref', lines: sidebarLines(uses), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

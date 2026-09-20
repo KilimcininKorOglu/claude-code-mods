@@ -17,7 +17,7 @@ A Claude Code Mod that tells the model which doc lines its commit made stale. Af
        doc-drift-watch: 1 doc line(s) stale: README.md:7 points at other.go:3, a file that no longer exists
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those lines go there instead, one line per stale anchor in a section per commit, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, those lines go there instead, one line per stale anchor, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 A stale anchor that was stale before the commit is not repeated, so an example path in a README does not come back on every commit. An anchor its author dated (ripwire `kind="dated-record"`) is not reported, because it records what was true then. The mod never stops a commit.
 

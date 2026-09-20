@@ -20,12 +20,12 @@ async function fileText($: EngineInterface, state: State, path: string): Promise
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, key: string, places: string[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'sql-concat-watch', key: sectionKey(key), title: 'SQL built from strings', lines: sidebarLines(places), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'sql-concat-watch', key: sectionKey(key), title: 'SQL built from strings', lines: sidebarLines(places), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.

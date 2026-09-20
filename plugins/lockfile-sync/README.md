@@ -42,7 +42,7 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair in a section per commit, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 A git error is logged once, and the commit's result stays as it was.
 

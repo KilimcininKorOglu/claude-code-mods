@@ -48,12 +48,12 @@ async function referenceFile($: EngineInterface, root: string): Promise<string |
 }
 
 /**
- * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
- * line, as before. The model's note is another channel and does not change here.
+ * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
+ * transcript line, as before. The model's note is another channel and does not change here.
  */
 async function toPerson($: EngineInterface, missing: readonly EnvRead[], reference: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title: `env variables ${reference} lacks`, lines: sidebarLines(missing), until: 'turn', order: 50 })
+    const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title: `env variables ${reference} lacks`, lines: sidebarLines(missing), until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
