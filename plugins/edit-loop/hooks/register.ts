@@ -1,24 +1,28 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { countEdit, logText, noteText, sectionKey, shownPath, type Counts } from './loop.ts'
+import { countEdit, logText, noteText, sectionKey, shownPath, THRESHOLD, WARN_THRESHOLD, type Counts } from './loop.ts'
 
 const ENABLED_KEY = 'enabled'
 
 const USAGE = 'expects nothing (the status), on or off'
 
-/** The edit counts of the running turn and the on/off setting read at session start. */
-type State = { counts: Counts; enabled: boolean }
+/**
+ * The edit counts of the running turn, the on/off setting, and the directory the session started in.
+ * A path is shown against that directory, not against `$.session.cwd()`, because a Bash `cd` moves
+ * the session's directory and would then leave every path outside it written in full.
+ */
+type State = { counts: Counts; enabled: boolean; root?: string }
 
 /**
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, line: string, kind: 'warn' | 'error'): Promise<void> {
   try {
     const taken = await $.sidebar.set({
       consumer: 'edit-loop',
       key: sectionKey(key),
       title,
-      lines: [{ text: line, kind: 'error' }],
+      lines: [{ text: line, kind }],
       until: 'stream',
     })
     if (taken) return
@@ -28,13 +32,22 @@ async function toPerson($: EngineInterface, key: string, title: string, line: st
   $.ui.log(line)
 }
 
-/** Counts a finished edit and adds the note to the edit that reaches the threshold. */
+/**
+ * Counts a finished edit. The third edit of one file warns the person in yellow, the fifth turns the
+ * finding red and is the one the model reads; every other edit passes without a word.
+ */
 async function afterEdit($: EngineInterface, state: State, agentId: string | undefined, path: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
-  if (!state.enabled || !countEdit(state.counts, agentId, path)) return r
-  const shown = shownPath(path, await $.session.cwd())
+  if (!state.enabled) return r
+  const count = countEdit(state.counts, agentId, path)
+  if (count !== WARN_THRESHOLD && count !== THRESHOLD) return r
+  const shown = shownPath(path, state.root ?? (await $.session.cwd()))
+  if (count === WARN_THRESHOLD) {
+    await toPerson($, shown, 'edits piling up', logText(shown, count), 'warn')
+    return r
+  }
   // The note goes to the model, the line to the person: neither reads the other's channel.
-  await toPerson($, shown, 'edit loop', logText(shown))
+  await toPerson($, shown, 'edit loop', logText(shown), 'error')
   return { ...r, context: [...(r.context ?? []), noteText(shown)] }
 }
 
@@ -55,6 +68,7 @@ export const register: Register = on => {
     const r = await next(e)
     await $.command.register({ name: 'edit-loop', description: 'A note at the fifth edit of one file in a turn: status, on, off (edit-loop)', argumentHint: '[on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.root = await $.session.cwd()
     return r
   })
 

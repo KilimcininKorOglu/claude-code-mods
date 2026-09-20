@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { countEdit, sectionKey, shownPath, THRESHOLD } from '../hooks/loop.ts'
+import { countEdit, sectionKey, shownPath, THRESHOLD, WARN_THRESHOLD } from '../hooks/loop.ts'
 
 tier('user')
 
@@ -42,12 +42,12 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; title: string; lines: string[]; until: string }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; title: string; lines: { text: string }[]; until: string }
-    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text), until: s.until })
+    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })), until: s.until })
     return { value: bar.open }
   })
 }
@@ -61,12 +61,13 @@ const edit = ($: Engine, path = `${ROOT}/hooks/a.ts`, agentId?: string) =>
   $.tool.call({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b', ...(agentId === undefined ? {} : { agentId }) } as never)
 
 describe('loop', () => {
-  test('reaches the threshold once per loop and file', async () => {
+  test('counts each loop and file apart', async () => {
     const counts = new Map<string, number>()
     const hits = Array.from({ length: 7 }, () => countEdit(counts, undefined, '/a'))
-    expect(hits.indexOf(true)).toBe(THRESHOLD - 1)
-    expect(hits.filter(Boolean)).toHaveLength(1)
-    expect(countEdit(counts, 'agent-1', '/a')).toBe(false)
+    expect(hits).toEqual([1, 2, 3, 4, 5, 6, 7])
+    expect(hits.indexOf(WARN_THRESHOLD)).toBe(WARN_THRESHOLD - 1)
+    expect(hits.indexOf(THRESHOLD)).toBe(THRESHOLD - 1)
+    expect(countEdit(counts, 'agent-1', '/a')).toBe(1)
     expect(shownPath('/Users/u/app/src/x.ts', '/Users/u/app/')).toBe('src/x.ts')
     expect(shownPath('/tmp/x.ts', '/Users/u/app')).toBe('/tmp/x.ts')
   })
@@ -79,13 +80,13 @@ describe('loop', () => {
 })
 
 describe('edit-loop', () => {
-  test('the fifth edit of one file in a turn gets the note, once, and the person sees one line', async ($, on) => {
+  test('the fifth edit of one file in a turn gets the note, once, and the third warns the person alone', async ($, on) => {
     const w = world(on)
     await started($)
     const results = []
     for (let i = 0; i < 6; i++) results.push(await edit($))
     expect(results.map(r => r.context)).toEqual([undefined, undefined, undefined, undefined, [NOTE], undefined])
-    expect(w.logs).toEqual(['5th edit of hooks/a.ts in this turn'])
+    expect(w.logs).toEqual(['3rd edit of hooks/a.ts in this turn', '5th edit of hooks/a.ts in this turn'])
   })
 
   test('Write and NotebookEdit count, a failed edit does not, and a new turn starts again', async ($, on) => {
@@ -104,13 +105,16 @@ describe('edit-loop', () => {
     expect((await $.tool.call({ tool: 'NotebookEdit', notebook_path: `${ROOT}/n.ipynb`, new_source: 'x' } as never)).context?.[0]).toContain('edited n.ipynb 5 times')
   })
 
-  withSidebar('an open sidebar takes the finding and the transcript stays clean', async ($, on) => {
+  withSidebar('an open sidebar takes the yellow warning and the red finding, and the transcript stays clean', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [] }
     seatSidebar(on, bar)
     await started($)
     for (let i = 0; i < 5; i++) await edit($)
-    expect(bar.sections).toEqual([{ key: 'hooks-a.ts', title: 'edit loop', lines: ['5th edit of hooks/a.ts in this turn'], until: 'stream' }])
+    expect(bar.sections).toEqual([
+      { key: 'hooks-a.ts', title: 'edits piling up', lines: [{ text: '3rd edit of hooks/a.ts in this turn', kind: 'warn' }], until: 'stream' },
+      { key: 'hooks-a.ts', title: 'edit loop', lines: [{ text: '5th edit of hooks/a.ts in this turn', kind: 'error' }], until: 'stream' },
+    ])
     expect(w.logs).toEqual([])
   })
 
@@ -119,7 +123,7 @@ describe('edit-loop', () => {
     seatSidebar(on, { open: false, sections: [] })
     await started($)
     for (let i = 0; i < 5; i++) await edit($)
-    expect(w.logs).toEqual(['5th edit of hooks/a.ts in this turn'])
+    expect(w.logs).toEqual(['3rd edit of hooks/a.ts in this turn', '5th edit of hooks/a.ts in this turn'])
   })
 
   test('a subagent counts apart from the main loop, and off counts nothing', async ($, on) => {

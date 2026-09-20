@@ -1,19 +1,22 @@
 /** How many times each loop edited each file in the running turn, and the note at the threshold. */
 
-/** The edit that reaches this count gets the note. */
+/** The edit that reaches this count gets the note the model reads. */
 export const THRESHOLD = 5
+
+/** The edit that reaches this count gets the first warning, to the person only. */
+export const WARN_THRESHOLD = 3
 
 /** Edits per loop and file in the running turn; the main loop is `main`, a subagent its id. */
 export type Counts = Map<string, number>
 
 const key = (agentId: string | undefined, path: string): string => `${agentId ?? 'main'}\0${path}`
 
-/** Counts one edit and answers whether this edit reached the threshold, which happens once per file and turn. */
-export function countEdit(counts: Counts, agentId: string | undefined, path: string): boolean {
+/** Counts one edit and answers how many times this loop has edited that file in this turn. */
+export function countEdit(counts: Counts, agentId: string | undefined, path: string): number {
   const k = key(agentId, path)
   const n = (counts.get(k) ?? 0) + 1
   counts.set(k, n)
-  return n === THRESHOLD
+  return n
 }
 
 /** `path` shown relative to the session directory when it is inside it. */
@@ -27,8 +30,8 @@ export function noteText(path: string): string {
 }
 
 /** The transcript line: the finding alone, without the instruction the model reads. The engine adds the mod name. */
-export function logText(path: string): string {
-  return `${THRESHOLD}th edit of ${path} in this turn`
+export function logText(path: string, count = THRESHOLD): string {
+  return `${count}${count === WARN_THRESHOLD ? 'rd' : 'th'} edit of ${path} in this turn`
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
