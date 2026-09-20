@@ -55,6 +55,16 @@ export function rowText(task: Task, now: number): string {
   return `${durationText(now - task.startedAt).padStart(6)}  ${task.byUser ? 'you  ' : 'model'}  ${task.label}`
 }
 
+/** The sidebar section's lines: the same rows the pane draws. */
+export function sidebarLines(tasks: readonly Task[], now: number): { text: string }[] {
+  return byAge(tasks).map(t => ({ text: rowText(t, now) }))
+}
+
+/** The sidebar section's buttons: one stop per task, run as `/bg-tasks stop <id>`. */
+export function sidebarButtons(tasks: readonly Task[]): { label: string; command: string; args: string }[] {
+  return byAge(tasks).map(t => ({ label: `stop ${t.label}`, command: 'bg-tasks', args: `stop ${t.id}` }))
+}
+
 export function listText(tasks: readonly Task[], now: number): string {
   if (tasks.length === 0) return 'no background shell task is running'
   return byAge(tasks).map(t => `${t.id}  ${rowText(t, now)}`).join('\n')

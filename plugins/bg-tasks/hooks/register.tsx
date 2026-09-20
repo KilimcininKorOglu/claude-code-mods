@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { byAge, endedIds, labelOf, listText, rowText, statusText, type Task } from './tasks.ts'
+import { byAge, endedIds, labelOf, listText, rowText, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -7,7 +7,7 @@ const ENABLED_KEY = 'enabled'
 
 const PANE_ID = 'bg-tasks'
 
-const USAGE = 'expects nothing (the pane), list, on or off'
+const USAGE = 'expects nothing (the pane), list, stop <id>, on or off'
 
 /** How often the status line's ages are redrawn. */
 const TICK_MS = 30_000
@@ -26,11 +26,44 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-async function showStatus($: EngineInterface, state: State): Promise<void> {
-  $.ui.status(state.enabled ? statusText([...state.tasks.values()], await $.clock.now()) : undefined)
+/** Writes the task list into the shared sidebar; false when the sidebar mod is absent or closed. */
+async function toSidebar($: EngineInterface, tasks: Task[], now: number): Promise<boolean> {
+  try {
+    return await $.sidebar.set({
+      consumer: 'bg-tasks',
+      key: 'tasks',
+      title: `${tasks.length} running`,
+      lines: sidebarLines(tasks, now),
+      buttons: sidebarButtons(tasks),
+      until: 'session',
+      order: 20,
+    })
+  } catch {
+    return false
+  }
 }
 
-/** Redraws the status line and the pane after the task list changed. */
+async function offSidebar($: EngineInterface): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'bg-tasks', key: 'tasks' })
+  } catch {
+    // The sidebar mod is not installed; there is nothing to clear.
+  }
+}
+
+/** The sidebar takes the list while it is open; otherwise the status line shows it, as before. */
+async function showStatus($: EngineInterface, state: State): Promise<void> {
+  const tasks = byAge(state.tasks.values())
+  const now = await $.clock.now()
+  if (state.enabled && tasks.length > 0 && (await toSidebar($, tasks, now))) {
+    $.ui.status(undefined)
+    return
+  }
+  await offSidebar($)
+  $.ui.status(state.enabled ? statusText(tasks, now) : undefined)
+}
+
+/** Redraws the status line, the sidebar and the pane after the task list changed. */
 async function changed($: EngineInterface, state: State): Promise<void> {
   await showStatus($, state)
   $.ui.invalidate('ui.render')
@@ -39,7 +72,7 @@ async function changed($: EngineInterface, state: State): Promise<void> {
 /** Stops one task through the engine's TaskStop tool, on the person's press. */
 async function stopTask($: EngineInterface, state: State, task: Task): Promise<void> {
   try {
-    const r = await $.tool.call({ tool: 'TaskStop', task_id: task.id, consent: `The user pressed "stop" for "${task.label}" in the bg-tasks pane` })
+    const r = await $.tool.call({ tool: 'TaskStop', task_id: task.id, consent: `The user pressed "stop" for "${task.label}"` })
     if (r.deny !== undefined || r.isError === true) throw new Error(r.deny ?? r.text ?? 'TaskStop failed')
     state.tasks.delete(task.id)
     state.message = `stopped: ${task.label}`
@@ -60,8 +93,17 @@ async function togglePane($: EngineInterface, state: State): Promise<string> {
   return 'pane open: Enter on a row stops it, Esc closes'
 }
 
+/** Stops the task a sidebar button names, so a press reaches this mod as `/bg-tasks stop <id>`. */
+async function stopById($: EngineInterface, state: State, id: string): Promise<string> {
+  const task = state.tasks.get(id)
+  if (task === undefined) return `no running task with id ${id}`
+  await stopTask($, state, task)
+  return state.message ?? `stopped ${task.label}`
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
+  if (word.startsWith('stop ')) return stopById($, state, word.slice(5).trim())
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     state.enabled = word === 'on'
@@ -92,7 +134,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'bg-tasks', description: 'Background shell tasks: the pane with stop buttons, list, on, off (bg-tasks)', argumentHint: '[list | on | off]' })
+    await $.command.register({ name: 'bg-tasks', description: 'Background shell tasks: the pane with stop buttons, list, stop <id>, on, off (bg-tasks)', argumentHint: '[list | stop <id> | on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     $.clock.every(TICK_MS, () => void showStatus($, state))
     return r

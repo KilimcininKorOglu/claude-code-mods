@@ -22,12 +22,15 @@ A Claude Code Mod that shows the background shell tasks of the session on the st
 
    Enter on a row stops that task through the engine's TaskStop tool, with your press as the consent. The pane says `stopped: npm run dev`, or `not stopped: ...` with the reason, and the task stays listed then.
 
+5. While the [sidebar](../sidebar) is open, the list goes there instead: one section with the same rows and a `[ stop ... ]` button per task, and the status line stays empty. A press runs `/bg-tasks stop <id>`, which stops that task the same way. With the sidebar closed, or without that mod installed, everything is as above.
+
 In the live check the model started `sleep 900` in the background. The status line showed `1 running · oldest <1m (sleep 900)`. A press on its row in the pane stopped the process, and the status line and the engine's `1 shell` footer went away.
 
 ## Command
 
     /bg-tasks            opens or closes the pane
     /bg-tasks list       the tasks as text, with their ids
+    /bg-tasks stop <id>  stops that task; what a sidebar button runs
     /bg-tasks on | off   on by default; off clears the list
 
 The name is not `/bg`, because the engine keeps `/bg` for its built-in `/background`.
@@ -50,12 +53,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=bg-tasks}, tool.call{tool=Bash}, tool.call{tool=TaskStop}, prompt.submit{origin has {kind=task-notification}}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.store.get, $.store.set (via runCommand), $.tool.call (via stopTask), $.ui.close (via togglePane), $.ui.invalidate (via changed), $.ui.open (via togglePane), $.ui.panes (via togglePane), $.ui.resolve, $.ui.status (via showStatus)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.sidebar.clear (via offSidebar), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand), $.tool.call (via stopTask), $.ui.close (via togglePane), $.ui.invalidate (via changed), $.ui.open (via togglePane), $.ui.panes (via togglePane), $.ui.resolve, $.ui.status (via showStatus)
 
 Reach L2, calls a tool.
 
     1. Reads:    the command and the result of each Bash call; the text of task notifications; the task id of each TaskStop call
-    2. Runs:     the engine's TaskStop tool, only on your press in the pane
+    2. Runs:     the engine's TaskStop tool, only on your press in the pane or on the sidebar's button
     3. Sends:    nothing to the model; the status line and the pane are drawn for you only
     4. Persists: in $.store, the on/off setting; the task list lives in memory for the session
     5. Hostile input: a task id reaches TaskStop only from the list the engine's own Bash results built; notification text is only matched for ids

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 
 import { durationText, endedIds, labelOf, statusText } from '../hooks/tasks.ts'
@@ -42,6 +42,30 @@ function world(on: On): World {
     return { result: { message: 'Successfully stopped task', task_id: e.task_id ?? '', task_type: 'local_bash' }, text: 'ok' } as never
   })
   return w
+}
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+/** A test with the sidebar mod loaded beneath this one. */
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+/** The sections the sidebar took, and the clears it saw; `open` says whether it takes them at all. */
+type Bar = { open: boolean; sections: { title: string; lines: string[]; buttons: string[] }[]; clears: number }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const section = e as unknown as { title: string; lines: { text: string }[]; buttons: { args: string }[] }
+    if (bar.open) bar.sections.push({ title: section.title, lines: section.lines.map(l => l.text), buttons: section.buttons.map(b => b.args) })
+    return { value: bar.open }
+  })
+  on('sidebar.clear', () => { bar.clears += 1; return { value: undefined } })
 }
 
 async function started($: Engine): Promise<void> {
@@ -90,7 +114,7 @@ describe('bg-tasks', () => {
     await ui.press({ key: 'stop:b1' })
     await w.clock.settle()
     expect(w.stopped).toEqual(['b1'])
-    expect(w.consents).toEqual(['The user pressed "stop" for "npm run dev" in the bg-tasks pane'])
+    expect(w.consents).toEqual(['The user pressed "stop" for "npm run dev"'])
     expect(await ui.find({ type: 'Button', key: 'stop:b1' })).toBe(undefined)
     expect(w.statuses.at(-1)).toBe(undefined)
     expect((await $.command.run(run(''))).text).toBe('pane closed')
@@ -117,6 +141,38 @@ describe('bg-tasks', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
     await background($, 'sleep 700')
     expect((await $.command.run(run('list'))).text).toBe('off\nno background shell task is running')
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the pane), list, on or off')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the pane), list, stop <id>, on or off')
+  })
+
+  withSidebar('an open sidebar takes the task list and the status line stays empty', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], clears: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    await background($, 'npm run dev')
+    expect(bar.sections.at(-1)).toEqual({ title: '1 running', lines: ['   <1m  model  npm run dev'], buttons: ['stop b1'] })
+    expect(w.statuses.at(-1)).toBe(undefined)
+    await $.tool.call({ tool: 'TaskStop', task_id: 'b1' } as never)
+    expect(bar.clears).toBe(1)
+  })
+
+  withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: false, sections: [], clears: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    await background($, 'npm run dev')
+    expect(bar.sections).toEqual([])
+    expect(w.statuses.at(-1)).toBe('1 running · oldest <1m (npm run dev)')
+  })
+
+  test('stop <id> stops the task a sidebar button names', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await background($, 'sleep 600')
+    expect((await $.command.run(run('stop b9'))).text).toBe('no running task with id b9')
+    expect((await $.command.run(run('stop b1'))).text).toBe('stopped: sleep 600')
+    expect(w.stopped).toEqual(['b1'])
+    expect(w.statuses.at(-1)).toBe(undefined)
   })
 })
