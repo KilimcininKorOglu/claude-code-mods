@@ -1,5 +1,28 @@
-import { describe, expect, mock, test, tier, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { On, SessionStartInput, TurnCompleteInput } from 'claude-code'
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    return { value: bar.open }
+  })
+  on('sidebar.clear', () => ({ value: undefined }))
+  on('sidebar.isOpen', () => ({ value: bar.open }))
+}
 
 tier('user')
 
@@ -92,6 +115,20 @@ describe('memory-save', () => {
     expect(w.statuses.at(-1)).toMatch(/^\+1 · \d\d:\d\d$/)
     expect(w.statuses[0]).toMatch(/^saving… · \d\d:\d\d$/)
     expect(w.prompts[0]).toContain('<memory_file>\n# app')
+  })
+
+  withSidebar('an open sidebar takes the save state and the status line stays clear', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    w.replies.push('{"ops":[{"op":"add","section":"CRITICAL RULES","text":"- Use pnpm."}],"topics":[]}')
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await settled(w, 1)
+    expect(bar.sections[0]?.key).toBe('save')
+    expect(bar.sections[0]?.lines[0]).toMatch(/^saving… · \d\d:\d\d$/)
+    expect(bar.sections.at(-1)?.lines[0]).toMatch(/^\+1 · \d\d:\d\d$/)
+    expect(w.statuses.every(s => s === undefined)).toBe(true)
   })
 
   test('creates the file from the skeleton when the project has no memory', async ($, on) => {

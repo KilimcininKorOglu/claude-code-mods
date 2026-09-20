@@ -41,6 +41,8 @@ The project name is the primary repository name, also inside a git worktree, els
     memory-save: +2 1 refused · 14:32
     memory-save: error: reply has no JSON object · 14:32
 
+While the [sidebar](../sidebar) is open, that state goes there instead, as a `MEMORY.md` section that stays for the session and is rewritten at each save, and the status line stays clear. With the sidebar closed, or without that mod installed, the status line is drawn as above.
+
 **One line in the transcript** when a save changed a file. The line is not sent to the model:
 
     memory-save: MEMORY.md: 2 added, 1 removed; appended to history.md
@@ -106,7 +108,7 @@ The mod has no command. To stop the saves, disable it: `claude plugin disable me
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
-    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, reportNoChange, save, templated), $.ui.status (via report)
+    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, reportNoChange, save, templated), $.ui.status (via clearReport, report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 

@@ -112,8 +112,34 @@ async function writeTopics($: EngineInterface, project: string, dir: string, top
   }
 }
 
+/** The section this mod owns in the shared sidebar. */
+const SECTION = { consumer: 'memory-save', key: 'save' }
+
+/**
+ * The save's state, on the shared sidebar while it is open, else on the status line, as before.
+ * A sidebar mod that is not installed answers the same as a closed one.
+ */
 async function report($: EngineInterface, text: string): Promise<void> {
-  $.ui.status(`${text} · ${clockText(await $.clock.now())}`)
+  const line = `${text} · ${clockText(await $.clock.now())}`
+  try {
+    if (await $.sidebar.set({ ...SECTION, title: 'MEMORY.md', lines: [{ text: line }], until: 'session', order: 20 })) {
+      $.ui.status(undefined)
+      return
+    }
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.status(line)
+}
+
+/** Takes the state down from both channels, because a save that is left to the next turn shows nothing. */
+async function clearReport($: EngineInterface): Promise<void> {
+  try {
+    await $.sidebar.clear(SECTION)
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.status(undefined)
 }
 
 /** Where a reply that could not be read is kept, the last one only, so its cause can be seen. */
@@ -153,10 +179,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
   const file = `${dir}/MEMORY.md`
   const current = await templated($, project, dir)
   const reply = await ask($, state, project, dir, current)
-  if (reply === undefined) {
-    $.ui.status(undefined)
-    return
-  }
+  if (reply === undefined) return clearReport($)
   const result = fit(project, current, reply)
   if (!result.ok) throw new Error(result.error)
   if (!result.changed) {
