@@ -57,24 +57,24 @@ A save whose result is not in the template is never written.
 
 ## What is checked before a write
 
-- The reply is one JSON object. Any other reply is an error, never a guess. An op or a topic of another shape is refused alone, the rest of the reply is written, the status line counts it (`+2 1 refused`), the transcript line names it, and the next save tells the fork what it refused. One bad op no longer loses the whole save.
+- The reply is one JSON object. A reply the parser cannot read is left to the next turn: nothing is written, the reply is kept as evidence, and one transcript line says so without a status line. An op or a topic of another shape is refused alone, the rest of the reply is written, the status line counts it (`+2 1 refused`), the transcript line names it, and the next save tells the fork what it refused. One bad op no longer loses the whole save.
 - An `add` names a heading the file already has: one of the four sections, or a `### ` subheading of it, whatever its case. A bullet goes at the end of that heading's own block, so an add to a section lands before its first subheading. An add whose heading the file lacks is refused alone.
 - A removed or replaced line exists in the file exactly, or it differs only by a leading list marker from exactly one line. The fork writes every entry as a bullet, also one that stands in the file as a plain paragraph line. A remove or replace whose line the file does not have is skipped, and the other ops are written: the status line counts it (`+1 1 skipped`), the transcript line names it, and the next save tells the fork to copy such a line exactly, with its markup. A misquoted line (the fork added `**` around one, for example) used to stop the whole save.
 - A topic file name is lowercase, ends in `.md`, has no directory part and is not `memory.md`.
-- The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters. A file that is already at or over a cap (one written before these checks, for example) is the exception: a save that makes it smaller in both measures is written, so the file comes back under the caps in steps instead of every save failing.
+- The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters. A file that is already at or over a cap (one written before these checks, for example) is the exception: a save that makes it smaller in both measures is written, so the file comes back under the caps in steps instead of every save failing. A result over a cap is not lost either: the adds and the topic appends are dropped, the removes alone are written, and the dropped part is counted as refused. A remove or replace that would take the title or one of the four `## ` section lines is refused alone, so the template cannot break; a `### ` subheading may still go.
 - From 160 lines or 42000 characters the fork is told how many lines and characters this save must remove. Over a cap the note becomes a shrink-only save: add no new bullet, only move entries to a topic file.
 - No new bullet is longer than 600 characters. An `add` or `replace` whose bullet is longer is refused alone: the other ops are written, the status line counts it (`+1 1 refused`), the transcript line names it, and the next save tells the fork to split such a bullet or move its detail to a topic file.
 - `MEMORY.md` did not change while the fork ran.
 
-A failed check writes nothing and shows the error on the status line.
+Two cases are left that write nothing and show an error on the status line: the fork gave no reply at all (a cold snapshot or an API error), and `MEMORY.md` changed while the fork ran.
 
 The reply's JSON object is read from the last `}` back to the first `{` that opens an object of named fields and parses. A reply that writes a sentence before the JSON is still read, also one whose sentence holds braces of its own, for example a `{ tool: 'Edit' }` matcher.
 
-A reply that is not a JSON object of that shape is written to `memory-save.failed-reply.txt` in the memory directory, and the error names its output tokens and length:
+A reply that is not a JSON object of that shape is written to `memory-save.failed-reply.txt` in the memory directory, and one transcript line names its cause and its output tokens:
 
-    memory-save: error: reply is not valid JSON (JSON Parse error: Expected '}'); 1840 output tokens, 6120 characters, kept in memory-save.failed-reply.txt · 16:27
+    memory-save: MEMORY.md: this turn's reply was not read (reply is not valid JSON (JSON Parse error: Expected '}')); 1840 output tokens, kept in memory-save.failed-reply.txt
 
-Each such error replaces the file, so it holds the last one. Read it to see whether the reply was cut short or held broken JSON. The fork reply's stop reason is not available to a mod, so the mod cannot tell the two apart itself.
+Each such reply replaces the file, so it holds the last one. Read it to see whether the reply was cut short or held broken JSON. The fork reply's stop reason is not available to a mod, so the mod cannot tell the two apart itself.
 
 ## Install
 

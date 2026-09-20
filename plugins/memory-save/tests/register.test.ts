@@ -141,14 +141,15 @@ describe('memory-save', () => {
     expect(w.files.get(FILE)).toContain('## Topic Files\n\n- `history.md`.\n')
   })
 
-  test('shows the error and writes nothing when the reply is not usable', async ($, on) => {
+  test('leaves an unreadable reply to the next turn: no status line, one transcript line', async ($, on) => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push('I saved it.')
     await $.session.start(session)
     await $.turn.complete(turn())
     await settled(w, 1)
     expect(w.files.get(FILE)).toBe(OLD)
-    expect(w.statuses.at(-1)).toMatch(/^error: reply has no JSON object; 2 output tokens, 11 characters, kept in memory-save.failed-reply.txt · /)
+    expect(w.statuses.at(-1)).toBeUndefined()
+    expect(w.logs.at(-1)).toContain("this turn's reply was not read (reply has no JSON object); 2 output tokens")
   })
 
   test('keeps a reply that is not valid JSON, the last one only, so its cause can be read', async ($, on) => {
@@ -161,7 +162,7 @@ describe('memory-save', () => {
     await $.turn.complete(turn())
     await settled(w, 2)
     expect(w.files.get(`${DIR}/memory-save.failed-reply.txt`)).toBe(broken)
-    expect(w.statuses.at(-1)).toMatch(/^error: reply is not valid JSON \(.+\); 2 output tokens, \d+ characters, kept in memory-save.failed-reply.txt · /)
+    expect(w.logs.at(-1)).toMatch(/this turn's reply was not read \(reply is not valid JSON \(.+\)\); 2 output tokens, kept in memory-save.failed-reply.txt/)
     expect(w.files.get(FILE)).toBe(OLD)
   })
 

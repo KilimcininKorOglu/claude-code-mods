@@ -1,13 +1,13 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
   BACKUP,
-  apply,
   appendTopic,
   buildPrompt,
   changeShort,
   changeText,
   clockText,
   contextText,
+  fit,
   inspect,
   isProjectName,
   parseReply,
@@ -15,7 +15,6 @@ import {
   repairSections,
   skippedText,
   topicFiles,
-  validate,
   type Reply,
   type TopicAppend,
 } from './memory.ts'
@@ -124,15 +123,18 @@ const FAILED_REPLY = 'memory-save.failed-reply.txt'
  * Asks the fork what to remember and reads its answer. A reply that cannot be
  * read is written to FAILED_REPLY, and the error names its output tokens.
  */
-async function ask($: EngineInterface, state: State, project: string, dir: string, current: string | undefined): Promise<Reply> {
+async function ask($: EngineInterface, state: State, project: string, dir: string, current: string | undefined): Promise<Reply | undefined> {
   const reply = await $.model.fork({ prompt: buildPrompt(project, dir, current, state.skipped, state.refused) })
   if (reply === null) throw new Error('the fork got no reply (cold snapshot or API error)')
   const u = reply.usage
   $.ui.log(`fork usage: in ${u.input_tokens}, cache read ${u.cache_read_input_tokens}, out ${u.output_tokens}`, { to: 'debug' })
   const parsed = parseReply(reply.text)
   if (parsed.ok) return parsed.reply
+  // A reply the parser cannot read is left to the next turn: the evidence is kept and the person reads
+  // one transcript line, because a save the fork repeats every turn is no reason for a status line error.
   await $.fs.write(`${dir}/${FAILED_REPLY}`, reply.text)
-  throw new Error(`${parsed.error}; ${u.output_tokens} output tokens, ${reply.text.length} characters, kept in ${FAILED_REPLY}`)
+  $.ui.log(`MEMORY.md: this turn's reply was not read (${parsed.error}); ${u.output_tokens} output tokens, kept in ${FAILED_REPLY}`)
+  return undefined
 }
 
 /** Reports a save that changed no file, naming the lines it skipped and the ops it refused. */
@@ -150,7 +152,12 @@ async function save($: EngineInterface, state: State): Promise<void> {
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved yet')
   const file = `${dir}/MEMORY.md`
   const current = await templated($, project, dir)
-  const result = apply(project, current, await ask($, state, project, dir, current))
+  const reply = await ask($, state, project, dir, current)
+  if (reply === undefined) {
+    $.ui.status(undefined)
+    return
+  }
+  const result = fit(project, current, reply)
   if (!result.ok) throw new Error(result.error)
   if (!result.changed) {
     state.skipped = result.skipped
@@ -159,8 +166,6 @@ async function save($: EngineInterface, state: State): Promise<void> {
   }
   state.skipped = result.changes.skipped
   state.refused = result.changes.refused
-  const errors = validate(result.text, result.newBullets, current)
-  if (errors.length > 0) throw new Error(`not written: ${errors.join('; ')}`)
   if ((await readFile($, file)) !== current) throw new Error('not written: MEMORY.md changed during the save')
   await writeTopics($, project, dir, result.topics)
   await $.fs.write(file, result.text)

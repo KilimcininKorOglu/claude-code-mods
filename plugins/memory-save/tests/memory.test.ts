@@ -6,6 +6,7 @@ import {
   changeShort,
   changeText,
   contextText,
+  fit,
   LANGUAGE_NOTE,
   inspect,
   isProjectName,
@@ -147,6 +148,19 @@ describe('apply', () => {
       skipped: ['* `scripts/test_*.py` are probe scripts.'],
       refused: [],
     })
+  })
+
+  test('refuses a remove or replace that would take a section heading', async () => {
+    const r = apply('demo', FILE, reply({
+      ops: [
+        { op: 'remove', line: '## Active Warnings' },
+        { op: 'add', section: 'Active Warnings', text: '- Kept.' },
+      ],
+    }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).toContain('## Active Warnings')
+    expect(r.text).toContain('- Kept.')
+    expect(r.changes.refused).toEqual(['remove: the line is a section heading: ## Active Warnings'])
   })
 
   test('refuses a bullet over the character cap and writes the other ops', async () => {
@@ -316,6 +330,38 @@ describe('validate', () => {
     expect(validate(`${FILE}${'- x\n'.repeat(215)}`, [], over)[0]).toContain('lines, the limit is under 200')
     // A file under the caps gets no step: a result over a cap is refused as before.
     expect(validate(`${FILE}${'- x\n'.repeat(200)}`, [], FILE)[0]).toContain('lines, the limit is under 200')
+  })
+})
+
+describe('fit', () => {
+  const big = FILE.replace('- None yet.\n\n## Topic Files', `${'- x\n'.repeat(198)}\n## Topic Files`)
+
+  test('writes the save when the result is under the caps', async () => {
+    const r = fit('demo', FILE, reply({ ops: [{ op: 'add', section: 'Active Warnings', text: '- New.' }] }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).toContain('- New.')
+    expect(r.changes.refused).toEqual([])
+  })
+
+  test('drops the adds and writes the removes when the result is over a cap', async () => {
+    // The add is long enough that the result grows: a save that shrinks the file is written as it is.
+    const r = fit('demo', big, reply({
+      ops: [
+        { op: 'add', section: 'Active Warnings', text: `- New ${'n'.repeat(200)}` },
+        { op: 'remove', line: '- The API lives in `api/`.' },
+      ],
+      topics: [{ file: 'history.md', append: '- Moved.' }],
+    }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).not.toContain('- New ')
+    expect(r.text).not.toContain('api/')
+    expect(r.topics).toEqual([])
+    expect(r.changes.refused[0]).toContain('2 add(s) and topic append(s) dropped')
+  })
+
+  test('reports the errors when even the shrinking pass stays over a cap', async () => {
+    const r = fit('demo', big, reply({ ops: [{ op: 'add', section: 'Active Warnings', text: '- New.' }] }))
+    expect(r.ok).toBe(false)
   })
 })
 

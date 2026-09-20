@@ -463,6 +463,9 @@ function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefi
   }
   const at = indexOfLine(lines, op.line)
   if (at === -1) return `${op.op}: line not found: ${op.line.slice(0, 60)}`
+  // A '### ' subheading may go (the fork removes an 'Unsorted' line once its bullets moved); the title and
+  // the four '## ' sections may not, because the file must stay in the template.
+  if (/^#{1,2} /.test(lines[at] ?? '')) return `${op.op}: the line is a section heading: ${op.line.slice(0, 60)}`
   if (op.op === 'remove') {
     lines.splice(at, 1)
     return undefined
@@ -549,6 +552,33 @@ export function validate(text: string, newBullets: string[], current?: string): 
   const long = newBullets.filter(b => b.length > MAX_BULLET)
   if (long.length > 0) errors.push(`${long.length} new bullet(s) over ${MAX_BULLET} characters`)
   return errors
+}
+
+/** The same reply without its adds and topic appends, so a save over a cap still writes its removes. */
+function withoutAdds(reply: Reply): Reply {
+  return { ops: reply.ops.filter(op => op.op !== 'add'), topics: [], refused: reply.refused }
+}
+
+/** The result of the shrinking second pass, or the first pass's errors when that pass writes nothing either. */
+function shrunk(project: string, current: string | undefined, reply: Reply, errors: string[]): Applied {
+  const second = apply(project, current, withoutAdds(reply))
+  if (!second.ok || !second.changed || validate(second.text, second.newBullets, current).length > 0) {
+    return { ok: false, error: `not written: ${errors.join('; ')}` }
+  }
+  const dropped = reply.ops.filter(op => op.op === 'add').length + reply.topics.length
+  const note = `over a cap (${errors.join('; ')}): ${dropped} add(s) and topic append(s) dropped, the removes were written`
+  return { ...second, changes: { ...second.changes, refused: [...second.changes.refused, note] } }
+}
+
+/**
+ * The save to write. A result over a line or character cap is not lost: the adds and topic appends are
+ * dropped and the removes alone are written, so the file comes down instead of the whole save failing.
+ */
+export function fit(project: string, current: string | undefined, reply: Reply): Applied {
+  const first = apply(project, current, reply)
+  if (!first.ok || !first.changed) return first
+  const errors = validate(first.text, first.newBullets, current)
+  return errors.length === 0 ? first : shrunk(project, current, reply, errors)
 }
 
 /** Returns the topic file after the append; a new file gets a title. */
