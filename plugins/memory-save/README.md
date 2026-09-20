@@ -68,6 +68,8 @@ A save whose result is not in the template is never written.
 
 A failed check writes nothing and shows the error on the status line.
 
+The reply's JSON object is read from the last `}` back to the first `{` that opens an object of named fields and parses. A reply that writes a sentence before the JSON is still read, also one whose sentence holds braces of its own, for example a `{ tool: 'Edit' }` matcher.
+
 A reply that is not a JSON object of that shape is written to `memory-save.failed-reply.txt` in the memory directory, and the error names its output tokens and length:
 
     memory-save: error: reply is not valid JSON (JSON Parse error: Expected '}'); 1840 output tokens, 6120 characters, kept in memory-save.failed-reply.txt · 16:27

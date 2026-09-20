@@ -286,10 +286,17 @@ export function buildPrompt(project: string, dir: string, current: string | unde
   return [head, file, existingRules(dir), migration, ...notes, FORMAT].filter(p => p !== '').join('\n\n')
 }
 
-function jsonSpan(text: string): string | undefined {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  return start === -1 || end < start ? undefined : text.slice(start, end + 1)
+/** At most this many spans are tried, so a long reply full of braces still parses in one pass. */
+const MAX_SPANS = 50
+
+/**
+ * Each `{` that opens an object of named fields. A brace inside prose (`{ tool: 'Edit' }`) has no quote
+ * after it and is left out, so text before the JSON does not become the start of the span.
+ */
+function objectStarts(text: string): number[] {
+  const out: number[] = []
+  for (const m of text.matchAll(/\{\s*"/g)) if (m.index !== undefined) out.push(m.index)
+  return out
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -342,9 +349,7 @@ function listOf<T>(value: unknown, parse: (v: unknown) => T | string, refused: s
   return items
 }
 
-function decode(text: string): Record<string, unknown> | string {
-  const span = jsonSpan(text)
-  if (span === undefined) return 'reply has no JSON object'
+function parseSpan(span: string): Record<string, unknown> | string {
   let value: unknown
   try {
     value = JSON.parse(span)
@@ -352,6 +357,23 @@ function decode(text: string): Record<string, unknown> | string {
     return `reply is not valid JSON (${err instanceof Error ? err.message : String(err)})`
   }
   return isRecord(value) ? value : 'reply is not a JSON object'
+}
+
+/**
+ * The reply's own JSON object. The span always ends at the last `}`, and the first start that parses is
+ * the outermost object, so a reply that writes a sentence before the JSON is still read.
+ */
+function decode(text: string): Record<string, unknown> | string {
+  const end = text.lastIndexOf('}')
+  const starts = objectStarts(text).filter(i => i < end).slice(0, MAX_SPANS)
+  if (starts.length === 0) return 'reply has no JSON object'
+  let last = 'reply has no JSON object'
+  for (const start of starts) {
+    const value = parseSpan(text.slice(start, end + 1))
+    if (typeof value !== 'string') return value
+    last = value
+  }
+  return last
 }
 
 /**

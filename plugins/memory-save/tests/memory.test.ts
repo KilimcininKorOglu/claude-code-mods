@@ -87,6 +87,12 @@ describe('parseReply', () => {
     expect(r.reply.refused).toEqual(['add: text is not one line', 'unknown op "move"'])
   })
 
+  test('reads the JSON after a sentence that holds braces of its own', async () => {
+    const r = parseReply('A matcher is written `{ tool: \'Edit\' }`, never `{ tool: \'Update\' }`.\n{"ops":[{"op":"remove","line":"- x"}],"topics":[]}')
+    if (!r.ok) throw new Error(r.error)
+    expect(r.reply.ops).toEqual([{ op: 'remove', line: '- x' }])
+  })
+
   test('names a topic file that could reach another file in refused', async () => {
     for (const file of ['../x.md', 'MEMORY.md', 'memory.md', 'notes.txt', 'a/b.md']) {
       const r = parseReply(`{"topics":[{"file":"${file}","append":"x"}]}`)
