@@ -56,6 +56,7 @@ describe('lockfile-sync', () => {
       'git show --format= --name-status --no-renames HEAD',
       'git show --format= --unified=20 --no-color --no-ext-diff HEAD -- package.json',
     ])
+    expect(w.logs).toEqual(['this commit changes package.json but not package-lock.json'])
   })
 
   test('a workspace manifest pairs with the root lockfile', async ($, on) => {

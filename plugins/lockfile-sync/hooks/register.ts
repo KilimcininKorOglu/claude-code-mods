@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, isCommit, isManifest, lockCandidates, noteText, touchesDependencies, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, isCommit, isManifest, lockCandidates, logText, noteText, touchesDependencies, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -69,7 +69,10 @@ async function commitNote($: EngineInterface, before: Before): Promise<string | 
     const s = await staleLock($, before.root, manifest, changed)
     if (s !== undefined) stale.push(s)
   }
-  return stale.length === 0 ? undefined : noteText(stale)
+  if (stale.length === 0) return undefined
+  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  $.ui.log(logText(stale))
+  return noteText(stale)
 }
 
 async function afterCommit($: EngineInterface, state: State, before: Before, r: ToolCallResult): Promise<ToolCallResult> {

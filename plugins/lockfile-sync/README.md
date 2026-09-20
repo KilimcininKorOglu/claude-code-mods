@@ -37,6 +37,12 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum. Run the package manager's install so the lockfile matches, and commit it.
 
+6. The same moment writes one line to the transcript, so you see what the model was told. The line holds the pairs alone, without the instruction:
+
+       lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
+
 A git error is logged once, and the commit's result stays as it was.
 
 In the live check the model raised a `package.json` dependency, committed only that file, and quoted the note word for word.
@@ -64,13 +70,13 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.store.get, $.store.set (via runCommand), $.ui.log (via report)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.store.get, $.store.set (via runCommand), $.ui.log (via commitNote, report)
 
 Reach L2, runs processes.
 
     1. Reads:    the Bash command text; whether lockfiles exist in the repository; through git, the commit's file list and manifest diffs
     2. Runs:     git rev-parse and git show, read-only, by argv, four times per commit plus one per manifest without its lockfile
-    3. Sends:    a note to the model after the commit's result; nothing leaves the machine
+    3. Sends:    a note to the model after the commit's result, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; manifest paths reach git as one argv entry after --
 

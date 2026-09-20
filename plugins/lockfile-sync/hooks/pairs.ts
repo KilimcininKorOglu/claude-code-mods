@@ -153,7 +153,15 @@ export function touchesDependencies(manifest: string, diff: string): boolean {
 /** A manifest the commit changed and the lockfile it left unchanged. */
 export type Stale = { manifest: string; lock: string }
 
+function namedPairs(stale: readonly Stale[]): string {
+  return stale.map(s => `${s.manifest} but not ${s.lock}`).join(' · ')
+}
+
 export function noteText(stale: readonly Stale[]): string {
-  const named = stale.map(s => `${s.manifest} but not ${s.lock}`).join(' · ')
-  return `lockfile-sync: this commit changes ${named}. Run the package manager's install so the lockfile matches, and commit it.`
+  return `lockfile-sync: this commit changes ${namedPairs(stale)}. Run the package manager's install so the lockfile matches, and commit it.`
+}
+
+/** The transcript line: the pairs alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(stale: readonly Stale[]): string {
+  return `this commit changes ${namedPairs(stale)}`
 }
