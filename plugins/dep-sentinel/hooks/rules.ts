@@ -65,3 +65,8 @@ export function denyText(reasons: readonly string[]): string {
 export function uncheckedNote(failures: readonly string[]): string {
   return `dep-sentinel could not check every package, so the install ran unchecked for: ${failures.join(' · ')}. Tell the user.`
 }
+
+/** The transcript line: the unchecked packages alone, without the instruction the model reads. The engine adds the mod name. */
+export function uncheckedLog(failures: readonly string[]): string {
+  return `the install ran unchecked for: ${failures.join(' · ')}`
+}

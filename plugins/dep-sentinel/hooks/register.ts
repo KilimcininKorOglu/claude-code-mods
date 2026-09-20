@@ -1,7 +1,7 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
-import { denyText, missingReason, registryReasons, targetVersion, uncheckedNote, vulnReason } from './rules.ts'
+import { denyText, missingReason, registryReasons, targetVersion, uncheckedLog, uncheckedNote, vulnReason } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -115,6 +115,9 @@ export const register: Register = on => {
     if (reasons.length > 0) return { deny: denyText(reasons) }
     const failures = outcomes.map(o => o.failure).filter((f): f is string => f !== undefined)
     const r = await next(e)
-    return failures.length === 0 ? r : withNote(r, uncheckedNote(failures))
+    if (failures.length === 0) return r
+    // The note goes to the model, the log line to the person: neither reads the other's channel.
+    $.ui.log(uncheckedLog(failures))
+    return withNote(r, uncheckedNote(failures))
   })
 }

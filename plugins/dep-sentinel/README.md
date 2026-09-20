@@ -21,7 +21,11 @@ A Claude Code Mod that checks each package the model installs before the install
    - an exact pin (`lodash@4.17.15`, `requests==2.25.0`, `tokio@=1.38.0`, `go get x@v1.9.0`, `vendor/pkg:2.0.0`) is not the latest version; the reason names the latest, and the latest in the same major version when that differs;
    - OSV.dev lists a known vulnerability for that version; the reason names the ids and the versions that fix them.
 5. The model reads the reasons as the command's error, with the instruction to install the latest version or the right name. When the user needs exactly that package, the model tells the user why and runs the command again with the `DEP_SENTINEL_SKIP=1` prefix. The mod logs such a skip.
-6. When a registry or OSV.dev cannot be reached, the install runs, and the model reads which package ran unchecked and why.
+6. When a registry or OSV.dev cannot be reached, the install runs, and the model reads which package ran unchecked and why. The same moment writes one line to the transcript, so you see it too:
+
+       dep-sentinel: the install ran unchecked for: lodash (api.osv.dev answered HTTP 503)
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
 
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 
@@ -54,7 +58,7 @@ Reach L3, reaches the network.
 
     1. Reads:    the Bash command text
     2. Runs:     nothing
-    3. Sends:    each package name, and its version, to its public registry and to api.osv.dev; nothing else leaves the machine
+    3. Sends:    each package name, and its version, to its public registry and to api.osv.dev; a note to the model and one line to the transcript when a check failed; nothing else leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: a package name comes from the model's command; it reaches a registry only inside a URL path or a JSON body, and a registry answer is read as data
 

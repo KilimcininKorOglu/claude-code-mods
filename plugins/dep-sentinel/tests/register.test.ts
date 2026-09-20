@@ -72,9 +72,10 @@ describe('dep-sentinel', () => {
     const r = await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
     // The test engine skips a mock that throws and rejects with its own error, so only the prefix is fixed.
     expect(r.context?.[0]).toMatch(/^dep-sentinel could not check every package, so the install ran unchecked for: lodash \(.+\)\. Tell the user\.$/)
+    expect(w.logs[0]).toMatch(/^the install ran unchecked for: lodash \(.+\)$/)
     w.asked = []
     await $.tool.call({ tool: 'Bash', command: 'DEP_SENTINEL_SKIP=1 npm i lodash@4.17.15' })
-    expect(w.logs).toEqual(['skipped on request: lodash'])
+    expect(w.logs.slice(1)).toEqual(['skipped on request: lodash'])
     expect((await $.command.run(run('off'))).text).toBe('off: installs run unchecked')
     await $.tool.call({ tool: 'Bash', command: 'npm i lodash@4.17.15' })
     expect(w.asked).toEqual([])
