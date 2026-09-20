@@ -42,7 +42,7 @@ describe('sidebar', () => {
     expect((await $.command.run(run(''))).text).toContain('on:')
     expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
     expect(w.store.open).toBe(true)
-    expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s)')
+    expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 0 in the stream')
     expect((await $.command.run(run('off'))).text).toContain('off:')
     expect(w.panes).toEqual([])
     expect(w.store.open).toBe(false)
@@ -53,7 +53,7 @@ describe('sidebar', () => {
     const w = world(on, { open: true })
     await started($)
     expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
-    expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s)')
+    expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 0 in the stream')
   })
 
   // The test engine raises no `ui.close`, so the person's close is measured in a live session.

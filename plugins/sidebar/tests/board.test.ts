@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { cut, drawn, dropTurn, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, ordered, readSection, type Board, type Kept } from '../hooks/board.ts'
+import { cut, drawn, dropTurn, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, ordered, pushed, readSection, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -102,20 +102,45 @@ describe('board', () => {
 
   test('draws the heading, the lines and the count of the lines left out', () => {
     const board = boardOf(section({ lines: Array.from({ length: MAX_SECTION_LINES + 2 }, () => ({ text: 'x' })) }))
-    const [one] = drawn(board, 80)
+    const [one] = drawn(board, [], 80, MAX_BOARD_LINES)
     expect(one?.head).toBe('edit-loop: the 5th edit')
     expect(one?.rows.at(-1)).toEqual({ text: '+2 more line(s)', tone: 'dim' })
   })
 
   test('keeps the whole pane under the board limit', () => {
     const many = Array.from({ length: 10 }, (_, i) => section({ key: `k${i}`, lines: Array.from({ length: MAX_SECTION_LINES }, () => ({ text: 'x' })) }))
-    const rows = drawn(boardOf(...many), 80).reduce((n, one) => n + 1 + one.rows.length, 0)
+    const rows = drawn(boardOf(...many), [], 80, MAX_BOARD_LINES).reduce((n, one) => n + 1 + one.rows.length, 0)
     expect(rows).toBeLessThanOrEqual(MAX_BOARD_LINES)
   })
 })
 
+describe('stream', () => {
+  const entry = (n: number): Kept => kept(section({ key: `k${n}`, title: `t${n}`, until: 'stream' }))
+
+  test('the stream draws under the standing sections, newest first', () => {
+    const board = boardOf(section({ consumer: 'cache-warm', key: 'window', until: 'session' }))
+    const stream = [entry(3), entry(2), entry(1)]
+    expect(drawn(board, stream, 80, MAX_BOARD_LINES).map(d => d.head)).toEqual([
+      'cache-warm: the 5th edit', 'edit-loop: t3', 'edit-loop: t2', 'edit-loop: t1',
+    ])
+  })
+
+  test("the pane's rows cut the oldest entries off the end", () => {
+    const stream = [entry(3), entry(2), entry(1)]
+    // Each entry draws a heading and one line, so four rows take two entries.
+    expect(drawn(new Map(), stream, 80, 4).map(d => d.head)).toEqual(['edit-loop: t3', 'edit-loop: t2'])
+  })
+
+  test('the stream keeps at most MAX_STREAM entries, the newest', () => {
+    let stream: Kept[] = []
+    for (let i = 0; i < MAX_STREAM + 5; i++) stream = pushed(stream, entry(i))
+    expect(stream).toHaveLength(MAX_STREAM)
+    expect(stream[0]?.title).toBe(`t${MAX_STREAM + 4}`)
+  })
+})
+
 describe('$.sidebar', () => {
-  const stateOf = (open: boolean): State => ({ board: new Map(), open })
+  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open })
 
   test('keeps nothing while the sidebar is closed', async () => {
     const state = stateOf(false)
@@ -139,6 +164,18 @@ describe('$.sidebar', () => {
     await bar.clear({ consumer: 'edit-loop', key: 'gone' })
     expect(state.board.size).toBe(0)
     expect(draws).toBe(3)
+  })
+
+  test('a stream section adds an entry instead of replacing one, and clear drops every entry of that key', async () => {
+    const state = stateOf(true)
+    const bar = createSidebar(() => {}, state)
+    await bar.set(section({ until: 'stream' }))
+    await bar.set(section({ until: 'stream', title: 'again' }))
+    await bar.set(section({ until: 'stream', key: 'other' }))
+    expect(state.stream.map(s => s.title)).toEqual(['the 5th edit', 'again', 'the 5th edit'])
+    expect(state.board.size).toBe(0)
+    await bar.clear({ consumer: 'edit-loop', key: 'note' })
+    expect(state.stream.map(s => s.key)).toEqual(['other'])
   })
 
   test('refuses a section of another shape', async () => {

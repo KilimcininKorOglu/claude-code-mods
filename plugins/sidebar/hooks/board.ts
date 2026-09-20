@@ -11,6 +11,9 @@ export const MAX_SECTION_LINES = 50
 /** Lines the whole pane may draw. */
 export const MAX_BOARD_LINES = 200
 
+/** Entries the stream keeps in memory; the pane draws only as many as its rows take. */
+export const MAX_STREAM = 100
+
 /** Buttons one section may draw. */
 export const MAX_BUTTONS = 5
 
@@ -73,6 +76,11 @@ export function sectionId(consumer: string, key: string): string {
   return `${consumer}:${key}`
 }
 
+function untilOf(value: unknown): SidebarUntil {
+  if (value === 'turn') return 'turn'
+  return value === 'stream' ? 'stream' : 'session'
+}
+
 /**
  * Reads a section another mod handed over. The input is untrusted: a field of another shape is
  * dropped, and the lines and buttons are cut to the limits.
@@ -90,7 +98,7 @@ export function readSection(input: SidebarSection): Kept | string {
     title: oneLine(input.title),
     lines,
     buttons: listOf(input.buttons, buttonOf, MAX_BUTTONS),
-    until: input.until === 'turn' ? 'turn' : 'session',
+    until: untilOf(input.until),
     order: typeof input.order === 'number' && Number.isFinite(input.order) ? input.order : DEFAULT_ORDER,
     more: Math.max(0, all - lines.length),
   }
@@ -138,13 +146,15 @@ function drawSection(section: Kept, columns: number, left: number): Drawn {
 }
 
 /**
- * The whole board as the pane draws it, cut to `columns` and to `MAX_BOARD_LINES`. A section the cap
- * leaves no room for is left out, and what it left out is counted in its own last row.
+ * The pane's content: the standing sections first, then the stream newest first, cut to `columns` and
+ * to `rows`, the pane's own height. The stream's oldest entries are the ones the rows run out on, so
+ * a new entry pushes the oldest off the pane. A section the room left over is too small for is left
+ * out, and what it left out is counted in its own last row.
  */
-export function drawn(board: Board, columns: number): Drawn[] {
+export function drawn(board: Board, stream: readonly Kept[], columns: number, rows: number): Drawn[] {
   const out: Drawn[] = []
-  let left = MAX_BOARD_LINES
-  for (const section of ordered(board)) {
+  let left = Math.min(Math.max(0, rows), MAX_BOARD_LINES)
+  for (const section of [...ordered(board), ...stream]) {
     if (left <= 1) break
     left -= 1
     const one = drawSection(section, columns, left)
@@ -152,6 +162,11 @@ export function drawn(board: Board, columns: number): Drawn[] {
     left -= one.rows.length
   }
   return out
+}
+
+/** The stream with the new entry at its head, cut to what it keeps in memory. */
+export function pushed(stream: readonly Kept[], entry: Kept): Kept[] {
+  return [entry, ...stream].slice(0, MAX_STREAM)
 }
 
 /** The line a pane with no section draws. */

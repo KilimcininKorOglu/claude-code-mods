@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { drawn, dropTurn, readSection, sectionId, type Board, type Drawn, EMPTY_TEXT } from './board.ts'
+import { drawn, dropTurn, pushed, readSection, sectionId, type Board, type Drawn, type Kept, EMPTY_TEXT, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -12,8 +12,22 @@ const OPEN_KEY = 'open'
 
 const USAGE = 'expects nothing (open or close), on, off or status'
 
-/** The sections other mods wrote, whether the pane is open, and the last button's answer. */
-export type State = { board: Board; open: boolean; message?: string }
+/**
+ * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
+ * each stream entry's id its own, whether the pane is open, and the last button's answer.
+ */
+export type State = { board: Board; stream: Kept[]; written: number; open: boolean; message?: string }
+
+function emptyState(): State {
+  return { board: new Map(), stream: [], written: 0, open: false }
+}
+
+/** Takes down every section and stream entry, because a closed sidebar keeps nothing. */
+function forget(state: State): void {
+  state.board.clear()
+  state.stream = []
+  state.message = undefined
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -38,8 +52,7 @@ async function openPane($: EngineInterface, state: State): Promise<void> {
 async function closePane($: EngineInterface, state: State): Promise<void> {
   if ((await $.ui.panes()).some(p => p.id === PANE_ID)) await $.ui.close({ id: PANE_ID })
   state.open = false
-  state.board.clear()
-  state.message = undefined
+  forget(state)
 }
 
 /** Turns the sidebar on or off and keeps the choice for the next session. */
@@ -56,7 +69,7 @@ async function setOpen($: EngineInterface, state: State, open: boolean): Promise
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') return setOpen($, state, word === 'on')
-  if (word === 'status') return state.open ? `on, ${state.board.size} section(s)` : 'off'
+  if (word === 'status') return state.open ? `on, ${state.board.size} section(s), ${state.stream.length} in the stream` : 'off'
   return word === '' ? setOpen($, state, !state.open) : USAGE
 }
 
@@ -71,12 +84,18 @@ export function createSidebar(redraw: () => void, state: State): Sidebar {
       if (!state.open) return false
       const kept = readSection(section)
       if (typeof kept === 'string') throw new Error(kept)
-      state.board.set(kept.id, kept)
+      // A stream entry never replaces another, so the same key twice reads as two entries of a log.
+      if (kept.until === 'stream') state.stream = pushed(state.stream, { ...kept, id: `${kept.id}#${++state.written}` })
+      else state.board.set(kept.id, kept)
       redraw()
       return true
     },
     clear: async (input: { consumer: string; key: string }) => {
-      if (state.board.delete(sectionId(input.consumer, input.key))) redraw()
+      const id = sectionId(input.consumer, input.key)
+      const kept = state.stream.filter(s => !s.id.startsWith(`${id}#`))
+      const dropped = kept.length < state.stream.length
+      state.stream = kept
+      if (state.board.delete(id) || dropped) redraw()
     },
     isOpen: async () => state.open,
   }
@@ -99,9 +118,9 @@ function sectionTree(els: Elements, one: Drawn, press: (command: string, args?: 
   )
 }
 
-function paneTree(els: Elements, state: State, columns: number, press: (command: string, args?: string) => void) {
+function paneTree(els: Elements, state: State, columns: number, rows: number, press: (command: string, args?: string) => void) {
   const { Box, Text } = els
-  const sections = drawn(state.board, columns)
+  const sections = drawn(state.board, state.stream, columns, rows)
   let buttons = 0
   return (
     <Box flexDirection="column">
@@ -117,7 +136,7 @@ function paneTree(els: Elements, state: State, columns: number, press: (command:
 }
 
 export const register: Register = on => {
-  const state: State = { board: new Map(), open: false }
+  const state: State = emptyState()
 
   on('engine.create', async (_, e, next) => {
     const below = await next(e)
@@ -136,7 +155,9 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e)
-    return paneTree($.ui.resolve(e), state, e.props.bodyColumns, (command, args) => void pressButton($, state, command, args))
+    // The body's own rows are the stream's room; the button's answer takes the last one.
+    const rows = (e.props.scroll.bodyRows || MAX_BOARD_LINES) - (state.message === undefined ? 0 : 1)
+    return paneTree($.ui.resolve(e), state, e.props.bodyColumns, rows, (command, args) => void pressButton($, state, command, args))
   })
 
   // The person's close ends the session's sections; the stored choice follows, so it stays closed.
@@ -144,8 +165,7 @@ export const register: Register = on => {
     if (e.id !== PANE_ID) return next(e)
     const r = await next(e)
     state.open = false
-    state.board.clear()
-    state.message = undefined
+    forget(state)
     if (e.origin.kind === 'person') await $.store.set(OPEN_KEY, false)
     return r
   })
