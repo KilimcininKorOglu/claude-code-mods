@@ -1,6 +1,6 @@
 {
   "name": "shot-inline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Draws each PNG or JPG the model saves or reads under its tool row, in a terminal that shows pictures. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

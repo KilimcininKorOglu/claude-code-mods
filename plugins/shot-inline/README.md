@@ -12,7 +12,7 @@ A Claude Code Mod that draws each PNG or JPG the model saves or reads under its 
 3. A JPG is copied once to `$TMPDIR/shot-inline/<hash>.png` with `sips -s format png`, because the terminal draws PNG only. The hash covers the path and the modification time.
 4. The tool row draws the picture under itself: at most 80 columns wide and 24 rows tall, in the picture's shape. The terminal reads the file itself; no pixel crosses the engine.
 
-The picture shows in a terminal with the kitty graphics protocol (kitty, Ghostty). Another terminal shows `picture: <path>` in its place. Only the terminal surface draws it.
+The picture shows in a terminal with the kitty graphics protocol (kitty, Ghostty). Another terminal shows `picture: <path>` in its place. Only the terminal surface draws it. iTerm2 has an inline image protocol of its own, and the engine does not use it, so iTerm2 shows the path as well. The protocol is chosen inside the engine's `Image` element, so no mod can change it.
 
 In the live check a `Read` of a PNG and of a JPG each drew under its row, the JPG through a `sips` copy, with no tree refused in the debug log. tmux shows the `picture: <path>` line, so the picture itself was not seen in that check.
 
@@ -32,7 +32,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## After installing
 
-1. Use a terminal that shows pictures (kitty, Ghostty) to see them; others show the path.
+1. Use a terminal that shows pictures (kitty, Ghostty) to see them; others show the path. iTerm2, the VS Code terminal, Terminal.app, Windows Terminal and conhost show the path, because the engine sends the kitty protocol only.
 2. `sips` is part of macOS. Elsewhere a PNG up to 4 MiB still draws, and a JPG logs `a picture was not drawn: ...` once.
 3. Restart Claude Code.
 
