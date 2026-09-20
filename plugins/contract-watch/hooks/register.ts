@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedSignatures, noteText, parseCheck } from './signature.ts'
+import { changedSignatures, logText, noteText, parseCheck } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -34,7 +34,11 @@ async function checkOne($: EngineInterface, root: string, rel: string, name: str
   const r = await $.process.run(['ripwire', root, `--edit-check=${rel}:${name}`], { cwd: root, timeoutMs: 20_000 })
   if (r.exitCode !== 0) throw new Error(`ripwire --edit-check failed: ${(r.stderr || r.stdout).trim().slice(0, 200)}`)
   const check = parseCheck(r.stdout)
-  return check === undefined ? undefined : noteText(check)
+  if (check === undefined) return undefined
+  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  const line = logText(check)
+  if (line !== undefined) $.ui.log(line)
+  return noteText(check)
 }
 
 async function notesFor($: EngineInterface, file: string, names: readonly string[]): Promise<string[]> {

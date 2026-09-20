@@ -36,6 +36,7 @@ describe('contract-watch', () => {
       ['git', 'rev-parse', '--show-toplevel', '--show-prefix', 'cwd=/src/app/cmd'],
       ['ripwire', '/src/app', '--edit-check=cmd/parse.go:parse', 'cwd=/src/app'],
     ])
+    expect(w.logs).toEqual(['parse changed from 1 to 2 parameter(s); callers: main (cmd/main.go:5)'])
   })
 
   test('a body edit runs nothing; off runs nothing', async ($, on) => {

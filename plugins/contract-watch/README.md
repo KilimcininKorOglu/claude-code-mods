@@ -12,6 +12,11 @@ A Claude Code Mod that tells the model which callers to check after it changes a
        contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; check each caller: main (main.go:5), other (main.go:9).
 
    A caller is named with the definition it sits in; at most 10 are named, the rest counted.
+5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the finding alone, without the instruction:
+
+       contract-watch: parse changed from 1 to 2 parameter(s); callers: main (main.go:5), other (main.go:9)
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
 
 The note lists every caller, not only the ones ripwire proves incompatible: in a live check on Go, ripwire reported `incompatible="0"` while both callers still passed one argument (measured with ripwire on 2.1.278).
 
@@ -41,13 +46,13 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=contract-watch}, tool.call{tool=Edit}
-    ❯ ./register.ts calls: $.command.register, $.process.run (via checkOne, locate), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via report)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via checkOne, locate), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via checkOne, report)
 
 Reach L2, runs processes.
 
     1. Reads:    the old and new text of each Edit; through ripwire, the repository's source and git HEAD
     2. Runs:     git rev-parse and ripwire --edit-check, read-only, by argv, only after an edit that changed a signature
-    3. Sends:    a note to the model after the Edit's result; nothing leaves the machine
+    3. Sends:    a note to the model after the Edit's result, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: a function name comes from the edited text and reaches ripwire as one argv item, never through a shell
 

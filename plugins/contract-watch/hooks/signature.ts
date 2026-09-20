@@ -78,10 +78,27 @@ function paramsText(c: Check): string {
   return `changed from ${c.paramsWas} to ${c.paramsNow} parameter(s)`
 }
 
+function namedCallers(c: Check): string {
+  const named = c.callers.slice(0, MAX_CALLERS).map(x => `${x.name} (${x.at})`).join(', ')
+  return c.callers.length > MAX_CALLERS ? `${named} and ${c.callers.length - MAX_CALLERS} more` : named
+}
+
+/** Whether this check has something to report: a changed contract that something calls. */
+function isReported(c: Check): boolean {
+  return c.status === 'contract-change' && c.callers.length > 0
+}
+
 /** The note for one changed contract, or undefined when nothing calls it. */
 export function noteText(c: Check): string | undefined {
-  if (c.status !== 'contract-change' || c.callers.length === 0) return undefined
-  const named = c.callers.slice(0, MAX_CALLERS).map(x => `${x.name} (${x.at})`).join(', ')
-  const rest = c.callers.length > MAX_CALLERS ? ` and ${c.callers.length - MAX_CALLERS} more` : ''
-  return `contract-watch: ${c.sym} ${paramsText(c)} since the last commit; check each caller: ${named}${rest}.`
+  if (!isReported(c)) return undefined
+  return `contract-watch: ${c.sym} ${paramsText(c)} since the last commit; check each caller: ${namedCallers(c)}.`
+}
+
+/**
+ * The transcript line for one changed contract: the finding alone, without the instruction the model
+ * reads, or undefined when nothing calls it. The engine adds the mod name.
+ */
+export function logText(c: Check): string | undefined {
+  if (!isReported(c)) return undefined
+  return `${c.sym} ${paramsText(c)}; callers: ${namedCallers(c)}`
 }
