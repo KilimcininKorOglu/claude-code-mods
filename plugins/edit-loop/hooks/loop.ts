@@ -30,3 +30,8 @@ export function noteText(path: string): string {
 export function logText(path: string): string {
   return `${THRESHOLD}th edit of ${path} in this turn`
 }
+
+/** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
+export function sectionKey(text: string): string {
+  return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}

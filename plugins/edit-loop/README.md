@@ -16,6 +16,7 @@ A Claude Code Mod that tells the model when it has edited the same file five tim
        edit-loop: 5th edit of hooks/a.ts in this turn
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
+5. While the [sidebar](../sidebar) is open, that line goes there instead, as a section of its own per file, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 In the live check the model edited one file six times in one turn. It read the note after the fifth edit, re-read the file, stated why the edits were intended, and quoted the note word for word. The other five edits had no note.
 
@@ -42,7 +43,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=edit-loop}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}
-    ❯ ./register.ts calls: $.command.register, $.session.cwd (via afterEdit), $.store.get, $.store.set (via runCommand), $.ui.log (via afterEdit)
+    ❯ ./register.ts calls: $.command.register, $.session.cwd (via afterEdit), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via toPerson)
 
 Reach L0, remembers.
 

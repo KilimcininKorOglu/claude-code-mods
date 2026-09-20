@@ -1,7 +1,7 @@
-import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { countEdit, shownPath, THRESHOLD } from '../hooks/loop.ts'
+import { countEdit, sectionKey, shownPath, THRESHOLD } from '../hooks/loop.ts'
 
 tier('user')
 
@@ -31,6 +31,27 @@ function world(on: On): World {
   return w
 }
 
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; title: string; lines: string[]; until: string }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; title: string; lines: { text: string }[]; until: string }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text), until: s.until })
+    return { value: bar.open }
+  })
+}
+
 async function started($: Engine): Promise<void> {
   await $.session.start({ surface: null, isInteractive: true, cwd: ROOT })
   await $.turn.start({ text: 'go', turnId: 't1' } as never)
@@ -48,6 +69,12 @@ describe('loop', () => {
     expect(countEdit(counts, 'agent-1', '/a')).toBe(false)
     expect(shownPath('/Users/u/app/src/x.ts', '/Users/u/app/')).toBe('src/x.ts')
     expect(shownPath('/tmp/x.ts', '/Users/u/app')).toBe('/tmp/x.ts')
+  })
+
+  test('a section key keeps the letters the sidebar takes', () => {
+    expect(sectionKey('hooks/a.ts')).toBe('hooks-a.ts')
+    expect(sectionKey('')).toBe('note')
+    expect(sectionKey('x'.repeat(80))).toHaveLength(64)
   })
 })
 
@@ -75,6 +102,24 @@ describe('edit-loop', () => {
     await $.turn.start({ text: 'again', turnId: 't2' } as never)
     for (let i = 0; i < 4; i++) expect((await $.tool.call({ tool: 'NotebookEdit', notebook_path: `${ROOT}/n.ipynb`, new_source: 'x' } as never)).context).toBe(undefined)
     expect((await $.tool.call({ tool: 'NotebookEdit', notebook_path: `${ROOT}/n.ipynb`, new_source: 'x' } as never)).context?.[0]).toContain('edited n.ipynb 5 times')
+  })
+
+  withSidebar('an open sidebar takes the finding and the transcript stays clean', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    await started($)
+    for (let i = 0; i < 5; i++) await edit($)
+    expect(bar.sections).toEqual([{ key: 'hooks-a.ts', title: 'edit loop', lines: ['5th edit of hooks/a.ts in this turn'], until: 'turn' }])
+    expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a closed sidebar leaves the transcript line as it was', async ($, on) => {
+    const w = world(on)
+    seatSidebar(on, { open: false, sections: [] })
+    await started($)
+    for (let i = 0; i < 5; i++) await edit($)
+    expect(w.logs).toEqual(['5th edit of hooks/a.ts in this turn'])
   })
 
   test('a subagent counts apart from the main loop, and off counts nothing', async ($, on) => {
