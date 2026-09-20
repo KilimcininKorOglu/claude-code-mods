@@ -1,7 +1,10 @@
 /** Which commands commit, which manifests pair with which lockfiles, and whether a manifest diff touches dependencies. */
 
+/** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
+const GIT_FLAG = String.raw`(?:\s+-[cC]\s+\S+|\s+--(?:git-dir|work-tree|namespace)=\S+|\s+--(?:no-pager|no-replace-objects|bare|literal-pathspecs|paginate))`
+
 /** A `git commit` the model runs, not one it only asks about. */
-const COMMIT = /(^|[\s;&|(])git(\s+-C\s+\S+)*\s+commit\b/
+const COMMIT = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+commit\b`)
 const NOT_A_COMMIT = /\s(--dry-run|--help|-h)(\s|$)/
 
 export function isCommit(command: string): boolean {

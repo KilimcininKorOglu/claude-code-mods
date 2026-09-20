@@ -70,6 +70,8 @@ describe('env reads', () => {
 describe('commits', () => {
   test('knows a commit and its directory', () => {
     expect(isCommit('git add a.ts && git commit -m x')).toBe(true)
+    expect(isCommit('git -c user.email=k@x -c user.name=d commit -m x')).toBe(true)
+    expect(commitDir('cd sub && git -c user.name=d -C deep commit -m x', '/src/app')).toBe('/src/app/sub/deep')
     expect(isCommit('git commit --dry-run')).toBe(false)
     expect(isCommit('git log')).toBe(false)
     expect(commitDir('cd sub && git -C inner commit -m x', '/r')).toBe('/r/sub/inner')

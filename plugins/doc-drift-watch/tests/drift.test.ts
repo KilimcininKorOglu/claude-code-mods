@@ -14,7 +14,7 @@ const OUTPUT = [
 
 describe('drift', () => {
   test('knows a commit from a command that only asks about one', async () => {
-    for (const c of ['git commit -m x', 'cd a && git add b.ts && git commit -m "y"', 'git -C sub commit -am z']) expect(isCommit(c), c).toBe(true)
+    for (const c of ['git commit -m x', 'cd a && git add b.ts && git commit -m "y"', 'git -C sub commit -am z', 'git -c user.email=k@x commit -m w']) expect(isCommit(c), c).toBe(true)
     for (const c of ['git commit --dry-run', 'git commit --help', 'git log --grep commit', 'echo git-commit']) expect(isCommit(c), c).toBe(false)
   })
 
