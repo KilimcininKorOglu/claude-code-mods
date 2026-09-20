@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { changedSignatures, noteText, parseCheck, signaturesIn } from '../hooks/signature.ts'
+import { blockingLine, changedSignatures, denyText, isBlocking, isGuarded, modeOf, noteText, parseCheck, signaturesIn } from '../hooks/signature.ts'
 
 tier('user')
 
@@ -42,17 +42,32 @@ const OUTPUT = '<!-- legend -->\n<edit-check sym="parse" t="fn" p="main.go:3" st
 describe('edit-check', () => {
   test('reads the output and names every caller of a changed contract', async () => {
     const check = parseCheck(OUTPUT)
-    expect(check).toEqual({ sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, callers: [{ name: 'main', at: 'main.go:5' }, { name: 'other', at: 'main.go:9' }] })
+    expect(check).toEqual({ sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 0, callers: [{ name: 'main', at: 'main.go:5' }, { name: 'other', at: 'main.go:9' }] })
     if (check === undefined) throw new Error('parsed')
     expect(noteText(check)).toBe('contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; check each caller: main (main.go:5), other (main.go:9).')
   })
 
   test('says nothing for an unchanged contract, no callers, or no edit-check element', async () => {
-    expect(noteText({ sym: 'a', status: 'unchanged', callers: [{ name: 'b', at: 'x:1' }] })).toBe(undefined)
-    expect(noteText({ sym: 'a', status: 'contract-change', callers: [] })).toBe(undefined)
+    expect(noteText({ sym: 'a', status: 'unchanged', incompatible: 0, callers: [{ name: 'b', at: 'x:1' }] })).toBe(undefined)
+    expect(noteText({ sym: 'a', status: 'contract-change', incompatible: 0, callers: [] })).toBe(undefined)
     expect(parseCheck('ripwire: no symbol a')).toBe(undefined)
-    const many = { sym: 'a', status: 'contract-change', paramsWas: 2, paramsNow: 2, callers: Array.from({ length: 12 }, (_, i) => ({ name: `c${i}`, at: `f:${i}` })) }
+    const many = { sym: 'a', status: 'contract-change', paramsWas: 2, paramsNow: 2, incompatible: 0, callers: Array.from({ length: 12 }, (_, i) => ({ name: `c${i}`, at: `f:${i}` })) }
     expect(noteText(many)).toContain('changed its parameters since the last commit')
     expect(noteText(many)).toContain('c9 (f:9) and 2 more.')
+  })
+
+  test('the gate stops only a check ripwire calls incompatible, and says why', () => {
+    const blocking = { sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 1, callers: [{ name: 'main', at: 'main.go:5' }] }
+    expect(isBlocking(blocking)).toBe(true)
+    expect(isBlocking({ ...blocking, incompatible: 0 })).toBe(false)
+    expect(isBlocking({ ...blocking, status: 'unchanged' })).toBe(false)
+    expect(blockingLine(blocking)).toBe('parse changed from 1 to 2 parameter(s), 1 caller(s) do not match')
+    for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
+    for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('deny')).toBe('deny')
+    expect(modeOf('x')).toBe(undefined)
+    expect(denyText([blockingLine(blocking)])).toBe(
+      'stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate, and only the person turns it off with /contract-watch mode note.',
+    )
   })
 })

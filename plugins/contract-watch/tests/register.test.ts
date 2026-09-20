@@ -42,9 +42,13 @@ function world(on: On): World {
     if (e.argv[0] === 'git') return { value: { exitCode: 0, stdout: '/src/app\ncmd/\n', stderr: '' } }
     return { value: w.ripwire }
   })
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'edited' }) as never)
   return w
 }
+
+/** The same check with callers ripwire calls incompatible, which is what the gate stops for. */
+const BLOCKING = '<edit-check sym="parse" status="contract-change" params_was="1" params_now="2" incompatible="1"><c n="main" p="cmd/main.go:5"/></edit-check>'
 
 const edit = (before: string, after: string) => ({ tool: 'Edit' as const, file_path: '/src/app/cmd/parse.go', old_string: before, new_string: after, replace_all: false })
 
@@ -75,7 +79,23 @@ describe('contract-watch', () => {
     expect((await $.command.run(run('off'))).text).toBe('off: signatures are not checked')
     await $.tool.call(edit('func parse(a int) {', 'func parse(b int) {'))
     expect(w.argv).toEqual([])
-    expect((await $.command.run(run(''))).text).toBe('off; it needs ripwire on PATH')
+    expect((await $.command.run(run(''))).text).toBe('off · mode note · no signature is open; it needs ripwire on PATH')
+  })
+
+  test('in deny mode a commit stops while a caller does not match, and runs once ripwire says it does', async ($, on) => {
+    const w = world(on)
+    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a caller does not match a changed signature')
+    const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
+    expect(denied.deny).toBe('stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate, and only the person turns it off with /contract-watch mode note.')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 signature(s) leave a caller behind; it needs ripwire on PATH')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git status' } as never)).result).toBe('ok')
+    // The caller takes the new signature now: ripwire says so and the gate opens.
+    w.ripwire = { exitCode: 0, stdout: CHECK, stderr: '' }
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('every caller matches parse again')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
   test('a ripwire failure is logged once and the edit result stays', async ($, on) => {
@@ -85,6 +105,6 @@ describe('contract-watch', () => {
     await $.tool.call(edit('func parse(a int) {', 'func parse(b int) {'))
     expect(r).toEqual({ result: 'edited' })
     expect(w.logs).toEqual(['the callers were not checked: ripwire --edit-check failed: ripwire: command not found'])
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
   })
 })

@@ -1,12 +1,16 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedSignatures, logText, noteText, parseCheck, sectionKey, sidebarLines, type Check } from './signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, logText, modeOf, noteText, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
+const MODE_KEY = 'mode'
 
-const USAGE = 'expects nothing (the status), on or off'
+const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
-/** The last error logged, so the same one is logged once. */
-type State = { lastError?: string }
+/** One symbol whose callers do not match it: where it lives, so the gate can measure it again. */
+type Open = { root: string; rel: string; sym: string }
+
+/** The last error logged, so the same one is logged once, the mode, and the symbols the gate holds. */
+type State = { lastError?: string; mode: Mode; open: Map<string, Open> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -33,9 +37,9 @@ async function locate($: EngineInterface, file: string): Promise<{ root: string;
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, check: Check, line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'dim' }[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(check.sym), title: 'changed signatures', lines: sidebarLines(check), until: 'stream' })
+    const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(key), title, lines, until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
@@ -43,27 +47,58 @@ async function toPerson($: EngineInterface, check: Check, line: string): Promise
   $.ui.log(line)
 }
 
-/** Asks ripwire about one changed function and answers the note, if its callers need a look. */
-async function checkOne($: EngineInterface, root: string, rel: string, name: string): Promise<string | undefined> {
-  const r = await $.process.run(['ripwire', root, `--edit-check=${rel}:${name}`], { cwd: root, timeoutMs: 20_000 })
+/** Drops the sidebar entries of one finding, so a signature whose callers caught up leaves no warning behind. */
+async function dropEntry($: EngineInterface, key: string): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'contract-watch', key: sectionKey(key) })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+}
+
+/** Asks ripwire about one symbol; undefined when its output has no edit-check element. */
+async function askRipwire($: EngineInterface, root: string, rel: string, sym: string): Promise<Check | undefined> {
+  const r = await $.process.run(['ripwire', root, `--edit-check=${rel}:${sym}`], { cwd: root, timeoutMs: 20_000 })
   if (r.exitCode !== 0) throw new Error(`ripwire --edit-check failed: ${(r.stderr || r.stdout).trim().slice(0, 200)}`)
-  const check = parseCheck(r.stdout)
+  return parseCheck(r.stdout)
+}
+
+/** Asks ripwire about one changed function and answers the note, if its callers need a look. */
+async function checkOne($: EngineInterface, state: State, place: { root: string; rel: string }, name: string): Promise<string | undefined> {
+  const check = await askRipwire($, place.root, place.rel, name)
   if (check === undefined) return undefined
+  if (isBlocking(check)) state.open.set(`${place.rel}:${check.sym}`, { root: place.root, rel: place.rel, sym: check.sym })
   // The note goes to the model, the line to the person: neither reads the other's channel.
   const line = logText(check)
-  if (line !== undefined) await toPerson($, check, line)
+  if (line !== undefined) await toPerson($, check.sym, 'changed signatures', sidebarLines(check), line)
   return noteText(check)
 }
 
-async function notesFor($: EngineInterface, file: string, names: readonly string[]): Promise<string[]> {
+async function notesFor($: EngineInterface, state: State, file: string, names: readonly string[]): Promise<string[]> {
   const place = await locate($, file)
   if (place === undefined) return []
   const notes: string[] = []
   for (const name of names) {
-    const note = await checkOne($, place.root, place.rel, name)
+    const note = await checkOne($, state, place, name)
     if (note !== undefined) notes.push(note)
   }
   return notes
+}
+
+/** Asks ripwire about each open symbol again and closes the ones whose callers caught up. */
+async function recheckOpen($: EngineInterface, state: State): Promise<string[]> {
+  const lines: string[] = []
+  for (const [key, held] of [...state.open]) {
+    const check = await askRipwire($, held.root, held.rel, held.sym)
+    if (check !== undefined && isBlocking(check)) {
+      lines.push(blockingLine(check))
+      continue
+    }
+    state.open.delete(key)
+    await dropEntry($, held.sym)
+    await toPerson($, held.sym, 'callers caught up', doneLines(held.sym), doneLog(held.sym))
+  }
+  return lines
 }
 
 /** Logs an error once until a different one comes. */
@@ -78,26 +113,61 @@ function withNotes(r: ToolCallResult, notes: readonly string[]): ToolCallResult 
   return { ...r, context: [...(r.context ?? []), ...notes] }
 }
 
-async function runCommand($: EngineInterface, args: string): Promise<string> {
+/**
+ * The gate of the `deny` mode: it asks ripwire about each open symbol again, so a caller the model
+ * brought to the new signature opens the gate itself. A symbol a caller still misses stops the command.
+ */
+async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
+  if (state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
+  const lines = await recheckOpen($, state)
+  return lines.length === 0 ? undefined : denyText(lines)
+}
+
+async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
+  const mode = modeOf(word)
+  if (mode === undefined) return 'mode expects note or deny'
+  await $.store.set(MODE_KEY, mode)
+  state.mode = mode
+  return mode === 'deny' ? 'mode deny: git commit, push and merge stop while a caller does not match a changed signature' : 'mode note: the callers are only reported'
+}
+
+async function statusText($: EngineInterface, state: State): Promise<string> {
+  const open = state.open.size === 0 ? 'no signature is open' : `${state.open.size} signature(s) leave a caller behind`
+  return `${(await isEnabled($)) ? 'on' : 'off'} · mode ${state.mode} · ${open}; it needs ripwire on PATH`
+}
+
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     return word === 'on' ? 'on: a changed signature brings its callers to the model' : 'off: signatures are not checked'
   }
-  return word === '' ? `${(await isEnabled($)) ? 'on' : 'off'}; it needs ripwire on PATH` : USAGE
+  if (word.startsWith('mode')) return setMode($, state, word.slice(4).trim())
+  return word === '' ? statusText($, state) : USAGE
 }
 
 export const register: Register = on => {
-  const state: State = {}
+  const state: State = { mode: 'note', open: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'contract-watch', description: 'Callers of a changed signature: status, on, off (contract-watch)', argumentHint: '[on | off]' })
+    await $.command.register({ name: 'contract-watch', description: 'Callers of a changed signature: status, on, off, mode (contract-watch)', argumentHint: '[on | off | mode note | deny]' })
+    state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
     return r
   })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
-  on('command.run', { command: 'contract-watch' }, async ($, e) => ({ text: await runCommand($, String(e.args ?? '')) }))
+  on('command.run', { command: 'contract-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    try {
+      const stop = await gate($, state, e.command)
+      if (stop !== undefined) return { deny: stop }
+    } catch (err) {
+      report($, state, err)
+    }
+    return next(e)
+  })
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
     const r = await next(e)
@@ -105,7 +175,7 @@ export const register: Register = on => {
     const names = changedSignatures(e.old_string, e.new_string)
     if (names.length === 0) return r
     try {
-      const notes = await notesFor($, e.file_path, names)
+      const notes = await notesFor($, state, e.file_path, names)
       state.lastError = undefined
       return withNotes(r, notes)
     } catch (err) {
