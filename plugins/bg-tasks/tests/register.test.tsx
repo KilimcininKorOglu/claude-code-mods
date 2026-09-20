@@ -57,12 +57,12 @@ const SIDEBAR: Plugin = {
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
 /** The sections the sidebar took, and the clears it saw; `open` says whether it takes them at all. */
-type Bar = { open: boolean; sections: { title: string; lines: string[]; buttons: string[] }[]; clears: number }
+type Bar = { open: boolean; sections: { title: string; lines: { text: string; kind?: string }[]; buttons: string[] }[]; clears: number }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const section = e as unknown as { title: string; lines: { text: string }[]; buttons: { args: string }[] }
-    if (bar.open) bar.sections.push({ title: section.title, lines: section.lines.map(l => l.text), buttons: section.buttons.map(b => b.args) })
+    const section = e as unknown as { title: string; lines: { text: string; kind?: string }[]; buttons?: { args: string }[] }
+    if (bar.open) bar.sections.push({ title: section.title, lines: section.lines, buttons: (section.buttons ?? []).map(b => b.args) })
     return { value: bar.open }
   })
   on('sidebar.clear', () => { bar.clears += 1; return { value: undefined } })
@@ -150,10 +150,21 @@ describe('bg-tasks', () => {
     seatSidebar(on, bar)
     await started($)
     await background($, 'npm run dev')
-    expect(bar.sections.at(-1)).toEqual({ title: '1 running', lines: ['   <1m  model  npm run dev'], buttons: ['stop b1'] })
+    expect(bar.sections.at(-1)).toEqual({ title: '1 running', lines: [{ text: '   <1m  model  npm run dev' }], buttons: ['stop b1'] })
     expect(w.statuses.at(-1)).toBe(undefined)
     await $.tool.call({ tool: 'TaskStop', task_id: 'b1' } as never)
     expect(bar.clears).toBe(1)
+  })
+
+  withSidebar('a task that ends by itself writes a green entry into the stream', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], clears: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    await background($, 'sleep 600')
+    await w.clock.advance(12 * MINUTE)
+    await $.prompt.submit({ text: notification('b1', 'completed'), origin: { kind: 'task-notification' } } as never)
+    expect(bar.sections.at(-1)).toEqual({ title: 'task finished', lines: [{ text: 'sleep 600 · finished after 12m', kind: 'ok' }], buttons: [] })
   })
 
   withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {

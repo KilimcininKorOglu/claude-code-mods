@@ -65,6 +65,16 @@ export function sidebarButtons(tasks: readonly Task[]): { label: string; command
   return byAge(tasks).map(t => ({ label: `stop ${t.label}`, command: 'bg-tasks', args: `stop ${t.id}` }))
 }
 
+/** The stream entry of a task that ended by itself: what it ran and how long it took. */
+export function doneText(task: Task, now: number): string {
+  return `${task.label} · finished after ${durationText(now - task.startedAt)}`
+}
+
+/** A sidebar section key: the task id cut to what the sidebar takes, so each task keeps its own entry. */
+export function sectionKey(id: string): string {
+  return `done-${id.replace(/[^A-Za-z0-9._:-]+/g, '-')}`.slice(0, 64)
+}
+
 export function listText(tasks: readonly Task[], now: number): string {
   if (tasks.length === 0) return 'no background shell task is running'
   return byAge(tasks).map(t => `${t.id}  ${rowText(t, now)}`).join('\n')

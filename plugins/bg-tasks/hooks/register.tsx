@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { byAge, endedIds, labelOf, listText, rowText, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
+import { byAge, doneText, endedIds, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -40,6 +40,24 @@ async function toSidebar($: EngineInterface, tasks: Task[], now: number): Promis
     })
   } catch {
     return false
+  }
+}
+
+/**
+ * A task that ended by itself, as a green entry in the sidebar's stream. The engine's own task
+ * notification already tells the person, so a closed sidebar gets no second line here.
+ */
+async function toFinished($: EngineInterface, task: Task, now: number): Promise<void> {
+  try {
+    await $.sidebar.set({
+      consumer: 'bg-tasks',
+      key: sectionKey(task.id),
+      title: 'task finished',
+      lines: [{ text: doneText(task, now), kind: 'ok' }],
+      until: 'stream',
+    })
+  } catch {
+    // The sidebar mod is not installed.
   }
 }
 
@@ -160,8 +178,17 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', { origin: { kind: 'task-notification' } }, async ($, e, next) => {
-    const ended = endedIds(e.text).filter(id => state.tasks.delete(id))
-    if (ended.length > 0) await changed($, state)
+    const ended = endedIds(e.text).flatMap(id => {
+      const task = state.tasks.get(id)
+      return task === undefined ? [] : [task]
+    })
+    if (ended.length === 0) return next(e)
+    const now = await $.clock.now()
+    for (const task of ended) {
+      state.tasks.delete(task.id)
+      await toFinished($, task, now)
+    }
+    await changed($, state)
     return next(e)
   })
 

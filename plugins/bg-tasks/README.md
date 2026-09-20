@@ -24,6 +24,13 @@ A Claude Code Mod that shows the background shell tasks of the session on the st
 
 5. While the [sidebar](../sidebar) is open, the list goes there instead: one section with the same rows and a `[ stop ... ]` button per task, and the status line stays empty. A press runs `/bg-tasks stop <id>`, which stops that task the same way. With the sidebar closed, or without that mod installed, everything is as above.
 
+6. A task that ends by itself also writes one green entry into the sidebar's stream, so the pane keeps what finished while the list above it holds only what still runs:
+
+       bg-tasks: task finished
+       sleep 600 · finished after 12m
+
+   A task you stopped writes no such entry; the pane already says `stopped: <task>`. With the sidebar closed nothing is written, because the engine's own task notification already reports the end.
+
 In the live check the model started `sleep 900` in the background. The status line showed `1 running · oldest <1m (sleep 900)`. A press on its row in the pane stopped the process, and the status line and the engine's `1 shell` footer went away.
 
 ## Command
@@ -53,7 +60,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=bg-tasks}, tool.call{tool=Bash}, tool.call{tool=TaskStop}, prompt.submit{origin has {kind=task-notification}}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.sidebar.clear (via offSidebar), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand), $.tool.call (via stopTask), $.ui.close (via togglePane), $.ui.invalidate (via changed), $.ui.open (via togglePane), $.ui.panes (via togglePane), $.ui.resolve, $.ui.status (via showStatus)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.sidebar.clear (via offSidebar), $.sidebar.set (via toFinished, toSidebar), $.store.get, $.store.set (via runCommand), $.tool.call (via stopTask), $.ui.close (via togglePane), $.ui.invalidate (via changed), $.ui.open (via togglePane), $.ui.panes (via togglePane), $.ui.resolve, $.ui.status (via showStatus)
 
 Reach L2, calls a tool.
 
