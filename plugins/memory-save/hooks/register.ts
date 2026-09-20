@@ -115,14 +115,17 @@ async function writeTopics($: EngineInterface, project: string, dir: string, top
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'memory-save', key: 'save' }
 
+/** How the sidebar colours the line: green for a written save, yellow for a part it left out, red for an error. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+
 /**
  * The save's state, on the shared sidebar while it is open, else on the status line, as before.
  * A sidebar mod that is not installed answers the same as a closed one.
  */
-async function report($: EngineInterface, text: string): Promise<void> {
+async function report($: EngineInterface, text: string, kind: Tone = 'dim'): Promise<void> {
   const line = `${text} · ${clockText(await $.clock.now())}`
   try {
-    if (await $.sidebar.set({ ...SECTION, title: 'MEMORY.md', lines: [{ text: line }], until: 'session', order: 20 })) {
+    if (await $.sidebar.set({ ...SECTION, title: 'MEMORY.md', lines: [{ text: line, kind }], until: 'session', order: 20 })) {
       $.ui.status(undefined)
       return
     }
@@ -168,7 +171,7 @@ async function reportNoChange($: EngineInterface, skipped: string[], refused: st
   const parts = [skipped.length > 0 ? skippedText(skipped) : '', refused.length > 0 ? `refused: ${refused.join('; ')}` : ''].filter(p => p !== '')
   if (parts.length > 0) $.ui.log(`MEMORY.md: no change; ${parts.join('; ')}`)
   const counts = [skipped.length > 0 ? `${skipped.length} skipped` : '', refused.length > 0 ? `${refused.length} refused` : ''].filter(p => p !== '')
-  return report($, counts.length > 0 ? `no change, ${counts.join(', ')}` : 'no change')
+  return counts.length > 0 ? report($, `no change, ${counts.join(', ')}`, 'warn') : report($, 'no change')
 }
 
 /** Asks the fork what to remember, then writes MEMORY.md and its topic files. */
@@ -193,7 +196,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
   await writeTopics($, project, dir, result.topics)
   await $.fs.write(file, result.text)
   $.ui.log(changeText(result.changes, result.topics))
-  await report($, changeShort(result.changes, result.topics))
+  await report($, changeShort(result.changes, result.topics), result.changes.refused.length + result.changes.skipped.length > 0 ? 'warn' : 'ok')
 }
 
 /** Returns the session's memory context, or undefined when the project has no MEMORY.md. */
@@ -212,7 +215,7 @@ async function withMemory<R extends { additionalContext?: string[] }>($: EngineI
     const text = await memoryContext($, state)
     return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
   } catch (err) {
-    await report($, `error: memory not loaded: ${message(err)}`)
+    await report($, `error: memory not loaded: ${message(err)}`, 'error')
     return r
   }
 }
@@ -229,7 +232,7 @@ async function drain($: EngineInterface, state: State): Promise<void> {
       state.pending = false
       // The fork runs in the background; the line says so until the result replaces it.
       await report($, 'saving…')
-      await save($, state).catch((err: unknown) => report($, `error: ${message(err)}`))
+      await save($, state).catch((err: unknown) => report($, `error: ${message(err)}`, 'error'))
     } while (state.pending)
   } finally {
     state.running = false

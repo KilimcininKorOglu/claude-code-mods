@@ -41,7 +41,7 @@ The project name is the primary repository name, also inside a git worktree, els
     memory-save: +2 1 refused · 14:32
     memory-save: error: reply has no JSON object · 14:32
 
-While the [sidebar](../sidebar) is open, that state goes there instead, as a `MEMORY.md` section that stays for the session and is rewritten at each save, and the status line stays clear. With the sidebar closed, or without that mod installed, the status line is drawn as above.
+While the [sidebar](../sidebar) is open, that state goes there instead, as a `MEMORY.md` section that stays for the session and is rewritten at each save, and the status line stays clear. There the line is coloured: a written save green, a save that skipped or refused a part yellow, an error red, and `saving…` or `no change` faint. With the sidebar closed, or without that mod installed, the status line is drawn as above, in the engine's own colour.
 
 **One line in the transcript** when a save changed a file. The line is not sent to the model:
 
