@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { changedFiles, isManifest, lockCandidates, noteText, touchesDependencies } from '../hooks/pairs.ts'
+import { changedFiles, denyText, isGuarded, isManifest, lockCandidates, modeOf, noteText, touchesDependencies } from '../hooks/pairs.ts'
 
 tier('user')
 
@@ -42,6 +42,16 @@ describe('pairs', () => {
   test('the note names each manifest and its lockfile', () => {
     expect(noteText([{ manifest: 'package.json', lock: 'package-lock.json' }, { manifest: 'go.mod', lock: 'go.sum' }])).toBe(
       "lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum. Run the package manager's install so the lockfile matches, and commit it.",
+    )
+  })
+
+  test('the gate stops a commit, a push and a merge, and says why', () => {
+    for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
+    for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('note')).toBe('note')
+    expect(modeOf('')).toBe(undefined)
+    expect(denyText([{ manifest: 'package.json', lock: 'package-lock.json' }])).toBe(
+      'stopped: 1 lockfile(s) are behind their manifest: package-lock.json behind package.json. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate, and only the person turns it off with /lockfile-sync mode note.',
     )
   })
 })

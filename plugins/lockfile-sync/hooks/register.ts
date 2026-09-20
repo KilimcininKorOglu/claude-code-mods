@@ -1,18 +1,20 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, doneLines, doneLog, isCommit, isManifest, lockCandidates, logText, noteText, sectionKey, sidebarLines, touchesDependencies, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, denyText, doneLines, doneLog, isCommit, isGuarded, isManifest, lockCandidates, logText, modeOf, noteText, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
+const MODE_KEY = 'mode'
 
-const USAGE = 'expects nothing (the status), on or off'
+const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /** A finding still open: the sidebar key it was written under, and the pairs it named. */
 type Open = { key: string; stale: Stale[] }
 
 /**
- * The on/off setting read at session start, and the last error logged, so the same one is logged once.
- * `open` holds the last finding, so a later commit that brings its lockfiles along closes it.
+ * The on/off setting read at session start, the mode, and the last error logged, so the same one is
+ * logged once. `open` holds the last finding, so a later commit that brings its lockfiles along closes
+ * it, and in `deny` mode it also holds the gate shut.
  */
-type State = { enabled: boolean; lastError?: string; open?: Open }
+type State = { enabled: boolean; mode: Mode; lastError?: string; open?: Open }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -129,23 +131,66 @@ async function afterCommit($: EngineInterface, state: State, before: Before, r: 
   }
 }
 
+/** The lockfiles of the open finding that the working tree has changed since the commit that left them out. */
+async function caughtUp($: EngineInterface, root: string, stale: readonly Stale[]): Promise<Set<string>> {
+  const changed = new Set<string>()
+  for (const s of stale) {
+    const status = await git($, root, ['status', '--porcelain', '--', s.lock])
+    if (status.ok && status.out.trim() !== '') changed.add(s.lock)
+  }
+  return changed
+}
+
+/**
+ * The gate: in deny mode a commit, push or merge waits while a lockfile is still behind its manifest.
+ * The working tree is read again first, so a lockfile the model updated opens the gate itself.
+ */
+async function gate($: EngineInterface, state: State, command: string): Promise<{ deny: string } | undefined> {
+  const open = state.open
+  if (!state.enabled || state.mode !== 'deny' || open === undefined || !isGuarded(command)) return undefined
+  try {
+    const before = await beforeCommit($, state, command)
+    if (before === undefined) return undefined
+    await closeResolved($, state, await caughtUp($, before.root, open.stale))
+    return state.open === undefined ? undefined : { deny: denyText(state.open.stale) }
+  } catch (err) {
+    report($, state, err)
+    return undefined
+  }
+}
+
+async function setMode($: EngineInterface, state: State, arg: string): Promise<string> {
+  const mode = modeOf(arg)
+  if (mode === undefined) return 'mode expects note or deny'
+  await $.store.set(MODE_KEY, mode)
+  state.mode = mode
+  return mode === 'deny'
+    ? 'mode deny: git commit, push and merge stop while a lockfile is behind its manifest'
+    : 'mode note: nothing is stopped, the finding reaches the model as a note'
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  const [first = '', second = ''] = args.trim().split(/\s+/)
+  if (first === 'mode') return setMode($, state, second)
   const word = args.trim()
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     state.enabled = word === 'on'
     return word === 'on' ? 'on: each commit is checked for manifests whose lockfile it left out' : 'off: commits are not checked'
   }
-  return word === '' ? (state.enabled ? 'on' : 'off') : USAGE
+  if (word !== '') return USAGE
+  const open = state.open === undefined ? 'no lockfile is open' : `${state.open.stale.map(s => s.lock).join(' · ')} still behind`
+  return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true }
+  const state: State = { enabled: true, mode: 'note' }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'lockfile-sync', description: 'Manifests a commit changes without their lockfile: status, on, off (lockfile-sync)', argumentHint: '[on | off]' })
+    await $.command.register({ name: 'lockfile-sync', description: 'Manifests a commit changes without their lockfile: status, on, off, mode note | deny (lockfile-sync)', argumentHint: '[on | off | mode note | mode deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
     return r
   })
 
@@ -153,6 +198,8 @@ export const register: Register = on => {
   on('command.run', { command: 'lockfile-sync' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const stopped = await gate($, state, e.command)
+    if (stopped !== undefined) return stopped
     if (!state.enabled || !isCommit(e.command)) return next(e)
     const before = await beforeCommit($, state, e.command)
     const r = await next(e)

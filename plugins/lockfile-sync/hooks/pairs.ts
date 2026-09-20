@@ -11,6 +11,21 @@ export function isCommit(command: string): boolean {
   return COMMIT.test(command) && !NOT_A_COMMIT.test(command)
 }
 
+/** A `git commit`, `git push` or `git merge` the gate stops while a finding is open. */
+const GUARDED = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+(commit|push|merge)\b`)
+
+export function isGuarded(command: string): boolean {
+  return GUARDED.test(command) && !NOT_A_COMMIT.test(command)
+}
+
+/** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
+export type Mode = 'note' | 'deny'
+
+/** The mode a `/lockfile-sync mode <word>` argument names, or undefined when it is not one. */
+export function modeOf(arg: string): Mode | undefined {
+  return arg === 'note' || arg === 'deny' ? arg : undefined
+}
+
 const unquote = (word: string): string => word.replace(/^(["'])(.*)\1$/, '$2')
 
 const joinDir = (base: string, dir: string): string => (dir.startsWith('/') ? dir : `${base.replace(/\/+$/, '')}/${dir}`)
@@ -167,6 +182,12 @@ export function noteText(stale: readonly Stale[]): string {
 /** The transcript line: the pairs alone, without the instruction the model reads. The engine adds the mod name. */
 export function logText(stale: readonly Stale[]): string {
   return `this commit changes ${namedPairs(stale)}`
+}
+
+/** What the deny says: why the command stopped, and the one setting that turns the gate off. */
+export function denyText(stale: readonly Stale[]): string {
+  const pairs = stale.map(s => `${s.lock} behind ${s.manifest}`).join(' · ')
+  return `stopped: ${stale.length} lockfile(s) are behind their manifest: ${pairs}. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate, and only the person turns it off with /lockfile-sync mode note.`
 }
 
 /** One sidebar line per pair, so the section reads as a list. */

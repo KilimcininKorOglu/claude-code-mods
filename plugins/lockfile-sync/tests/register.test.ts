@@ -42,12 +42,12 @@ const DEP_DIFF = '@@ -1,5 +1,5 @@\n {\n   "dependencies": {\n-    "left-pad": "^
  * `head` moves to `next` when a commit runs; `names` is the commit's name-status; `files` are the paths on disk;
  * `showFails` makes git show fail; `notRepo` makes the directory no repository.
  */
-type World = { head: string; next: string; names: string; files: Set<string>; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean }
+type World = { head: string; next: string; names: string; files: Set<string>; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean; lockDirty: boolean }
 
 function world(on: On): World {
   const w: World = {
     head: 'aaa', next: 'bbb', names: 'M\tpackage.json\n', files: new Set([`${ROOT}/package-lock.json`]),
-    argv: [], logs: [], commitFails: false, showFails: false, notRepo: false,
+    argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false,
   }
   mock.store(on, {})
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -59,6 +59,7 @@ function world(on: On): World {
     const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } })
     if (cmd === 'git rev-parse --show-toplevel') return w.notRepo ? { value: { exitCode: 128, stdout: '', stderr: 'not a git repository' } } : ok(`${ROOT}\n`)
     if (cmd === 'git rev-parse HEAD') return ok(`${w.head}\n`)
+    if (cmd.startsWith('git status')) return ok(w.lockDirty ? ' M package-lock.json\n' : '')
     if (w.showFails) return { value: { exitCode: 128, stdout: '', stderr: 'bad' } }
     return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
   })
@@ -145,8 +146,24 @@ describe('lockfile-sync', () => {
     const before = w.argv.length
     await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
     expect(w.argv.length).toBe(before)
-    expect((await $.command.run(run(''))).text).toBe('off')
+    expect((await $.command.run(run(''))).text).toBe('off · mode note · no lockfile is open')
     expect(w.logs).toEqual([])
+  })
+
+  test('in deny mode a push stops while the lockfile is behind, and runs once the working tree has it', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a lockfile is behind its manifest')
+    const denied = await $.tool.call({ tool: 'Bash', command: 'git push' })
+    expect(denied.deny).toContain('stopped: 1 lockfile(s) are behind their manifest: package-lock.json behind package.json')
+    expect(denied.result).toBe(undefined)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git status' })).result).toBe('ok')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · package-lock.json still behind')
+    // The package manager wrote the lockfile: the gate reads the working tree and opens.
+    w.lockDirty = true
+    expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('a later commit brought the lockfiles along: package-lock.json')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
   test('a git error is logged once and the commit result stays', async ($, on) => {

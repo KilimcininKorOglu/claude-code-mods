@@ -50,14 +50,18 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: it committed the lockfile itself, so a note would only repeat what it just did.
 
+8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs `git status --porcelain` on each lockfile it named, so a lockfile the package manager just wrote opens the gate itself. There is no bypass; only the person turns the gate off with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
+
 A git error is logged once, and the commit's result stays as it was.
 
 In the live check the model raised a `package.json` dependency, committed only that file, and quoted the note word for word.
 
 ## Command
 
-    /lockfile-sync            on or off
-    /lockfile-sync on | off   on by default
+    /lockfile-sync                 on or off, the mode, and the lockfiles still behind
+    /lockfile-sync on | off        on by default
+    /lockfile-sync mode note       note only; the default
+    /lockfile-sync mode deny       a commit, a push and a merge also stop while a lockfile is behind
 
 ## Install
 
@@ -77,7 +81,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 
@@ -93,6 +97,8 @@ Reach L2, runs processes.
 - Two lockfiles of one manager in one directory (a `yarn.lock` beside a `package-lock.json`) pair with the first in the table.
 - A commit through a script or an alias that hides `git commit` is not seen. `cd ~/x` is not expanded.
 - A merge commit's combined diff is not read.
+- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/lockfile-sync mode note`.
+- The gate reads any change to the lockfile in the working tree as the fix; it does not check what that change holds.
 
 ## Development
 
