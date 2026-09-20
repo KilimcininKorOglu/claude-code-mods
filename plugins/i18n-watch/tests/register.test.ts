@@ -14,13 +14,19 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: string[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string }[] }
-    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    const s = e as unknown as { key: string; title: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text) })
     return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    const c = e as unknown as { key: string }
+    bar.cleared.push(c.key)
+    bar.sections = bar.sections.filter(s => s.key !== c.key)
+    return { value: undefined }
   })
 }
 
@@ -92,12 +98,43 @@ describe('i18n-watch', () => {
 
   withSidebar('an open sidebar takes the keys and the transcript stays clean', async ($, on) => {
     const w = world(on, LOCALES)
-    const bar: Bar = { open: true, sections: [] }
+    const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await started($)
     await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
-    expect(bar.sections).toEqual([{ key: '-Users-u-app-src-Cart.vue', lines: ['checkout.fee (missing in every locale)'] }])
+    expect(bar.sections).toEqual([{ key: '-Users-u-app-src-Cart.vue', title: 'missing translation keys', lines: ['checkout.fee (missing in every locale)'] }])
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a locale edit that adds every missing key clears the entry and writes a new one', async ($, on) => {
+    const w = world(on, LOCALES)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    await started($)
+    await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
+    for (const lang of ['en', 'tr', 'de']) w.files.set(`${ROOT}/locales/${lang}.json`, '{"checkout":{"fee":"Fee"}}')
+    await edit($, 'locales/de.json', '{}', '{"checkout":{"fee":"Fee"}}')
+    expect(bar.cleared).toEqual(['-Users-u-app-src-Cart.vue'])
+    expect(bar.sections).toEqual([{
+      key: '-Users-u-app-src-Cart.vue',
+      title: 'translation keys added',
+      lines: [`${ROOT}/src/Cart.vue`, 'checkout.fee'],
+    }])
+    expect(w.logs).toEqual([])
+  })
+
+  test('a finding stays open until the last missing key is added, then the person reads one line', async ($, on) => {
+    const w = world(on, LOCALES)
+    await started($)
+    await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }} {{ $t('checkout.vat') }}")
+    w.files.set(`${ROOT}/locales/de.json`, '{"checkout":{"vat":"MwSt"}}')
+    await edit($, 'locales/de.json', '{}', '{"checkout":{"vat":"MwSt"}}')
+    expect(w.logs).toHaveLength(1)
+    w.files.set(`${ROOT}/locales/de.json`, '{"checkout":{"vat":"MwSt","fee":"Gebühr"}}')
+    w.files.set(`${ROOT}/locales/en.json`, '{"checkout":{"total":"Total","vat":"VAT","fee":"Fee"}}')
+    w.files.set(`${ROOT}/locales/tr.json`, '{"checkout":{"total":"Toplam","vat":"KDV","fee":"Ücret"}}')
+    await edit($, 'locales/en.json', '{}', '{"checkout":{"fee":"Fee"}}')
+    expect(w.logs[1]).toBe(`every locale now has the keys ${ROOT}/src/Cart.vue lacked: checkout.fee · checkout.vat`)
   })
 
   test('reads Laravel, YAML and gettext trees, and Write checks the whole file', async ($, on) => {

@@ -28,6 +28,12 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those keys go there instead, one line per key, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
+7. A finding stays open until the keys are there. After each Edit or Write of a locale file the mod measures the keys it reported for each source file again. When a file lacks none of them any more, its sidebar entry is cleared and a new entry takes its place:
+
+       i18n-watch: every locale now has the keys src/Cart.vue lacked: checkout.total · checkout.vat
+
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this: it added the keys itself, so a note would only repeat what it just did.
+
 The locale files are read at the first edit of a turn that adds a key, and again after an Edit or Write of a locale file. A project without these directories gets nothing. A locale file that cannot be read or parsed is skipped and logged once per session.
 
 In the live check the model added `t('cart.total')` to a file of a project with `locales/en.json` and `locales/tr.json`, read the note after the Edit, and quoted it word for word.
@@ -55,7 +61,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf, toPerson)
 
 Reach L1, reads files.
 

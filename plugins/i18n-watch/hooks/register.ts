@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { isSource, newKeys } from './keys.ts'
-import { addFile, isLocalePath, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, sectionKey, sidebarLines, type Catalog } from './locale.ts'
+import { addFile, doneLines, doneLog, isLocalePath, openKeys, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, sectionKey, sidebarLines, type Catalog } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -18,8 +18,9 @@ const MAX_BYTES = 2_000_000
 /**
  * The catalog of the session directory's locale files, read at the first edit that uses a new key and
  * dropped at each turn and each edit of a locale file; `reported` makes a read error logged once.
+ * `open` holds the keys each reported file still lacks, so an edit that adds them closes the finding.
  */
-type State = { enabled: boolean; catalog?: Catalog; reported: boolean }
+type State = { enabled: boolean; catalog?: Catalog; reported: boolean; open: Map<string, string[]> }
 
 /** A locale file and the locale directory it was found under. */
 type Found = { root: string; path: string }
@@ -78,9 +79,9 @@ async function catalogOf($: EngineInterface, state: State): Promise<Catalog> {
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, lines: { text: string; kind: 'warn' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'warn' | 'ok' }[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'i18n-watch', key: sectionKey(key), title: 'missing translation keys', lines, until: 'stream' })
+    const taken = await $.sidebar.set({ consumer: 'i18n-watch', key: sectionKey(key), title, lines, until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
@@ -88,16 +89,42 @@ async function toPerson($: EngineInterface, key: string, lines: { text: string; 
   $.ui.log(line)
 }
 
+/** Drops the sidebar entries of one finding, so a key the locales gained leaves no warning behind. */
+async function dropEntry($: EngineInterface, key: string): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'i18n-watch', key: sectionKey(key) })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+}
+
+/** Measures every finding still open after an edit of a locale file, and reports the ones it closed. */
+async function closeResolved($: EngineInterface, state: State, r: ToolCallResult): Promise<ToolCallResult> {
+  if (!state.enabled || state.open.size === 0) return r
+  const catalog = await catalogOf($, state)
+  for (const [file, keys] of [...state.open]) {
+    if (missingKeys(catalog, keys).length > 0) continue
+    state.open.delete(file)
+    await dropEntry($, file)
+    await toPerson($, file, 'translation keys added', doneLines(file, keys), doneLog(file, keys))
+  }
+  return r
+}
+
 /** Adds the note to an edit that calls translation keys a locale lacks. */
 async function afterEdit($: EngineInterface, state: State, path: string, before: string, after: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
-  if (isLocalePath(path)) state.catalog = undefined
+  if (isLocalePath(path)) {
+    state.catalog = undefined
+    return closeResolved($, state, r)
+  }
   const keys = state.enabled && isSource(path) ? newKeys(before, after) : []
   if (keys.length === 0) return r
   const missing = missingKeys(await catalogOf($, state), keys)
   if (missing.length === 0) return r
+  state.open.set(path, openKeys(state.open.get(path), missing))
   // The note goes to the model, the line to the person: neither reads the other's channel.
-  await toPerson($, path, sidebarLines(missing), logText(missing))
+  await toPerson($, path, 'missing translation keys', sidebarLines(missing), logText(missing))
   return { ...r, context: [...(r.context ?? []), noteText(missing)] }
 }
 
@@ -112,7 +139,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, reported: false }
+  const state: State = { enabled: true, reported: false, open: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

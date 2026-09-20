@@ -162,6 +162,27 @@ export function sidebarLines(missing: Missing[]): { text: string; kind: 'warn' }
   return namedKeys(missing).split(' · ').map(text => ({ text, kind: 'warn' }))
 }
 
+/** The keys a file's finding holds open after a new report: the earlier ones and the new ones, each once. */
+export function openKeys(before: string[] | undefined, missing: Missing[]): string[] {
+  return [...new Set([...(before ?? []), ...missing.map(m => m.key)])]
+}
+
+function namedPlain(keys: string[]): string {
+  const named = keys.slice(0, MAX_NAMED)
+  if (keys.length > MAX_NAMED) named.push(`${keys.length - MAX_NAMED} more`)
+  return named.join(' · ')
+}
+
+/** The transcript line of a finding an edit of a locale file closed. */
+export function doneLog(file: string, keys: string[]): string {
+  return `every locale now has the keys ${file} lacked: ${namedPlain(keys)}`
+}
+
+/** The sidebar lines of a closed finding: the file, then the keys every locale now has. */
+export function doneLines(file: string, keys: string[]): { text: string; kind: 'ok' }[] {
+  return [{ text: file, kind: 'ok' }, ...namedPlain(keys).split(' · ').map(text => ({ text, kind: 'ok' as const }))]
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
