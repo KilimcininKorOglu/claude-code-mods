@@ -55,6 +55,7 @@ describe('env-sync', () => {
       'git rev-parse HEAD',
       'git show --format= --unified=0 --no-color --no-ext-diff HEAD',
     ])
+    expect(w.logs).toEqual(['env variables .env.example lacks: STRIPE_KEY (src/pay.ts:1)'])
   })
 
   test('the first commit of a repository is checked, and .env.sample is read when .env.example is missing', async ($, on) => {

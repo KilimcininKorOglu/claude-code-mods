@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, diffReads, isCommit, listedNames, noteText, REFERENCE_FILES } from './env.ts'
+import { commitDir, diffReads, isCommit, listedNames, logText, noteText, REFERENCE_FILES } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -56,7 +56,10 @@ async function commitNote($: EngineInterface, before: Before): Promise<string | 
   if (!diff.ok) throw new Error('git show HEAD failed')
   const listed = listedNames(await $.fs.read(`${before.root}/${reference}`))
   const missing = diffReads(diff.out).filter(r => !listed.has(r.name))
-  return missing.length === 0 ? undefined : noteText(missing, reference)
+  if (missing.length === 0) return undefined
+  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  $.ui.log(logText(missing, reference))
+  return noteText(missing, reference)
 }
 
 async function afterCommit($: EngineInterface, state: State, before: Before, r: ToolCallResult): Promise<ToolCallResult> {

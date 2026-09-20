@@ -25,6 +25,11 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
        env-sync: this commit reads env variables .env.example lacks: STRIPE_KEY (src/pay.ts:12) · REDIS_URL (app/cache.py:4). Add them to .env.example with a placeholder value, never a real secret.
 
    Each variable is named once, at its first added line. At most 10 are named, the rest counted.
+5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the variables alone, without the instruction:
+
+       env-sync: env variables .env.example lacks: STRIPE_KEY (src/pay.ts:12) · REDIS_URL (app/cache.py:4)
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -53,13 +58,13 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.store.get, $.store.set (via runCommand), $.ui.log (via report)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.store.get, $.store.set (via runCommand), $.ui.log (via commitNote, report)
 
 Reach L2, runs processes.
 
     1. Reads:    the Bash command text; the reference file at the repository root; through git, the commit's added lines
     2. Runs:     git rev-parse and git show, read-only, by argv, at most four times per commit
-    3. Sends:    a note to the model after the commit's result; nothing leaves the machine
+    3. Sends:    a note to the model after the commit's result, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; the note names variables, never a value from .env.example
 

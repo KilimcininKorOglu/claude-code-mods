@@ -98,8 +98,17 @@ export function listedNames(text: string): Set<string> {
 /** At most this many variables are named in the note, the rest counted. */
 const MAX_NAMED = 10
 
-export function noteText(missing: readonly EnvRead[], reference: string): string {
+function namedReads(missing: readonly EnvRead[]): string {
   const named = missing.slice(0, MAX_NAMED).map(r => `${r.name} (${r.file}:${r.line})`)
   if (missing.length > MAX_NAMED) named.push(`${missing.length - MAX_NAMED} more`)
-  return `env-sync: this commit reads env variables ${reference} lacks: ${named.join(' · ')}. Add them to ${reference} with a placeholder value, never a real secret.`
+  return named.join(' · ')
+}
+
+export function noteText(missing: readonly EnvRead[], reference: string): string {
+  return `env-sync: this commit reads env variables ${reference} lacks: ${namedReads(missing)}. Add them to ${reference} with a placeholder value, never a real secret.`
+}
+
+/** The transcript line: the variables alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(missing: readonly EnvRead[], reference: string): string {
+  return `env variables ${reference} lacks: ${namedReads(missing)}`
 }
