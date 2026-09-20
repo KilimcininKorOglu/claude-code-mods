@@ -4,7 +4,7 @@ A Claude Code Mod that measures the build artifacts of the session's repository,
 
 ## What it does
 
-1. At session start, and after a turn when the last measurement is 10 minutes old, it runs `git ls-files --others --ignored --exclude-standard --directory` in the repository of the session's directory. Outside a git repository it does nothing.
+1. At session start, and after a turn when the last measurement is 10 minutes old, it runs `git ls-files --others --ignored --exclude-standard --directory` in the repository of the session's directory. The session's directory is the one it started in, read once at that start, because a Bash `cd` moves the session's own directory and would point the measurement at another repository. Outside a git repository it does nothing.
 2. It sorts each git-ignored directory by name and content:
    - **certain**: `node_modules` (with `.package-lock.json`, `.modules.yaml`, `.yarn-integrity` or `.yarn-state.yml` inside), `target` (with `CACHEDIR.TAG` or `.rustc_info.json`), `.venv` and `venv` (with `pyvenv.cfg`), `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.phpunit.cache`, `.next`, `.nuxt`, `.turbo`, `.parcel-cache`, `.gradle`, `DerivedData`, `Pods`. A certain name without its marker file is unsure.
    - **unsure**: `dist`, `build`, `out`, `bin`, `obj`, `vendor`, `.cache`, `coverage`. Listed with `(unsure)`, never picked in advance.
@@ -15,6 +15,14 @@ A Claude Code Mod that measures the build artifacts of the session's repository,
 
        disk-janitor: artifacts 7.4 GB · /janitor
        disk-janitor: over 20 GB: artifacts 23.1 GB · /janitor
+
+   While the [sidebar](../sidebar) is open, that line goes there instead, as a `build artifacts` section that stays for the session, and the status line stays clear. The line is yellow from 5 GB and red from 20 GB, and the section goes down under 5 GB. A second, faint line under it holds the last deletion:
+
+       disk-janitor: build artifacts
+       artifacts 7.4 GB · /janitor
+       deleted 2 dir(s), 2.5 GB
+
+   With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
 ## The pane
 
@@ -63,7 +71,7 @@ Restart Claude Code. The mod needs no key and no setting. Start Claude Code insi
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=janitor}, ui.render{component=Pane}, ui.close
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via refresh)
+    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
 Reach L2, runs processes and deletes directories.
 

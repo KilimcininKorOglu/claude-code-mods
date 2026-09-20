@@ -1,6 +1,6 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText, type Class } from './classify.ts'
-import { carriedSelection, listText, reportText, rowText, totalKb, type Outcome } from './report.ts'
+import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText, statusTone, type Class } from './classify.ts'
+import { carriedSelection, deletedShort, listText, reportText, rowText, totalKb, type Outcome } from './report.ts'
 import { MAX_FOUND, type Found, type Scan } from './scan.ts'
 
 const PANE_ID = 'disk-janitor'
@@ -19,9 +19,15 @@ type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
 /**
  * The last scan, the paths picked in the pane, whether the delete button was
- * pressed once, whether a scan or a deletion runs, and the last background error.
+ * pressed once, whether a scan or a deletion runs, the last background error,
+ * and the directory the session started in. The repository is looked for under
+ * that directory, not under `$.session.cwd()`, because a Bash `cd` moves the
+ * session's directory and would point the scan at another repository.
  */
-type State = { scan?: Scan; selected: Set<string>; confirm: boolean; busy: boolean; scannedAt: number; lastError?: string }
+type State = { scan?: Scan; selected: Set<string>; confirm: boolean; busy: boolean; scannedAt: number; lastError?: string; cwd?: string; event?: string }
+
+/** The section this mod owns in the shared sidebar. */
+const SECTION = { consumer: 'disk-janitor', key: 'artifacts' }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -111,18 +117,46 @@ async function removeDir($: EngineInterface, root: string, f: Found): Promise<st
   return r.exitCode === 0 ? undefined : r.stderr.trim().slice(0, 200) || `rm exited ${r.exitCode}`
 }
 
-/** Measures the session's repository, shows the status line and redraws the pane; a running measurement or deletion is left to finish. */
+/**
+ * Writes the total into the shared sidebar and answers whether it took it. Under 5 GB there is
+ * nothing to show and the section goes down. The section carries the last deletion under the total,
+ * faint. A closed sidebar, and a sidebar mod that is not installed, both answer false, so the status
+ * line is drawn instead.
+ */
+async function toSidebar($: EngineInterface, state: State, text: string | undefined, kb: number): Promise<boolean> {
+  try {
+    if (text === undefined) {
+      await $.sidebar.clear(SECTION)
+      return await $.sidebar.isOpen()
+    }
+    const lines = [{ text, kind: statusTone(kb) }, ...(state.event === undefined ? [] : [{ text: state.event, kind: 'dim' as const }])]
+    return await $.sidebar.set({ ...SECTION, title: 'build artifacts', lines, until: 'session', order: 20 })
+  } catch {
+    // The sidebar mod is not installed.
+    return false
+  }
+}
+
+/** Shows the measured total on the one channel that takes it. */
+async function showTotal($: EngineInterface, state: State): Promise<void> {
+  const kb = state.scan === undefined ? 0 : totalKb(state.scan)
+  const text = state.scan === undefined ? undefined : statusText(kb)
+  $.ui.status((await toSidebar($, state, text, kb)) ? undefined : text)
+}
+
+/** Measures the session's repository, shows the total and redraws the pane; a running measurement or deletion is left to finish. */
 async function refresh($: EngineInterface, state: State): Promise<void> {
   if (state.busy) return
   state.busy = true
   try {
-    state.scannedAt = await $.clock.now()
-    const root = await repoRoot($, await $.session.cwd())
+    const root = await repoRoot($, state.cwd ?? (await $.session.cwd()))
     const before = state.scan
     state.scan = root === undefined ? undefined : await scanRepo($, root)
+    // Stamped after the measurement, so a failed one is tried again at the next turn.
+    state.scannedAt = await $.clock.now()
     state.selected = carriedSelection(before?.root === state.scan?.root ? before : undefined, state.selected, state.scan)
     state.confirm = false
-    $.ui.status(state.scan === undefined ? undefined : statusText(totalKb(state.scan)))
+    await showTotal($, state)
   } finally {
     state.busy = false
     $.ui.invalidate('ui.render')
@@ -155,6 +189,8 @@ async function deletePicked($: EngineInterface, state: State, picked: readonly F
   } finally {
     state.busy = false
   }
+  // The measurement that follows redraws the section, so the line is kept before it starts.
+  state.event = deletedShort(o)
   refreshInBackground($, state)
   return reportText(o, scan.data)
 }
@@ -251,6 +287,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
+    state.cwd = e.cwd
     await $.command.register({
       name: 'janitor',
       description: 'Build artifacts of this repository: the pane, list, rescan, delete <path> (disk-janitor)',

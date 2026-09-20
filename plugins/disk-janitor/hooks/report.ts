@@ -28,6 +28,14 @@ export function reportText(o: Outcome, data: readonly string[]): string {
   return parts.join(' · ')
 }
 
+/** The sidebar's second line after a deletion: how much went, without the names the pane holds. */
+export function deletedShort(o: Outcome): string {
+  const parts = [o.deleted.length === 0 ? 'deleted nothing' : `deleted ${o.deleted.length} dir(s), ${sizeText(o.freedKb)}`]
+  if (o.skipped.length > 0) parts.push(`${o.skipped.length} skipped`)
+  if (o.failed.length > 0) parts.push(`${o.failed.length} failed`)
+  return parts.join(' · ')
+}
+
 /**
  * The picks after a new scan: a path listed before keeps the person's choice,
  * a new one starts picked when it is certain.

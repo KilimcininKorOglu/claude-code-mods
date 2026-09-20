@@ -89,6 +89,11 @@ export function sizeText(kb: number): string {
 export const WARN_KB = 5 * KB_PER_GB
 export const LOUD_KB = 20 * KB_PER_GB
 
+/** The colour of that line in the sidebar: red over 20 GB, yellow from 5 GB; under it no line is drawn. */
+export function statusTone(totalKb: number): 'warn' | 'error' {
+  return totalKb >= LOUD_KB ? 'error' : 'warn'
+}
+
 /** The status line for a total, or undefined under 5 GB. */
 export function statusText(totalKb: number): string | undefined {
   if (totalKb >= LOUD_KB) return `over 20 GB: artifacts ${sizeText(totalKb)} · /janitor`

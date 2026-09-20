@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, FsEntry, On, PromptOrigin, RenderPropsOf, TurnCompleteInput, UiPane } from 'claude-code'
 
 tier('user')
@@ -85,6 +85,32 @@ async function started($: Engine, w: World): Promise<void> {
   await w.clock.settle()
 }
 
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; lines: { text: string; kind?: string }[] }[]; cleared: string[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; lines: { text: string; kind?: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })) })
+    return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    bar.cleared.push((e as unknown as { key: string }).key)
+    return { value: undefined }
+  })
+  on('sidebar.isOpen', () => ({ value: bar.open }))
+}
+
 const pane = ($: Engine) => $.ui.mount({ plugin: 'disk-janitor', surface: 'terminal', component: 'Pane', requestId: 'disk-janitor', props: PANE })
 
 describe('disk-janitor', () => {
@@ -100,6 +126,34 @@ describe('disk-janitor', () => {
       'data/venv  512 MB',
       'kept, data: data',
     ].join('\n'))
+  })
+
+  withSidebar('an open sidebar takes the total, in yellow, and the deletion goes under it', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    await started($, w)
+    expect(bar.sections.at(-1)).toEqual({ key: 'artifacts', lines: [{ text: 'artifacts 6.5 GB · /janitor', kind: 'warn' }] })
+    expect(w.statuses.at(-1)).toBe(undefined)
+    const ui = await pane($)
+    await ui.press({ key: 'row:target' })
+    await ui.press({ key: 'delete' })
+    await ui.press({ key: 'delete' })
+    await w.clock.settle()
+    // Under 5 GB the section goes down, so the last write is the clear.
+    expect(bar.cleared).toEqual(['artifacts'])
+  })
+
+  withSidebar('over 20 GB the total is red, and the deletion stands under it', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.sizes.set(`${ROOT}/target`, 30 * GB)
+    await started($, w)
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'over 20 GB: artifacts 32.5 GB · /janitor', kind: 'error' })
+    expect((await $.command.run(run('delete dist'))).text).toContain('deleted 1 dir(s)')
+    await w.clock.settle()
+    expect(bar.sections.at(-1)?.lines[1]).toEqual({ text: 'deleted 1 dir(s), 1 MB', kind: 'dim' })
   })
 
   test('the pane deletes the picked directories on the second press, and logs what went and what stayed', async ($, on) => {
