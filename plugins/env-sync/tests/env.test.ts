@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitDir, diffReads, isCommit, lineReads, listedNames, noteText } from '../hooks/env.ts'
+import { commitDir, denyText, diffReads, isCommit, isGuarded, lineReads, listedNames, modeOf, noteText } from '../hooks/env.ts'
 
 tier('user')
 
@@ -75,5 +75,15 @@ describe('commits', () => {
     expect(isCommit('git commit --dry-run')).toBe(false)
     expect(isCommit('git log')).toBe(false)
     expect(commitDir('cd sub && git -C inner commit -m x', '/r')).toBe('/r/sub/inner')
+  })
+
+  test('the gate stops a commit, a push and a merge, and nothing else', () => {
+    for (const command of ['git commit -m x', 'git push', 'git -c a=b merge main', 'cd app && git push origin main']) {
+      expect(isGuarded(command), command).toBe(true)
+    }
+    for (const command of ['git status', 'git push --dry-run', 'git log', 'echo "gitcommit"']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('deny')).toBe('deny')
+    expect(modeOf('x')).toBe(undefined)
+    expect(denyText(['A', 'B'], '.env.example')).toBe('stopped: .env.example still lacks 2 variable(s): A · B. Add them with a placeholder value and run the command again; there is no way around this gate, and only the person turns it off with /env-sync mode note.')
   })
 })

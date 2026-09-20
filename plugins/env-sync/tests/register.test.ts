@@ -151,8 +151,23 @@ describe('env-sync', () => {
     const before = w.argv.length
     await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
     expect(w.argv.length).toBe(before)
-    expect((await $.command.run(run(''))).text).toBe('off')
+    expect((await $.command.run(run(''))).text).toBe('off · mode note · no variable is open')
     expect(w.logs).toEqual([])
+  })
+
+  test('in deny mode a push stops while the reference file lacks a variable, and runs once it lists them', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while the reference file lacks a variable')
+    const denied = await $.tool.call({ tool: 'Bash', command: 'git push origin main' })
+    expect(denied.deny).toContain('stopped: .env.example still lacks 1 variable(s): STRIPE_KEY')
+    expect(denied.result).toBe(undefined)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git status' })).result).toBe('ok')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · STRIPE_KEY still missing')
+    w.files.set(`${ROOT}/.env.example`, 'DB_URL=\nSTRIPE_KEY=\n')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('.env.example now lists the variables it lacked: STRIPE_KEY')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
   test('a git error is logged once and the commit result stays', async ($, on) => {

@@ -1,15 +1,17 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, diffReads, doneLines, doneLog, isCommit, listedNames, logText, noteText, openNames, REFERENCE_FILES, sectionKey, sidebarLines } from './env.ts'
+import { commitDir, denyText, diffReads, doneLines, doneLog, isCommit, isGuarded, listedNames, logText, modeOf, noteText, openNames, REFERENCE_FILES, sectionKey, sidebarLines, type Mode } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
+const MODE_KEY = 'mode'
 
-const USAGE = 'expects nothing (the status), on or off'
+const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /**
- * The on/off setting read at session start, and the last error logged, so the same one is logged once.
- * `open` holds the variables the last finding named, so a commit that adds them all closes it.
+ * The on/off setting read at session start, the mode, and the last error logged, so the same one is
+ * logged once. `open` holds the variables the last finding named, so a commit that adds them all
+ * closes it, and in `deny` mode it also holds the gate shut.
  */
-type State = { enabled: boolean; lastError?: string; open: string[] }
+type State = { enabled: boolean; mode: Mode; lastError?: string; open: string[] }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -111,23 +113,56 @@ async function afterCommit($: EngineInterface, state: State, before: Before, r: 
   }
 }
 
+/**
+ * The gate: in deny mode a commit, push or merge waits while the reference file still lacks a variable.
+ * The reference file is read again first, so a commit that added the variables opens the gate itself.
+ */
+async function gate($: EngineInterface, state: State, command: string): Promise<{ deny: string } | undefined> {
+  if (!state.enabled || state.mode !== 'deny' || state.open.length === 0 || !isGuarded(command)) return undefined
+  try {
+    const before = await beforeCommit($, state, command)
+    const reference = before === undefined ? undefined : await referenceFile($, before.root)
+    if (before === undefined || reference === undefined) return undefined
+    await closeResolved($, state, reference, listedNames(await $.fs.read(`${before.root}/${reference}`)))
+    return state.open.length === 0 ? undefined : { deny: denyText(state.open, reference) }
+  } catch (err) {
+    report($, state, err)
+    return undefined
+  }
+}
+
+async function setMode($: EngineInterface, state: State, arg: string): Promise<string> {
+  const mode = modeOf(arg)
+  if (mode === undefined) return 'mode expects note or deny'
+  await $.store.set(MODE_KEY, mode)
+  state.mode = mode
+  return mode === 'deny'
+    ? 'mode deny: git commit, push and merge stop while the reference file lacks a variable'
+    : 'mode note: nothing is stopped, the finding reaches the model as a note'
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  const [first = '', second = ''] = args.trim().split(/\s+/)
+  if (first === 'mode') return setMode($, state, second)
   const word = args.trim()
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     state.enabled = word === 'on'
     return word === 'on' ? 'on: each commit is checked for env reads .env.example lacks' : 'off: commits are not checked'
   }
-  return word === '' ? (state.enabled ? 'on' : 'off') : USAGE
+  if (word !== '') return USAGE
+  const open = state.open.length === 0 ? 'no variable is open' : `${state.open.join(' · ')} still missing`
+  return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, open: [] }
+  const state: State = { enabled: true, mode: 'note', open: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'env-sync', description: 'Env variables a commit reads that .env.example lacks: status, on, off (env-sync)', argumentHint: '[on | off]' })
+    await $.command.register({ name: 'env-sync', description: 'Env variables a commit reads that .env.example lacks: status, on, off, mode note | deny (env-sync)', argumentHint: '[on | off | mode note | mode deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
     return r
   })
 
@@ -135,6 +170,8 @@ export const register: Register = on => {
   on('command.run', { command: 'env-sync' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const stopped = await gate($, state, e.command)
+    if (stopped !== undefined) return stopped
     if (!state.enabled || !isCommit(e.command)) return next(e)
     const before = await beforeCommit($, state, e.command)
     const r = await next(e)

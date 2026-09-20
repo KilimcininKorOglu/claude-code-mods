@@ -38,14 +38,18 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: it added the variables itself, so a note would only repeat what it just did.
 
+8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it reads the reference file again, so a commit that added the variables opens the gate itself. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
+
 A git error is logged once, and the commit's result stays as it was.
 
 In the live check the model added `process.env.STRIPE_KEY` to a file of a repository whose `.env.example` listed only `DB_URL`, committed it, and quoted the note word for word.
 
 ## Command
 
-    /env-sync            on or off
-    /env-sync on | off   on by default
+    /env-sync                 on or off, the mode, and the variables still missing
+    /env-sync on | off        on by default
+    /env-sync mode note       note only; the default
+    /env-sync mode deny       a commit, a push and a merge also stop while a variable is missing
 
 ## Install
 
@@ -65,7 +69,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote, gate), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 
@@ -81,6 +85,8 @@ Reach L2, runs processes.
 - Only the reference file at the repository root is read. A monorepo package with its own `.env.example` is checked against the root file.
 - A commit through a script or an alias that hides `git commit` is not seen. `cd ~/x` is not expanded.
 - A merge commit's combined diff is not read.
+- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/env-sync mode note`.
+- The gate reads the command as text, so a commit through a script or an alias passes it.
 
 ## Development
 
