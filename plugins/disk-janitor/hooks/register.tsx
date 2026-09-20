@@ -232,11 +232,11 @@ function toggle($: EngineInterface, state: State, path: string): void {
   $.ui.invalidate('ui.render')
 }
 
-/** `/janitor delete <path>`, for a surface without the pane; the path must be one the last scan listed. */
+/** `/disk-janitor delete <path>`, for a surface without the pane; the path must be one the last scan listed. */
 async function deleteByCommand($: EngineInterface, state: State, path: string, origin: PromptOrigin): Promise<string> {
   if (!PERSON.has(origin.kind)) return 'refused: only you can delete, from the prompt or the pane'
   const f = state.scan?.found.find(x => x.path === path.replace(/\/+$/, ''))
-  if (f === undefined) return `not listed: ${path}; /janitor list shows what can be deleted`
+  if (f === undefined) return `not listed: ${path}; /disk-janitor list shows what can be deleted`
   return deletePicked($, state, [f])
 }
 
@@ -289,7 +289,7 @@ export const register: Register = on => {
     const r = await next(e)
     state.cwd = e.cwd
     await $.command.register({
-      name: 'janitor',
+      name: 'disk-janitor',
       description: 'Build artifacts of this repository: the pane, list, rescan, delete <path> (disk-janitor)',
       argumentHint: '[list | rescan | delete <path>]',
     })
@@ -304,7 +304,7 @@ export const register: Register = on => {
   })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
-  on('command.run', { command: 'janitor' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? ''), e.origin) }))
+  on('command.run', { command: 'disk-janitor' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? ''), e.origin) }))
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e)

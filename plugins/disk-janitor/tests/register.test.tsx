@@ -7,7 +7,7 @@ const ROOT = '/Users/u/app'
 const GB = 1024 * 1024
 
 const run = (args: string, origin: PromptOrigin = { kind: 'composer' }): CommandRunInput => ({
-  command: 'janitor', args, origin, presentation: { isFullscreen: true, columns: 120 },
+  command: 'disk-janitor', args, origin, presentation: { isFullscreen: true, columns: 120 },
 })
 
 const turn: TurnCompleteInput = { answer: 'done', durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer' }
@@ -117,7 +117,7 @@ describe('disk-janitor', () => {
   test('lists the artifacts with their sizes, never a data directory, and shows the total over 5 GB', async ($, on) => {
     const w = world(on)
     await started($, w)
-    expect(w.statuses.at(-1)).toBe('artifacts 6.5 GB · /janitor')
+    expect(w.statuses.at(-1)).toBe('artifacts 6.5 GB · /disk-janitor')
     expect((await $.command.run(run('list'))).text).toBe([
       `${ROOT} · 4 artifact dir(s) · 6.5 GB`,
       'node_modules  2.0 GB',
@@ -133,7 +133,7 @@ describe('disk-janitor', () => {
     const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await started($, w)
-    expect(bar.sections.at(-1)).toEqual({ key: 'artifacts', lines: [{ text: 'artifacts 6.5 GB · /janitor', kind: 'warn' }] })
+    expect(bar.sections.at(-1)).toEqual({ key: 'artifacts', lines: [{ text: 'artifacts 6.5 GB · /disk-janitor', kind: 'warn' }] })
     expect(w.statuses.at(-1)).toBe(undefined)
     const ui = await pane($)
     await ui.press({ key: 'row:target' })
@@ -150,7 +150,7 @@ describe('disk-janitor', () => {
     seatSidebar(on, bar)
     w.sizes.set(`${ROOT}/target`, 30 * GB)
     await started($, w)
-    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'over 20 GB: artifacts 32.5 GB · /janitor', kind: 'error' })
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'over 20 GB: artifacts 32.5 GB · /disk-janitor', kind: 'error' })
     expect((await $.command.run(run('delete dist'))).text).toContain('deleted 1 dir(s)')
     await w.clock.settle()
     expect(bar.sections.at(-1)?.lines[1]).toEqual({ text: 'deleted 1 dir(s), 1 MB', kind: 'dim' })
@@ -188,11 +188,11 @@ describe('disk-janitor', () => {
     expect(w.logs[0]).toBe('deleted 1 dir(s), 4.0 GB: target (4.0 GB) · skipped: node_modules (no longer git-ignored), data/venv (no longer a directory) · kept, data: data')
   })
 
-  test('/janitor delete works for a person only, and only on a listed path', async ($, on) => {
+  test('/disk-janitor delete works for a person only, and only on a listed path', async ($, on) => {
     const w = world(on)
     await started($, w)
     expect((await $.command.run(run('delete dist', { kind: 'plugin', name: 'x' } as unknown as PromptOrigin))).text).toBe('refused: only you can delete, from the prompt or the pane')
-    expect((await $.command.run(run('delete data'))).text).toBe('not listed: data; /janitor list shows what can be deleted')
+    expect((await $.command.run(run('delete data'))).text).toBe('not listed: data; /disk-janitor list shows what can be deleted')
     expect(w.removed).toEqual([])
     expect((await $.command.run(run('delete dist/'))).text).toBe('deleted 1 dir(s), 1 MB: dist (1 MB) · kept, data: data')
     expect(w.removed).toEqual([`${ROOT}/dist`])

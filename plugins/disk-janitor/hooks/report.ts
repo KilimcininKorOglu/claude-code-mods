@@ -46,7 +46,7 @@ export function carriedSelection(before: Scan | undefined, selected: ReadonlySet
   return new Set(after?.found.filter(keep).map(f => f.path) ?? [])
 }
 
-/** The text /janitor answers: every listed directory, and how to delete where the surface has no pane. */
+/** The text /disk-janitor answers: every listed directory, and how to delete where the surface has no pane. */
 export function listText(scan: Scan | undefined): string {
   if (scan === undefined) return 'not measured yet, or not in a git repository'
   const rows = scan.found.map(f => rowText(scan, f))

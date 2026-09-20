@@ -1,6 +1,6 @@
 # disk-janitor
 
-A Claude Code Mod that measures the build artifacts of the session's repository, shows them on the status line once they pass 5 GB, and deletes the ones you pick in the `/janitor` pane. A data directory is never listed and never deleted.
+A Claude Code Mod that measures the build artifacts of the session's repository, shows them on the status line once they pass 5 GB, and deletes the ones you pick in the `/disk-janitor` pane. A data directory is never listed and never deleted.
 
 ## What it does
 
@@ -13,20 +13,20 @@ A Claude Code Mod that measures the build artifacts of the session's repository,
 3. It measures the listed directories with one `du -sk` call, by argv, in the background, so no prompt waits for it.
 4. The status line shows the total from 5 GB on, and says so louder from 20 GB on:
 
-       disk-janitor: artifacts 7.4 GB · /janitor
-       disk-janitor: over 20 GB: artifacts 23.1 GB · /janitor
+       disk-janitor: artifacts 7.4 GB · /disk-janitor
+       disk-janitor: over 20 GB: artifacts 23.1 GB · /disk-janitor
 
    While the [sidebar](../sidebar) is open, that line goes there instead, as a `build artifacts` section that stays for the session, and the status line stays clear. The line is yellow from 5 GB and red from 20 GB, and the section goes down under 5 GB. A second, faint line under it holds the last deletion:
 
        disk-janitor: build artifacts
-       artifacts 7.4 GB · /janitor
+       artifacts 7.4 GB · /disk-janitor
        deleted 2 dir(s), 2.5 GB
 
    With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
 ## The pane
 
-`/janitor` opens the pane, and again closes it. It takes the keys; Esc closes it.
+`/disk-janitor` opens the pane, and again closes it. It takes the keys; Esc closes it.
 
     /Users/you/app · 6.5 GB
     [x] node_modules  2.0 GB
@@ -46,10 +46,10 @@ One transcript line then says what went and what stayed, the data directories by
 
 ## Command
 
-    /janitor                  open or close the pane
-    /janitor list             the listed directories as text, for a surface without the pane
-    /janitor rescan           measure again now
-    /janitor delete <path>    delete one listed directory, the same checks as the pane
+    /disk-janitor                  open or close the pane
+    /disk-janitor list             the listed directories as text, for a surface without the pane
+    /disk-janitor rescan           measure again now
+    /disk-janitor delete <path>    delete one listed directory, the same checks as the pane
 
 `delete` runs only for a command you typed at the prompt or through the bridge. A command a plugin runs is refused, so the model cannot delete.
 
@@ -76,8 +76,8 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 Reach L2, runs processes and deletes directories.
 
     1. Reads:    the repository's git-ignored directory names; the marker files of a listed directory; the entries one level inside a data directory; the resolved path of a directory before its deletion
-    2. Runs:     git rev-parse, git ls-files and git check-ignore, read-only; du -sk; rm -rf -- on a directory you picked twice in the pane or named with /janitor delete; all by argv, no shell
-    3. Sends:    nothing; the /janitor output row is read by the model as any command output is
+    2. Runs:     git rev-parse, git ls-files and git check-ignore, read-only; du -sk; rm -rf -- on a directory you picked twice in the pane or named with /disk-janitor delete; all by argv, no shell
+    3. Sends:    nothing; the /disk-janitor output row is read by the model as any command output is
     4. Persists: nothing; the last measurement and your picks live in memory
     5. Hostile input: a directory name comes from git and the disk, never from the model; a deletion needs your key press or your typed command, and a path must pass every check again right before it
 

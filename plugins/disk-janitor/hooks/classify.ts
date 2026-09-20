@@ -96,6 +96,6 @@ export function statusTone(totalKb: number): 'warn' | 'error' {
 
 /** The status line for a total, or undefined under 5 GB. */
 export function statusText(totalKb: number): string | undefined {
-  if (totalKb >= LOUD_KB) return `over 20 GB: artifacts ${sizeText(totalKb)} · /janitor`
-  return totalKb >= WARN_KB ? `artifacts ${sizeText(totalKb)} · /janitor` : undefined
+  if (totalKb >= LOUD_KB) return `over 20 GB: artifacts ${sizeText(totalKb)} · /disk-janitor`
+  return totalKb >= WARN_KB ? `artifacts ${sizeText(totalKb)} · /disk-janitor` : undefined
 }
