@@ -94,7 +94,7 @@ export const register: Register = on => {
     if (stored === undefined) $.ui.log('the stored samples have an unknown shape, so the pace starts over')
     state.tracks = stored ?? {}
     await $.command.register({
-      name: 'limits',
+      name: 'limit-watch',
       description: 'Open or close the usage limits pane (limit-watch)',
       immediate: true,
     })
@@ -111,7 +111,7 @@ export const register: Register = on => {
   })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
-  on('command.run', { command: 'limits' }, async $ => {
+  on('command.run', { command: 'limit-watch' }, async $ => {
     const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
     if (isOpen) {
       await $.ui.close({ id: PANE_ID })
@@ -119,7 +119,7 @@ export const register: Register = on => {
     }
     await sample($, state)
     await $.ui.open({ id: PANE_ID, title: 'Usage limits', rows: Math.max(2, state.limits.length * ROWS_PER_LIMIT) })
-    return { text: 'pane open. /limits closes it.' }
+    return { text: 'pane open. /limit-watch closes it.' }
   })
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {

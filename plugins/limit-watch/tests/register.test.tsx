@@ -15,7 +15,7 @@ const turn = (agentId?: string): TurnCompleteInput => ({
   agentId,
 })
 const run: CommandRunInput = {
-  command: 'limits',
+  command: 'limit-watch',
   args: '',
   origin: { kind: 'composer' },
   presentation: { isFullscreen: false, columns: 100 },
@@ -228,7 +228,7 @@ describe('limit-watch', () => {
     expect(w.statuses.at(-1)).toContain('5h 23%')
   })
 
-  test('/limits opens the pane and closes it on the second run', async ($, on) => {
+  test('/limit-watch opens the pane and closes it on the second run', async ($, on) => {
     const w = world(on)
     w.setLimits([fiveHour(23)])
     await $.session.start(session)

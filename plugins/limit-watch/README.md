@@ -19,7 +19,7 @@ An API key session reports no limits. The status line then reads `no usage limit
 
 **A section in the [sidebar](../sidebar)** instead of that status line while the sidebar is open: the same parts, one line per limit (green under 80%, yellow from 80%, red from 95%, the same steps as the pane's bar) and the pace line under them, itself red when a limit is already reached, yellow when one fills before its reset, green when none does and faint while the pace is still measured. The status line is cleared then. With the sidebar closed, or without that mod installed, the status line stays as above.
 
-**A pane, opened and closed with `/limits`**, with one block per limit:
+**A pane, opened and closed with `/limit-watch`**, with one block per limit:
 
     5-hour limit · 9% used
     ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
@@ -36,7 +36,7 @@ Each warning comes once per limit cycle. A new session in the same cycle does no
 
 ## How the numbers are made
 
-- `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limits` opens the pane.
+- `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limit-watch` opens the pane.
 - Every reading is one sample `{ at, percent }`, kept in `$.store` so that a restart keeps the pace.
 - The pace is the change in percent between the first and the last sample of a recent span, per hour. The span is the last hour for the 5-hour limit and the last 24 hours for the 7-day and spend limits, so the pace follows how you work now and not how you worked earlier in the cycle.
 - A pace is shown only when its samples span at least 10 minutes (5-hour limit) or 2 hours (7-day and spend limits). A shorter span gives a pace that one step of the percentage can double.
@@ -65,7 +65,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 1. Restart Claude Code.
 2. Sign in with a Claude subscription (`/login`). A session on an API key reports no limits, and the status line stays at `no usage limits reported yet`.
-3. Send one prompt. The limits come from the last API response, so the status line fills after the first answer. Open the pane with `/limits`.
+3. Send one prompt. The limits come from the last API response, so the status line fills after the first answer. Open the pane with `/limit-watch`.
 
 ## What it can reach
 
@@ -87,7 +87,7 @@ Reach L0, draws and remembers.
 - A new session has no reading until Claude answers once, because the figures come from the last API response.
 - The 7-day limit shows a pace only after 2 hours of samples.
 - A spend limit can pass 100%. The bar stops at full; the percentage does not.
-- `/limits` toggles one pane. The second run closes it.
+- `/limit-watch` toggles one pane. The second run closes it.
 
 ## Development
 
