@@ -1,7 +1,30 @@
-import { describe, expect, mock, test, tier, type MockClock } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
 
 tier('user')
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    return { value: bar.open }
+  })
+  on('sidebar.clear', () => ({ value: undefined }))
+  on('sidebar.isOpen', () => ({ value: bar.open }))
+}
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
@@ -90,6 +113,16 @@ describe('keep warm', () => {
     expect(w.statuses.at(-1)).toBe('5h 10m left · ping in 50m · last ping read 200k $0.05')
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(2)
+  })
+
+  withSidebar('an open sidebar takes the window state and the status line stays clear', async ($, on) => {
+    const w = world(on, [])
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    expect(bar.sections.at(-1)).toEqual({ key: 'window', lines: ['6h left · waiting for the first turn'] })
+    expect(w.statuses.at(-1)).toBe(undefined)
   })
 
   test('a new turn moves the ping later', async ($, on) => {

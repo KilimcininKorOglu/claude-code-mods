@@ -47,8 +47,33 @@ function disarm(s: State): void {
   s.pending = null
 }
 
+/** The section this mod owns in the shared sidebar. */
+const SECTION = { consumer: 'cache-warm', key: 'window' }
+
+/**
+ * Writes the window's state into the shared sidebar and answers whether it took it. A closed sidebar,
+ * and a sidebar mod that is not installed, both answer false, so the status line is drawn instead.
+ */
+async function toSidebar($: EngineInterface, text: string | undefined): Promise<boolean> {
+  try {
+    if (text === undefined) {
+      await $.sidebar.clear(SECTION)
+      return await $.sidebar.isOpen()
+    }
+    return await $.sidebar.set({ ...SECTION, title: 'cache window', lines: [{ text }], until: 'session', order: 20 })
+  } catch {
+    // The sidebar mod is not installed.
+    return false
+  }
+}
+
+async function showStatusAt($: EngineInterface, s: State, now: number): Promise<void> {
+  const text = statusText(s, now)
+  $.ui.status((await toSidebar($, text)) ? undefined : text)
+}
+
 async function showStatus($: EngineInterface, s: State): Promise<void> {
-  $.ui.status(statusText(s, await $.clock.now()))
+  await showStatusAt($, s, await $.clock.now())
 }
 
 /**
@@ -99,7 +124,7 @@ async function arm($: EngineInterface, s: State): Promise<void> {
     const delay = Math.max(1000, s.lastRequestAt + s.every - now)
     s.pending = $.clock.after(delay, () => { void runPing($, s) })
   }
-  $.ui.status(statusText(s, now))
+  await showStatusAt($, s, now)
 }
 
 async function ping($: EngineInterface, s: State): Promise<void> {

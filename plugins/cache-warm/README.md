@@ -33,6 +33,8 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
     cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05
     cache-warm: stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone
 
+While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. The section goes when the window ends. With the sidebar closed, or without that mod installed, the status line is drawn as above.
+
 **The card** of `/cache-status`:
 
     claude-fable-5-1
@@ -80,7 +82,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log, $.ui.status (via arm, showStatus)
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log, $.ui.status (via showStatusAt)
 
 Reach L2, drives Claude.
 
