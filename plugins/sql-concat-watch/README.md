@@ -27,6 +27,7 @@ A Claude Code Mod that tells the model when an edit builds SQL by joining string
        sql-concat-watch: SQL built from strings: src/db.ts:14 · src/db.ts:22
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
+6. While the [sidebar](../sidebar) is open, those places go there instead, one line each in a section per edited file, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 In the live check the model put `` db.query(`SELECT * FROM users WHERE id = ${id}`) `` into a file with one Edit, read the note naming `src/users.ts:3`, and named the parameterized form in its answer.
 
@@ -53,7 +54,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=sql-concat-watch}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd (via afterEdit), $.store.get, $.store.set (via runCommand), $.ui.log (via afterEdit, fileText)
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd (via afterEdit), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via fileText, toPerson)
 
 Reach L1, reads files.
 

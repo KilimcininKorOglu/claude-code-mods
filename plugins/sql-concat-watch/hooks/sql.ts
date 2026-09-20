@@ -93,3 +93,13 @@ export function noteText(places: string[]): string {
 export function logText(places: string[]): string {
   return `SQL built from strings: ${namedPlaces(places)}`
 }
+
+/** One sidebar line per place, so the section reads as a list. */
+export function sidebarLines(places: string[]): { text: string; kind: 'warn' }[] {
+  return namedPlaces(places).split(' · ').map(text => ({ text, kind: 'warn' }))
+}
+
+/** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
+export function sectionKey(text: string): string {
+  return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}
