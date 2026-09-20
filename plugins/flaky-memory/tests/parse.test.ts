@@ -7,7 +7,12 @@ tier('user')
 
 describe('isTestCommand', () => {
   test('knows the supported runners, also behind cd, npm, make and a vendor path', async () => {
-    for (const c of ['go test ./...', 'cd api && pytest -x', 'python3 -m pytest tests', 'npx jest', 'npx vitest run', 'bun test', 'cargo test -q', 'vendor/bin/phpunit', 'npm test', 'pnpm run test', 'make test']) {
+    const commands = [
+      'go test ./...', 'cd api && pytest -x', 'python3 -m pytest tests', 'npx jest', 'npx vitest run', 'bun test',
+      'bun run test', 'deno test -A', 'cargo test -q', 'vendor/bin/phpunit', 'bundle exec rspec spec', 'npm test',
+      'pnpm run test', 'make test', 'mvn test', './gradlew test', 'gradle test --info', 'dotnet test',
+    ]
+    for (const c of commands) {
       expect(isTestCommand(c), c).toBe(true)
     }
     for (const c of ['go build ./...', 'git commit -m "test"', 'ls tests/', 'echo pytest-cov', 'make testdata']) {
@@ -48,6 +53,22 @@ describe('parseOutput', () => {
   test('cargo test and PHPUnit', async () => {
     const out = 'test parse::reads ... ok\ntest parse::fails ... FAILED\n\nThere was 1 failure:\n\n1) App\\Tests\\UserTest::testCreate\nFailed asserting that false is true.'
     expect(parseOutput(out)).toEqual({ passed: ['cargo:parse::reads'], failed: ['cargo:parse::fails', 'phpunit:App\\Tests\\UserTest::testCreate'] })
+  })
+
+  test('deno and dotnet name both sides, rspec, Maven and Gradle only their failures', async () => {
+    const out = [
+      'my test ... ok (0ms)',
+      'other test ... FAILED (1ms)',
+      '  Passed UserTests.Creates [1 ms]',
+      '  Failed UserTests.Deletes [2 ms]',
+      'rspec ./spec/user_spec.rb:12 # User is created',
+      '  testCreate(com.x.UserTest)  Time elapsed: 0.01 s  <<< FAILURE!',
+      'UserTest > deletes a user FAILED',
+    ].join('\n')
+    expect(parseOutput(out)).toEqual({
+      passed: ['deno:my test', 'dotnet:UserTests.Creates'],
+      failed: ['deno:other test', 'dotnet:UserTests.Deletes', 'rspec:User is created', 'maven:testCreate(com.x.UserTest)', 'gradle:UserTest > deletes a user'],
+    })
   })
 
   test('a test named both ways counts as failed, and text with no test names nothing', async () => {

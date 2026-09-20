@@ -14,7 +14,7 @@ The model reads this note after the Bash result of a failed run:
 
 ### Test commands
 
-A Bash command is a test command when it contains one of: `go test`, `pytest`, `python -m pytest`, `jest`, `vitest`, `bun test`, `cargo test`, `cargo nextest`, `phpunit` (also `vendor/bin/phpunit`), `npm test`, `pnpm test`, `yarn test` (also with `run`), `make test`. Other commands pass through untouched, and no git command runs for them.
+A Bash command is a test command when it contains one of: `go test`, `pytest`, `python -m pytest`, `jest`, `vitest`, `bun test`, `cargo test`, `cargo nextest`, `phpunit` (also `vendor/bin/phpunit`), `npm test`, `pnpm test`, `yarn test` (also with `run`), `bun run test`, `deno test`, `rspec`, `make test`, `mvn test`, `gradle test` (also `./gradlew test`), `dotnet test`. Other commands pass through untouched, and no git command runs for them.
 
 ### What the output must show
 
@@ -25,8 +25,13 @@ A Bash command is a test command when it contains one of: `go test`, `pytest`, `
 | jest, vitest, bun | `✕`, `×`, `✗`, `(fail)` lines | `✓`, `√`, `(pass)` lines |
 | cargo test | `test x ... FAILED` | `test x ... ok` |
 | PHPUnit | `1) Class::method` | none |
+| deno test | `name ... FAILED` | `name ... ok` |
+| dotnet test | `Failed Name [12 ms]` | `Passed Name [1 ms]` |
+| rspec | the `rspec path:line # name` rerun list | none |
+| Maven surefire | `name(Class)  Time elapsed … <<< FAILURE!` | none |
+| Gradle | `Class > test FAILED` | none |
 
-A run that names no passing test still counts as a pass for the tests the same command failed at its last failing run, when it exits 0. So `go test ./...` without `-v` and PHPUnit work too.
+A run that names no passing test still counts as a pass for the tests the same command failed at its last failing run, when it exits 0. So `go test ./...` without `-v`, PHPUnit, rspec, Maven and Gradle work too: their failures are read, and their next run that exits 0 counts those tests as passed.
 
 Only tests that failed in the window are stored. A suite of thousands of passing tests stores nothing. Each test keeps at most 50 runs of the last 7 days.
 
@@ -78,7 +83,7 @@ Reach L2, runs git.
 - Only the names of untracked files enter the fingerprint, not their content. A change inside an untracked file does not change the fingerprint.
 - State outside the tree (a database, a cache, a file under `/tmp`) is not in the fingerprint. A test that depends on it can show as flaky.
 - An interrupted run and a run sent to the background are not recorded, because their output is partial.
-- The runner id prefixes (`go:`, `pytest:`, `js:`, `cargo:`, `phpunit:`) keep the names of two runners apart. The go id has no package name, so two packages with the same test name share one id.
+- The runner id prefixes (`go:`, `pytest:`, `js:`, `cargo:`, `phpunit:`, `deno:`, `dotnet:`, `rspec:`, `maven:`, `gradle:`) keep the names of two runners apart. The go id has no package name, so two packages with the same test name share one id.
 
 ## Development
 

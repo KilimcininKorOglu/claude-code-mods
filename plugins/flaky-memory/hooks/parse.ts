@@ -2,7 +2,7 @@
 
 /** A command that runs one of the supported test runners, directly or through npm, make or a vendor path. */
 const TEST_COMMAND =
-  /(^|[\s;&|(/])(go\s+test|pytest|python3?\s+-m\s+pytest|jest|vitest|bun\s+test|cargo\s+(test|nextest)|phpunit|(npm|pnpm|yarn)\s+(run\s+)?test|make\s+test)(\s|$|[;&|)])/
+  /(^|[\s;&|(/])(go\s+test|pytest|python3?\s+-m\s+pytest|jest|vitest|bun\s+(run\s+)?test|deno\s+test|cargo\s+(test|nextest)|phpunit|rspec|(npm|pnpm|yarn)\s+(run\s+)?test|make\s+test|mvn\s+test|gradlew?\s+test|dotnet\s+test)(\s|$|[;&|)])/
 
 export function isTestCommand(command: string): boolean {
   return TEST_COMMAND.test(command)
@@ -24,7 +24,18 @@ const RULES: readonly LineRule[] = [
   { runner: 'pytest', pattern: /^PASSED (\S+::\S+)/, ok: true },
   { runner: 'cargo', pattern: /^test (\S+) \.\.\. FAILED$/, ok: false },
   { runner: 'cargo', pattern: /^test (\S+) \.\.\. ok$/, ok: true },
+  // After the cargo rules: a cargo line ends at `ok`, a deno one carries its duration after it.
+  { runner: 'deno', pattern: /^(.+?) \.\.\. FAILED\b/, ok: false },
+  { runner: 'deno', pattern: /^(.+?) \.\.\. ok\b/, ok: true },
   { runner: 'phpunit', pattern: /^\d+\) ([\w\\]+::\w+)/, ok: false },
+  // The duration is required, so PHPUnit's `Failed asserting that ...` prose is not read as a test.
+  { runner: 'dotnet', pattern: /^\s*Failed\s+(\S+)\s+\[/, ok: false },
+  { runner: 'dotnet', pattern: /^\s*Passed\s+(\S+)\s+\[/, ok: true },
+  // The rerun list rspec prints after a failing run; a passing run names no test.
+  { runner: 'rspec', pattern: /^rspec\s+\S+ # (.+)$/, ok: false },
+  // Maven surefire and Gradle print a failure per test; neither names a passing one.
+  { runner: 'maven', pattern: /^\s*(\S+)\s+Time elapsed.*<<< (?:FAILURE|ERROR)!/, ok: false },
+  { runner: 'gradle', pattern: /^(\S+ > .+?) FAILED$/, ok: false },
   { runner: 'js', pattern: /^\s*(?:✕|×|✗|\(fail\))\s+(.+)$/, ok: false },
   { runner: 'js', pattern: /^\s*(?:✓|√|\(pass\))\s+(.+)$/, ok: true },
 ]
