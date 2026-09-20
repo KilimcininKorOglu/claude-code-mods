@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, isWorkflow, logText, MAX_NAMED, noteText, unpinnedUses, type Unpinned } from './pin.ts'
+import { commitUrl, isWorkflow, logText, MAX_NAMED, noteText, sectionKey, sidebarLines, unpinnedUses, type Unpinned } from './pin.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -53,14 +53,28 @@ async function withShas($: EngineInterface, state: State, uses: readonly Unpinne
   return [...out, ...uses.slice(MAX_NAMED)]
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, path: string, uses: readonly Unpinned[]): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'action-pin', key: sectionKey(path), title: 'actions by a moving ref', lines: sidebarLines(uses), until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(logText(uses))
+}
+
 /** Adds the note to an edit that pins an action to a moving ref. */
 async function afterEdit($: EngineInterface, state: State, path: string, before: string, after: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
   const found = state.enabled && isWorkflow(path) ? unpinnedUses(before, after) : []
   if (found.length === 0) return r
   const uses = await withShas($, state, found)
-  // The note goes to the model, the log line to the person: neither reads the other's channel.
-  $.ui.log(logText(uses))
+  // The note goes to the model, the finding to the person: neither reads the other's channel.
+  await toPerson($, path, uses)
   return { ...r, context: [...(r.context ?? []), noteText(uses)] }
 }
 
