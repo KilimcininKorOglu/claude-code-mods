@@ -63,7 +63,7 @@ A save whose result is not in the template is never written.
 - A topic file name is lowercase, ends in `.md`, has no directory part and is not `memory.md`.
 - The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters. A file that is already at or over a cap (one written before these checks, for example) is the exception: a save that makes it smaller in both measures is written, so the file comes back under the caps in steps instead of every save failing.
 - From 160 lines or 42000 characters the fork is told how many lines and characters this save must remove. Over a cap the note becomes a shrink-only save: add no new bullet, only move entries to a topic file.
-- No new bullet is longer than 600 characters.
+- No new bullet is longer than 600 characters. An `add` or `replace` whose bullet is longer is refused alone: the other ops are written, the status line counts it (`+1 1 refused`), the transcript line names it, and the next save tells the fork to split such a bullet or move its detail to a topic file.
 - `MEMORY.md` did not change while the fork ran.
 
 A failed check writes nothing and shows the error on the status line.

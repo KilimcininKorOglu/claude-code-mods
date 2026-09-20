@@ -266,7 +266,7 @@ function skippedNote(skipped: readonly string[]): string {
 function refusedNote(refused: readonly string[]): string {
   if (refused.length === 0) return ''
   const list = refused.map(r => `  - ${r}`).join('\n')
-  return `MANDATORY OP SHAPE: the last save refused these ops and wrote the rest. An "add" names a heading MEMORY.md already has: one of the four '## ' sections, or a '### ' subheading of the file, copied exactly. Refused:\n${list}`
+  return `MANDATORY OP SHAPE: the last save refused these ops and wrote the rest. An "add" names a heading MEMORY.md already has: one of the four '## ' sections, or a '### ' subheading of the file, copied exactly. A new bullet is at most ${MAX_BULLET} characters: split a longer one into focused bullets, or move its detail to a topic file. Refused:\n${list}`
 }
 
 /**
@@ -449,10 +449,15 @@ function indexOfLine(lines: string[], line: string): number {
   return loose.length === 1 ? (loose[0] ?? -1) : -1
 }
 
+/** A bullet over the cap is refused as its own op, so the other ops of the same reply are still written. */
+function tooLong(kind: Op['op'], text: string): string | undefined {
+  return text.length > MAX_BULLET ? `${kind}: bullet of ${text.length} characters, the limit is ${MAX_BULLET}: ${text.slice(0, 60)}…` : undefined
+}
+
 function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefined {
   if (op.op === 'add') {
     const text = bullet(op.text)
-    const error = addTo(lines, op.section, text)
+    const error = tooLong('add', text) ?? addTo(lines, op.section, text)
     if (error === undefined) newBullets.push(text)
     return error
   }
@@ -463,6 +468,8 @@ function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefi
     return undefined
   }
   const text = bullet(op.text)
+  const long = tooLong('replace', text)
+  if (long !== undefined) return long
   newBullets.push(text)
   lines[at] = text
   return undefined

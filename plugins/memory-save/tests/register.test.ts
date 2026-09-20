@@ -193,14 +193,15 @@ describe('memory-save', () => {
     expect(w.statuses.at(-1)).toMatch(/^error: the fork got no reply/)
   })
 
-  test('refuses a result over the limits', async ($, on) => {
+  test('refuses a bullet over the character cap and keeps the file', async ($, on) => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push(JSON.stringify({ ops: [{ op: 'add', section: 'Active Warnings', text: `- ${'x'.repeat(700)}` }] }))
     await $.session.start(session)
     await $.turn.complete(turn())
     await settled(w, 1)
     expect(w.files.get(FILE)).toBe(OLD)
-    expect(w.statuses.at(-1)).toContain('error: not written: 1 new bullet(s) over 600 characters')
+    expect(w.statuses.at(-1)).toMatch(/^no change, 1 refused · /)
+    expect(w.logs.at(-1)).toContain('bullet of 702 characters, the limit is 600')
   })
 
   test('does not save on a subagent turn or an API error turn', async ($, on) => {

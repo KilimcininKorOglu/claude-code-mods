@@ -149,6 +149,26 @@ describe('apply', () => {
     })
   })
 
+  test('refuses a bullet over the character cap and writes the other ops', async () => {
+    const long = `- ${'z'.repeat(700)}`
+    const r = apply('demo', FILE, reply({
+      ops: [
+        { op: 'add', section: 'Active Warnings', text: long },
+        { op: 'replace', line: '- The API lives in `api/`.', text: long },
+        { op: 'add', section: 'Active Warnings', text: '- Short one.' },
+      ],
+    }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).not.toContain('zzz')
+    expect(r.text).toContain('- Short one.')
+    expect(r.text).toContain('- The API lives in `api/`.')
+    expect(r.changes.refused).toEqual([
+      `add: bullet of 702 characters, the limit is 600: ${long.slice(0, 60)}…`,
+      `replace: bullet of 702 characters, the limit is 600: ${long.slice(0, 60)}…`,
+    ])
+    expect(changeShort(r.changes, [])).toBe('+1 2 refused')
+  })
+
   test('skips a remove or replace whose line is not in the file, applies the rest, and names it', async () => {
     const r = apply('demo', FILE, reply({
       ops: [
