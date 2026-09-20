@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { isSource, lineOf, noteText, shownPath, sqlLines } from './sql.ts'
+import { isSource, lineOf, logText, noteText, shownPath, sqlLines } from './sql.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -30,6 +30,8 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
     const n = text === undefined ? undefined : lineOf(text, l)
     return n === undefined ? shown : `${shown}:${n}`
   })
+  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  $.ui.log(logText(places))
   return { ...r, context: [...(r.context ?? []), noteText(places)] }
 }
 

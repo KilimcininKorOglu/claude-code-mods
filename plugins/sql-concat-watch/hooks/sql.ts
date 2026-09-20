@@ -79,8 +79,17 @@ export function shownPath(path: string, cwd: string): string {
 /** At most this many places are named, the rest counted. */
 const MAX_NAMED = 8
 
-export function noteText(places: string[]): string {
+function namedPlaces(places: string[]): string {
   const named = places.slice(0, MAX_NAMED)
   if (places.length > MAX_NAMED) named.push(`${places.length - MAX_NAMED} more`)
-  return `sql-concat-watch: this edit builds SQL from strings: ${named.join(' · ')}. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.`
+  return named.join(' · ')
+}
+
+export function noteText(places: string[]): string {
+  return `sql-concat-watch: this edit builds SQL from strings: ${namedPlaces(places)}. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.`
+}
+
+/** The transcript line: the places alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(places: string[]): string {
+  return `SQL built from strings: ${namedPlaces(places)}`
 }

@@ -22,6 +22,11 @@ A Claude Code Mod that tells the model when an edit builds SQL by joining string
        sql-concat-watch: this edit builds SQL from strings: src/db.ts:14 · src/db.ts:22. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.
 
    The line number comes from the file after the edit; a Write is numbered from its own content. At most 8 places are named, the rest counted. When the file cannot be read, the path stands without a line and the error is logged once.
+4. The same moment writes one line to the transcript, so you see what the model was told. The line holds the places alone, without the instruction:
+
+       sql-concat-watch: SQL built from strings: src/db.ts:14 · src/db.ts:22
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
 
 In the live check the model put `` db.query(`SELECT * FROM users WHERE id = ${id}`) `` into a file with one Edit, read the note naming `src/users.ts:3`, and named the parameterized form in its answer.
 
@@ -48,13 +53,13 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=sql-concat-watch}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd (via afterEdit), $.store.get, $.store.set (via runCommand), $.ui.log (via fileText)
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd (via afterEdit), $.store.get, $.store.set (via runCommand), $.ui.log (via afterEdit, fileText)
 
 Reach L1, reads files.
 
     1. Reads:    the text of each Edit and Write call; the edited file after an Edit that joins SQL, for the line numbers
     2. Runs:     nothing
-    3. Sends:    a note to the model after an edit that joins SQL; nothing leaves the machine
+    3. Sends:    a note to the model after an edit that joins SQL, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: the edited text is only matched by regular expressions and printed as file:line, never run
 

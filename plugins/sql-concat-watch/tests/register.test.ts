@@ -46,6 +46,7 @@ describe('sql-concat-watch', () => {
     expect((await edit($, 'src/users.ts', 'const q = ""', QUERY)).context).toEqual([
       'sql-concat-watch: this edit builds SQL from strings: src/users.ts:3. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.',
     ])
+    expect(w.logs).toEqual(['SQL built from strings: src/users.ts:3'])
     // The Edit's text is only part of line 4.
     expect((await edit($, 'src/users.ts', "db.query('SELECT 1')", 'db.query(`SELECT * FROM users WHERE id = ${id}`)')).context?.[0]).toContain('src/users.ts:4.')
   })
@@ -75,7 +76,8 @@ describe('sql-concat-watch', () => {
     w.readFails = true
     expect((await edit($, 'src/a.ts', 'x', QUERY)).context?.[0]).toContain('from strings: src/a.ts. Pass')
     await edit($, 'src/b.ts', 'x', QUERY)
-    expect(w.logs).toHaveLength(1)
-    expect(w.logs[0]).toMatch(/^line numbers were left out, the edited file was not read: /)
+    const read = w.logs.filter(l => l.startsWith('line numbers were left out'))
+    expect(read).toHaveLength(1)
+    expect(read[0]).toMatch(/^line numbers were left out, the edited file was not read: /)
   })
 })
