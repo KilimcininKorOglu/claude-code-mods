@@ -51,8 +51,11 @@ function world(on: On): World {
   })
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }) as never)
   on('tool.call', { tool: 'Write' }, () => ({ result: 'ok' }) as never)
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran' }) as never)
   return w
 }
+
+const bash = ($: Engine, command: string) => $.tool.call({ tool: 'Bash', command } as never)
 
 async function started($: Engine): Promise<void> {
   await $.session.start({ surface: null, isInteractive: true, cwd: ROOT })
@@ -102,7 +105,7 @@ describe('config-parse', () => {
     await started($)
     w.file = 'A=1\nthis is prose\n'
     await edit($, '.env')
-    expect((await $.command.run(run(''))).text).toBe('on · .env does not parse')
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · .env does not parse')
     w.file = 'A=1\nB=2\n'
     await edit($, '.env')
     expect(bar.sections).toEqual([
@@ -111,7 +114,7 @@ describe('config-parse', () => {
     ])
     expect(bar.cleared).toEqual(['.env'])
     expect(w.logs).toEqual([])
-    expect((await $.command.run(run(''))).text).toBe('on · no file is open')
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · no file is open')
   })
 
   test('a file that is not configuration, and off, are both left alone', async ($, on) => {
@@ -121,8 +124,29 @@ describe('config-parse', () => {
     expect((await edit($, 'src/main.ts')).context).toBe(undefined)
     expect((await $.command.run(run('off'))).text).toBe('off: edited files are not parsed')
     expect((await edit($, 'package.json')).context).toBe(undefined)
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
     expect(w.logs).toEqual([])
+  })
+
+  test('in deny mode a commit stops while a file does not parse, and runs once the edit fixes it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = '{"a": 1,}'
+    await edit($, 'package.json')
+    expect((await bash($, 'git commit -m "wip"')).result).toBe('ran')
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a file does not parse')
+    const denied = await bash($, 'git commit -m "wip"')
+    expect(denied.deny).toContain('1 file(s) do not parse: package.json')
+    expect(denied.result).toBe(undefined)
+    // The gate leaves every other command alone.
+    expect((await bash($, 'git status')).result).toBe('ran')
+    // The file parses again: the gate rechecks it and lets the same command through.
+    w.file = '{"a": 1}'
+    const passed = await bash($, 'git push origin main')
+    expect(passed.result).toBe('ran')
+    expect(w.logs.at(-1)).toBe('package.json parses as JSON again')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · no file is open')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
   test('a Write of a broken file is checked too', async ($, on) => {

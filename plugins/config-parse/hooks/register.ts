@@ -1,18 +1,20 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { doneLines, doneLog, envError, isMissingTool, jsonError, kindOf, logText, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind } from './parse.ts'
+import { denyText, doneLines, doneLog, envError, isGuarded, isMissingTool, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
+const MODE_KEY = 'mode'
 
 const CONSUMER = 'config-parse'
 
-const USAGE = 'expects nothing (the status), on or off'
+const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /**
- * The on/off setting, the files whose finding still stands, the kinds this machine cannot parse, and
- * the directory the session started in. A path is shown against that directory, not against
- * `$.session.cwd()`, because a Bash `cd` moves the session's directory.
+ * The on/off setting, the mode, the files whose finding still stands (by the path shown, each with the
+ * path on disk and its kind), the kinds this machine cannot parse, and the directory the session
+ * started in. A path is shown against that directory, not against `$.session.cwd()`, because a Bash
+ * `cd` moves the session's directory.
  */
-type State = { enabled: boolean; open: Set<string>; skipped: Set<Kind>; reported: boolean; root?: string }
+type State = { enabled: boolean; mode: Mode; open: Map<string, { path: string; kind: Kind }>; skipped: Set<Kind>; reported: boolean; root?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -84,13 +86,33 @@ async function afterEdit($: EngineInterface, state: State, path: string, r: Tool
     if (state.open.has(shown)) await closeOne($, state, kind, shown)
     return r
   }
-  state.open.add(shown)
+  state.open.set(shown, { path, kind })
   // The note goes to the model, the line to the person: neither reads the other's channel.
   await toPerson($, shown, 'config does not parse', sidebarLines(error), logText(kind, shown, error))
   return { ...r, context: [...(r.context ?? []), noteText(kind, shown, error)] }
 }
 
+/** Parses every open file again and closes the ones an edit fixed, so the gate never holds a stale finding. */
+async function recheckOpen($: EngineInterface, state: State): Promise<void> {
+  for (const [shown, { path, kind }] of [...state.open]) {
+    const error = await checkFile($, state, kind, path)
+    if (error === undefined) await closeOne($, state, kind, shown)
+  }
+}
+
+async function setMode($: EngineInterface, state: State, arg: string): Promise<string> {
+  const mode = modeOf(arg)
+  if (mode === undefined) return 'mode expects note or deny'
+  await $.store.set(MODE_KEY, mode)
+  state.mode = mode
+  return mode === 'deny'
+    ? 'mode deny: git commit, push and merge stop while a file does not parse'
+    : 'mode note: nothing is stopped, the finding reaches the model as a note'
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  const [first = '', second = ''] = args.trim().split(/\s+/)
+  if (first === 'mode') return setMode($, state, second)
   const word = args.trim()
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
@@ -98,17 +120,18 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each edited JSON, YAML, TOML and .env file is parsed' : 'off: edited files are not parsed'
   }
   if (word !== '') return USAGE
-  const open = state.open.size === 0 ? 'no file is open' : `${[...state.open].join(' · ')} does not parse`
-  return `${state.enabled ? 'on' : 'off'} · ${open}`
+  const open = state.open.size === 0 ? 'no file is open' : `${[...state.open.keys()].join(' · ')} does not parse`
+  return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, open: new Set(), skipped: new Set(), reported: false }
+  const state: State = { enabled: true, mode: 'note', open: new Map(), skipped: new Set(), reported: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'config-parse', description: 'JSON, YAML, TOML and .env files an edit broke: status, on, off (config-parse)', argumentHint: '[on | off]' })
+    await $.command.register({ name: 'config-parse', description: 'JSON, YAML, TOML and .env files an edit broke: status, on, off, mode note | deny (config-parse)', argumentHint: '[on | off | mode note | mode deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
     state.root = await $.session.cwd()
     return r
   })
@@ -118,4 +141,12 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => afterEdit($, state, e.file_path, await next(e)))
   on('tool.call', { tool: 'Write' }, async ($, e, next) => afterEdit($, state, e.file_path, await next(e)))
+
+  // The gate: in deny mode a commit, push or merge waits until every open file parses again.
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(e.command)) return next(e)
+    await recheckOpen($, state)
+    if (state.open.size === 0) return next(e)
+    return { deny: denyText([...state.open.keys()]) }
+  })
 }

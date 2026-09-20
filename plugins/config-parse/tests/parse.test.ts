@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { doneLog, envError, isMissingTool, jsonError, kindOf, logText, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines } from '../hooks/parse.ts'
+import { denyText, doneLog, envError, isGuarded, isMissingTool, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines } from '../hooks/parse.ts'
 
 tier('user')
 
@@ -42,6 +42,23 @@ describe('parse', () => {
     expect(logText('env', '.env', 'line 2 is not a setting: x')).toBe('.env does not parse as a .env file: line 2 is not a setting: x')
     expect(doneLog('yaml', 'ci.yml')).toBe('ci.yml parses as YAML again')
     expect(sidebarLines('boom')).toEqual([{ text: 'boom', kind: 'error' }])
+  })
+
+  test('stops a commit, a push and a merge, and leaves every other command alone', async () => {
+    for (const command of ['git commit -m "x"', 'cd app && git commit', 'git -c user.name=x push', 'git merge main', 'npm t && git push origin main']) {
+      expect(isGuarded(command), command).toBe(true)
+    }
+    for (const command of ['git commit --dry-run', 'git log', 'git status', 'git push --help', 'echo "git commit"', 'gitcommit']) {
+      expect(isGuarded(command), command).toBe(false)
+    }
+  })
+
+  test('says why the command stopped and names the files, the rest counted', async () => {
+    expect(denyText(['a.json'])).toBe('stopped: 1 file(s) do not parse: a.json. Fix them and run the command again; there is no way around this gate, and only the person turns it off with /config-parse mode note.')
+    expect(denyText(Array.from({ length: 10 }, (_, i) => `f${i}.json`))).toContain('f7.json · 2 more.')
+    expect(modeOf('deny')).toBe('deny')
+    expect(modeOf('note')).toBe('note')
+    for (const arg of ['', 'x', 'DENY']) expect(modeOf(arg), arg).toBe(undefined)
   })
 
   test('shows a path against the session directory and keys one section per file', async () => {

@@ -10,13 +10,16 @@ A Claude Code Mod that parses each JSON, YAML, TOML or `.env` file an Edit or Wr
 4. A file that does not parse is written to two channels: the model gets a `context` note naming the file and the error, and the person gets a red entry in the shared sidebar's stream, or a transcript line where the sidebar is closed.
 5. When a later edit makes the same file parse again, the standing entry is cleared and one green line says so. That line goes to the person only, because the model fixed it itself.
 6. The mod never denies an edit. The file is written, then read.
+7. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a file does not parse. Before it stops one it parses every open file again, so the command runs by itself once the model fixed them. There is no bypass: a `--dry-run`, a `--help` and every other command pass, but a real commit waits for the fix. `note` mode is the default and stops nothing.
 
 In the live check a JSON file broken with a trailing comma got the note (`Property name must be a string literal`), a YAML file broken with `a: 1: 2` got the python error, and the next Write of `a: 1` closed the finding with `parses as YAML again`.
 
 ## Command
 
-    /config-parse            on or off, and the files that do not parse
-    /config-parse on | off   on by default
+    /config-parse                 on or off, the mode, and the files that do not parse
+    /config-parse on | off        on by default
+    /config-parse mode note       note only; the default
+    /config-parse mode deny       a commit, a push and a merge also stop while a file does not parse
 
 ## Install
 
@@ -36,12 +39,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via fileText, pythonCheck, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=Bash}
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, pythonCheck, toPerson)
 
 Reach L2, reads files and runs a process.
 
-    1. Reads:    the path of each Edit and Write, and the text of the edited JSON and .env files
+    1. Reads:    the path of each Edit and Write, the command of each Bash call, and the text of the edited JSON and .env files
     2. Runs:     python3 -c, by argv, on YAML and TOML files
     3. Sends:    the file name and the parse error to the model; nothing leaves the machine
     4. Persists: the on/off setting in $.store
@@ -49,7 +52,9 @@ Reach L2, reads files and runs a process.
 
 ## Limits
 
-- The check runs after the write, so a broken file exists until the next edit fixes it. The mod is a note and denies nothing.
+- The check runs after the write, so a broken file exists until the next edit fixes it. No edit is ever denied; in `deny` mode only a commit, a push and a merge stop.
+- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/config-parse mode note`.
+- A git command run through a wrapper, an alias or a script the mod cannot read as `git commit|push|merge` passes the gate.
 - A `.env` line is checked for its shape only. A wrong value, a missing quote or a duplicate key is not a finding.
 - A JSON file with comments (`.jsonc` in a `.json` name) is reported as broken, because `JSON.parse` is the parser.
 - YAML and TOML need `python3`; on a machine without it those files are never checked.

@@ -54,6 +54,36 @@ export function pythonError(stderr: string): string {
   return last.replace(/^\w*(Error|Exception):\s*/, '').slice(0, 300)
 }
 
+/** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
+const GIT_FLAG = String.raw`(?:\s+-[cC]\s+\S+|\s+--(?:git-dir|work-tree|namespace)=\S+|\s+--(?:no-pager|no-replace-objects|bare|literal-pathspecs|paginate))`
+
+/** A `git commit`, `git push` or `git merge` the model runs, not one it only asks about. */
+const GUARDED = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+(commit|push|merge)\b`)
+const ASKING = /\s(--dry-run|--help|-h)(\s|$)/
+
+/** Whether the gate stops this command while a finding is open. */
+export function isGuarded(command: string): boolean {
+  return GUARDED.test(command) && !ASKING.test(command)
+}
+
+/** What the deny says: why the command stopped, and the one setting that turns the gate off. */
+export function denyText(open: readonly string[]): string {
+  const named = open.slice(0, MAX_NAMED)
+  if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
+  return `stopped: ${open.length} file(s) do not parse: ${named.join(' · ')}. Fix them and run the command again; there is no way around this gate, and only the person turns it off with /config-parse mode note.`
+}
+
+/** At most this many files are named in the deny text, the rest counted. */
+const MAX_NAMED = 8
+
+/** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
+export type Mode = 'note' | 'deny'
+
+/** The mode a `/config-parse mode <word>` argument names, or undefined when it is not one. */
+export function modeOf(arg: string): Mode | undefined {
+  return arg === 'note' || arg === 'deny' ? arg : undefined
+}
+
 /** `path` shown relative to the session directory when it is inside it. */
 export function shownPath(path: string, cwd: string): string {
   const base = `${cwd.replace(/\/+$/, '')}/`
