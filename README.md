@@ -61,6 +61,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [sql-concat-watch](plugins/sql-concat-watch) | After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters. | L1 |
 | [lockfile-sync](plugins/lockfile-sync) | After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix). | L2 |
 | [bg-tasks](plugins/bg-tasks) | Shows the running background shell tasks on the status line with the oldest one's age, and stops one from the `/bg-tasks` pane. | L2 |
+| [action-pin](plugins/action-pin) | After an edit that adds a GitHub Actions step pinned to a tag or a branch, names each one with the commit SHA to write instead, from the GitHub API. | L3 |
 
 gemini-compact, gemini-advisor, gemini-review and gemini-plan-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 

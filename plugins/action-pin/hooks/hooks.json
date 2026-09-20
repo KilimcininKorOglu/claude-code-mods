@@ -1,0 +1,4 @@
+{
+  "description": "action-pin: session.start, command.run{command=action-pin}, tool.call{tool=Edit}, tool.call{tool=Write}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.ts"]
+}
