@@ -21,7 +21,7 @@ A Claude Code Mod that tells the model when an edit builds SQL by joining string
 
        sql-concat-watch: this edit builds SQL from strings: src/db.ts:14 · src/db.ts:22. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.
 
-   The line number comes from the file after the edit; a Write is numbered from its own content. At most 8 places are named, the rest counted. When the file cannot be read, the path stands without a line and the error is logged once.
+   The line number comes from the file after the edit; a Write is numbered from its own content. At most 8 places are named, the rest counted. When the file cannot be read, the path stands without a line and the error is logged once. The path is written against the directory the session started in when the file is inside it. That directory is read once at the session's start, because a Bash `cd` moves the session's own directory.
 4. The same moment writes one line to the transcript, so you see what the model was told. The line holds the places alone, without the instruction:
 
        sql-concat-watch: SQL built from strings: src/db.ts:14 · src/db.ts:22
@@ -54,7 +54,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=sql-concat-watch}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd (via afterEdit), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via fileText, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via fileText, toPerson)
 
 Reach L1, reads files.
 

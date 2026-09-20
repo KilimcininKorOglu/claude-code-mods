@@ -5,8 +5,12 @@ const ENABLED_KEY = 'enabled'
 
 const USAGE = 'expects nothing (the status), on or off'
 
-/** The on/off setting read at session start, and whether a read error was logged. */
-type State = { enabled: boolean; reported: boolean }
+/**
+ * The on/off setting read at session start, whether a read error was logged, and the directory the
+ * session started in. A path is shown against that directory, not against `$.session.cwd()`, because
+ * a Bash `cd` moves the session's directory and would then leave every path outside it written in full.
+ */
+type State = { enabled: boolean; reported: boolean; root?: string }
 
 /** The file's text after the edit, or undefined when it cannot be read; the first failure is logged. */
 async function fileText($: EngineInterface, state: State, path: string): Promise<string | undefined> {
@@ -38,7 +42,7 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
   if (r.deny !== undefined || r.isError === true) return r
   const lines = state.enabled && isSource(path) ? sqlLines(before, after) : []
   if (lines.length === 0) return r
-  const shown = shownPath(path, await $.session.cwd())
+  const shown = shownPath(path, state.root ?? (await $.session.cwd()))
   const text = before === '' ? after : await fileText($, state, path)
   const places = lines.map(l => {
     const n = text === undefined ? undefined : lineOf(text, l)
@@ -66,6 +70,7 @@ export const register: Register = on => {
     const r = await next(e)
     await $.command.register({ name: 'sql-concat-watch', description: 'SQL an edit builds from strings: status, on, off (sql-concat-watch)', argumentHint: '[on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.root = await $.session.cwd()
     return r
   })
 
