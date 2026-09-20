@@ -119,7 +119,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 function bandTree(els: Elements, prompts: readonly string[], columns: number, onPick: (text: string) => void) {
   const { Box, Button } = els
   return (
-    <Box flexDirection="row" gap={2}>
+    <Box flexDirection="row" gap={2} marginTop={1}>
       {prompts.map((text, i) => (
         <Button key={`deck:${i + 1}`} plain dimColor hotkey={String(i + 1)} label={fit(text, prompts.length, columns)} onPress={() => onPick(text)} />
       ))}
