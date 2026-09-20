@@ -12,15 +12,45 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 
 ## The API other mods use
 
-`plugin.json` declares `"dependencies": ["sidebar"]`, and the mod's own call stays behind a guard, because `$.sidebar` is missing when this mod is not installed:
+Do **not** declare `"dependencies": ["sidebar"]` in `plugin.json`. A declared dependency is a hard one: the engine does not load your mod at all when the person has no sidebar installed (measured on 2.1.278). Call the API behind a guard instead, and your mod works with or without this one:
 
 ```ts
-async function toSidebar($: EngineInterface, section: SidebarSection): Promise<boolean> {
-  try { return await $.sidebar.set(section) } catch { return false }
+/** The finding the person reads: the sidebar while it is open, else the mod's own transcript line. */
+async function toPerson($: EngineInterface, findings: readonly string[], line: string): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({
+      consumer: 'my-mod',              // your mod's name, drawn in the section heading
+      key: 'src-users.ts',             // names the section inside your mod; [A-Za-z0-9._:-]
+      title: 'SQL built from strings', // the heading beside the consumer
+      lines: findings.map(text => ({ text, kind: 'warn' })), // kind: 'ok' | 'warn' | 'dim', or absent
+      buttons: [{ label: 'fix', command: 'my-mod', args: 'fix src/users.ts' }], // optional
+      until: 'turn',                   // 'turn' drops it at the turn's end, 'session' keeps it
+      order: 50,                       // smaller is higher in the pane; 100 when absent
+    })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed, so $.sidebar is missing and the call throws.
+  }
+  $.ui.log(line)
 }
 ```
 
-`types/index.d.ts` is the contract: `set`, `clear({ consumer, key })` and `isOpen()`, with `SidebarSection`, `SidebarLine` and `SidebarButton`. `/plugin-types` copies it into `.claude/types/claude-code-plugins/`, so `$.sidebar` is typed in the dependent mod with nothing copied by hand.
+`set` answers `true` when the section was kept and drawn, and `false` when the sidebar is closed, so one `if (taken) return` covers both the closed and the missing case. `clear({ consumer, key })` removes one of your sections, and `isOpen()` answers whether the pane is up.
+
+`types/index.d.ts` is the contract: `SidebarSection`, `SidebarLine`, `SidebarButton`, `SidebarUntil` and `Sidebar`. `/plugin-types` copies it into `.claude/types/claude-code-plugins/` for every enabled plugin, so `$.sidebar` is typed in your mod with nothing copied by hand. Develop against it with `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>`.
+
+In a `claude plugin test` file the test engine runs no `engine.create`, so stub the noun with an inline plugin and answer its calls in the world:
+
+```ts
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+// then in the test: on('sidebar.set', (_, e) => ({ value: true }))
+```
 
 Limits per section: 50 lines and 5 buttons; the lines left out are counted in the pane. The whole pane draws at most 200 rows. A line longer than the pane's width is cut. A section whose `consumer`, `key` or `title` is of another shape is refused with an error the calling mod reads.
 
