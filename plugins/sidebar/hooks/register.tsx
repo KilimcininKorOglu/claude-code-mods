@@ -117,7 +117,8 @@ function sectionTree(els: Elements, one: Drawn, press: (command: string, args?: 
         </Text>
       ))}
       {one.buttons.map((b, i) => (
-        <Button key={`${one.id}:b${i}`} plain {...(first + i < 9 ? { hotkey: String(first + i + 1) } : {})} label={`[ ${b.label} ]`} onPress={() => press(b.command, b.args)} />
+        // The label turns red under the pointer, because a button's own colour cannot be set.
+        <Button key={`${one.id}:b${i}`} plain hover={{ color: 'red' }} {...(first + i < 9 ? { hotkey: String(first + i + 1) } : {})} label={`[ ${b.label} ]`} onPress={() => press(b.command, b.args)} />
       ))}
     </Box>
   )
