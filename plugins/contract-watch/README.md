@@ -1,6 +1,6 @@
 # contract-watch
 
-A Claude Code Mod that tells the model which callers to check after it changes a function signature. When an Edit changes the parameters of a function, the mod asks ripwire who calls it and adds the callers to the Edit's result, before a build or a test finds them.
+A Claude Code Mod that tells the model which callers to check after it changes a function signature. When an Edit changes the parameters of a function, the mod asks [ripwire](https://github.com/redhat-et/ripwire) who calls it and adds the callers to the Edit's result, before a build or a test finds them.
 
 ## What it does
 
@@ -39,7 +39,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## After installing
 
-1. Install ripwire and put it on PATH. Without it every changed signature logs `the callers were not checked: ...` once, and the edit runs as before.
+1. Install [ripwire](https://github.com/redhat-et/ripwire) and put it on PATH. Without it every changed signature logs `the callers were not checked: ...` once, and the edit runs as before.
 2. Restart Claude Code.
 
 ## What it can reach

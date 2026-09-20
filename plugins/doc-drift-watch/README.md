@@ -1,6 +1,6 @@
 # doc-drift-watch
 
-A Claude Code Mod that tells the model which doc lines its commit made stale. After each `git commit` the model runs, the mod asks ripwire which markdown anchors no longer hold, and adds the ones the commit broke to the commit's result.
+A Claude Code Mod that tells the model which doc lines its commit made stale. After each `git commit` the model runs, the mod asks [ripwire](https://github.com/redhat-et/ripwire) which markdown anchors no longer hold, and adds the ones the commit broke to the commit's result.
 
 ## What it does
 
@@ -39,7 +39,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## After installing
 
-1. Install ripwire and put it on PATH. Without it each commit logs `the docs were not checked: ...` once, and the commit runs as before.
+1. Install [ripwire](https://github.com/redhat-et/ripwire) and put it on PATH. Without it each commit logs `the docs were not checked: ...` once, and the commit runs as before.
 2. Restart Claude Code.
 
 ## What it can reach
