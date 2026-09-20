@@ -5,8 +5,8 @@
  * not installed, where the call throws), so the caller keeps its own way of showing the same finding.
  */
 
-/** One line of a section; `kind` colours it. */
-export type SidebarLine = { text: string; kind?: 'ok' | 'warn' | 'dim' }
+/** One line of a section; `kind` colours it: `ok` green, `warn` yellow, `error` red, `dim` faint. */
+export type SidebarLine = { text: string; kind?: 'ok' | 'warn' | 'error' | 'dim' }
 
 /** A button under a section: pressing it runs the slash command `/<command> <args>`. */
 export type SidebarButton = { label: string; command: string; args?: string }

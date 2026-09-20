@@ -6,7 +6,7 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 
 1. `/sidebar` opens the pane and `/sidebar off` closes it. The choice is kept in `$.store`, so a session started later opens the sidebar again by itself.
 2. While it is open, any mod writes a section: `$.sidebar.set({ consumer, key, title, lines, buttons, until, order })` answers `true`. While it is closed nothing is kept and the call answers `false`, so the mod keeps showing its own transcript line or status line instead.
-3. A section is drawn as a bold heading (`<consumer>: <title>`), its lines (`ok` green, `warn` yellow, `dim` faint) and its buttons. The pane has two parts: the standing sections at the top (`until: 'session'`, then `until: 'turn'`, each group by `order`, then consumer, then key), and the stream under them.
+3. A section is drawn as a bold heading (`<consumer>: <title>`), its lines (`ok` green, `warn` yellow, `error` red, `dim` faint) and its buttons. The pane has two parts: the standing sections at the top (`until: 'session'`, then `until: 'turn'`, each group by `order`, then consumer, then key), and the stream under them.
 4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
 5. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane. The mod that offers the button serves that command itself.
 6. The three lifetimes: `session` stands at the top until the mod replaces or clears it, `stream` joins the log under it, `turn` goes when the turn ends.
@@ -23,7 +23,7 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
       consumer: 'my-mod',              // your mod's name, drawn in the section heading
       key: 'src-users.ts',             // names the section inside your mod; [A-Za-z0-9._:-]
       title: 'SQL built from strings', // the heading beside the consumer
-      lines: findings.map(text => ({ text, kind: 'warn' })), // kind: 'ok' | 'warn' | 'dim', or absent
+      lines: findings.map(text => ({ text, kind: 'error' })), // kind: 'ok' | 'warn' | 'error' | 'dim', or absent
       buttons: [{ label: 'fix', command: 'my-mod', args: 'fix src/users.ts' }], // optional
       until: 'stream',                 // 'stream' logs it, 'session' keeps it standing, 'turn' drops it at the turn's end
       order: 50,                       // smaller is higher inside your group; 100 when absent

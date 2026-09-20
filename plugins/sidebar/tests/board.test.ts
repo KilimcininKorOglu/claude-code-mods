@@ -52,6 +52,7 @@ describe('readSection', () => {
       until: 'forever' as never,
     }))
     expect(r.lines).toEqual([{ text: 'one two' }, { text: 'tone', kind: 'ok' }, { text: 'plain' }])
+    expect(kept(section({ lines: [{ text: 'bad', kind: 'error' }] })).lines).toEqual([{ text: 'bad', kind: 'error' }])
     expect(r.buttons).toEqual([{ label: 'stop', command: 'bg-tasks', args: 'stop 1' }])
     expect(r.order).toBe(100)
     expect(r.until).toBe('session')

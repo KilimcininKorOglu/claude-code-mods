@@ -57,7 +57,7 @@ function lineOf(value: unknown): SidebarLine | undefined {
   if (typeof value !== 'object' || value === null) return undefined
   const { text, kind } = value as { text?: unknown; kind?: unknown }
   if (typeof text !== 'string') return undefined
-  const ok = kind === 'ok' || kind === 'warn' || kind === 'dim'
+  const ok = kind === 'ok' || kind === 'warn' || kind === 'error' || kind === 'dim'
   return ok ? { text: oneLine(text), kind } : { text: oneLine(text) }
 }
 

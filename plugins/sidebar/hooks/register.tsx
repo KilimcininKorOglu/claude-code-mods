@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { drawn, dropTurn, pushed, readSection, sectionId, type Board, type Drawn, type Kept, EMPTY_TEXT, MAX_BOARD_LINES } from './board.ts'
+import { drawn, dropTurn, pushed, readSection, sectionId, type Board, type Drawn, type Kept, type Row, EMPTY_TEXT, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -101,13 +101,18 @@ export function createSidebar(redraw: () => void, state: State): Sidebar {
   }
 }
 
+/** The colour of a line's tone; `dim` has none of its own and is drawn faint instead. */
+function toneColor(tone: Row['tone']): string | undefined {
+  return { ok: 'green', warn: 'yellow', error: 'red' }[tone as 'ok' | 'warn' | 'error']
+}
+
 function sectionTree(els: Elements, one: Drawn, press: (command: string, args?: string) => void, first: number) {
   const { Box, Button, Text } = els
   return (
     <Box key={one.id} flexDirection="column" marginBottom={1}>
       <Text bold>{one.head}</Text>
       {one.rows.map((row, i) => (
-        <Text key={`${one.id}:${i}`} color={row.tone === 'ok' ? 'green' : row.tone === 'warn' ? 'yellow' : undefined} dimColor={row.tone === 'dim'}>
+        <Text key={`${one.id}:${i}`} color={toneColor(row.tone)} dimColor={row.tone === 'dim'}>
           {row.text}
         </Text>
       ))}
