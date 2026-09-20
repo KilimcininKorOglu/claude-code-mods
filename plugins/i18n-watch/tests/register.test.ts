@@ -64,6 +64,7 @@ function world(on: On, files: Record<string, string>): World {
     if (text === undefined) throw new Error('ENOENT')
     return { value: text } as never
   })
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }))
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }))
   on('tool.call', { tool: 'Write' }, () => ({ result: 'ok' }))
   return w
@@ -160,7 +161,24 @@ describe('i18n-watch', () => {
     expect(w.reads).toBe(0)
     expect((await $.command.run(run('off'))).text).toBe('off: edits are not checked')
     expect((await edit($, 'src/a.ts', '', "t('checkout.fee')")).context).toBe(undefined)
-    expect((await $.command.run(run(''))).text).toBe('off')
+    expect((await $.command.run(run(''))).text).toBe('off · mode note · no file is open')
+  })
+
+  test('in deny mode a commit stops while a key is missing, and runs once every locale has it', async ($, on) => {
+    const w = world(on, LOCALES)
+    await started($)
+    await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a file lacks translation keys')
+    const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
+    expect(denied.deny).toContain('stopped: 1 file(s) use translation keys the locale files lack: src/Cart.vue (checkout.fee)')
+    expect(denied.result).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 file(s) still lack keys')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git status' } as never)).result).toBe('ok')
+    // The keys are in every locale now: the gate reads them again and the push runs.
+    for (const lang of ['en', 'tr', 'de']) w.files.set(`${ROOT}/locales/${lang}.json`, '{"checkout":{"fee":"Fee"}}')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('every locale now has the keys src/Cart.vue lacked: checkout.fee')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
   test('the catalog is read once per turn and again after a locale edit', async ($, on) => {

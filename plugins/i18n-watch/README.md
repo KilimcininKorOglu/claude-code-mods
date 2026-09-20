@@ -1,6 +1,6 @@
 # i18n-watch
 
-A Claude Code Mod that tells the model when an edit uses translation keys that one or more locale files lack. The note comes with the Edit's result, so the model adds the keys in the same turn. Nothing is stopped.
+A Claude Code Mod that tells the model when an edit uses translation keys that one or more locale files lack. The note comes with the Edit's result, so the model adds the keys in the same turn. By default nothing is stopped; in `deny` mode a commit, a push and a merge stop while a key is missing.
 
 ## What it does
 
@@ -34,14 +34,18 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: it added the keys itself, so a note would only repeat what it just did.
 
+8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a file still uses keys the locale files lack. Before it stops one it drops the catalog and reads the locale files again, so keys the model added without an Edit of a locale file open the gate too. There is no bypass; only the person turns the gate off with `/i18n-watch mode note`. `note` mode is the default and stops nothing.
+
 The locale files are read at the first edit of a turn that adds a key, and again after an Edit or Write of a locale file. A project without these directories gets nothing. A locale file that cannot be read or parsed is skipped and logged once per session.
 
 In the live check the model added `t('cart.total')` to a file of a project with `locales/en.json` and `locales/tr.json`, read the note after the Edit, and quoted it word for word.
 
 ## Command
 
-    /i18n-watch            on or off
-    /i18n-watch on | off   on by default
+    /i18n-watch                 on or off, the mode, and the files still missing keys
+    /i18n-watch on | off        on by default
+    /i18n-watch mode note       note only; the default
+    /i18n-watch mode deny       a commit, a push and a merge also stop while a key is missing
 
 ## Install
 
@@ -60,15 +64,15 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, toPerson)
 
 Reach L1, reads files.
 
-    1. Reads:    the text of each Edit and Write call; the locale directories under the session directory and their files
+    1. Reads:    the text of each Edit and Write call; the Bash command text; the locale directories under the session directory and their files
     2. Runs:     nothing
     3. Sends:    a note to the model after an edit that uses missing keys, and one line to the transcript; nothing leaves the machine
-    4. Persists: in $.store, the on/off setting; the locale keys live in memory for one turn
+    4. Persists: in $.store, the on/off setting and the mode; the locale keys live in memory for one turn
     5. Hostile input: locale files are only parsed as data (JSON.parse and line regexes), never run; PHP files are not executed
 
 ## Limits
@@ -79,6 +83,8 @@ Reach L1, reads files.
 - A key built at run time (`t(name)`, `` t(`a.${b}`) ``) is not checked.
 - A language code is two letters with an optional region or script (`tr`, `pt_BR`, `zh-Hant`); a three-letter code such as `fil` is not recognised.
 - A key the edit only moves (it was in `old_string` too) is not checked, and neither is an edit through Bash.
+- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/i18n-watch mode note`.
+- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
 
 ## Development
 

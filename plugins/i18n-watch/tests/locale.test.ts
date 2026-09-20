@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { callKeys, newKeys } from '../hooks/keys.ts'
-import { addFile, fileLang, jsonKeys, missingKeys, noteText, phpKeys, poKeys, yamlKeys, type Catalog } from '../hooks/locale.ts'
+import { addFile, denyText, fileLang, isGuarded, jsonKeys, missingKeys, modeOf, noteText, phpKeys, poKeys, yamlKeys, type Catalog } from '../hooks/locale.ts'
 
 tier('user')
 
@@ -73,5 +73,15 @@ describe('locale files', () => {
     )
     const many = Array.from({ length: 12 }, (_, i) => ({ key: `k${i}`, langs: 'all' as const }))
     expect(noteText(many)).toContain('k9 (missing in every locale) · 2 more.')
+  })
+
+  test('the gate stops a commit, a push and a merge, and says why', () => {
+    for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
+    for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('deny')).toBe('deny')
+    expect(modeOf('x')).toBe(undefined)
+    expect(denyText([{ file: 'src/Cart.vue', keys: ['checkout.fee'] }])).toBe(
+      'stopped: 1 file(s) use translation keys the locale files lack: src/Cart.vue (checkout.fee). Add the keys to every locale file, then run the command again; there is no way around this gate, and only the person turns it off with /i18n-watch mode note.',
+    )
   })
 })

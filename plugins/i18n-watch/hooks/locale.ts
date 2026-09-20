@@ -183,6 +183,32 @@ export function doneLines(file: string, keys: string[]): { text: string; kind: '
   return [{ text: file, kind: 'ok' }, ...namedPlain(keys).split(' · ').map(text => ({ text, kind: 'ok' as const }))]
 }
 
+/** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
+const GIT_FLAG = String.raw`(?:\s+-[cC]\s+\S+|\s+--(?:git-dir|work-tree|namespace)=\S+|\s+--(?:no-pager|no-replace-objects|bare|literal-pathspecs|paginate))`
+
+/** A `git commit`, `git push` or `git merge` the gate stops while a finding is open. */
+const GUARDED = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+(commit|push|merge)\b`)
+const ASKING = /\s(--dry-run|--help|-h)(\s|$)/
+
+export function isGuarded(command: string): boolean {
+  return GUARDED.test(command) && !ASKING.test(command)
+}
+
+/** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
+export type Mode = 'note' | 'deny'
+
+/** The mode a `/i18n-watch mode <word>` argument names, or undefined when it is not one. */
+export function modeOf(arg: string): Mode | undefined {
+  return arg === 'note' || arg === 'deny' ? arg : undefined
+}
+
+/** The deny text both the model and the person read: which file lacks which keys, and the one way out. */
+export function denyText(open: readonly { file: string; keys: string[] }[]): string {
+  const named = open.slice(0, MAX_NAMED).map(o => `${o.file} (${namedPlain(o.keys)})`)
+  if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
+  return `stopped: ${open.length} file(s) use translation keys the locale files lack: ${named.join(' · ')}. Add the keys to every locale file, then run the command again; there is no way around this gate, and only the person turns it off with /i18n-watch mode note.`
+}
+
 /** `path` shown relative to the session's directory when it is inside it. */
 export function shownPath(path: string, cwd: string): string {
   const base = `${cwd.replace(/\/+$/, '')}/`
