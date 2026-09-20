@@ -1,12 +1,15 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, diffReads, isCommit, listedNames, logText, noteText, REFERENCE_FILES, sectionKey, sidebarLines, type EnvRead } from './env.ts'
+import { commitDir, diffReads, doneLines, doneLog, isCommit, listedNames, logText, noteText, openNames, REFERENCE_FILES, sectionKey, sidebarLines } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 
 const USAGE = 'expects nothing (the status), on or off'
 
-/** The on/off setting read at session start, and the last error logged, so the same one is logged once. */
-type State = { enabled: boolean; lastError?: string }
+/**
+ * The on/off setting read at session start, and the last error logged, so the same one is logged once.
+ * `open` holds the variables the last finding named, so a commit that adds them all closes it.
+ */
+type State = { enabled: boolean; lastError?: string; open: string[] }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -51,35 +54,55 @@ async function referenceFile($: EngineInterface, root: string): Promise<string |
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, missing: readonly EnvRead[], reference: string): Promise<void> {
+async function toPerson($: EngineInterface, reference: string, title: string, lines: { text: string; kind: 'warn' | 'ok' }[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title: `env variables ${reference} lacks`, lines: sidebarLines(missing), until: 'stream' })
+    const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title, lines, until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
   }
-  $.ui.log(logText(missing, reference))
+  $.ui.log(line)
+}
+
+/** Drops the sidebar entries of one finding, so a variable that was added leaves no warning behind. */
+async function dropEntry($: EngineInterface, reference: string): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'env-sync', key: sectionKey(reference) })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+}
+
+/** Closes the open finding when the reference file lists every variable it named, and reports it. */
+async function closeResolved($: EngineInterface, state: State, reference: string, listed: ReadonlySet<string>): Promise<void> {
+  const added = state.open
+  if (added.length === 0 || added.some(name => !listed.has(name))) return
+  state.open = []
+  await dropEntry($, reference)
+  await toPerson($, reference, `env variables ${reference} gained`, doneLines(added), doneLog(added, reference))
 }
 
 /** The note for the commit that moved HEAD, or undefined when it reads no variable the reference file lacks. */
-async function commitNote($: EngineInterface, before: Before): Promise<string | undefined> {
+async function commitNote($: EngineInterface, state: State, before: Before): Promise<string | undefined> {
   const head = await git($, before.root, ['rev-parse', 'HEAD'])
   const reference = await referenceFile($, before.root)
   if (!head.ok || head.out.trim() === before.head || reference === undefined) return undefined
   const diff = await git($, before.root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', 'HEAD'])
   if (!diff.ok) throw new Error('git show HEAD failed')
   const listed = listedNames(await $.fs.read(`${before.root}/${reference}`))
+  await closeResolved($, state, reference, listed)
   const missing = diffReads(diff.out).filter(r => !listed.has(r.name))
   if (missing.length === 0) return undefined
+  state.open = openNames(state.open, missing)
   // The note goes to the model, the finding to the person: neither reads the other's channel.
-  await toPerson($, missing, reference)
+  await toPerson($, reference, `env variables ${reference} lacks`, sidebarLines(missing), logText(missing, reference))
   return noteText(missing, reference)
 }
 
 async function afterCommit($: EngineInterface, state: State, before: Before, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
   try {
-    const note = await commitNote($, before)
+    const note = await commitNote($, state, before)
     state.lastError = undefined
     return note === undefined ? r : { ...r, context: [...(r.context ?? []), note] }
   } catch (err) {
@@ -99,7 +122,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true }
+  const state: State = { enabled: true, open: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

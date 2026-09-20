@@ -32,6 +32,12 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those variables go there instead, one line per variable, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
+7. A finding stays open until the variables are listed. After each later commit the mod measures the names it reported against the reference file again. When none of them is missing any more, its sidebar entry is cleared and a new entry takes its place:
+
+       env-sync: .env.example now lists the variables it lacked: STRIPE_KEY · REDIS_URL
+
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this: it added the variables itself, so a note would only repeat what it just did.
+
 A git error is logged once, and the commit's result stays as it was.
 
 In the live check the model added `process.env.STRIPE_KEY` to a file of a repository whose `.env.example` listed only `DB_URL`, committed it, and quoted the note word for word.
@@ -59,7 +65,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 

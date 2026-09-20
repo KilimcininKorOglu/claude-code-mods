@@ -14,13 +14,19 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: string[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string }[] }
-    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    const s = e as unknown as { key: string; title: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text) })
     return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    const c = e as unknown as { key: string }
+    bar.cleared.push(c.key)
+    bar.sections = bar.sections.filter(s => s.key !== c.key)
+    return { value: undefined }
   })
 }
 
@@ -81,11 +87,40 @@ describe('env-sync', () => {
 
   withSidebar('an open sidebar takes the variables and the transcript stays clean', async ($, on) => {
     const w = world(on)
-    const bar: Bar = { open: true, sections: [] }
+    const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
-    expect(bar.sections).toEqual([{ key: '.env.example', lines: ['STRIPE_KEY (src/pay.ts:1)'] }])
+    expect(bar.sections).toEqual([{ key: '.env.example', title: 'env variables .env.example lacks', lines: ['STRIPE_KEY (src/pay.ts:1)'] }])
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a later commit that adds the variables clears the entry and writes a new one', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    w.files.set(`${ROOT}/.env.example`, 'DB_URL=postgres://localhost/app\nSTRIPE_KEY=\n')
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m env' })).context).toBe(undefined)
+    expect(bar.cleared).toEqual(['.env.example'])
+    expect(bar.sections).toEqual([{ key: '.env.example', title: 'env variables .env.example gained', lines: ['STRIPE_KEY'] }])
+  })
+
+  test('the finding stays open while one variable is still missing', async ($, on) => {
+    const w = world(on)
+    w.files = new Map([[`${ROOT}/.env.example`, '']])
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    w.files.set(`${ROOT}/.env.example`, 'STRIPE_KEY=\n')
+    w.next = 'ccc'
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m half' })
+    expect(w.logs).toEqual([
+      'env variables .env.example lacks: STRIPE_KEY (src/pay.ts:1) · DB_URL (src/pay.ts:2)',
+      'env variables .env.example lacks: DB_URL (src/pay.ts:2)',
+    ])
+    w.files.set(`${ROOT}/.env.example`, 'STRIPE_KEY=\nDB_URL=\n')
+    w.next = 'ddd'
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m rest' })
+    expect(w.logs[2]).toBe('.env.example now lists the variables it lacked: STRIPE_KEY · DB_URL')
   })
 
   test('the first commit of a repository is checked, and .env.sample is read when .env.example is missing', async ($, on) => {

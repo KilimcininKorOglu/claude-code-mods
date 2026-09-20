@@ -121,6 +121,27 @@ export function sidebarLines(missing: readonly EnvRead[]): { text: string; kind:
   return namedReads(missing).split(' · ').map(text => ({ text, kind: 'warn' }))
 }
 
+/** The variables a finding holds open after a new report: the earlier ones and the new ones, each once. */
+export function openNames(before: readonly string[], missing: readonly EnvRead[]): string[] {
+  return [...new Set([...before, ...missing.map(r => r.name)])]
+}
+
+function namedPlain(names: readonly string[]): string {
+  const named = names.slice(0, MAX_NAMED)
+  if (names.length > MAX_NAMED) named.push(`${names.length - MAX_NAMED} more`)
+  return named.join(' · ')
+}
+
+/** The transcript line of a finding a later commit closed. */
+export function doneLog(names: readonly string[], reference: string): string {
+  return `${reference} now lists the variables it lacked: ${namedPlain(names)}`
+}
+
+/** One sidebar line per variable the reference file gained. */
+export function doneLines(names: readonly string[]): { text: string; kind: 'ok' }[] {
+  return namedPlain(names).split(' · ').map(text => ({ text, kind: 'ok' as const }))
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one reference file keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
