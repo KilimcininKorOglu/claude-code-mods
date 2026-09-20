@@ -61,6 +61,30 @@ export function denyText(reasons: readonly string[]): string {
   return `dep-sentinel stopped this install: ${reasons.join(' · ')}. Install the latest version or the right name instead. If the user needs exactly this, tell them why, then run the same command again with the DEP_SENTINEL_SKIP=1 prefix.`
 }
 
+/** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
+const GIT_FLAG = String.raw`(?:\s+-[cC]\s+\S+|\s+--(?:git-dir|work-tree|namespace)=\S+|\s+--(?:no-pager|no-replace-objects|bare|literal-pathspecs|paginate))`
+
+/** A `git commit`, `git push` or `git merge` the gate stops while a package stayed unchecked. */
+const GUARDED = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+(commit|push|merge)\b`)
+const ASKING = /\s(--dry-run|--help|-h)(\s|$)/
+
+export function isGuarded(command: string): boolean {
+  return GUARDED.test(command) && !ASKING.test(command)
+}
+
+/** The mode of the mod: a note only after an unchecked install, or a note and a gate on git commit, push and merge. */
+export type Mode = 'note' | 'deny'
+
+/** The mode a `/dep-sentinel mode <word>` argument names, or undefined when it is not one. */
+export function modeOf(arg: string): Mode | undefined {
+  return arg === 'note' || arg === 'deny' ? arg : undefined
+}
+
+/** The gate text both the model and the person read: which packages stayed unchecked, and the one way out. */
+export function gateText(names: readonly string[]): string {
+  return `stopped: ${names.length} package(s) were installed unchecked: ${names.join(' · ')}. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate, and only the person turns it off with /dep-sentinel mode note.`
+}
+
 /** The note the model reads after an install whose check could not finish. */
 export function uncheckedNote(failures: readonly string[]): string {
   return `dep-sentinel could not check every package, so the install ran unchecked for: ${failures.join(' · ')}. Tell the user.`

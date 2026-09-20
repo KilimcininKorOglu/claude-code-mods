@@ -2,7 +2,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { distance, lookAlike } from '../hooks/popular.ts'
 import { compareVersions, cratesInfo, goInfo, goOldest, latestInMajor, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl } from '../hooks/registry.ts'
-import { denyText, registryReasons, targetVersion, vulnReason } from '../hooks/rules.ts'
+import { denyText, gateText, isGuarded, modeOf, registryReasons, targetVersion, vulnReason } from '../hooks/rules.ts'
 
 tier('user')
 
@@ -73,5 +73,15 @@ describe('rules', () => {
       .toBe('lodash@4.17.15 has 2 known vulnerability(ies) on OSV.dev: GHSA-1, GHSA-2; fixed in 4.17.21')
     expect(vulnReason({ ecosystem: 'npm', name: 'x', exact: false }, '1.0.0', { ids: [], fixed: [] })).toBe(undefined)
     expect(denyText(['a', 'b'])).toBe('dep-sentinel stopped this install: a · b. Install the latest version or the right name instead. If the user needs exactly this, tell them why, then run the same command again with the DEP_SENTINEL_SKIP=1 prefix.')
+  })
+
+  test('the gate stops a commit, a push and a merge, and says why', () => {
+    for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
+    for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('note')).toBe('note')
+    expect(modeOf('')).toBe(undefined)
+    expect(gateText(['lodash'])).toBe(
+      'stopped: 1 package(s) were installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate, and only the person turns it off with /dep-sentinel mode note.',
+    )
   })
 })

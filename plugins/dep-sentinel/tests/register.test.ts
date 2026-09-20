@@ -140,6 +140,21 @@ describe('dep-sentinel', () => {
     await $.tool.call({ tool: 'Bash', command: 'npm i lodash@4.17.15' })
     expect(w.asked).toEqual([])
     expect(w.ran).toEqual(['npm i lodash', 'DEP_SENTINEL_SKIP=1 npm i lodash@4.17.15', 'npm i lodash@4.17.15'])
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
+  })
+
+  test('in deny mode a commit stops while a package stayed unchecked, and runs once a later install checked it', async ($, on) => {
+    const w = world(on)
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a package stayed unchecked')
+    const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
+    expect(denied.deny).toBe('stopped: 1 package(s) were installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate, and only the person turns it off with /dep-sentinel mode note.')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 package(s) still unchecked; npm, PyPI, Go, crates.io and Packagist installs are checked')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git status' })).result).toBe('ok')
+    w.down = false
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).result).toBe('ok')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 })

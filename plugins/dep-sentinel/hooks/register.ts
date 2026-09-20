@@ -1,11 +1,12 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
-import { checkedLog, denyText, doneLines, missingReason, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason } from './rules.ts'
+import { checkedLog, denyText, doneLines, gateText, isGuarded, missingReason, modeOf, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
+const MODE_KEY = 'mode'
 
-const USAGE = 'expects nothing (the status), on or off'
+const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /** crates.io refuses a request without a User-Agent. */
 const HEADERS = { 'User-Agent': 'dep-sentinel (Claude Code mod; github.com/KilimcininKorOglu/claude-code-mods)', Accept: 'application/json' }
@@ -17,7 +18,7 @@ const GO_PARENT_TRIES = 4
 type Outcome = { reasons: string[]; failure?: string }
 
 /** The packages an earlier install could not check, so a later one that checks them closes the finding. */
-type State = { open: Set<string> }
+type State = { mode: Mode; open: Set<string> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -127,28 +128,54 @@ function withNote(r: ToolCallResult, note: string): ToolCallResult {
   return { ...r, context: [...(r.context ?? []), note] }
 }
 
-async function runCommand($: EngineInterface, args: string): Promise<string> {
+/**
+ * The gate of the `deny` mode. It holds no check of its own: a package the registry or OSV.dev did not
+ * answer for stays open until a later install checks it, because a gate must not wait on the network.
+ */
+async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
+  if (state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
+  return gateText([...state.open])
+}
+
+async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
+  const mode = modeOf(word)
+  if (mode === undefined) return 'mode expects note or deny'
+  await $.store.set(MODE_KEY, mode)
+  state.mode = mode
+  return mode === 'deny' ? 'mode deny: git commit, push and merge stop while a package stayed unchecked' : 'mode note: an unchecked package is only reported'
+}
+
+async function statusText($: EngineInterface, state: State): Promise<string> {
+  const open = state.open.size === 0 ? 'no package is open' : `${state.open.size} package(s) still unchecked`
+  return `${(await isEnabled($)) ? 'on' : 'off'} · mode ${state.mode} · ${open}; npm, PyPI, Go, crates.io and Packagist installs are checked`
+}
+
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     return word === 'on' ? 'on: each install is checked against its registry and OSV.dev' : 'off: installs run unchecked'
   }
-  return word === '' ? `${(await isEnabled($)) ? 'on' : 'off'}; npm, PyPI, Go, crates.io and Packagist installs are checked` : USAGE
+  if (word.startsWith('mode')) return setMode($, state, word.slice(4).trim())
+  return word === '' ? statusText($, state) : USAGE
 }
 
 export const register: Register = on => {
-  const state: State = { open: new Set() }
+  const state: State = { mode: 'note', open: new Set() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'dep-sentinel', description: 'Package installs checked before they run: status, on, off (dep-sentinel)', argumentHint: '[on | off]' })
+    await $.command.register({ name: 'dep-sentinel', description: 'Package installs checked before they run: status, on, off, mode (dep-sentinel)', argumentHint: '[on | off | mode note | deny]' })
+    state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
     return r
   })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
-  on('command.run', { command: 'dep-sentinel' }, async ($, e) => ({ text: await runCommand($, String(e.args ?? '')) }))
+  on('command.run', { command: 'dep-sentinel' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const stop = await gate($, state, e.command)
+    if (stop !== undefined) return { deny: stop }
     const plan = planOf(e.command)
     if (plan.installs.length === 0 || !(await isEnabled($))) return next(e)
     if (plan.skipped) {

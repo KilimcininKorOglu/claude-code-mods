@@ -34,12 +34,16 @@ A Claude Code Mod that checks each package the model installs before the install
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this.
 
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stayed unchecked. The gate runs no check of its own, because it must not wait on the network: the package opens the gate when a later install checks it. There is no bypass; only the person turns the gate off with `/dep-sentinel mode note`. `note` mode is the default and stops no git command. An install is stopped in both modes, as above.
+
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 
 ## Command
 
-    /dep-sentinel            on or off
-    /dep-sentinel on | off   on by default
+    /dep-sentinel                 on or off, the mode, and the packages still unchecked
+    /dep-sentinel on | off        on by default
+    /dep-sentinel mode note       an unchecked package is only reported; the default
+    /dep-sentinel mode deny       a commit, a push and a merge also stop while a package stayed unchecked
 
 ## Install
 
@@ -59,14 +63,14 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
 
 Reach L3, reaches the network.
 
     1. Reads:    the Bash command text
     2. Runs:     nothing
     3. Sends:    each package name, and its version, to its public registry and to api.osv.dev; a note to the model and one line to the transcript when a check failed; nothing else leaves the machine
-    4. Persists: in $.store, the on/off setting
+    4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a package name comes from the model's command; it reaches a registry only inside a URL path or a JSON body, and a registry answer is read as data
 
 ## Limits
@@ -75,6 +79,8 @@ Reach L3, reaches the network.
 - A version range (`^18`, `>=4`, `cargo add serde@1.0`) is not stopped as old, because the installer resolves it; its latest version is checked on OSV.dev.
 - npm package documents are large (16 MB for typescript, measured), so a check takes up to a few seconds.
 - An install that a script, an alias or a lockfile runs (`npm ci`, `pip install -r`) is not checked.
+- The `deny` mode has no bypass. When a registry stays unreachable, the person turns the gate off with `/dep-sentinel mode note`.
+- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
 
 ## Development
 
