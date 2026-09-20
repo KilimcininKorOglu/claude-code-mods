@@ -14,6 +14,12 @@ export const MAX_BOARD_LINES = 200
 /** Entries the stream keeps in memory; the pane draws only as many as its rows take. */
 export const MAX_STREAM = 100
 
+/** Entries one consumer keeps in the stream; its own oldest drops first, never another mod's. */
+export const MAX_STREAM_PER_CONSUMER = 20
+
+/** Rows one consumer draws of the stream at least, while other consumers write too. */
+export const MIN_STREAM_SHARE = 2
+
 /** Buttons one section may draw. */
 export const MAX_BUTTONS = 5
 
@@ -145,6 +151,49 @@ function drawSection(section: Kept, columns: number, left: number): Drawn {
   return { id: section.id, head: cut(`${section.consumer}: ${section.title}`, columns), rows, buttons: section.buttons }
 }
 
+/** Draws one section into `out` with `left` rows to spend; answers the rows it took, 0 for none. */
+function addSection(out: Drawn[], section: Kept, columns: number, left: number): number {
+  if (left <= 1) return 0
+  const one = drawSection(section, columns, left - 1)
+  out.push(one)
+  return 1 + one.rows.length
+}
+
+/** The rows a stream entry asks for: its heading and its lines. */
+const cost = (s: Kept): number => 1 + s.lines.length
+
+/**
+ * The stream entries the pane draws, in the stream's own order. Each consumer takes at most its share
+ * of the rows while another consumer writes too, so one talkative mod cannot push every other mod's
+ * entry off the pane. A second pass hands the rows the shares left over to the entries they held
+ * back, so a consumer writing alone still fills the whole area.
+ */
+export function picked(stream: readonly Kept[], rows: number): Kept[] {
+  const names = new Set(stream.map(s => s.consumer))
+  if (names.size < 2) return [...stream]
+  const share = Math.max(MIN_STREAM_SHARE, Math.floor(rows / names.size))
+  const used = new Map<string, number>()
+  const keep = new Set<Kept>()
+  const later: Kept[] = []
+  let left = rows
+  for (const entry of stream) {
+    const before = used.get(entry.consumer) ?? 0
+    if (before + cost(entry) > share) {
+      later.push(entry)
+      continue
+    }
+    used.set(entry.consumer, before + cost(entry))
+    left -= cost(entry)
+    keep.add(entry)
+  }
+  for (const entry of later) {
+    if (left <= 1) break
+    left -= cost(entry)
+    keep.add(entry)
+  }
+  return stream.filter(e => keep.has(e))
+}
+
 /**
  * The pane's content: the standing sections first, then the stream newest first, cut to `columns` and
  * to `rows`, the pane's own height. The stream's oldest entries are the ones the rows run out on, so
@@ -154,19 +203,28 @@ function drawSection(section: Kept, columns: number, left: number): Drawn {
 export function drawn(board: Board, stream: readonly Kept[], columns: number, rows: number): Drawn[] {
   const out: Drawn[] = []
   let left = Math.min(Math.max(0, rows), MAX_BOARD_LINES)
-  for (const section of [...ordered(board), ...stream]) {
-    if (left <= 1) break
-    left -= 1
-    const one = drawSection(section, columns, left)
-    out.push(one)
-    left -= one.rows.length
+  for (const section of ordered(board)) {
+    const spent = addSection(out, section, columns, left)
+    if (spent === 0) return out
+    left -= spent
+  }
+  for (const entry of picked(stream, left)) {
+    const spent = addSection(out, entry, columns, left)
+    if (spent === 0) break
+    left -= spent
   }
   return out
 }
 
-/** The stream with the new entry at its head, cut to what it keeps in memory. */
+/**
+ * The stream with the new entry at its head, cut to what it keeps in memory. A consumer over its own
+ * count drops its own oldest entry, so a talkative mod never evicts another mod's finding.
+ */
 export function pushed(stream: readonly Kept[], entry: Kept): Kept[] {
-  return [entry, ...stream].slice(0, MAX_STREAM)
+  const mine = stream.filter(s => s.consumer === entry.consumer)
+  const drop = new Set(mine.slice(MAX_STREAM_PER_CONSUMER - 1))
+  const kept = drop.size === 0 ? stream : stream.filter(s => !drop.has(s))
+  return [entry, ...kept].slice(0, MAX_STREAM)
 }
 
 /** The line a pane with no section draws. */

@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { cut, drawn, dropTurn, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, ordered, pushed, readSection, type Board, type Kept } from '../hooks/board.ts'
+import { cut, drawn, dropTurn, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -115,7 +115,7 @@ describe('board', () => {
 })
 
 describe('stream', () => {
-  const entry = (n: number): Kept => kept(section({ key: `k${n}`, title: `t${n}`, until: 'stream' }))
+  const entry = (n: number, consumer = 'edit-loop'): Kept => kept(section({ consumer, key: `k${n}`, title: `t${n}`, until: 'stream' }))
 
   test('the stream draws under the standing sections, newest first', () => {
     const board = boardOf(section({ consumer: 'cache-warm', key: 'window', until: 'session' }))
@@ -131,11 +131,31 @@ describe('stream', () => {
     expect(drawn(new Map(), stream, 80, 4).map(d => d.head)).toEqual(['edit-loop: t3', 'edit-loop: t2'])
   })
 
+  test('a consumer over its count drops its own oldest entry, never another mod one', () => {
+    let stream: Kept[] = [entry(0, 'env-sync')]
+    for (let i = 1; i <= MAX_STREAM_PER_CONSUMER + 10; i++) stream = pushed(stream, entry(i))
+    expect(stream.filter(s => s.consumer === 'edit-loop')).toHaveLength(MAX_STREAM_PER_CONSUMER)
+    expect(stream.filter(s => s.consumer === 'env-sync')).toHaveLength(1)
+    expect(stream[0]?.title).toBe(`t${MAX_STREAM_PER_CONSUMER + 10}`)
+  })
+
   test('the stream keeps at most MAX_STREAM entries, the newest', () => {
     let stream: Kept[] = []
-    for (let i = 0; i < MAX_STREAM + 5; i++) stream = pushed(stream, entry(i))
+    for (let c = 0; c < 6; c++) for (let i = 0; i < MAX_STREAM_PER_CONSUMER; i++) stream = pushed(stream, entry(i, `mod-${c}`))
     expect(stream).toHaveLength(MAX_STREAM)
-    expect(stream[0]?.title).toBe(`t${MAX_STREAM + 4}`)
+    expect(stream[0]?.consumer).toBe('mod-5')
+  })
+
+  test('two consumers share the rows, so the older mod entry still draws', () => {
+    const stream = [entry(6, 'sql-concat-watch'), entry(5, 'sql-concat-watch'), entry(4, 'sql-concat-watch'), entry(3, 'sql-concat-watch'), entry(2, 'sql-concat-watch'), entry(1, 'env-sync')]
+    expect(drawn(new Map(), stream, 80, 8).map(d => d.head)).toEqual([
+      'sql-concat-watch: t6', 'sql-concat-watch: t5', 'sql-concat-watch: t4', 'env-sync: t1',
+    ])
+  })
+
+  test('one consumer writing alone takes the whole area', () => {
+    const stream = [entry(6), entry(5), entry(4), entry(3), entry(2), entry(1)]
+    expect(drawn(new Map(), stream, 80, 8).map(d => d.head)).toEqual(['edit-loop: t6', 'edit-loop: t5', 'edit-loop: t4', 'edit-loop: t3'])
   })
 })
 

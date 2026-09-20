@@ -7,7 +7,7 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 1. `/sidebar` opens the pane and `/sidebar off` closes it. The choice is kept in `$.store`, so a session started later opens the sidebar again by itself.
 2. While it is open, any mod writes a section: `$.sidebar.set({ consumer, key, title, lines, buttons, until, order })` answers `true`. While it is closed nothing is kept and the call answers `false`, so the mod keeps showing its own transcript line or status line instead.
 3. A section is drawn as a bold heading (`<consumer>: <title>`), its lines (`ok` green, `warn` yellow, `dim` faint) and its buttons. The pane has two parts: the standing sections at the top (`until: 'session'`, then `until: 'turn'`, each group by `order`, then consumer, then key), and the stream under them.
-4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less.
+4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
 5. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane. The mod that offers the button serves that command itself.
 6. The three lifetimes: `session` stands at the top until the mod replaces or clears it, `stream` joins the log under it, `turn` goes when the turn ends.
 
@@ -53,7 +53,7 @@ const SIDEBAR: Plugin = {
 // then in the test: on('sidebar.set', (_, e) => ({ value: true }))
 ```
 
-Limits per section: 50 lines and 5 buttons; the lines left out are counted in the pane. The pane draws as many rows as the surface gave its body, and at most 200. The stream holds its newest 100 entries in memory, however few of them the rows show. A line longer than the pane's width is cut. A section whose `consumer`, `key` or `title` is of another shape is refused with an error the calling mod reads.
+Limits per section: 50 lines and 5 buttons; the lines left out are counted in the pane. The pane draws as many rows as the surface gave its body, and at most 200. The stream holds its newest 20 entries per consumer and 100 in all, however few of them the rows show, and the rows it draws are shared between the consumers writing into it. A line longer than the pane's width is cut. A section whose `consumer`, `key` or `title` is of another shape is refused with an error the calling mod reads.
 
 ## Command
 
@@ -97,6 +97,7 @@ Reach L0, it draws and remembers.
 - A session that opens the sidebar from the stored choice opens it as the plugin, not as the person: the engine leaves such a pane undrawn below 144 terminal columns, 110 once the person opened that pane themselves. `/sidebar` in that session places it at any width.
 - Closing the sidebar drops every section and the whole stream. Neither comes back when it is opened again; each mod writes its own at the next update.
 - The stream holds the session only. It is not written to disk, so it does not survive a restart.
+- The stream keeps 20 entries per consumer and 100 in all. Over its own count a mod drops its own oldest entry, never another mod's.
 - A button can only run a slash command. A mod that wants a button must serve a command for it.
 - The pane's scroll window belongs to the engine; this mod adds no scrolling of its own.
 
