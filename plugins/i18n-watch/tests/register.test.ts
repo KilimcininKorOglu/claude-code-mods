@@ -1,7 +1,28 @@
-import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    return { value: bar.open }
+  })
+}
 
 const ROOT = '/Users/u/app'
 
@@ -67,6 +88,16 @@ describe('i18n-watch', () => {
     expect(w.logs).toEqual([
       'keys the locale files lack: checkout.total (missing in de) · checkout.vat (missing in de, tr) · checkout.fee (missing in every locale)',
     ])
+  })
+
+  withSidebar('an open sidebar takes the keys and the transcript stays clean', async ($, on) => {
+    const w = world(on, LOCALES)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    await started($)
+    await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
+    expect(bar.sections).toEqual([{ key: '-Users-u-app-src-Cart.vue', lines: ['checkout.fee (missing in every locale)'] }])
+    expect(w.logs).toEqual([])
   })
 
   test('reads Laravel, YAML and gettext trees, and Write checks the whole file', async ($, on) => {

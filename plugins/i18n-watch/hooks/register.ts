@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { isSource, newKeys } from './keys.ts'
-import { addFile, isLocalePath, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, type Catalog } from './locale.ts'
+import { addFile, isLocalePath, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, sectionKey, sidebarLines, type Catalog } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -74,6 +74,20 @@ async function catalogOf($: EngineInterface, state: State): Promise<Catalog> {
   return catalog
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, key: string, lines: { text: string; kind: 'warn' }[], line: string): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'i18n-watch', key: sectionKey(key), title: 'missing translation keys', lines, until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(line)
+}
+
 /** Adds the note to an edit that calls translation keys a locale lacks. */
 async function afterEdit($: EngineInterface, state: State, path: string, before: string, after: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
@@ -82,8 +96,8 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
   if (keys.length === 0) return r
   const missing = missingKeys(await catalogOf($, state), keys)
   if (missing.length === 0) return r
-  // The note goes to the model, the log line to the person: neither reads the other's channel.
-  $.ui.log(logText(missing))
+  // The note goes to the model, the line to the person: neither reads the other's channel.
+  await toPerson($, path, sidebarLines(missing), logText(missing))
   return { ...r, context: [...(r.context ?? []), noteText(missing)] }
 }
 

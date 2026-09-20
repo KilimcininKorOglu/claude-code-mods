@@ -156,3 +156,13 @@ export function noteText(missing: Missing[]): string {
 export function logText(missing: Missing[]): string {
   return `keys the locale files lack: ${namedKeys(missing)}`
 }
+
+/** One sidebar line per missing key, so the section reads as a list. */
+export function sidebarLines(missing: Missing[]): { text: string; kind: 'warn' }[] {
+  return namedKeys(missing).split(' · ').map(text => ({ text, kind: 'warn' }))
+}
+
+/** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
+export function sectionKey(text: string): string {
+  return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}

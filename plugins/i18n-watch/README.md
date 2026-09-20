@@ -26,6 +26,7 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
        i18n-watch: keys the locale files lack: checkout.total (missing in tr, de) · checkout.vat (missing in every locale)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
+6. While the [sidebar](../sidebar) is open, those keys go there instead, one line per key in a section per edited file, and the transcript stays clean. The section goes when the turn ends. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 The locale files are read at the first edit of a turn that adds a key, and again after an Edit or Write of a locale file. A project without these directories gets nothing. A locale file that cannot be read or parsed is skipped and logged once per session.
 
@@ -54,7 +55,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.store.get, $.store.set (via runCommand), $.ui.log (via afterEdit, catalogOf)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf, toPerson)
 
 Reach L1, reads files.
 
