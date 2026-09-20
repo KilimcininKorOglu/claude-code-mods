@@ -18,12 +18,23 @@ Claude Code offers the task-tracking tools only on Claude 3.x, Opus 4.0 to 4.7, 
 - The variable also reaches every Bash command and MCP server the session starts.
 - `CLAUDE_CODE_ENABLE_TASKS=false` replaces the Task tools with `TodoWrite`. The mod reads both formats.
 
+## What it shows
+
+While the [sidebar](../sidebar) is open, the count stands there as a `task list` section for the session, rewritten at each turn:
+
+    task-poke: task list
+    3 unfinished tasks, poke 2/5
+
+The line is green below the last poke, yellow at it, and red once the pokes stopped. The section goes down when nothing is unfinished. Three findings go into the stream instead, in red, so the next count does not take them off the pane: the stop after 5 pokes, a poke the engine dropped, and a task list the parser cannot read.
+
+With the sidebar closed, or without that mod installed, only a turn that sent a poke writes its line to the transcript, and the three findings are transcript lines, as before.
+
 ## When it does not poke
 
 - The turn was interrupted, refused, or ended on an API error (`reason` is not `answer`).
 - The turn ran in a subagent.
 - The last assistant message called `AskUserQuestion`.
-- 5 pokes were sent since your last prompt. One log line reports the stop.
+- 5 pokes were sent since your last prompt. One red entry reports the stop.
 - `/task-poke off` is set.
 
 ## Commands
@@ -58,7 +69,7 @@ Restart Claude Code. The mod turns the task tools on at session start, so on a m
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit, $.session.messages, $.store.get, $.store.set, $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
@@ -68,7 +79,7 @@ Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
     2. Runs:     one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 5 in a row; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) in $.store; the environment variable lasts for the process only
-    5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status or a TaskCreate result without task.id stops the pokes, and one log line names the error until the error changes
+    5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status or a TaskCreate result without task.id stops the pokes, and one line names the error until the error changes
 
 ## Limits
 

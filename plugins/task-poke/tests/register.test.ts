@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type {
   CommandRunInput,
   On,
@@ -71,6 +71,33 @@ function world(on: On, env: Record<string, string> = {}, store: Record<string, u
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   return w
+}
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+type Section = { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }
+type Bar = { open: boolean; sections: Section[]; cleared: string[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })), until: s.until })
+    return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    bar.cleared.push((e as unknown as { key: string }).key)
+    return { value: undefined }
+  })
+  on('sidebar.isOpen', () => ({ value: bar.open }))
 }
 
 const flush = async (): Promise<void> => {
@@ -199,6 +226,50 @@ describe('task-poke', () => {
     await flush()
     expect(text).toContain('task-poke is off')
     expect(w.submitted).toHaveLength(0)
+  })
+
+  withSidebar('an open sidebar takes the count and the transcript stays clean', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.setMessages([todoWrite('completed', 'in_progress', 'pending')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(bar.sections).toEqual([{ key: 'pokes', title: 'task list', lines: [{ text: '2 unfinished tasks, poke 1/5', kind: 'ok' }], until: 'session' }])
+    expect(w.logs).toEqual([])
+  })
+
+  withSidebar('the last poke is yellow, the limit red, and one entry says the pokes stopped', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    for (let i = 0; i < 7; i += 1) {
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(bar.sections.map(s => s.lines[0]?.kind)).toEqual(['ok', 'ok', 'ok', 'warn', 'error', 'error', 'error', 'error'])
+    const stopped = bar.sections.filter(s => s.key === 'limit')
+    expect(stopped).toHaveLength(1)
+    expect(stopped[0]?.until).toBe('stream')
+    expect(stopped[0]?.lines[0]).toEqual({ text: 'stopped after 5 pokes with unfinished tasks. Send a prompt to reset the count.', kind: 'error' })
+    expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a finished list takes the count down', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    w.setMessages([todoWrite('completed')])
+    await $.turn.complete(turn())
+    await flush()
+    expect(bar.cleared).toEqual(['pokes'])
   })
 
   test('an unknown status fails loudly instead of counting as done', async ($, on) => {
