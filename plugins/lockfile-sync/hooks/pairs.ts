@@ -165,3 +165,13 @@ export function noteText(stale: readonly Stale[]): string {
 export function logText(stale: readonly Stale[]): string {
   return `this commit changes ${namedPairs(stale)}`
 }
+
+/** One sidebar line per pair, so the section reads as a list. */
+export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'warn' }[] {
+  return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'warn' }))
+}
+
+/** A sidebar section key: the manifests of this commit, cut to what the sidebar takes. */
+export function sectionKey(stale: readonly Stale[]): string {
+  return stale.map(s => s.manifest).join('-').replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}

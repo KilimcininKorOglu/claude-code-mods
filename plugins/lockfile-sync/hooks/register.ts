@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, isCommit, isManifest, lockCandidates, logText, noteText, touchesDependencies, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, isCommit, isManifest, lockCandidates, logText, noteText, sectionKey, sidebarLines, touchesDependencies, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -56,6 +56,20 @@ async function staleLock($: EngineInterface, root: string, manifest: string, cha
   return touchesDependencies(manifest, diff.out) ? { manifest, lock } : undefined
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, stale: readonly Stale[]): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key: sectionKey(stale), title: 'lockfiles the commit left out', lines: sidebarLines(stale), until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(logText(stale))
+}
+
 /** The note for the commit that moved HEAD, or undefined when every changed manifest has its lockfile along. */
 async function commitNote($: EngineInterface, before: Before): Promise<string | undefined> {
   const head = await git($, before.root, ['rev-parse', 'HEAD'])
@@ -70,8 +84,8 @@ async function commitNote($: EngineInterface, before: Before): Promise<string | 
     if (s !== undefined) stale.push(s)
   }
   if (stale.length === 0) return undefined
-  // The note goes to the model, the log line to the person: neither reads the other's channel.
-  $.ui.log(logText(stale))
+  // The note goes to the model, the finding to the person: neither reads the other's channel.
+  await toPerson($, stale)
   return noteText(stale)
 }
 
