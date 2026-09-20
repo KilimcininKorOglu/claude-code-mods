@@ -66,6 +66,8 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [sidebar](plugins/sidebar) | Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through `$.sidebar`. | L0 |
 | [action-pin](plugins/action-pin) | After an edit that adds a GitHub Actions step pinned to a tag or a branch, names each one with the commit SHA to write instead, from the GitHub API. | L3 |
 
+Eight of these mods hold their findings open and share one setting, `/<mod> mode note | deny`: config-parse, env-sync, i18n-watch, lockfile-sync, dep-sentinel, sql-concat-watch, contract-watch and action-pin. In `note` mode, the default, a finding only reaches the model and the transcript. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while one of its findings stands, and says which. Before it stops a command it measures its own findings again, so a finding the model fixed opens the gate itself. Each mod holds its own gate, so the first one with a finding stops the command and the next speaks at the following attempt. There is no bypass: only the person turns a gate off, with `/<mod> mode note`.
+
 gemini-compact, gemini-advisor, gemini-review and gemini-plan-review depend on gemini-core, which holds their keys, tier, models and thinking levels. `claude plugin install` adds gemini-core with them; `claude plugin update` does not (measured on 2.1.278), so after an update from a version without it, run `claude plugin install gemini-core@kilimcininkoroglu-mods` once, then set the key in gemini-core again, because the old `apiKey` option of the Gemini mod is no longer read.
 
 ## Layout
