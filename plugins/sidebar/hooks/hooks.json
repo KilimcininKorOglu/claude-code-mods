@@ -1,0 +1,4 @@
+{
+  "description": "engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete",
+  "modules": ["./register.tsx"]
+}

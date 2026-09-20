@@ -1,0 +1,12 @@
+{
+  "name": "sidebar",
+  "version": "0.1.0",
+  "description": "Opens one shared sidebar pane that every other mod writes its sections, lines and buttons into. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
