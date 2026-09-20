@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { countEdit, noteText, shownPath, type Counts } from './loop.ts'
+import { countEdit, logText, noteText, shownPath, type Counts } from './loop.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -12,8 +12,10 @@ type State = { counts: Counts; enabled: boolean }
 async function afterEdit($: EngineInterface, state: State, agentId: string | undefined, path: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
   if (!state.enabled || !countEdit(state.counts, agentId, path)) return r
-  const note = noteText(shownPath(path, await $.session.cwd()))
-  return { ...r, context: [...(r.context ?? []), note] }
+  const shown = shownPath(path, await $.session.cwd())
+  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  $.ui.log(logText(shown))
+  return { ...r, context: [...(r.context ?? []), noteText(shown)] }
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {

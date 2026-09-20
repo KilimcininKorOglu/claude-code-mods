@@ -13,12 +13,13 @@ const run = (args: string): CommandRunInput => ({
 
 const NOTE = 'edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, re-read the code path and state the root cause before the next edit.'
 
-/** `fail` makes the next edit fail beneath the plugin. */
-type World = { fail: boolean }
+/** `fail` makes the next edit fail beneath the plugin; `logs` holds the lines the person sees. */
+type World = { fail: boolean; logs: string[] }
 
 function world(on: On): World {
-  const w: World = { fail: false }
+  const w: World = { fail: false, logs: [] }
   mock.store(on, {})
+  on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -51,12 +52,13 @@ describe('loop', () => {
 })
 
 describe('edit-loop', () => {
-  test('the fifth edit of one file in a turn gets the note, once', async ($, on) => {
-    world(on)
+  test('the fifth edit of one file in a turn gets the note, once, and the person sees one line', async ($, on) => {
+    const w = world(on)
     await started($)
     const results = []
     for (let i = 0; i < 6; i++) results.push(await edit($))
     expect(results.map(r => r.context)).toEqual([undefined, undefined, undefined, undefined, [NOTE], undefined])
+    expect(w.logs).toEqual(['5th edit of hooks/a.ts in this turn'])
   })
 
   test('Write and NotebookEdit count, a failed edit does not, and a new turn starts again', async ($, on) => {

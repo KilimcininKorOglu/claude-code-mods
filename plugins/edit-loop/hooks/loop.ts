@@ -25,3 +25,8 @@ export function shownPath(path: string, cwd: string): string {
 export function noteText(path: string): string {
   return `edit-loop: this turn edited ${path} ${THRESHOLD} times. Stop editing it, re-read the code path and state the root cause before the next edit.`
 }
+
+/** The transcript line: the finding alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(path: string): string {
+  return `${THRESHOLD}th edit of ${path} in this turn`
+}
