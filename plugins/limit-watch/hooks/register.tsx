@@ -13,6 +13,7 @@ import {
   profile,
   record,
   resetTime,
+  sidebarLines,
   statusLine,
   warningText,
   type Tracks,
@@ -41,6 +42,22 @@ function warn($: EngineInterface, state: State, now: number): void {
   }
 }
 
+/** Writes the reading into the shared sidebar; false when the sidebar mod is absent or closed. */
+async function toSidebar($: EngineInterface, state: State, now: number): Promise<boolean> {
+  try {
+    return await $.sidebar.set({
+      consumer: 'limit-watch',
+      key: 'limits',
+      title: 'usage limits',
+      lines: sidebarLines(state.limits, state.tracks, now),
+      until: 'session',
+      order: 10,
+    })
+  } catch {
+    return false
+  }
+}
+
 /** Reads the limits, records a sample, raises new warnings, stores the tracks and redraws. */
 async function sample($: EngineInterface, state: State): Promise<void> {
   const usage = await $.session.usage()
@@ -49,7 +66,8 @@ async function sample($: EngineInterface, state: State): Promise<void> {
   state.tracks = record(state.tracks, state.limits, now)
   warn($, state, now)
   await $.store.set(TRACKS_KEY, state.tracks)
-  $.ui.status(statusLine(state.limits, state.tracks, now))
+  // The sidebar takes the reading while it is open; otherwise the status line shows it, as before.
+  $.ui.status((await toSidebar($, state, now)) ? undefined : statusLine(state.limits, state.tracks, now))
   $.ui.invalidate('ui.render')
 }
 

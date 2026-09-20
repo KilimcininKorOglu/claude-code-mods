@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionRateLimit, SessionStartInput, TurnCompleteInput, UiPane } from 'claude-code'
 
 tier('user')
@@ -62,6 +62,28 @@ function world(on: On, store: Record<string, unknown> = {}): World {
 }
 
 const fiveHour = (percentUsed: number, resetsAt = RESET): SessionRateLimit => ({ kind: 'five_hour', percentUsed, resetsAt })
+
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
+
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+
+/** The sections the sidebar took; `open` says whether it takes them at all. */
+type Bar = { open: boolean; sections: { title: string; lines: { text: string; kind?: string }[] }[] }
+
+function seatSidebar(on: On, bar: Bar): void {
+  on('sidebar.set', (_, e) => {
+    const section = e as unknown as { title: string; lines: { text: string; kind?: string }[] }
+    if (bar.open) bar.sections.push({ title: section.title, lines: section.lines })
+    return { value: bar.open }
+  })
+}
 
 describe('limit-watch', () => {
   test('pins a status line with every limit at session start', async ($, on) => {
@@ -167,6 +189,31 @@ describe('limit-watch', () => {
     const text = JSON.stringify(tree)
     expect(text).toContain('pace +40.0%/h over the last 30m')
     expect(text).not.toContain('forecast')
+  })
+
+  withSidebar('an open sidebar takes the reading and the status line stays empty', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    w.setLimits([fiveHour(23), { kind: 'seven_day', percentUsed: 88, resetsAt: '2026-09-20T00:00:00Z' }])
+    await $.session.start(session)
+    expect(bar.sections.at(-1)).toEqual({
+      title: 'usage limits',
+      lines: [
+        { text: '5h 23%, reset in 3h', kind: 'ok' },
+        { text: '7d 88%, reset in 1d 12h', kind: 'warn' },
+        { text: 'measuring the pace', kind: 'dim' },
+      ],
+    })
+    expect(w.statuses.at(-1)).toBe(undefined)
+  })
+
+  withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {
+    const w = world(on)
+    seatSidebar(on, { open: false, sections: [] })
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    expect(w.statuses.at(-1)).toContain('5h 23%')
   })
 
   test('/limits opens the pane and closes it on the second run', async ($, on) => {

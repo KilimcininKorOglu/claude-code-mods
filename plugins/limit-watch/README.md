@@ -17,6 +17,8 @@ The last part is one of these:
 
 An API key session reports no limits. The status line then reads `no usage limits reported yet`. A new session also shows this until Claude answers once.
 
+**A section in the [sidebar](../sidebar)** instead of that status line while the sidebar is open: the same parts, one line per limit (green under 80%, yellow from 80%) and the pace line under them. The status line is cleared then. With the sidebar closed, or without that mod installed, the status line stays as above.
+
 **A pane, opened and closed with `/limits`**, with one block per limit:
 
     5-hour limit · 9% used
@@ -70,7 +72,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limits}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
 
 Reach L0, draws and remembers.
 

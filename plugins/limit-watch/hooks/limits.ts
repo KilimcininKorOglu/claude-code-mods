@@ -189,6 +189,13 @@ export function statusLine(limits: readonly SessionRateLimit[], tracks: Tracks, 
   return [...limits.map(l => limitPart(l, now)), statusTail(limits, tracks, now)].join(' · ')
 }
 
+/** The same reading as the status line, one line per limit, for the shared sidebar. */
+export function sidebarLines(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): { text: string; kind?: 'ok' | 'warn' | 'dim' }[] {
+  if (limits.length === 0) return [{ text: 'no usage limits reported yet', kind: 'dim' }]
+  const parts = limits.map(l => ({ text: limitPart(l, now), kind: l.percentUsed >= (THRESHOLDS[0] ?? 80) ? ('warn' as const) : ('ok' as const) }))
+  return [...parts, { text: statusTail(limits, tracks, now), kind: 'dim' }]
+}
+
 /** A bar of `width` cells, filled up to the percentage. A percentage above 100 fills the whole bar. */
 export function barCells(percent: number, width: number): { filled: string; empty: string } {
   const cells = Math.max(1, width)
