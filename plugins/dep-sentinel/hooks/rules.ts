@@ -75,3 +75,13 @@ export function uncheckedLog(failures: readonly string[]): string {
 export function sidebarLines(items: readonly string[]): { text: string; kind: 'warn' }[] {
   return items.map(text => ({ text, kind: 'warn' }))
 }
+
+/** The transcript line of an unchecked finding a later install closed. */
+export function checkedLog(names: readonly string[]): string {
+  return `a later install checked the packages that stayed unchecked: ${names.join(' · ')}`
+}
+
+/** One sidebar line per package a later install checked. */
+export function doneLines(names: readonly string[]): { text: string; kind: 'ok' }[] {
+  return names.map(text => ({ text, kind: 'ok' as const }))
+}

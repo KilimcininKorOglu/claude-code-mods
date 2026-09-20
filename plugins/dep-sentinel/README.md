@@ -28,6 +28,12 @@ A Claude Code Mod that checks each package the model installs before the install
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
 
+8. An unchecked finding stays open until the packages are checked. When a later install checks every package the finding named, its sidebar entry is cleared and a new entry takes its place:
+
+       dep-sentinel: a later install checked the packages that stayed unchecked: lodash
+
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this.
+
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 
 ## Command
@@ -53,7 +59,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.set (via toPerson), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via toPerson)
 
 Reach L3, reaches the network.
 

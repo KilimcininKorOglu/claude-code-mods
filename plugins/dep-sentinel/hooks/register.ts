@@ -1,7 +1,7 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
-import { denyText, missingReason, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason } from './rules.ts'
+import { checkedLog, denyText, doneLines, missingReason, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -15,6 +15,9 @@ const GO_PARENT_TRIES = 4
 
 /** One package's check: reasons to stop it, or why it could not be checked. */
 type Outcome = { reasons: string[]; failure?: string }
+
+/** The packages an earlier install could not check, so a later one that checks them closes the finding. */
+type State = { open: Set<string> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -82,14 +85,41 @@ async function checkOne($: EngineInterface, p: Install, now: number): Promise<Ou
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, names: readonly string[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'warn' | 'ok' }[], line: string): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'dep-sentinel', key, title, lines: sidebarLines(names), until: 'stream' })
+    const taken = await $.sidebar.set({ consumer: 'dep-sentinel', key, title, lines, until: 'stream' })
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
   }
   $.ui.log(line)
+}
+
+/** Drops the sidebar entries of one finding, so a package that was checked leaves no warning behind. */
+async function dropEntry($: EngineInterface, key: string): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'dep-sentinel', key })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+}
+
+/** The names of the installs whose check finished, and of those it did not. */
+function splitNames(installs: readonly Install[], outcomes: readonly Outcome[]): { checked: string[]; unchecked: string[] } {
+  const checked: string[] = []
+  const unchecked: string[] = []
+  installs.forEach((p, i) => (outcomes[i]?.failure === undefined ? checked : unchecked).push(p.name))
+  return { checked, unchecked }
+}
+
+/** Closes the unchecked finding once every package it named was checked, and reports it. */
+async function closeChecked($: EngineInterface, state: State, checked: readonly string[]): Promise<void> {
+  if (state.open.size === 0) return
+  const named = [...state.open]
+  for (const name of checked) state.open.delete(name)
+  if (state.open.size > 0) return
+  await dropEntry($, 'unchecked')
+  await toPerson($, 'unchecked', 'packages checked after all', doneLines(named), checkedLog(named))
 }
 
 function withNote(r: ToolCallResult, note: string): ToolCallResult {
@@ -107,6 +137,8 @@ async function runCommand($: EngineInterface, args: string): Promise<string> {
 }
 
 export const register: Register = on => {
+  const state: State = { open: new Set() }
+
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'dep-sentinel', description: 'Package installs checked before they run: status, on, off (dep-sentinel)', argumentHint: '[on | off]' })
@@ -121,18 +153,21 @@ export const register: Register = on => {
     if (plan.installs.length === 0 || !(await isEnabled($))) return next(e)
     if (plan.skipped) {
       const names = plan.installs.map(p => p.name)
-      await toPerson($, 'skipped', 'installs skipped on request', names, `skipped on request: ${names.join(', ')}`)
+      await toPerson($, 'skipped', 'installs skipped on request', sidebarLines(names), `skipped on request: ${names.join(', ')}`)
       return next(e)
     }
     const now = await $.clock.now()
     const outcomes = await Promise.all(plan.installs.map(p => checkOne($, p, now)))
+    const names = splitNames(plan.installs, outcomes)
+    await closeChecked($, state, names.checked)
     const reasons = outcomes.flatMap(o => o.reasons)
     if (reasons.length > 0) return { deny: denyText(reasons) }
     const failures = outcomes.map(o => o.failure).filter((f): f is string => f !== undefined)
     const r = await next(e)
     if (failures.length === 0) return r
+    for (const name of names.unchecked) state.open.add(name)
     // The note goes to the model, the finding to the person: neither reads the other's channel.
-    await toPerson($, 'unchecked', 'packages the install did not check', failures, uncheckedLog(failures))
+    await toPerson($, 'unchecked', 'packages the install did not check', sidebarLines(failures), uncheckedLog(failures))
     return withNote(r, uncheckedNote(failures))
   })
 }

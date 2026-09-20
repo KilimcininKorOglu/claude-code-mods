@@ -14,13 +14,19 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: string[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string }[] }
-    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    const s = e as unknown as { key: string; title: string; lines: { text: string }[] }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text) })
     return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    const c = e as unknown as { key: string }
+    bar.cleared.push(c.key)
+    bar.sections = bar.sections.filter(s => s.key !== c.key)
+    return { value: undefined }
   })
 }
 
@@ -79,7 +85,7 @@ describe('dep-sentinel', () => {
 
   withSidebar('an open sidebar takes the unchecked and skipped packages, and the transcript stays clean', async ($, on) => {
     const w = world(on)
-    const bar: Bar = { open: true, sections: [] }
+    const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     w.down = true
     await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
@@ -87,6 +93,27 @@ describe('dep-sentinel', () => {
     expect(bar.sections.map(s => s.key)).toEqual(['unchecked', 'skipped'])
     expect(bar.sections[1]?.lines).toEqual(['lodash'])
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a later install that checks the package clears the entry and writes a new one', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    w.down = false
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    expect(bar.cleared).toEqual(['unchecked'])
+    expect(bar.sections).toEqual([{ key: 'unchecked', title: 'packages checked after all', lines: ['lodash'] }])
+  })
+
+  test('the transcript reads the closed finding when the sidebar is not there', async ($, on) => {
+    const w = world(on)
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    w.down = false
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    expect(w.logs[1]).toBe('a later install checked the packages that stayed unchecked: lodash')
   })
 
   test('finds a Go module from a package path under it', async ($, on) => {
