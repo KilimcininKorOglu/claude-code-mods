@@ -23,7 +23,7 @@ export function normalize(text: string): string | undefined {
 }
 
 /**
- * The prompt as `/deck add` keeps it, or undefined for one the deck cannot draw. A pinned prompt has no
+ * The prompt as `/prompt-deck add` keeps it, or undefined for one the deck cannot draw. A pinned prompt has no
  * length limit, because the person typed it themselves; the band cuts its label to the width.
  */
 export function normalizePin(text: string): string | undefined {
@@ -86,19 +86,19 @@ export function fit(text: string, count: number, columns: number): string {
   return text.length <= width ? text : `${text.slice(0, width - 1).trimEnd()}…`
 }
 
-/** The prompts of the `/deck` list in order: the pinned ones, then the counted ones. */
+/** The prompts of the `/prompt-deck` list in order: the pinned ones, then the counted ones. */
 function listed(counts: Counts, pins: readonly string[]): string[] {
   return [...pins, ...ranked(counts).filter(t => !pins.includes(t))]
 }
 
-/** The `/deck` list: every pinned and counted prompt, each with the number `/deck remove` takes. */
+/** The `/prompt-deck` list: every pinned and counted prompt, each with the number `/prompt-deck remove` takes. */
 export function listText(counts: Counts, pins: readonly string[] = []): string {
   const all = listed(counts, pins)
-  if (all.length === 0) return `no prompt counted yet; a prompt reaches the band after ${MIN_USES} uses, or add one with /deck add <text>`
+  if (all.length === 0) return `no prompt counted yet; a prompt reaches the band after ${MIN_USES} uses, or add one with /prompt-deck add <text>`
   return all.map((t, i) => `${i + 1}. ${t} ${pins.includes(t) ? '(pinned)' : `(${counts[t]?.n ?? 0})`}`).join('\n')
 }
 
-/** The deck without the prompt at 1-based place `place` of the `/deck` list, or undefined for no such place. */
+/** The deck without the prompt at 1-based place `place` of the `/prompt-deck` list, or undefined for no such place. */
 export function removeAt(counts: Counts, pins: readonly string[], place: number): { counts: Counts; pins: string[] } | undefined {
   const text = listed(counts, pins)[place - 1]
   if (text === undefined) return undefined

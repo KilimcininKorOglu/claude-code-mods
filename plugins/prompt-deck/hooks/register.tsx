@@ -42,7 +42,7 @@ async function savePins($: EngineInterface, state: State, pins: string[]): Promi
   $.ui.invalidate('ui.render')
 }
 
-/** `/deck add <text>`: pins a prompt of the person's own, drawn before the counted ones. */
+/** `/prompt-deck add <text>`: pins a prompt of the person's own, drawn before the counted ones. */
 async function addCommand($: EngineInterface, state: State, text: string): Promise<string> {
   const pin = normalizePin(text)
   if (pin === undefined) return 'add expects one line of text that does not start with /'
@@ -88,7 +88,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
 
 async function removeCommand($: EngineInterface, state: State, arg: string): Promise<string> {
   const rest = removeAt(state.counts, state.pins, Number(arg))
-  if (!/^\d+$/.test(arg) || rest === undefined) return `no prompt at ${arg || '?'}; /deck list names the numbers`
+  if (!/^\d+$/.test(arg) || rest === undefined) return `no prompt at ${arg || '?'}; /prompt-deck list names the numbers`
   if (rest.pins.length !== state.pins.length) await savePins($, state, rest.pins)
   await saveCounts($, state, rest.counts)
   return `removed; ${rest.pins.length + Object.keys(rest.counts).length} prompt(s) left`
@@ -100,7 +100,7 @@ async function clearCommand($: EngineInterface, state: State): Promise<string> {
   return 'cleared: no prompt is pinned or counted'
 }
 
-/** The `/deck` and `/deck list` answer: the setting, the project and every prompt of it. */
+/** The `/prompt-deck` and `/prompt-deck list` answer: the setting, the project and every prompt of it. */
 function statusText(state: State): string {
   return `${state.enabled ? 'on' : 'off'} · project ${state.project}\n${listText(state.counts, state.pins)}`
 }
@@ -132,7 +132,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'deck', description: 'Prompts you send often in this project, on the keys 1-5: list, add <text>, remove <n>, clear, on, off (prompt-deck)', argumentHint: '[list | add <text> | remove <n> | clear | on | off]' })
+    await $.command.register({ name: 'prompt-deck', description: 'Prompts you send often in this project, on the keys 1-5: list, add <text>, remove <n>, clear, on, off (prompt-deck)', argumentHint: '[list | add <text> | remove <n> | clear | on | off]' })
     state.project = await resolveProject($)
     await loadDeck($, state)
     await adoptLegacy($, state)
@@ -141,7 +141,7 @@ export const register: Register = on => {
   })
 
   // The engine prints the plugin name in front of command text, so the texts do not repeat it.
-  on('command.run', { command: 'deck' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+  on('command.run', { command: 'prompt-deck' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('prompt.submit', async ($, e, next) => {
     const text = normalize(e.text)

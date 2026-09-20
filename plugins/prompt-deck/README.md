@@ -5,7 +5,7 @@ A Claude Code Mod that learns the short prompts you send often in this project, 
 ## What it does
 
 1. Each prompt you type, or send through Remote Control, is counted: trimmed, one line, 1 to 80 characters, not a slash command. A notification, a peer message, a schedule or another plugin's prompt is not counted.
-2. `/deck add <text>` pins a prompt by hand. A pinned prompt is drawn first, in the order it was added, and the counts never push it off the band. It has no length limit and is kept per project, like the counts. Up to 5 prompts are pinned, because the band holds 5. `/deck remove <n>` unpins one.
+2. `/prompt-deck add <text>` pins a prompt by hand. A pinned prompt is drawn first, in the order it was added, and the counts never push it off the band. It has no length limit and is kept per project, like the counts. Up to 5 prompts are pinned, because the band holds 5. `/prompt-deck remove <n>` unpins one.
 3. A prompt reaches the band after 3 uses. The band draws the 5 most used, the latest first on a tie, as `1: commitle  2: devam et ...`, each label cut to its share of the width.
 4. With the prompt box empty, a digit key sends that prompt at once. A click, or ctrl+x tab and Enter, sends it too. A press counts as one more use.
 5. The band is not drawn while a survey holds it, while a turn runs, or while an agent's transcript is in view.
@@ -14,16 +14,16 @@ A Claude Code Mod that learns the short prompts you send often in this project, 
 
 The engine shows a pressed prompt as `The prompt-deck plugin sent a message:` with the prompt under it, and the model answers it as a user turn (measured on 2.1.278). A plugin's own `$.prompt.submit` passes every hook but the calling plugin's, so the mod cannot leave the plugin name out.
 
-In the live check a prompt sent three times appeared as `1: reply with the single word ok`, the `1` key sent it, the model answered, and `/deck` showed 4 uses.
+In the live check a prompt sent three times appeared as `1: reply with the single word ok`, the `1` key sent it, the model answered, and `/prompt-deck` showed 4 uses.
 
 ## Command
 
-    /deck                on or off, the project, and its prompts with their uses
-    /deck list           the same
-    /deck add <text>     pin a prompt of your own, drawn before the counted ones
-    /deck remove <n>     forget the prompt at place n of the list, pinned or counted
-    /deck clear          forget every prompt
-    /deck on | off       on by default; off keeps the counts
+    /prompt-deck                on or off, the project, and its prompts with their uses
+    /prompt-deck list           the same
+    /prompt-deck add <text>     pin a prompt of your own, drawn before the counted ones
+    /prompt-deck remove <n>     forget the prompt at place n of the list, pinned or counted
+    /prompt-deck clear          forget every prompt
+    /prompt-deck on | off       on by default; off keeps the counts
 
 ## Install
 
@@ -51,11 +51,11 @@ Reach L2, runs git and drives Claude: a press submits a prompt.
     2. Runs:     git rev-parse --show-toplevel, once per session, to name the project
     3. Sends:    a stored prompt as a user turn, only on the person's press; nothing leaves the machine
     4. Persists: in $.store, per project, up to 200 short prompts with their use counts and last use time, up to 5 pinned prompts, and the on/off setting
-    5. Hostile input: only prompts from the composer or Remote Control are counted, and only a typed /deck add pins one, so a notification, a peer or a plugin cannot put a prompt on the band
+    5. Hostile input: only prompts from the composer or Remote Control are counted, and only a typed /prompt-deck add pins one, so a notification, a peer or a plugin cannot put a prompt on the band
 
 ## Limits
 
-- A prompt longer than 80 characters or over several lines is never counted. `/deck add` takes any length on one line.
+- A prompt longer than 80 characters or over several lines is never counted. `/prompt-deck add` takes any length on one line.
 - The band is drawn on the terminal only, because the engine raises `AbovePrompt` there only.
 - Two prompts that differ only in case or punctuation count apart.
 - Two projects with the same directory name share one deck, because the project is the name only, not the path.

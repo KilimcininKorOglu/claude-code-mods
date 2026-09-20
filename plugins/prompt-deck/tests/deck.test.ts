@@ -9,7 +9,7 @@ const uses = (list: [string, number][]): Counts => Object.fromEntries(list.map((
 describe('deck', () => {
   test('keeps only a short one-line prompt that is not a slash command', async () => {
     expect(normalize('  commitle  ')).toBe('commitle')
-    for (const t of ['', '   ', '/deck', 'a\nb', 'x'.repeat(81)]) expect(normalize(t), JSON.stringify(t)).toBe(undefined)
+    for (const t of ['', '   ', '/prompt-deck', 'a\nb', 'x'.repeat(81)]) expect(normalize(t), JSON.stringify(t)).toBe(undefined)
   })
 
   test('draws the five most used prompts that reached three uses, the latest first on a tie', async () => {
@@ -36,13 +36,13 @@ describe('deck', () => {
     expect(removeAt(c, [], 3)).toBe(undefined)
     expect(fit('run the tests for the area I changed', 5, 100)).toBe('run the tests…')
     expect(fit('short', 5, 100)).toBe('short')
-    expect(listText({})).toBe('no prompt counted yet; a prompt reaches the band after 3 uses, or add one with /deck add <text>')
+    expect(listText({})).toBe('no prompt counted yet; a prompt reaches the band after 3 uses, or add one with /prompt-deck add <text>')
   })
 
   test('keeps a pinned prompt of any length, on one line and without a leading slash', async () => {
     expect(normalizePin('  commitle  ')).toBe('commitle')
     expect(normalizePin('x'.repeat(200))).toBe('x'.repeat(200))
-    for (const t of ['', '   ', '/deck', 'a\nb']) expect(normalizePin(t), JSON.stringify(t)).toBe(undefined)
+    for (const t of ['', '   ', '/prompt-deck', 'a\nb']) expect(normalizePin(t), JSON.stringify(t)).toBe(undefined)
   })
 
   test('draws the pinned prompts first, and a pinned prompt is listed and removed by its place', async () => {

@@ -4,7 +4,7 @@ import type { CommandRunInput, On, PromptOrigin, PromptSubmitInput, RenderPropsO
 tier('user')
 
 const run = (args: string): CommandRunInput => ({
-  command: 'deck', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
+  command: 'prompt-deck', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
 const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): PromptSubmitInput => ({ text, wait: false, origin })
@@ -49,7 +49,7 @@ describe('prompt-deck', () => {
     await started($)
     for (let i = 0; i < 3; i++) await $.prompt.submit(typed(' commitle '))
     await $.prompt.submit(typed('commitle', { kind: 'task-notification' }))
-    await $.prompt.submit(typed('/deck'))
+    await $.prompt.submit(typed('/prompt-deck'))
     const ui = await band($)
     const button = await ui.find({ type: 'Button', key: 'deck:1' })
     expect(button?.props.label).toBe('commitle')
@@ -77,7 +77,7 @@ describe('prompt-deck', () => {
     for (let i = 0; i < 3; i++) await $.prompt.submit(typed('a'))
     for (let i = 0; i < 4; i++) await $.prompt.submit(typed('b'))
     expect((await $.command.run(run('remove 1'))).text).toBe('removed; 1 prompt(s) left')
-    expect((await $.command.run(run('remove 9'))).text).toBe('no prompt at 9; /deck list names the numbers')
+    expect((await $.command.run(run('remove 9'))).text).toBe('no prompt at 9; /prompt-deck list names the numbers')
     expect((await $.command.run(run('off'))).text).toBe('off: nothing is counted or drawn; the counts stay')
     await $.prompt.submit(typed('c'))
     expect(await (await band($)).find({ type: 'Button', key: 'deck:1' })).toBe(undefined)
