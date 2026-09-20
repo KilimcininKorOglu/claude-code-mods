@@ -608,6 +608,18 @@ export function changeText(changes: Changes, topics: TopicAppend[]): string {
   return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}${skippedPart}${refusedPart}`
 }
 
+/** How many characters of the last event the sidebar's second line holds. */
+const MAX_EVENT = 120
+
+/**
+ * The last transcript line as the sidebar's second line: the section's own title is left off the
+ * front, and a long line is cut, because the pane holds one row for it.
+ */
+export function eventShort(text: string): string {
+  const body = text.replace(/^MEMORY\.md: /, '')
+  return body.length > MAX_EVENT ? `${body.slice(0, MAX_EVENT - 1)}…` : body
+}
+
 const SHORT_TOPICS = 3
 
 /** The topic files a save appended to, without `.md`: the first three and the count of the rest. */

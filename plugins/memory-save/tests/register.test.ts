@@ -126,8 +126,11 @@ describe('memory-save', () => {
     await $.turn.complete(turn())
     await settled(w, 1)
     expect(bar.sections[0]?.key).toBe('save')
+    expect(bar.sections[0]?.lines).toHaveLength(1)
     expect(bar.sections[0]?.lines[0]).toMatch(/^saving… · \d\d:\d\d$/)
     expect(bar.sections.at(-1)?.lines[0]).toMatch(/^\+1 · \d\d:\d\d$/)
+    // The second line is the transcript line the same save wrote, without the section's own name.
+    expect(bar.sections.at(-1)?.lines[1]).toBe('1 added')
     expect(w.statuses.every(s => s === undefined)).toBe(true)
   })
 

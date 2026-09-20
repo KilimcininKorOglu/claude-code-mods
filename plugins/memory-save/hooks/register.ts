@@ -7,6 +7,7 @@ import {
   changeText,
   clockText,
   contextText,
+  eventShort,
   fit,
   inspect,
   isProjectName,
@@ -35,6 +36,8 @@ type State = {
   skipped: string[]
   /** The ops the last save refused, named to the next fork so it writes them in the documented shape. */
   refused: string[]
+  /** The short form of the last transcript line, drawn faint under the state in the sidebar. */
+  event?: string
 }
 
 function message(err: unknown): string {
@@ -94,14 +97,14 @@ async function readFile($: EngineInterface, path: string): Promise<string | unde
  * is kept as the backup and one line in the transcript says so. Undefined when
  * the file does not exist.
  */
-async function templated($: EngineInterface, project: string, dir: string): Promise<string | undefined> {
+async function templated($: EngineInterface, state: State, project: string, dir: string): Promise<string | undefined> {
   const file = `${dir}/MEMORY.md`
   const current = await readFile($, file)
   if (current === undefined || inspect(current).inFormat) return current
   const repaired = repairSections(project, current)
   await $.fs.write(`${dir}/${BACKUP}`, current)
   await $.fs.write(file, repaired)
-  $.ui.log(`MEMORY.md: put into the four sections (old copy: ${BACKUP})`)
+  logEvent($, state, `MEMORY.md: put into the four sections (old copy: ${BACKUP})`)
   return repaired
 }
 
@@ -118,14 +121,23 @@ const SECTION = { consumer: 'memory-save', key: 'save' }
 /** How the sidebar colours the line: green for a written save, yellow for a part it left out, red for an error. */
 type Tone = 'ok' | 'warn' | 'error' | 'dim'
 
+/** Writes one transcript line and keeps its short form for the sidebar's second line. */
+function logEvent($: EngineInterface, state: State, text: string): void {
+  $.ui.log(text)
+  state.event = eventShort(text)
+}
+
 /**
  * The save's state, on the shared sidebar while it is open, else on the status line, as before.
- * A sidebar mod that is not installed answers the same as a closed one.
+ * The sidebar also gets the last transcript line under the state, faint, because the status line
+ * says where the save stands and the event says what it did. A sidebar mod that is not installed
+ * answers the same as a closed one.
  */
-async function report($: EngineInterface, text: string, kind: Tone = 'dim'): Promise<void> {
+async function report($: EngineInterface, state: State, text: string, kind: Tone = 'dim'): Promise<void> {
   const line = `${text} · ${clockText(await $.clock.now())}`
+  const lines = [{ text: line, kind }, ...(state.event === undefined ? [] : [{ text: state.event, kind: 'dim' as const }])]
   try {
-    if (await $.sidebar.set({ ...SECTION, title: 'MEMORY.md', lines: [{ text: line, kind }], until: 'session', order: 20 })) {
+    if (await $.sidebar.set({ ...SECTION, title: 'MEMORY.md', lines, until: 'session', order: 20 })) {
       $.ui.status(undefined)
       return
     }
@@ -162,16 +174,16 @@ async function ask($: EngineInterface, state: State, project: string, dir: strin
   // A reply the parser cannot read is left to the next turn: the evidence is kept and the person reads
   // one transcript line, because a save the fork repeats every turn is no reason for a status line error.
   await $.fs.write(`${dir}/${FAILED_REPLY}`, reply.text)
-  $.ui.log(`MEMORY.md: this turn's reply was not read (${parsed.error}); ${u.output_tokens} output tokens, kept in ${FAILED_REPLY}`)
+  logEvent($, state, `MEMORY.md: this turn's reply was not read (${parsed.error}); ${u.output_tokens} output tokens, kept in ${FAILED_REPLY}`)
   return undefined
 }
 
 /** Reports a save that changed no file, naming the lines it skipped and the ops it refused. */
-async function reportNoChange($: EngineInterface, skipped: string[], refused: string[]): Promise<void> {
+async function reportNoChange($: EngineInterface, state: State, skipped: string[], refused: string[]): Promise<void> {
   const parts = [skipped.length > 0 ? skippedText(skipped) : '', refused.length > 0 ? `refused: ${refused.join('; ')}` : ''].filter(p => p !== '')
-  if (parts.length > 0) $.ui.log(`MEMORY.md: no change; ${parts.join('; ')}`)
+  if (parts.length > 0) logEvent($, state, `MEMORY.md: no change; ${parts.join('; ')}`)
   const counts = [skipped.length > 0 ? `${skipped.length} skipped` : '', refused.length > 0 ? `${refused.length} refused` : ''].filter(p => p !== '')
-  return counts.length > 0 ? report($, `no change, ${counts.join(', ')}`, 'warn') : report($, 'no change')
+  return counts.length > 0 ? report($, state, `no change, ${counts.join(', ')}`, 'warn') : report($, state, 'no change')
 }
 
 /** Asks the fork what to remember, then writes MEMORY.md and its topic files. */
@@ -180,7 +192,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
   const { project, dir } = state
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved yet')
   const file = `${dir}/MEMORY.md`
-  const current = await templated($, project, dir)
+  const current = await templated($, state, project, dir)
   const reply = await ask($, state, project, dir, current)
   if (reply === undefined) return clearReport($)
   const result = fit(project, current, reply)
@@ -188,22 +200,22 @@ async function save($: EngineInterface, state: State): Promise<void> {
   if (!result.changed) {
     state.skipped = result.skipped
     state.refused = result.refused
-    return reportNoChange($, result.skipped, result.refused)
+    return reportNoChange($, state, result.skipped, result.refused)
   }
   state.skipped = result.changes.skipped
   state.refused = result.changes.refused
   if ((await readFile($, file)) !== current) throw new Error('not written: MEMORY.md changed during the save')
   await writeTopics($, project, dir, result.topics)
   await $.fs.write(file, result.text)
-  $.ui.log(changeText(result.changes, result.topics))
-  await report($, changeShort(result.changes, result.topics), result.changes.refused.length + result.changes.skipped.length > 0 ? 'warn' : 'ok')
+  logEvent($, state, changeText(result.changes, result.topics))
+  await report($, state, changeShort(result.changes, result.topics), result.changes.refused.length + result.changes.skipped.length > 0 ? 'warn' : 'ok')
 }
 
 /** Returns the session's memory context, or undefined when the project has no MEMORY.md. */
 async function memoryContext($: EngineInterface, state: State): Promise<string | undefined> {
   const { project, dir } = state
   if (project === undefined || dir === undefined) throw new Error(state.error ?? 'the project is not resolved')
-  const memory = await templated($, project, dir)
+  const memory = await templated($, state, project, dir)
   if (memory === undefined) return undefined
   const files = (await $.fs.list(dir)).filter(f => f.kind === 'file').map(f => f.name)
   return contextText(project, dir, memory, topicFiles(files))
@@ -215,7 +227,7 @@ async function withMemory<R extends { additionalContext?: string[] }>($: EngineI
     const text = await memoryContext($, state)
     return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
   } catch (err) {
-    await report($, `error: memory not loaded: ${message(err)}`, 'error')
+    await report($, state, `error: memory not loaded: ${message(err)}`, 'error')
     return r
   }
 }
@@ -231,8 +243,8 @@ async function drain($: EngineInterface, state: State): Promise<void> {
     do {
       state.pending = false
       // The fork runs in the background; the line says so until the result replaces it.
-      await report($, 'saving…')
-      await save($, state).catch((err: unknown) => report($, `error: ${message(err)}`, 'error'))
+      await report($, state, 'saving…')
+      await save($, state).catch((err: unknown) => report($, state, `error: ${message(err)}`, 'error'))
     } while (state.pending)
   } finally {
     state.running = false
