@@ -91,3 +91,16 @@ export function noteText(added: readonly Stale[]): string {
 export function logText(added: readonly Stale[]): string {
   return `${added.length} doc line(s) stale: ${namedLines(added)}`
 }
+
+/** One sidebar line per stale anchor, so the section reads as a list. */
+export function sidebarLines(added: readonly Stale[]): { text: string; kind: 'warn' }[] {
+  const lines = added.slice(0, MAX_NAMED).map(s => ({ text: `${s.doc}:${s.line} ${describe(s)}`, kind: 'warn' as const }))
+  const rest = added.length - MAX_NAMED
+  if (rest > 0) lines.push({ text: `and ${rest} more`, kind: 'warn' })
+  return lines
+}
+
+/** A sidebar section key: the docs of this commit, cut to what the sidebar takes. */
+export function sectionKey(added: readonly Stale[]): string {
+  return [...new Set(added.map(s => s.doc))].join('-').replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}

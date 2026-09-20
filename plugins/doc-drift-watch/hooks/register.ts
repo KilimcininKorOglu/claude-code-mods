@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { addedBy, commitDir, isCommit, logText, noteText, parseDrift, type Stale } from './drift.ts'
+import { addedBy, commitDir, isCommit, logText, noteText, parseDrift, sectionKey, sidebarLines, type Stale } from './drift.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -51,13 +51,27 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
   }
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, added: readonly Stale[]): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'doc-drift-watch', key: sectionKey(added), title: 'doc lines the commit made stale', lines: sidebarLines(added), until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(logText(added))
+}
+
 async function afterCommit($: EngineInterface, state: State, before: { root: string; stale: Stale[] }, r: ToolCallResult): Promise<ToolCallResult> {
   try {
     const added = addedBy(before.stale, await driftNow($, before.root))
     state.lastError = undefined
     if (added.length === 0) return r
-    // The note goes to the model, the log line to the person: neither reads the other's channel.
-    $.ui.log(logText(added))
+    // The note goes to the model, the finding to the person: neither reads the other's channel.
+    await toPerson($, added)
     return withNote(r, noteText(added))
   } catch (err) {
     report($, state, err)
