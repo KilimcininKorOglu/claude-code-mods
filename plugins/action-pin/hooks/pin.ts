@@ -90,6 +90,50 @@ export function sidebarLines(uses: readonly Unpinned[]): { text: string; kind: '
   return named(uses).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
+/** The transcript line of a finding a later edit closed. */
+export function doneLog(file: string, refs: readonly string[]): string {
+  return `every action of ${file} is pinned to a commit now: ${refs.join(' · ')}`
+}
+
+/** The sidebar lines of a closed finding: the file, then the refs that are gone. */
+export function doneLines(file: string, refs: readonly string[]): { text: string; kind: 'ok' }[] {
+  return [{ text: file, kind: 'ok' }, ...refs.map(text => ({ text, kind: 'ok' as const }))]
+}
+
+/** `action@ref`, the form the finding is held and named by. */
+export const refOf = (use: Unpinned): string => `${use.action}@${use.ref}`
+
+/** The refs a file's finding holds open after a new report: the earlier ones and the new ones, each once. */
+export function openRefs(before: readonly string[] | undefined, uses: readonly Unpinned[]): string[] {
+  return [...new Set([...(before ?? []), ...uses.map(refOf)])]
+}
+
+/** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
+const GIT_FLAG = String.raw`(?:\s+-[cC]\s+\S+|\s+--(?:git-dir|work-tree|namespace)=\S+|\s+--(?:no-pager|no-replace-objects|bare|literal-pathspecs|paginate))`
+
+/** A `git commit`, `git push` or `git merge` the gate stops while a finding is open. */
+const GUARDED = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+(commit|push|merge)\b`)
+const ASKING = /\s(--dry-run|--help|-h)(\s|$)/
+
+export function isGuarded(command: string): boolean {
+  return GUARDED.test(command) && !ASKING.test(command)
+}
+
+/** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
+export type Mode = 'note' | 'deny'
+
+/** The mode a `/action-pin mode <word>` argument names, or undefined when it is not one. */
+export function modeOf(arg: string): Mode | undefined {
+  return arg === 'note' || arg === 'deny' ? arg : undefined
+}
+
+/** The deny text both the model and the person read: which refs still move, and the one way out. */
+export function denyText(refs: readonly string[]): string {
+  const rows = refs.slice(0, MAX_NAMED)
+  if (refs.length > MAX_NAMED) rows.push(`${refs.length - MAX_NAMED} more`)
+  return `stopped: ${refs.length} action(s) are used by a moving ref: ${rows.join(' · ')}. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate, and only the person turns it off with /action-pin mode note.`
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'

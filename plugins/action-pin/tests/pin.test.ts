@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitUrl, isWorkflow, logText, noteText, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
+import { commitUrl, denyText, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
 
 tier('user')
 
@@ -46,5 +46,17 @@ describe('pin', () => {
     expect(noteText(withSha)).toContain(`for example: uses: actions/checkout@${SHA} # v4`)
     expect(logText(withSha)).toBe(`actions by a moving ref: actions/checkout@v4 → ${SHA}`)
     expect(noteText([{ action: 'actions/checkout', ref: 'v4' }])).toContain('Pin each to the commit SHA of that tag')
+  })
+
+  test('the gate stops a commit, a push and a merge, and says why', () => {
+    for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
+    for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('note')).toBe('note')
+    expect(modeOf('')).toBe(undefined)
+    expect(refOf({ action: 'actions/checkout', ref: 'v4', sha: SHA })).toBe('actions/checkout@v4')
+    expect(openRefs(['a@1'], [{ action: 'a', ref: '1' }, { action: 'b', ref: '2' }])).toEqual(['a@1', 'b@2'])
+    expect(denyText(['actions/checkout@v4'])).toBe(
+      'stopped: 1 action(s) are used by a moving ref: actions/checkout@v4. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate, and only the person turns it off with /action-pin mode note.',
+    )
   })
 })

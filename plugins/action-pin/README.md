@@ -1,6 +1,6 @@
 # action-pin
 
-A Claude Code Mod that tells the model when an edit adds a GitHub Actions step pinned to a moving tag, and names the commit SHA to write instead. Nothing is stopped.
+A Claude Code Mod that tells the model when an edit adds a GitHub Actions step pinned to a moving tag, and names the commit SHA to write instead. By default nothing is stopped; in `deny` mode a commit, a push and a merge stop while a ref still moves.
 
 ## What it does
 
@@ -19,10 +19,20 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those actions go there instead, one line per action as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
+7. A finding stays open until the workflow pins those actions. After a later Edit or Write the mod reads each open workflow again, and one whose refs are all pinned closes:
+
+       action-pin: every action of .github/workflows/ci.yml is pinned to a commit now: actions/checkout@v4
+
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this: it wrote the SHA itself.
+
+8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a workflow still uses an action by a moving ref. Before it stops one it reads each open workflow again, so a file the model pinned opens the gate itself. There is no bypass; only the person turns the gate off with `/action-pin mode note`. `note` mode is the default and stops nothing.
+
 ## Command
 
-    /action-pin            on or off
-    /action-pin on | off   on by default
+    /action-pin                 on or off, the mode, and the workflows that still move
+    /action-pin on | off        on by default
+    /action-pin mode note       note only; the default
+    /action-pin mode deny       a commit, a push and a merge also stop while a ref moves
 
 ## Install
 
@@ -41,15 +51,15 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.http.fetch (via resolveSha), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via report, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L3, reaches the network.
 
-    1. Reads:    the path and the new text of each Edit and Write; no file is opened
+    1. Reads:    the path and the new text of each Edit and Write; the Bash command text; each open workflow again while a finding stands
     2. Runs:     nothing
     3. Sends:    the public action name and its ref (for example actions/checkout and v4) to api.github.com, at most 10 per edit, once each per session; no token, no repository content, no file path
-    4. Persists: in $.store, the on/off setting; the resolved SHAs live in memory for one session
+    4. Persists: in $.store, the on/off setting and the mode; the resolved SHAs live in memory for one session
     5. Hostile input: the answer is used only when it is 40 hex characters, and it is written into the note alone; the mod never edits a file
 
 ## Limits
@@ -58,6 +68,9 @@ Reach L3, reaches the network.
 - A workflow already in the repository is not checked; only the lines an edit adds are.
 - An action the anonymous rate limit or a private repository hides gets the note without a SHA.
 - A SHA resolved once is kept for the session, so a tag moved during the session keeps its first answer.
+- A finding closes only when the workflow no longer uses those actions by a ref. A file that cannot be read keeps it open.
+- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/action-pin mode note`.
+- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
 
 ## Development
 
