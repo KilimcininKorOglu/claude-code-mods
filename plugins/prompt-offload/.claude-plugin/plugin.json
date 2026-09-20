@@ -1,0 +1,11 @@
+{
+  "name": "prompt-offload",
+  "version": "0.1.0",
+  "description": "Writes a long pasted prompt to a temp file and sends the model its first lines with the path, so one paste does not fill the context. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

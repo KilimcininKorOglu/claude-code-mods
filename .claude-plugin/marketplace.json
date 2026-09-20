@@ -316,6 +316,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "prompt-offload",
+      "source": "./plugins/prompt-offload",
+      "description": "Writes a long pasted prompt to a temp file and sends the model its first lines with the path, so one paste does not fill the context.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
