@@ -51,7 +51,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [disk-janitor](plugins/disk-janitor) | Measures the build artifacts of the repository, shows them on the status line from 5 GB, and deletes the ones you pick in the `/janitor` pane; data directories are never listed. | L2 |
 | [contract-watch](plugins/contract-watch) | After the model changes a function signature with Edit, adds the callers ripwire finds to the Edit's result, so the model fixes them before the build does. | L2 |
 | [doc-drift-watch](plugins/doc-drift-watch) | After each commit the model makes, adds the doc lines that commit made stale (file:line references, symbol names) to the commit's result, from ripwire doc-drift. | L2 |
-| [prompt-deck](plugins/prompt-deck) | Learns the short prompts you send often in this project and draws the top five above the prompt; with the prompt box empty, a digit key sends one at once. | L2 |
+| [prompt-deck](plugins/prompt-deck) | Learns the short prompts you send often in this project and draws them, with the ones you pin by hand, above the prompt; with the prompt box empty, a digit key sends one at once. | L2 |
 | [shot-inline](plugins/shot-inline) | Draws each PNG or JPG the model saves or reads (Playwright screenshot, Read, a Bash command) under its tool row, in a terminal with the kitty graphics protocol. | L2 |
 | [diagram-render](plugins/diagram-render) | Renders the mermaid blocks of the model's replies with an installed `mmdc` after each turn and draws each picture under its reply. | L2 |
 | [dep-sentinel](plugins/dep-sentinel) | Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one, naming the latest version. | L3 |

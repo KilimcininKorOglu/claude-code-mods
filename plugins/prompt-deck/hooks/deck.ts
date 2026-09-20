@@ -22,6 +22,15 @@ export function normalize(text: string): string | undefined {
   return t
 }
 
+/**
+ * The prompt as `/deck add` keeps it, or undefined for one the deck cannot draw. A pinned prompt has no
+ * length limit, because the person typed it themselves; the band cuts its label to the width.
+ */
+export function normalizePin(text: string): string | undefined {
+  const t = text.trim()
+  return t === '' || t.includes('\n') || t.startsWith('/') ? undefined : t
+}
+
 const byUse = ([, a]: [string, { n: number; last: number }], [, b]: [string, { n: number; last: number }]): number => b.n - a.n || b.last - a.last
 
 /** Every kept prompt, the most used first, the latest first on a tie. */
@@ -56,9 +65,19 @@ export function record(counts: Counts, text: string, now: number): Counts {
   return Object.fromEntries(kept)
 }
 
-/** The prompts the band draws. */
-export function band(counts: Counts): string[] {
-  return ranked(counts).filter(t => (counts[t]?.n ?? 0) >= MIN_USES).slice(0, BAND_SIZE)
+/** The store key of one project's pinned prompts. */
+export function pinsKey(project: string): string {
+  return `pins:${project}`
+}
+
+/**
+ * The prompts the band draws: the pinned ones in the order they were added, then the most used, up to
+ * five. A pinned prompt keeps its place whatever the counts say.
+ */
+export function band(counts: Counts, pins: readonly string[] = []): string[] {
+  const kept = pins.slice(0, BAND_SIZE)
+  const counted = ranked(counts).filter(t => (counts[t]?.n ?? 0) >= MIN_USES && !kept.includes(t))
+  return [...kept, ...counted].slice(0, BAND_SIZE)
 }
 
 /** One band label cut to fit `count` buttons across `columns` cells; `N: ` and a gap take 5 cells each. */
@@ -67,16 +86,24 @@ export function fit(text: string, count: number, columns: number): string {
   return text.length <= width ? text : `${text.slice(0, width - 1).trimEnd()}…`
 }
 
-/** The `/deck` list: every kept prompt with its uses, the number `/deck remove` takes. */
-export function listText(counts: Counts): string {
-  const all = ranked(counts)
-  if (all.length === 0) return `no prompt counted yet; a prompt reaches the band after ${MIN_USES} uses`
-  return all.map((t, i) => `${i + 1}. ${t} (${counts[t]?.n ?? 0})`).join('\n')
+/** The prompts of the `/deck` list in order: the pinned ones, then the counted ones. */
+function listed(counts: Counts, pins: readonly string[]): string[] {
+  return [...pins, ...ranked(counts).filter(t => !pins.includes(t))]
 }
 
-/** The counts without the prompt at 1-based place `place` of the `/deck` list, or undefined for no such place. */
-export function removeAt(counts: Counts, place: number): Counts | undefined {
-  const text = ranked(counts)[place - 1]
+/** The `/deck` list: every pinned and counted prompt, each with the number `/deck remove` takes. */
+export function listText(counts: Counts, pins: readonly string[] = []): string {
+  const all = listed(counts, pins)
+  if (all.length === 0) return `no prompt counted yet; a prompt reaches the band after ${MIN_USES} uses, or add one with /deck add <text>`
+  return all.map((t, i) => `${i + 1}. ${t} ${pins.includes(t) ? '(pinned)' : `(${counts[t]?.n ?? 0})`}`).join('\n')
+}
+
+/** The deck without the prompt at 1-based place `place` of the `/deck` list, or undefined for no such place. */
+export function removeAt(counts: Counts, pins: readonly string[], place: number): { counts: Counts; pins: string[] } | undefined {
+  const text = listed(counts, pins)[place - 1]
   if (text === undefined) return undefined
-  return Object.fromEntries(Object.entries(counts).filter(([t]) => t !== text))
+  return {
+    counts: Object.fromEntries(Object.entries(counts).filter(([t]) => t !== text)),
+    pins: pins.filter(p => p !== text),
+  }
 }

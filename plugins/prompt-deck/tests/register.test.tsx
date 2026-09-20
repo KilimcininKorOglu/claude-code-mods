@@ -82,8 +82,26 @@ describe('prompt-deck', () => {
     await $.prompt.submit(typed('c'))
     expect(await (await band($)).find({ type: 'Button', key: 'deck:1' })).toBe(undefined)
     expect((await $.command.run(run(''))).text).toBe('off · project app\n1. a (3)')
-    expect((await $.command.run(run('clear'))).text).toBe('cleared: no prompt is counted')
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the band), list, remove <n>, clear, on or off')
+    expect((await $.command.run(run('clear'))).text).toBe('cleared: no prompt is pinned or counted')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the band), list, add <text>, remove <n>, clear, on or off')
+  })
+
+  test('a prompt added by hand is pinned first on the band, whatever the counts say', async ($, on) => {
+    const w = world(on)
+    await started($)
+    for (let i = 0; i < 4; i++) await $.prompt.submit(typed('devam et'))
+    const long = 'raporu hazırla ve her bölümünü ayrı ayrı gözden geçir, sonra bana tek bir özet olarak ver'
+    expect((await $.command.run(run(`add ${long}`))).text).toBe('pinned at 1 of 5')
+    expect((await $.command.run(run(`add ${long}`))).text).toBe('that prompt is already pinned')
+    expect((await $.command.run(run('add /clear'))).text).toBe('add expects one line of text that does not start with /')
+    const ui = await band($)
+    expect((await ui.find({ type: 'Button', key: 'deck:1' }))?.props.label).toBe('raporu hazırla ve her bölümünü ayrı ayrı göz…')
+    expect((await ui.find({ type: 'Button', key: 'deck:2' }))?.props.label).toBe('devam et')
+    expect((await $.command.run(run('list'))).text).toBe(`on · project app\n1. ${long} (pinned)\n2. devam et (4)`)
+    await ui.press({ key: 'deck:1' })
+    expect(w.entered.at(-1)?.text).toBe(long)
+    expect((await $.command.run(run('remove 1'))).text).toBe('removed; 1 prompt(s) left')
+    expect(w.store['pins:app']).toEqual([])
   })
 
   test('the counts of the one shared deck move into this project once, and other projects start empty', async ($, on) => {
