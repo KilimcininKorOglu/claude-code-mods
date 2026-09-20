@@ -45,6 +45,8 @@ export interface State {
   pending: { cancel: () => void } | null
   lastPing: PingRecord | null
   stopped: string | null
+  /** The short form of the last transcript line, drawn faint under the window line in the sidebar. */
+  event?: string
 }
 
 export function freshState(): State {
@@ -147,6 +149,19 @@ export function statusTone(s: State, now: number): 'ok' | 'warn' | 'error' | 'di
   return s.deadline - now <= s.every ? 'warn' : 'ok'
 }
 
+/** How many characters of the last event the sidebar's second line holds. */
+const MAX_EVENT = 120
+
+/** A transcript line as the sidebar's second line: cut, because the pane holds one row for it. */
+export function eventShort(text: string): string {
+  return text.length > MAX_EVENT ? `${text.slice(0, MAX_EVENT - 1)}…` : text
+}
+
+/** The cold write as the sidebar's second line: what it cost, without the instruction the line carries. */
+export function coldWriteShort(tokens: number, usd: number | null): string {
+  return `cold write ${fmtTok(tokens)} tokens paid (${fmtUsd(usd)})`
+}
+
 export type ResumeFields = {
   source: string
   model?: string
@@ -178,6 +193,7 @@ export function resetForClear(s: State): void {
   s.coldWrites = []
   s.lastPing = null
   s.stopped = null
+  s.event = undefined
 }
 
 function stateLine(s: State, now: number): string {

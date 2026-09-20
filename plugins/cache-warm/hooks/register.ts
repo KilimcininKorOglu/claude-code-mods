@@ -7,6 +7,8 @@ import {
   PING_AFTER_MS,
   card,
   coldPingText,
+  coldWriteShort,
+  eventShort,
   fmtDuration,
   fmtTok,
   fmtUsd,
@@ -51,17 +53,26 @@ function disarm(s: State): void {
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'cache-warm', key: 'window' }
 
+/** Writes one transcript line and keeps a short form of it for the sidebar's second line. */
+function logEvent($: EngineInterface, s: State, text: string, short: string): void {
+  $.ui.log(text)
+  s.event = short
+}
+
 /**
- * Writes the window's state into the shared sidebar and answers whether it took it. A closed sidebar,
- * and a sidebar mod that is not installed, both answer false, so the status line is drawn instead.
+ * Writes the window's state into the shared sidebar and answers whether it took it. The section also
+ * carries the last transcript line under the state, faint: the first line says how long the window
+ * holds, the second what the mod last did. A closed sidebar, and a sidebar mod that is not installed,
+ * both answer false, so the status line is drawn instead.
  */
-async function toSidebar($: EngineInterface, text: string | undefined, kind: 'ok' | 'warn' | 'error' | 'dim'): Promise<boolean> {
+async function toSidebar($: EngineInterface, s: State, text: string | undefined, kind: 'ok' | 'warn' | 'error' | 'dim'): Promise<boolean> {
   try {
     if (text === undefined) {
       await $.sidebar.clear(SECTION)
       return await $.sidebar.isOpen()
     }
-    return await $.sidebar.set({ ...SECTION, title: 'cache window', lines: [{ text, kind }], until: 'session', order: 20 })
+    const lines = [{ text, kind }, ...(s.event === undefined ? [] : [{ text: s.event, kind: 'dim' as const }])]
+    return await $.sidebar.set({ ...SECTION, title: 'cache window', lines, until: 'session', order: 20 })
   } catch {
     // The sidebar mod is not installed.
     return false
@@ -70,7 +81,7 @@ async function toSidebar($: EngineInterface, text: string | undefined, kind: 'ok
 
 async function showStatusAt($: EngineInterface, s: State, now: number): Promise<void> {
   const text = statusText(s, now)
-  $.ui.status((await toSidebar($, text, statusTone(s, now))) ? undefined : text)
+  $.ui.status((await toSidebar($, s, text, statusTone(s, now))) ? undefined : text)
 }
 
 async function showStatus($: EngineInterface, s: State): Promise<void> {
@@ -224,8 +235,9 @@ async function measure($: EngineInterface, s: State, u: TurnUsage, now: number):
   const usd = writeUsd(write, priceOf(s.model))
   s.coldWrites.push({ tokens: write, usd })
   if (s.deadline >= now + AUTO_WARM_MS) return
+  // The line is written before the window starts, so the sidebar's redraw already carries it.
+  logEvent($, s, `cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)}; /cache-warm off stops it.`, coldWriteShort(write, usd))
   await startWindow($, s, AUTO_WARM_MS, s.every)
-  $.ui.log(`cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)}; /cache-warm off stops it.`)
 }
 
 async function afterTurn($: EngineInterface, s: State, durationMs: number, usage: TurnUsage | undefined): Promise<void> {
@@ -266,7 +278,7 @@ export const register: Register = on => {
     }
     const line = seedFromResume(s, e, await $.clock.now())
     s.model ??= await $.session.model()
-    if (line) $.ui.log(line)
+    if (line) logEvent($, s, line, eventShort(line))
     return r
   })
 

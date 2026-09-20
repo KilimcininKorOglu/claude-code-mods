@@ -125,6 +125,17 @@ describe('keep warm', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
   })
 
+  withSidebar('the section carries the last transcript line under the window state', async ($, on) => {
+    const w = world(on, [warm])
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await w.clock.advance(3 * HOUR)
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
+    expect(bar.sections.at(-1)?.lines).toEqual(['6h left · ping in 50m', 'cold write 201k tokens paid ($4.01)'])
+  })
+
   test('a new turn moves the ping later', async ($, on) => {
     const w = world(on, [warm])
     await $.session.start(session)

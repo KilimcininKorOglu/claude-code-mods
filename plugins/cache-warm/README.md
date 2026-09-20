@@ -35,6 +35,12 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
 While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. The section goes when the window ends. There the line is coloured: a stopped window red, a window whose end is nearer than one ping period yellow, a window that holds green, and the wait for the first turn faint. With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
+The section holds a second, faint line under the window: the last transcript line, shortened. The window line says how long the cache is kept, the second line says what the mod last did:
+
+    cache window
+    6h left · ping in 50m
+    cold write 201k tokens paid ($4.01)
+
 **The card** of `/cache-status`:
 
     claude-fable-5-1
@@ -82,7 +88,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log, $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
 
 Reach L2, drives Claude.
 
