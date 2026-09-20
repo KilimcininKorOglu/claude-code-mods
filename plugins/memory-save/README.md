@@ -38,6 +38,7 @@ The project name is the primary repository name, also inside a git worktree, els
     memory-save: +2 -1 · 14:32
     memory-save: +3 -1 ~3 topic: history · 14:32
     memory-save: no change · 14:32
+    memory-save: +2 1 refused · 14:32
     memory-save: error: reply has no JSON object · 14:32
 
 **One line in the transcript** when a save changed a file. The line is not sent to the model:
@@ -56,7 +57,8 @@ A save whose result is not in the template is never written.
 
 ## What is checked before a write
 
-- The reply is one JSON object of the documented shape. Any other reply is an error, never a guess.
+- The reply is one JSON object. Any other reply is an error, never a guess. An op or a topic of another shape is refused alone, the rest of the reply is written, the status line counts it (`+2 1 refused`), the transcript line names it, and the next save tells the fork what it refused. One bad op no longer loses the whole save.
+- An `add` names a heading the file already has: one of the four sections, or a `### ` subheading of it, whatever its case. A bullet goes at the end of that heading's own block, so an add to a section lands before its first subheading. An add whose heading the file lacks is refused alone.
 - A removed or replaced line exists in the file exactly, or it differs only by a leading list marker from exactly one line. The fork writes every entry as a bullet, also one that stands in the file as a plain paragraph line. A remove or replace whose line the file does not have is skipped, and the other ops are written: the status line counts it (`+1 1 skipped`), the transcript line names it, and the next save tells the fork to copy such a line exactly, with its markup. A misquoted line (the fork added `**` around one, for example) used to stop the whole save.
 - A topic file name is lowercase, ends in `.md`, has no directory part and is not `memory.md`.
 - The result has the four sections in order, fewer than 200 lines and fewer than 50000 characters. A file that is already at or over a cap (one written before these checks, for example) is the exception: a save that makes it smaller in both measures is written, so the file comes back under the caps in steps instead of every save failing.
@@ -102,7 +104,7 @@ The mod has no command. To stop the saves, disable it: `claude plugin disable me
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
-    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, save, templated), $.ui.status (via report)
+    ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.ui.log (via ask, git, reportNoChange, save, templated), $.ui.status (via report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 

@@ -16,21 +16,23 @@ const PROJECT_NAME = /^[A-Za-z0-9._-]+$/
 const TOPIC_FILE = /^[a-z0-9][a-z0-9._-]*\.md$/
 
 export type Op =
-  | { op: 'add'; section: Section; text: string }
+  /** `section` is a heading of the file: one of the four sections, or a '### ' subheading. */
+  | { op: 'add'; section: string; text: string }
   | { op: 'remove'; line: string }
   | { op: 'replace'; line: string; text: string }
 
 export type TopicAppend = { file: string; append: string }
 
-export type Reply = { ops: Op[]; topics: TopicAppend[] }
+/** `refused` names each op or topic the mod could not read or place; the rest is still applied. */
+export type Reply = { ops: Op[]; topics: TopicAppend[]; refused: string[] }
 
 export type Parsed = { ok: true; reply: Reply } | { ok: false; error: string }
 
 /** `skipped` holds the lines of remove and replace ops the file has no line for. */
-export type Changes = { added: number; removed: number; replaced: number; created: boolean; skipped: string[] }
+export type Changes = { added: number; removed: number; replaced: number; created: boolean; skipped: string[]; refused: string[] }
 
 export type Applied =
-  | { ok: true; changed: false; skipped: string[] }
+  | { ok: true; changed: false; skipped: string[]; refused: string[] }
   | { ok: true; changed: true; text: string; changes: Changes; newBullets: string[]; topics: TopicAppend[] }
   | { ok: false; error: string }
 
@@ -215,7 +217,7 @@ Preserve all real content, reorganize it under those sections, and convert rules
 
 const FORMAT = `Answer with ONE JSON object and nothing else, no prose, no code fence:
 {"ops": [...], "topics": [...]}
-- {"op":"add","section":"<one of: ${SECTIONS.join(' | ')}>","text":"- <one bullet on one line>"}
+- {"op":"add","section":"<one of: ${SECTIONS.join(' | ')}, or a '### ' subheading the file already has, copied exactly>","text":"- <one bullet on one line>"}
 - {"op":"remove","line":"<an existing line of MEMORY.md, copied exactly>"}
 - {"op":"replace","line":"<an existing line, copied exactly>","text":"- <the new bullet on one line>"}
 - topics: {"file":"history.md","append":"<markdown to append to that topic file>"}; a file name is lowercase, ends in .md, and is not MEMORY.md. The mod lists a new topic file under '## Topic Files'.
@@ -261,12 +263,18 @@ function skippedNote(skipped: readonly string[]): string {
   return `MANDATORY EXACT COPY: the last save skipped these remove or replace lines, because MEMORY.md has no line equal to them. Copy the "line" of a remove or replace op character for character from the file above, with its markup: do not add or drop a list marker, bold, italics or backticks. Skipped:\n${list}`
 }
 
+function refusedNote(refused: readonly string[]): string {
+  if (refused.length === 0) return ''
+  const list = refused.map(r => `  - ${r}`).join('\n')
+  return `MANDATORY OP SHAPE: the last save refused these ops and wrote the rest. An "add" names a heading MEMORY.md already has: one of the four '## ' sections, or a '### ' subheading of the file, copied exactly. Refused:\n${list}`
+}
+
 /**
  * Builds the one message the fork answers. The current file rides along as
  * data, because the fork has no tools and cannot read it. `skipped` names the
- * lines the last save could not find.
+ * lines the last save could not find, and `refused` the ops it could not place.
  */
-export function buildPrompt(project: string, dir: string, current: string | undefined, skipped: readonly string[] = []): string {
+export function buildPrompt(project: string, dir: string, current: string | undefined, skipped: readonly string[] = [], refused: readonly string[] = []): string {
   const head = `You are the memory-save step of this session, not the assistant. Do not answer the user and do not use tools. Review the conversation above and decide what project "${project}" must remember in its MEMORY.md.`
   if (current === undefined) {
     return [head, 'MEMORY.md does not exist yet. The mod creates it with the four sections when your answer has at least one op.', newProjectRules(dir), FORMAT].join('\n\n')
@@ -274,7 +282,8 @@ export function buildPrompt(project: string, dir: string, current: string | unde
   const state = inspect(current)
   const file = `The current MEMORY.md, as data between the markers:\n<memory_file>\n${current}\n</memory_file>`
   const migration = linesOf(current).some(l => l.trim().toLowerCase() === '## critical rules') ? '' : MIGRATION
-  return [head, file, existingRules(dir), migration, sortNote(current), sizeNotes(state), skippedNote(skipped), FORMAT].filter(p => p !== '').join('\n\n')
+  const notes = [sortNote(current), sizeNotes(state), skippedNote(skipped), refusedNote(refused)]
+  return [head, file, existingRules(dir), migration, ...notes, FORMAT].filter(p => p !== '').join('\n\n')
 }
 
 function jsonSpan(text: string): string | undefined {
@@ -300,8 +309,8 @@ function parseOp(value: unknown): Op | string {
   const text = oneLine(value.text)
   const line = oneLine(value.line)
   if (value.op === 'add') {
-    const section = sectionOf(value.section)
-    if (section === undefined) return `add: unknown section ${JSON.stringify(value.section)}`
+    const section = oneLine(value.section)
+    if (section === undefined) return `add: section is not one line: ${JSON.stringify(value.section)}`
     return text === undefined ? 'add: text is not one line' : { op: 'add', section, text }
   }
   if (value.op === 'remove') return line === undefined ? 'remove: line is not one line' : { op: 'remove', line }
@@ -320,14 +329,15 @@ function parseTopic(value: unknown): TopicAppend | string {
   return value.append.trim() === '' ? `topic ${file}: empty append` : { file, append: value.append }
 }
 
-function listOf<T>(value: unknown, parse: (v: unknown) => T | string): T[] | string {
+/** Reads every entry it can; an entry it cannot read is named in `refused` and the rest is kept. */
+function listOf<T>(value: unknown, parse: (v: unknown) => T | string, refused: string[]): T[] | string {
   if (value === undefined) return []
   if (!Array.isArray(value)) return 'ops and topics must be arrays'
   const items: T[] = []
   for (const raw of value) {
     const item = parse(raw)
-    if (typeof item === 'string') return item
-    items.push(item)
+    if (typeof item === 'string') refused.push(item)
+    else items.push(item)
   }
   return items
 }
@@ -344,15 +354,20 @@ function decode(text: string): Record<string, unknown> | string {
   return isRecord(value) ? value : 'reply is not a JSON object'
 }
 
-/** Reads the fork's answer. A reply of any other shape is an error, never a guess. */
+/**
+ * Reads the fork's answer. A reply that is not one JSON object is an error, never a guess. An op or a
+ * topic of another shape is named in `refused` and the rest of the reply is kept, because one bad entry
+ * must not lose the whole save.
+ */
 export function parseReply(text: string): Parsed {
   const value = decode(text)
   if (typeof value === 'string') return { ok: false, error: value }
-  const ops = listOf(value.ops, parseOp)
+  const refused: string[] = []
+  const ops = listOf(value.ops, parseOp, refused)
   if (typeof ops === 'string') return { ok: false, error: ops }
-  const topics = listOf(value.topics, parseTopic)
+  const topics = listOf(value.topics, parseTopic, refused)
   if (typeof topics === 'string') return { ok: false, error: topics }
-  return { ok: true, reply: { ops, topics } }
+  return { ok: true, reply: { ops, topics, refused } }
 }
 
 function bullet(text: string): string {
@@ -365,10 +380,28 @@ function sectionEnd(lines: string[], start: number): number {
   return next === -1 ? lines.length : next
 }
 
+const HEADING = /^#{2,3} /
+
+function headingName(line: string): string {
+  return line.replace(/^#+\s*/, '').trim().toLowerCase()
+}
+
+/** The line of the heading an add op names: one of the four sections, or a '### ' subheading of the file. */
+function headingIndex(lines: string[], name: string): number {
+  const want = headingName(name)
+  return lines.findIndex(l => HEADING.test(l) && headingName(l) === want)
+}
+
+/** The end of a heading's own block: the next heading of any level, so a bullet stays under its own heading. */
+function blockEnd(lines: string[], start: number): number {
+  const next = lines.findIndex((l, i) => i > start && HEADING.test(l))
+  return next === -1 ? lines.length : next
+}
+
 function addTo(lines: string[], section: string, text: string): string | undefined {
-  const start = lines.findIndex(l => isHeading(l, section))
-  if (start === -1) return `add: section '## ${section}' not found`
-  let at = sectionEnd(lines, start)
+  const start = headingIndex(lines, section)
+  if (start === -1) return `add: unknown section ${JSON.stringify(section)}`
+  let at = blockEnd(lines, start)
   while (at > start + 1 && (lines[at - 1] ?? '').trim() === '') at--
   const body = lines.slice(start + 1, at).filter(l => l.trim() !== '')
   if (body.length === 1 && /^- none yet\.?$/i.test(body[0]?.trim() ?? '')) lines.splice(at - 1, 1, text)
@@ -397,8 +430,9 @@ function indexOfLine(lines: string[], line: string): number {
 function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefined {
   if (op.op === 'add') {
     const text = bullet(op.text)
-    newBullets.push(text)
-    return addTo(lines, op.section, text)
+    const error = addTo(lines, op.section, text)
+    if (error === undefined) newBullets.push(text)
+    return error
   }
   const at = indexOfLine(lines, op.line)
   if (at === -1) return `${op.op}: line not found: ${op.line.slice(0, 60)}`
@@ -412,50 +446,48 @@ function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefi
   return undefined
 }
 
-function tally(ops: Op[], created: boolean, skipped: string[]): Changes {
+function tally(ops: Op[], created: boolean, skipped: string[], refused: string[]): Changes {
   const count = (kind: Op['op']): number => ops.filter(o => o.op === kind).length
-  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created, skipped }
+  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created, skipped, refused }
 }
 
 /** Lists every topic file the reply writes under '## Topic Files' when the file does not name it yet. */
-function pointTopics(lines: string[], topics: TopicAppend[], newBullets: string[]): string | undefined {
+function pointTopics(lines: string[], topics: TopicAppend[], newBullets: string[], refused: string[]): void {
   for (const { file } of topics) {
     const start = lines.findIndex(l => isHeading(l, 'Topic Files'))
     const listed = start !== -1 && lines.slice(start, sectionEnd(lines, start)).some(l => l.includes(file))
     if (listed) continue
-    const text = `- \`${file}\`.`
-    newBullets.push(text)
-    const error = addTo(lines, 'Topic Files', text)
-    if (error !== undefined) return error
+    const error = addTo(lines, 'Topic Files', `- \`${file}\`.`)
+    if (error === undefined) newBullets.push(`- \`${file}\`.`)
+    else refused.push(`topic ${file}: ${error}`)
   }
-  return undefined
 }
 
 /**
  * Applies the reply to the current file. A missing file starts from the
  * skeleton. A remove or replace whose line the file lacks is skipped and
- * named, and the rest is applied: the line is already gone or the fork misquoted
- * it, and neither is a reason to lose the other ops. The result is not checked
- * here; `validate` checks it.
+ * named, and an add whose heading the file lacks is refused and named: the rest
+ * is applied, because one bad op is no reason to lose the others. The result is
+ * not checked here; `validate` checks it.
  */
 export function apply(project: string, current: string | undefined, reply: Reply): Applied {
   const lines = linesOf(current ?? skeleton(project))
   const newBullets: string[] = []
   const done: Op[] = []
   const skipped: string[] = []
+  const refused = [...reply.refused]
   for (const op of reply.ops) {
     if (op.op !== 'add' && indexOfLine(lines, op.line) === -1) {
       skipped.push(op.line)
       continue
     }
     const error = applyOp(lines, op, newBullets)
-    if (error !== undefined) return { ok: false, error }
-    done.push(op)
+    if (error !== undefined) refused.push(error)
+    else done.push(op)
   }
-  if (done.length === 0 && reply.topics.length === 0) return { ok: true, changed: false, skipped }
-  const error = pointTopics(lines, reply.topics, newBullets)
-  if (error !== undefined) return { ok: false, error }
-  const changes = tally(done, current === undefined, skipped)
+  if (done.length === 0 && reply.topics.length === 0) return { ok: true, changed: false, skipped, refused }
+  pointTopics(lines, reply.topics, newBullets, refused)
+  const changes = tally(done, current === undefined, skipped, refused)
   return { ok: true, changed: true, text: `${lines.join('\n')}\n`, changes, newBullets, topics: reply.topics }
 }
 
@@ -513,7 +545,8 @@ export function changeText(changes: Changes, topics: TopicAppend[]): string {
   const files = [...new Set(topics.map(t => t.file))]
   const topicPart = files.length > 0 ? `; appended to ${files.join(', ')}` : ''
   const skippedPart = changes.skipped.length > 0 ? `; ${skippedText(changes.skipped)}` : ''
-  return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}${skippedPart}`
+  const refusedPart = changes.refused.length > 0 ? `; refused: ${changes.refused.join('; ')}` : ''
+  return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}${skippedPart}${refusedPart}`
 }
 
 const SHORT_TOPICS = 3
@@ -535,6 +568,7 @@ export function changeShort(changes: Changes, topics: TopicAppend[]): string {
   const parts = counts.filter(([, n]) => n > 0).map(([sign, n]) => `${sign}${n}`)
   if (topics.length > 0) parts.push(topicNames(topics))
   if (changes.skipped.length > 0) parts.push(`${changes.skipped.length} skipped`)
+  if (changes.refused.length > 0) parts.push(`${changes.refused.length} refused`)
   return parts.join(' ') || 'saved'
 }
 

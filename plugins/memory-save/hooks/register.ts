@@ -34,6 +34,8 @@ type State = {
   pending: boolean
   /** The lines the last save skipped, named to the next fork so it copies them exactly. */
   skipped: string[]
+  /** The ops the last save refused, named to the next fork so it writes them in the documented shape. */
+  refused: string[]
 }
 
 function message(err: unknown): string {
@@ -123,7 +125,7 @@ const FAILED_REPLY = 'memory-save.failed-reply.txt'
  * read is written to FAILED_REPLY, and the error names its output tokens.
  */
 async function ask($: EngineInterface, state: State, project: string, dir: string, current: string | undefined): Promise<Reply> {
-  const reply = await $.model.fork({ prompt: buildPrompt(project, dir, current, state.skipped) })
+  const reply = await $.model.fork({ prompt: buildPrompt(project, dir, current, state.skipped, state.refused) })
   if (reply === null) throw new Error('the fork got no reply (cold snapshot or API error)')
   const u = reply.usage
   $.ui.log(`fork usage: in ${u.input_tokens}, cache read ${u.cache_read_input_tokens}, out ${u.output_tokens}`, { to: 'debug' })
@@ -131,6 +133,14 @@ async function ask($: EngineInterface, state: State, project: string, dir: strin
   if (parsed.ok) return parsed.reply
   await $.fs.write(`${dir}/${FAILED_REPLY}`, reply.text)
   throw new Error(`${parsed.error}; ${u.output_tokens} output tokens, ${reply.text.length} characters, kept in ${FAILED_REPLY}`)
+}
+
+/** Reports a save that changed no file, naming the lines it skipped and the ops it refused. */
+async function reportNoChange($: EngineInterface, skipped: string[], refused: string[]): Promise<void> {
+  const parts = [skipped.length > 0 ? skippedText(skipped) : '', refused.length > 0 ? `refused: ${refused.join('; ')}` : ''].filter(p => p !== '')
+  if (parts.length > 0) $.ui.log(`MEMORY.md: no change; ${parts.join('; ')}`)
+  const counts = [skipped.length > 0 ? `${skipped.length} skipped` : '', refused.length > 0 ? `${refused.length} refused` : ''].filter(p => p !== '')
+  return report($, counts.length > 0 ? `no change, ${counts.join(', ')}` : 'no change')
 }
 
 /** Asks the fork what to remember, then writes MEMORY.md and its topic files. */
@@ -144,10 +154,11 @@ async function save($: EngineInterface, state: State): Promise<void> {
   if (!result.ok) throw new Error(result.error)
   if (!result.changed) {
     state.skipped = result.skipped
-    if (result.skipped.length > 0) $.ui.log(`MEMORY.md: no change; ${skippedText(result.skipped)}`)
-    return report($, result.skipped.length > 0 ? `no change, ${result.skipped.length} skipped` : 'no change')
+    state.refused = result.refused
+    return reportNoChange($, result.skipped, result.refused)
   }
   state.skipped = result.changes.skipped
+  state.refused = result.changes.refused
   const errors = validate(result.text, result.newBullets, current)
   if (errors.length > 0) throw new Error(`not written: ${errors.join('; ')}`)
   if ((await readFile($, file)) !== current) throw new Error('not written: MEMORY.md changed during the save')
@@ -198,7 +209,7 @@ async function drain($: EngineInterface, state: State): Promise<void> {
 }
 
 export const register: Register = on => {
-  const state: State = { running: false, pending: false, skipped: [] }
+  const state: State = { running: false, pending: false, skipped: [], refused: [] }
 
   on('session.start', async ($, e, next) => {
     // A new start (a reload, an enable) looks the project up again.

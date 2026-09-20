@@ -39,7 +39,7 @@ const FILE = `# demo
 - None yet.
 `
 
-const reply = (r: Partial<Reply>): Reply => ({ ops: [], topics: [], ...r })
+const reply = (r: Partial<Reply>): Reply => ({ ops: [], topics: [], refused: [], ...r })
 
 describe('projectNameFrom', () => {
   test('names the repository from its .git directory', async () => {
@@ -65,14 +65,14 @@ describe('projectNameFrom', () => {
 describe('parseReply', () => {
   test('reads a bare object and one inside a code fence', async () => {
     const ok = parseReply('{"ops":[{"op":"remove","line":"- x"}]}')
-    expect(ok).toEqual({ ok: true, reply: { ops: [{ op: 'remove', line: '- x' }], topics: [] } })
+    expect(ok).toEqual({ ok: true, reply: { ops: [{ op: 'remove', line: '- x' }], topics: [], refused: [] } })
     const fenced = parseReply('```json\n{"ops":[],"topics":[]}\n```')
     expect(fenced.ok).toBe(true)
   })
 
-  test('matches a section name without regard to case', async () => {
+  test('keeps the section name as the fork wrote it, and apply matches it without regard to case', async () => {
     const r = parseReply('{"ops":[{"op":"add","section":"critical rules","text":"- a"}]}')
-    expect(r).toEqual({ ok: true, reply: { ops: [{ op: 'add', section: 'CRITICAL RULES', text: '- a' }], topics: [] } })
+    expect(r).toEqual({ ok: true, reply: { ops: [{ op: 'add', section: 'critical rules', text: '- a' }], topics: [], refused: [] } })
   })
 
   test('refuses text that is not JSON', async () => {
@@ -80,15 +80,19 @@ describe('parseReply', () => {
     expect(parseReply('{ops: }').ok).toBe(false)
   })
 
-  test('refuses an unknown section, a multi-line bullet and an unknown op', async () => {
-    expect(parseReply('{"ops":[{"op":"add","section":"Misc","text":"- a"}]}').ok).toBe(false)
-    expect(parseReply('{"ops":[{"op":"add","section":"Active Warnings","text":"- a\\n- b"}]}').ok).toBe(false)
-    expect(parseReply('{"ops":[{"op":"move","line":"- a"}]}').ok).toBe(false)
+  test('names a multi-line bullet and an unknown op in refused, and keeps the other ops', async () => {
+    const r = parseReply('{"ops":[{"op":"add","section":"Active Warnings","text":"- a\\n- b"},{"op":"move","line":"- a"},{"op":"remove","line":"- keep"}]}')
+    if (!r.ok) throw new Error(r.error)
+    expect(r.reply.ops).toEqual([{ op: 'remove', line: '- keep' }])
+    expect(r.reply.refused).toEqual(['add: text is not one line', 'unknown op "move"'])
   })
 
-  test('refuses a topic file name that could reach another file', async () => {
+  test('names a topic file that could reach another file in refused', async () => {
     for (const file of ['../x.md', 'MEMORY.md', 'memory.md', 'notes.txt', 'a/b.md']) {
-      expect(parseReply(`{"topics":[{"file":"${file}","append":"x"}]}`).ok, file).toBe(false)
+      const r = parseReply(`{"topics":[{"file":"${file}","append":"x"}]}`)
+      if (!r.ok) throw new Error(r.error)
+      expect(r.reply.topics, file).toEqual([])
+      expect(r.reply.refused, file).toHaveLength(1)
     }
   })
 
@@ -96,7 +100,7 @@ describe('parseReply', () => {
 
 describe('apply', () => {
   test('reports no change for an empty reply', async () => {
-    expect(apply('demo', FILE, reply({}))).toEqual({ ok: true, changed: false, skipped: [] })
+    expect(apply('demo', FILE, reply({}))).toEqual({ ok: true, changed: false, skipped: [], refused: [] })
   })
 
   test('adds a bullet at the end of its section and replaces the placeholder', async () => {
@@ -110,7 +114,7 @@ describe('apply', () => {
     expect(r.text).toContain('- Run `make test` before a commit.\n- Use pnpm.\n\n## Architecture')
     expect(r.text).toContain('## Active Warnings\n\n- The cache is stale after a rebase.\n\n## Topic Files')
     expect(r.text).not.toContain('## Active Warnings\n\n- None yet.')
-    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false, skipped: [] })
+    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false, skipped: [], refused: [] })
   })
 
   test('removes and replaces exact lines', async () => {
@@ -135,6 +139,7 @@ describe('apply', () => {
       ok: true,
       changed: false,
       skipped: ['* `scripts/test_*.py` are probe scripts.'],
+      refused: [],
     })
   })
 
@@ -148,9 +153,35 @@ describe('apply', () => {
     if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
     expect(r.text).toContain('- Run `make test` before a commit.')
     expect(r.text).toContain('- New warning.')
-    expect(r.changes).toEqual({ added: 1, removed: 0, replaced: 0, created: false, skipped: ['- **Run `make test` before a commit.**'] })
+    expect(r.changes).toEqual({ added: 1, removed: 0, replaced: 0, created: false, skipped: ['- **Run `make test` before a commit.**'], refused: [] })
     expect(changeText(r.changes, [])).toBe('MEMORY.md: 1 added; 1 skipped, not in the file: - **Run `make test` before a commit.**')
     expect(changeShort(r.changes, [])).toBe('+1 1 skipped')
+  })
+
+  test('adds a bullet under a subheading the file has, and refuses a heading it does not have', async () => {
+    const withSub = FILE.replace('- The API lives in `api/`.', '- The API lives in `api/`.\n\n### i18n (translations)\n\n- Keys live in `locales/`.')
+    const r = apply('demo', withSub, reply({
+      ops: [
+        { op: 'add', section: 'i18n (TRANSLATIONS)', text: '- Reuse the `common.*` namespace.' },
+        { op: 'add', section: 'Misc', text: '- Lost.' },
+        { op: 'add', section: 'Active Warnings', text: '- Kept.' },
+      ],
+    }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).toContain('### i18n (translations)\n\n- Keys live in `locales/`.\n- Reuse the `common.*` namespace.\n\n## Active Warnings')
+    expect(r.text).toContain('- Kept.')
+    expect(r.text).not.toContain('- Lost.')
+    expect(r.changes.added).toBe(2)
+    expect(r.changes.refused).toEqual(['add: unknown section "Misc"'])
+    expect(changeShort(r.changes, [])).toBe('+2 1 refused')
+    expect(changeText(r.changes, [])).toBe('MEMORY.md: 2 added; refused: add: unknown section "Misc"')
+  })
+
+  test('adds a bullet of a section before its first subheading', async () => {
+    const withSub = FILE.replace('- The API lives in `api/`.', '- The API lives in `api/`.\n\n### i18n (translations)\n\n- Keys live in `locales/`.')
+    const r = apply('demo', withSub, reply({ ops: [{ op: 'add', section: 'Architecture & Config Facts', text: '- Node 22.' }] }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).toContain('- The API lives in `api/`.\n- Node 22.\n\n### i18n (translations)')
   })
 
   test('names the skipped lines to the next fork and asks for an exact copy', async () => {
@@ -158,6 +189,13 @@ describe('apply', () => {
     expect(prompt).toContain('MANDATORY EXACT COPY')
     expect(prompt).toContain('  - - **Walk a backfill.**')
     expect(buildPrompt('demo', '/m/demo', FILE)).not.toContain('MANDATORY EXACT COPY')
+  })
+
+  test('names the refused ops to the next fork', async () => {
+    const prompt = buildPrompt('demo', '/m/demo', FILE, [], ['add: unknown section "Misc"'])
+    expect(prompt).toContain('MANDATORY OP SHAPE')
+    expect(prompt).toContain('  - add: unknown section "Misc"')
+    expect(buildPrompt('demo', '/m/demo', FILE)).not.toContain('MANDATORY OP SHAPE')
   })
 
   test('starts a missing file from the skeleton', async () => {
@@ -321,14 +359,14 @@ describe('texts', () => {
   })
 
   test('changeText and changeShort name every change', async () => {
-    const changes = { added: 12, removed: 1, replaced: 0, created: false, skipped: [] }
+    const changes = { added: 12, removed: 1, replaced: 0, created: false, skipped: [], refused: [] }
     const topics = [{ file: 'history.md', append: 'x' }]
     expect(changeText(changes, topics)).toBe('MEMORY.md: 12 added, 1 removed; appended to history.md')
     expect(changeShort(changes, topics)).toBe('+12 -1 topic: history')
   })
 
   test('changeShort names at most three topic files and counts the rest', async () => {
-    const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [] }
+    const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [], refused: [] }
     const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
     expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
   })
