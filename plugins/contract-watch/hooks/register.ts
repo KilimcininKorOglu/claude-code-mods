@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedSignatures, logText, noteText, parseCheck } from './signature.ts'
+import { changedSignatures, logText, noteText, parseCheck, sectionKey, sidebarLines, type Check } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -29,15 +29,29 @@ async function locate($: EngineInterface, file: string): Promise<{ root: string;
   return root === '' ? undefined : { root, rel: `${prefix}${file.slice(file.lastIndexOf('/') + 1)}` }
 }
 
+/**
+ * The finding the person reads: a section of the shared sidebar while it is open, else the transcript
+ * line, as before. The model's note is another channel and does not change here.
+ */
+async function toPerson($: EngineInterface, check: Check, line: string): Promise<void> {
+  try {
+    const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(check.sym), title: 'changed signatures', lines: sidebarLines(check), until: 'turn', order: 50 })
+    if (taken) return
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.log(line)
+}
+
 /** Asks ripwire about one changed function and answers the note, if its callers need a look. */
 async function checkOne($: EngineInterface, root: string, rel: string, name: string): Promise<string | undefined> {
   const r = await $.process.run(['ripwire', root, `--edit-check=${rel}:${name}`], { cwd: root, timeoutMs: 20_000 })
   if (r.exitCode !== 0) throw new Error(`ripwire --edit-check failed: ${(r.stderr || r.stdout).trim().slice(0, 200)}`)
   const check = parseCheck(r.stdout)
   if (check === undefined) return undefined
-  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  // The note goes to the model, the line to the person: neither reads the other's channel.
   const line = logText(check)
-  if (line !== undefined) $.ui.log(line)
+  if (line !== undefined) await toPerson($, check, line)
   return noteText(check)
 }
 

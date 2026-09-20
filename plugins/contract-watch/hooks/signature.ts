@@ -102,3 +102,19 @@ export function logText(c: Check): string | undefined {
   if (!isReported(c)) return undefined
   return `${c.sym} ${paramsText(c)}; callers: ${namedCallers(c)}`
 }
+
+/** A sidebar line, as the sidebar mod's contract names it. */
+type Line = { text: string; kind: 'warn' | 'dim' }
+
+/** The change on the first line, then one line per caller, so the section reads as a list. */
+export function sidebarLines(c: Check): Line[] {
+  const named = c.callers.slice(0, MAX_CALLERS).map(x => ({ text: `${x.name} (${x.at})`, kind: 'dim' as const }))
+  const rest = c.callers.length - MAX_CALLERS
+  if (rest > 0) named.push({ text: `${rest} more`, kind: 'dim' })
+  return [{ text: `${c.sym} ${paramsText(c)}`, kind: 'warn' }, ...named]
+}
+
+/** A sidebar section key: the subject cut to what the sidebar takes, so one symbol keeps one section. */
+export function sectionKey(text: string): string {
+  return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}
