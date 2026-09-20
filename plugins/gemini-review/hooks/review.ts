@@ -102,6 +102,15 @@ export function cleanContext(files: number): string {
   return `gemini-review: Gemini reviewed the ${files} file(s) of this commit and found nothing to report.`
 }
 
+/**
+ * The transcript line after a commit that passed: the findings alone, without the instruction the model
+ * reads. The engine adds the mod name.
+ */
+export function passedLog(minors: readonly Finding[], files: number): string {
+  if (minors.length === 0) return `commit reviewed: ${files} file(s), nothing to report`
+  return `commit reviewed with ${minors.length} minor note(s): ${minors.map(f => `${f.file}${f.line === undefined ? '' : `:${f.line}`}: ${f.message}`).join(' · ')}`
+}
+
 /** What the model reads after a commit that ran without a review. */
 export function failedContext(reason: string): string {
   return `gemini-review could not review this commit and let it run: ${reason}`

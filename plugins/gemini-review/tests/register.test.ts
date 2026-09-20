@@ -155,6 +155,7 @@ describe('gemini-review', () => {
     expect(w.commits).toEqual(['git commit -m x'])
     expect(r.result).toBe('ran')
     expect(r.context).toEqual([expect.stringContaining('let this commit run with 1 minor note(s):\n- pay.ts: Name the constant.')])
+    expect(w.logs).toEqual(['commit reviewed with 1 minor note(s): pay.ts: Name the constant.'])
   })
 
   it('an empty change asks Gemini nothing and adds nothing', async ($, on) => {
@@ -170,6 +171,7 @@ describe('gemini-review', () => {
     w.replies.push({ status: 200, text: reply([]) })
     const r = await $.tool.call({ tool: 'Bash', command: 'cd sub && git add new.ts && git commit -m x' })
     expect(r).toEqual({ result: 'ran', context: ['gemini-review: Gemini reviewed the 2 file(s) of this commit and found nothing to report.'] })
+    expect(w.logs).toEqual(['commit reviewed: 2 file(s), nothing to report'])
     expect(w.git.map(g => g.cwd)).toEqual(Array(w.git.length).fill('/src/app/sub'))
     expect(w.git.map(g => g.argv.join(' '))).toEqual([
       'git rev-parse --verify --quiet HEAD',

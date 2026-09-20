@@ -25,10 +25,14 @@ A toast after each review, and the last one in `/gemini-review`:
 
     gemini-review: reviewed 1 file(s) · 1 blocker, 0 minor · 2k in, 515 out · sent to Gemini free tier
 
-A transcript line when a commit is stopped, skipped or not reviewed:
+A transcript line after every review, so you read what the model was told. The line holds the findings alone, without the instruction:
 
+    gemini-review: commit reviewed: 2 file(s), nothing to report
+    gemini-review: commit reviewed with 1 minor note(s): pay.ts:12: Name the constant.
     gemini-review: commit stopped: reviewed 1 file(s) · 1 blocker, 0 minor · 2k in, 515 out
     gemini-review: commit ran without a review: the model used GEMINI_REVIEW_SKIP=1
+
+The context and the line are separate channels: the model never reads the line, and you never read the context.
 
 ## Command
 

@@ -2,7 +2,7 @@ import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command.ts'
 import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit.ts'
 import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
-import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, summaryText, type Answer, type Finding } from './review.ts'
+import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, passedLog, summaryText, type Answer, type Finding } from './review.ts'
 import { renderTranscript } from './transcript.ts'
 
 /** The last review's line, for the status. */
@@ -96,6 +96,8 @@ function verdictOf($: EngineInterface, state: State, tier: 'free' | 'paid', find
     $.ui.log(`commit stopped: ${summary}`)
     return { deny: denyText(blockers, minors) }
   }
+  // The context goes to the model, the log line to the person: neither reads the other's channel.
+  $.ui.log(passedLog(minors, files))
   return { context: minors.length === 0 ? cleanContext(files) : minorContext(minors) }
 }
 

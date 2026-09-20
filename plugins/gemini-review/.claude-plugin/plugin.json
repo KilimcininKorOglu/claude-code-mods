@@ -1,6 +1,6 @@
 {
   "name": "gemini-review",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Gemini reviews each git commit the model runs, with the staged diff and the conversation, and stops a commit with a serious bug, a security hole or a committed secret. /gemini-review turns it on or off; gemini-core holds the key, tier, model and thinking level. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
