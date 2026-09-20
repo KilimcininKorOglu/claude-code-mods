@@ -183,6 +183,12 @@ export function doneLines(file: string, keys: string[]): { text: string; kind: '
   return [{ text: file, kind: 'ok' }, ...namedPlain(keys).split(' · ').map(text => ({ text, kind: 'ok' as const }))]
 }
 
+/** `path` shown relative to the session's directory when it is inside it. */
+export function shownPath(path: string, cwd: string): string {
+  const base = `${cwd.replace(/\/+$/, '')}/`
+  return path.startsWith(base) ? path.slice(base.length) : path
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'

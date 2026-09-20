@@ -6,7 +6,7 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
 
 1. The mod hooks the Edit and Write tools. After a successful call on a source file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `.astro`, `.php`, `.py`, `.rb`, `.erb`, `.haml`, `.slim`), it reads the translation calls the edit added: those in `new_string` that `old_string` does not have, or every call of a Write.
 2. The calls read are `t`, `$t`, `i18n.t`, `__`, `trans`, `trans_choice`, `@lang`, `_`, `gettext` and `ngettext` with a quoted first argument, also after `this.`, `vm.`, `i18n.`, `$i18n.`, `I18n.` and `i18n.global.`. A variable argument, a template literal and a Rails lazy key (`t('.title')`) are skipped.
-3. It reads the locale files under these directories of the session directory, at most 4 levels deep and 200 files: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`.
+3. It reads the locale files under these directories of the session directory, at most 4 levels deep and 200 files: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. The session directory is the one the session started in, read once at its start, because a Bash `cd` moves the session's own directory. The edited file is named against that directory too, so a path inside the project is written from the project root.
 
    | Format | Example path | Keys |
    |---|---|---|
@@ -61,7 +61,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf, toPerson)
 
 Reach L1, reads files.
 

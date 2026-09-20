@@ -102,7 +102,7 @@ describe('i18n-watch', () => {
     seatSidebar(on, bar)
     await started($)
     await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
-    expect(bar.sections).toEqual([{ key: '-Users-u-app-src-Cart.vue', title: 'missing translation keys', lines: ['checkout.fee (missing in every locale)'] }])
+    expect(bar.sections).toEqual([{ key: 'src-Cart.vue', title: 'missing translation keys', lines: ['checkout.fee (missing in every locale)'] }])
     expect(w.logs).toEqual([])
   })
 
@@ -114,11 +114,11 @@ describe('i18n-watch', () => {
     await edit($, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
     for (const lang of ['en', 'tr', 'de']) w.files.set(`${ROOT}/locales/${lang}.json`, '{"checkout":{"fee":"Fee"}}')
     await edit($, 'locales/de.json', '{}', '{"checkout":{"fee":"Fee"}}')
-    expect(bar.cleared).toEqual(['-Users-u-app-src-Cart.vue'])
+    expect(bar.cleared).toEqual(['src-Cart.vue'])
     expect(bar.sections).toEqual([{
-      key: '-Users-u-app-src-Cart.vue',
+      key: 'src-Cart.vue',
       title: 'translation keys added',
-      lines: [`${ROOT}/src/Cart.vue`, 'checkout.fee'],
+      lines: ['src/Cart.vue', 'checkout.fee'],
     }])
     expect(w.logs).toEqual([])
   })
@@ -134,7 +134,7 @@ describe('i18n-watch', () => {
     w.files.set(`${ROOT}/locales/en.json`, '{"checkout":{"total":"Total","vat":"VAT","fee":"Fee"}}')
     w.files.set(`${ROOT}/locales/tr.json`, '{"checkout":{"total":"Toplam","vat":"KDV","fee":"Ücret"}}')
     await edit($, 'locales/en.json', '{}', '{"checkout":{"fee":"Fee"}}')
-    expect(w.logs[1]).toBe(`every locale now has the keys ${ROOT}/src/Cart.vue lacked: checkout.fee · checkout.vat`)
+    expect(w.logs[1]).toBe('every locale now has the keys src/Cart.vue lacked: checkout.fee · checkout.vat')
   })
 
   test('reads Laravel, YAML and gettext trees, and Write checks the whole file', async ($, on) => {

@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { isSource, newKeys } from './keys.ts'
-import { addFile, doneLines, doneLog, isLocalePath, openKeys, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, sectionKey, sidebarLines, type Catalog } from './locale.ts'
+import { addFile, doneLines, doneLog, isLocalePath, openKeys, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, sectionKey, shownPath, sidebarLines, type Catalog } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -19,8 +19,10 @@ const MAX_BYTES = 2_000_000
  * The catalog of the session directory's locale files, read at the first edit that uses a new key and
  * dropped at each turn and each edit of a locale file; `reported` makes a read error logged once.
  * `open` holds the keys each reported file still lacks, so an edit that adds them closes the finding.
+ * `root` is the directory the session started in. Locale files are looked for under it and a path is
+ * shown against it, because a Bash `cd` moves `$.session.cwd()` away from the project.
  */
-type State = { enabled: boolean; catalog?: Catalog; reported: boolean; open: Map<string, string[]> }
+type State = { enabled: boolean; catalog?: Catalog; reported: boolean; open: Map<string, string[]>; root?: string }
 
 /** A locale file and the locale directory it was found under. */
 type Found = { root: string; path: string }
@@ -66,9 +68,14 @@ async function loadCatalog($: EngineInterface, cwd: string): Promise<{ catalog: 
   return { catalog, errors }
 }
 
+/** The directory the session started in, or the current one until `session.start` has recorded it. */
+async function rootOf($: EngineInterface, state: State): Promise<string> {
+  return state.root ?? (await $.session.cwd())
+}
+
 async function catalogOf($: EngineInterface, state: State): Promise<Catalog> {
   if (state.catalog !== undefined) return state.catalog
-  const { catalog, errors } = await loadCatalog($, await $.session.cwd())
+  const { catalog, errors } = await loadCatalog($, await rootOf($, state))
   if (errors.length > 0 && !state.reported) $.ui.log(`some locale files were not read: ${errors.slice(0, 3).join(' · ')}`)
   state.reported ||= errors.length > 0
   state.catalog = catalog
@@ -122,9 +129,10 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
   if (keys.length === 0) return r
   const missing = missingKeys(await catalogOf($, state), keys)
   if (missing.length === 0) return r
-  state.open.set(path, openKeys(state.open.get(path), missing))
+  const shown = shownPath(path, await rootOf($, state))
+  state.open.set(shown, openKeys(state.open.get(shown), missing))
   // The note goes to the model, the line to the person: neither reads the other's channel.
-  await toPerson($, path, 'missing translation keys', sidebarLines(missing), logText(missing))
+  await toPerson($, shown, 'missing translation keys', sidebarLines(missing), logText(missing))
   return { ...r, context: [...(r.context ?? []), noteText(missing)] }
 }
 
@@ -145,6 +153,7 @@ export const register: Register = on => {
     const r = await next(e)
     await $.command.register({ name: 'i18n-watch', description: 'Translation keys an edit uses that locale files lack: status, on, off (i18n-watch)', argumentHint: '[on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.root = await $.session.cwd()
     return r
   })
 
