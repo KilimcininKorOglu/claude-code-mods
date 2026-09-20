@@ -170,8 +170,8 @@ export function logText(stale: readonly Stale[]): string {
 }
 
 /** One sidebar line per pair, so the section reads as a list. */
-export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'warn' }[] {
-  return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'warn' }))
+export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'error' }[] {
+  return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'error' }))
 }
 
 /** The transcript line of a finding a later commit closed. */

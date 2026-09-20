@@ -86,8 +86,8 @@ export function logText(uses: readonly Unpinned[]): string {
 }
 
 /** One sidebar line per action, so the section reads as a list. */
-export function sidebarLines(uses: readonly Unpinned[]): { text: string; kind: 'warn' }[] {
-  return named(uses).split(' · ').map(text => ({ text, kind: 'warn' }))
+export function sidebarLines(uses: readonly Unpinned[]): { text: string; kind: 'error' }[] {
+  return named(uses).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */

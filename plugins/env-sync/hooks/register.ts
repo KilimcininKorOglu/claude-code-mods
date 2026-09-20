@@ -54,7 +54,7 @@ async function referenceFile($: EngineInterface, root: string): Promise<string |
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, reference: string, title: string, lines: { text: string; kind: 'warn' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, reference: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title, lines, until: 'stream' })
     if (taken) return

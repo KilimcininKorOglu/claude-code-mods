@@ -95,8 +95,8 @@ export function logText(places: string[]): string {
 }
 
 /** One sidebar line per place, so the section reads as a list. */
-export function sidebarLines(places: string[]): { text: string; kind: 'warn' }[] {
-  return namedPlaces(places).split(' · ').map(text => ({ text, kind: 'warn' }))
+export function sidebarLines(places: string[]): { text: string; kind: 'error' }[] {
+  return namedPlaces(places).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */

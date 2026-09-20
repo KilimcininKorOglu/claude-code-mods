@@ -66,7 +66,7 @@ async function staleLock($: EngineInterface, root: string, manifest: string, cha
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'warn' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key, title, lines, until: 'stream' })
     if (taken) return

@@ -117,8 +117,8 @@ export function logText(missing: readonly EnvRead[], reference: string): string 
 }
 
 /** One sidebar line per variable, so the section reads as a list. */
-export function sidebarLines(missing: readonly EnvRead[]): { text: string; kind: 'warn' }[] {
-  return namedReads(missing).split(' · ').map(text => ({ text, kind: 'warn' }))
+export function sidebarLines(missing: readonly EnvRead[]): { text: string; kind: 'error' }[] {
+  return namedReads(missing).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
 /** The variables a finding holds open after a new report: the earlier ones and the new ones, each once. */

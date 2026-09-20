@@ -158,8 +158,8 @@ export function logText(missing: Missing[]): string {
 }
 
 /** One sidebar line per missing key, so the section reads as a list. */
-export function sidebarLines(missing: Missing[]): { text: string; kind: 'warn' }[] {
-  return namedKeys(missing).split(' · ').map(text => ({ text, kind: 'warn' }))
+export function sidebarLines(missing: Missing[]): { text: string; kind: 'error' }[] {
+  return namedKeys(missing).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
 /** The keys a file's finding holds open after a new report: the earlier ones and the new ones, each once. */

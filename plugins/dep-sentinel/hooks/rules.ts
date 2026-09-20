@@ -72,8 +72,8 @@ export function uncheckedLog(failures: readonly string[]): string {
 }
 
 /** One sidebar line per named package, so the section reads as a list. */
-export function sidebarLines(items: readonly string[]): { text: string; kind: 'warn' }[] {
-  return items.map(text => ({ text, kind: 'warn' }))
+export function sidebarLines(items: readonly string[]): { text: string; kind: 'error' }[] {
+  return items.map(text => ({ text, kind: 'error' }))
 }
 
 /** The transcript line of an unchecked finding a later install closed. */

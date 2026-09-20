@@ -18,7 +18,7 @@ async function toPerson($: EngineInterface, key: string, title: string, line: st
       consumer: 'edit-loop',
       key: sectionKey(key),
       title,
-      lines: [{ text: line, kind: 'warn' }],
+      lines: [{ text: line, kind: 'error' }],
       until: 'stream',
     })
     if (taken) return

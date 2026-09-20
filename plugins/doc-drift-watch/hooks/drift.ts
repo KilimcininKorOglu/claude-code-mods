@@ -96,10 +96,10 @@ export function logText(added: readonly Stale[]): string {
 }
 
 /** One sidebar line per stale anchor, so the section reads as a list. */
-export function sidebarLines(added: readonly Stale[]): { text: string; kind: 'warn' }[] {
-  const lines = added.slice(0, MAX_NAMED).map(s => ({ text: `${s.doc}:${s.line} ${describe(s)}`, kind: 'warn' as const }))
+export function sidebarLines(added: readonly Stale[]): { text: string; kind: 'error' }[] {
+  const lines = added.slice(0, MAX_NAMED).map(s => ({ text: `${s.doc}:${s.line} ${describe(s)}`, kind: 'error' as const }))
   const rest = added.length - MAX_NAMED
-  if (rest > 0) lines.push({ text: `and ${rest} more`, kind: 'warn' })
+  if (rest > 0) lines.push({ text: `and ${rest} more`, kind: 'error' })
   return lines
 }
 
