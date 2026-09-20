@@ -45,6 +45,7 @@ function world(on: On): World {
     if (w.readFails) throw new Error('EACCES')
     return { value: w.file } as never
   })
+  on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }) as never)
   on('tool.call', { tool: 'Write' }, () => ({ result: 'ok' }) as never)
   return w
@@ -98,8 +99,38 @@ describe('sql-concat-watch', () => {
     expect((await edit($, 'README.md', 'x', QUERY)).context).toBe(undefined)
     expect((await $.command.run(run('off'))).text).toBe('off: edits are not checked')
     expect((await edit($, 'src/a.ts', 'x', QUERY)).context).toBe(undefined)
-    expect((await $.command.run(run(''))).text).toBe('off')
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+    expect((await $.command.run(run(''))).text).toBe('off · mode note · no file is open')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
+  })
+
+  withSidebar('a later edit that drops the joined SQL closes the finding', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    on('sidebar.clear', () => ({ value: undefined }))
+    await started($)
+    w.file = `${QUERY}\n`
+    await edit($, 'src/users.ts', 'const q = ""', QUERY)
+    w.file = 'const q = "SELECT * FROM users WHERE id = ?"\n'
+    await edit($, 'src/other.ts', 'x', 'const y = 1')
+    expect(bar.sections.at(-1)).toEqual({ key: 'src-users.ts', lines: ['src/users.ts', 'src/users.ts:1'] })
+  })
+
+  test('in deny mode a commit stops while a file joins SQL, and runs once the file is fixed', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = `${QUERY}\n`
+    await edit($, 'src/users.ts', 'const q = ""', QUERY)
+    expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a file builds SQL from strings')
+    const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
+    expect(denied.deny).toBe('stopped: 1 place(s) build SQL from strings: src/users.ts:1. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate, and only the person turns it off with /sql-concat-watch mode note.')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 file(s) still build SQL from strings')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git status' } as never)).result).toBe('ok')
+    // The value is a query parameter now: the gate reads the file again and opens.
+    w.file = 'const q = "SELECT * FROM users WHERE id = ?"\n'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('the SQL built from strings is gone from src/users.ts: src/users.ts:1')
+    expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
   test('a failed read leaves the line number out and is logged once', async ($, on) => {

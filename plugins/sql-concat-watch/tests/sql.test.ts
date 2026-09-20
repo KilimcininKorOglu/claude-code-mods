@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { lineOf, noteText, sqlLines } from '../hooks/sql.ts'
+import { denyText, isGuarded, lineOf, modeOf, noteText, sqlLines } from '../hooks/sql.ts'
 
 tier('user')
 
@@ -52,5 +52,15 @@ describe('sql', () => {
       'sql-concat-watch: this edit builds SQL from strings: src/db.ts:14 · src/db.ts:22. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.',
     )
     expect(noteText(Array.from({ length: 10 }, (_, i) => `a.ts:${i}`))).toContain('a.ts:7 · 2 more.')
+  })
+
+  test('the gate stops a commit, a push and a merge, and says why', () => {
+    for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
+    for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
+    expect(modeOf('deny')).toBe('deny')
+    expect(modeOf('x')).toBe(undefined)
+    expect(denyText(['src/db.ts:14'])).toBe(
+      'stopped: 1 place(s) build SQL from strings: src/db.ts:14. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate, and only the person turns it off with /sql-concat-watch mode note.',
+    )
   })
 })
