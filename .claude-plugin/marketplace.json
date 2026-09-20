@@ -327,6 +327,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "config-parse",
+      "source": "./plugins/config-parse",
+      "description": "Checks each JSON, YAML, TOML or .env file an Edit or Write touches, and notes the parse error at once instead of at the next build.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

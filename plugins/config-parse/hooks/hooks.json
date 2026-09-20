@@ -1,0 +1,4 @@
+{
+  "description": "config-parse: session.start, command.run, tool.call{Edit,Write}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.ts"]
+}

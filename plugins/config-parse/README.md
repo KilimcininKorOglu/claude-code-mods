@@ -1,0 +1,64 @@
+# config-parse
+
+A Claude Code Mod that parses each JSON, YAML, TOML or `.env` file an Edit or Write touches, and notes the parse error at once instead of at the next build.
+
+## What it does
+
+1. After each Edit or Write that the engine ran, the mod reads the path. A `.json`, `.yml`, `.yaml`, `.toml`, `.env` or `.env.<name>` file is parsed; every other file is left alone.
+2. JSON is parsed by the mod itself, and a `.env` file is read line by line: a line that is not empty, a comment or `KEY=value` is the finding, with its number.
+3. YAML and TOML are parsed by `python3` (`yaml.safe_load` and `tomllib.load`), the file path as one argv item. When python or the module is missing, that kind is skipped for the session and one line says so.
+4. A file that does not parse is written to two channels: the model gets a `context` note naming the file and the error, and the person gets a red entry in the shared sidebar's stream, or a transcript line where the sidebar is closed.
+5. When a later edit makes the same file parse again, the standing entry is cleared and one green line says so. That line goes to the person only, because the model fixed it itself.
+6. The mod never denies an edit. The file is written, then read.
+
+In the live check a JSON file broken with a trailing comma got the note (`Property name must be a string literal`), a YAML file broken with `a: 1: 2` got the python error, and the next Write of `a: 1` closed the finding with `parses as YAML again`.
+
+## Command
+
+    /config-parse            on or off, and the files that do not parse
+    /config-parse on | off   on by default
+
+## Install
+
+    claude plugin marketplace add KilimcininKorOglu/claude-code-mods
+    claude plugin install config-parse@kilimcininkoroglu-mods
+
+Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+
+    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+
+## After installing
+
+1. Install `python3` with PyYAML for the YAML check (`python3 -m pip install pyyaml`). TOML needs python 3.11 or newer only. Without them those two kinds are skipped and JSON and `.env` still work.
+2. Restart Claude Code.
+
+## What it can reach
+
+Validated with `claude plugin validate` on Claude Code 2.1.278:
+
+    ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via fileText, pythonCheck, toPerson)
+
+Reach L2, reads files and runs a process.
+
+    1. Reads:    the path of each Edit and Write, and the text of the edited JSON and .env files
+    2. Runs:     python3 -c, by argv, on YAML and TOML files
+    3. Sends:    the file name and the parse error to the model; nothing leaves the machine
+    4. Persists: the on/off setting in $.store
+    5. Hostile input: the path comes from the tool call and reaches python as one argv item, never through a shell; the python program is fixed text and reads sys.argv[1]
+
+## Limits
+
+- The check runs after the write, so a broken file exists until the next edit fixes it. The mod is a note and denies nothing.
+- A `.env` line is checked for its shape only. A wrong value, a missing quote or a duplicate key is not a finding.
+- A JSON file with comments (`.jsonc` in a `.json` name) is reported as broken, because `JSON.parse` is the parser.
+- YAML and TOML need `python3`; on a machine without it those files are never checked.
+- An edit made outside Edit and Write, for example by a Bash `sed`, is not seen.
+
+## Development
+
+    make install     # eslint, typescript-eslint, typescript
+    make lint        # complexity limit 10, fails the build above it
+    make typecheck   # needs .claude/types/ from /plugin-types
+    make validate
+    make test        # claude plugin test
