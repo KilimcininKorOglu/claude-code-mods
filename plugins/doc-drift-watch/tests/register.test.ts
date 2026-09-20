@@ -38,6 +38,7 @@ describe('doc-drift-watch', () => {
       'ripwire /src/app --doc-drift --with-history',
       'ripwire /src/app --doc-drift --with-history',
     ])
+    expect(w.logs).toEqual(['1 doc line(s) stale: README.md:3 points at main.go:90, past the end of that file'])
   })
 
   test('another command, a failed commit and off add nothing', async ($, on) => {

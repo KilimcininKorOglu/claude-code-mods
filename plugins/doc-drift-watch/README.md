@@ -12,6 +12,11 @@ A Claude Code Mod that tells the model which doc lines its commit made stale. Af
        doc-drift-watch: this commit made 1 doc line(s) stale: README.md:7 points at other.go:3, a file that no longer exists. Update them in a follow-up commit, or tell the user why a line stays.
 
    At most 8 lines are named, the rest counted.
+5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the stale lines alone, without the instruction:
+
+       doc-drift-watch: 1 doc line(s) stale: README.md:7 points at other.go:3, a file that no longer exists
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
 
 A stale anchor that was stale before the commit is not repeated, so an example path in a README does not come back on every commit. An anchor its author dated (ripwire `kind="dated-record"`) is not reported, because it records what was true then. The mod never stops a commit.
 
@@ -41,13 +46,13 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=doc-drift-watch}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.process.run (via driftNow, repoRoot), $.session.cwd (via beforeCommit), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via report)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via driftNow, repoRoot), $.session.cwd (via beforeCommit), $.store.get (via isEnabled), $.store.set (via runCommand), $.ui.log (via afterCommit, report)
 
 Reach L2, runs processes.
 
     1. Reads:    the Bash command text; through ripwire, the repository's markdown, source and git history
     2. Runs:     git rev-parse and ripwire --doc-drift, read-only, by argv, twice per commit
-    3. Sends:    a note to the model after the commit's result; nothing leaves the machine
+    3. Sends:    a note to the model after the commit's result, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell
 

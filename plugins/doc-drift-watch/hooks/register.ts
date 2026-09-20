@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { addedBy, commitDir, isCommit, noteText, parseDrift, type Stale } from './drift.ts'
+import { addedBy, commitDir, isCommit, logText, noteText, parseDrift, type Stale } from './drift.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -55,7 +55,10 @@ async function afterCommit($: EngineInterface, state: State, before: { root: str
   try {
     const added = addedBy(before.stale, await driftNow($, before.root))
     state.lastError = undefined
-    return added.length === 0 ? r : withNote(r, noteText(added))
+    if (added.length === 0) return r
+    // The note goes to the model, the log line to the person: neither reads the other's channel.
+    $.ui.log(logText(added))
+    return withNote(r, noteText(added))
   } catch (err) {
     report($, state, err)
     return r

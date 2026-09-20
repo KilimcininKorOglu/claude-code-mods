@@ -77,9 +77,17 @@ function describe(s: Stale): string {
 /** At most this many lines are named; the rest are counted. */
 const MAX_NAMED = 8
 
+function namedLines(added: readonly Stale[]): string {
+  const named = added.slice(0, MAX_NAMED).map(s => `${s.doc}:${s.line} ${describe(s)}`).join(' · ')
+  return added.length > MAX_NAMED ? `${named} · and ${added.length - MAX_NAMED} more` : named
+}
+
 /** The note the model reads after a commit that made doc lines stale. */
 export function noteText(added: readonly Stale[]): string {
-  const named = added.slice(0, MAX_NAMED).map(s => `${s.doc}:${s.line} ${describe(s)}`).join(' · ')
-  const rest = added.length > MAX_NAMED ? ` · and ${added.length - MAX_NAMED} more` : ''
-  return `doc-drift-watch: this commit made ${added.length} doc line(s) stale: ${named}${rest}. Update them in a follow-up commit, or tell the user why a line stays.`
+  return `doc-drift-watch: this commit made ${added.length} doc line(s) stale: ${namedLines(added)}. Update them in a follow-up commit, or tell the user why a line stays.`
+}
+
+/** The transcript line: the stale lines alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(added: readonly Stale[]): string {
+  return `${added.length} doc line(s) stale: ${namedLines(added)}`
 }
