@@ -17,6 +17,7 @@ import {
   resetForClear,
   seedFromResume,
   statusText,
+  statusTone,
   type State,
 } from './warm.ts'
 
@@ -54,13 +55,13 @@ const SECTION = { consumer: 'cache-warm', key: 'window' }
  * Writes the window's state into the shared sidebar and answers whether it took it. A closed sidebar,
  * and a sidebar mod that is not installed, both answer false, so the status line is drawn instead.
  */
-async function toSidebar($: EngineInterface, text: string | undefined): Promise<boolean> {
+async function toSidebar($: EngineInterface, text: string | undefined, kind: 'ok' | 'warn' | 'error' | 'dim'): Promise<boolean> {
   try {
     if (text === undefined) {
       await $.sidebar.clear(SECTION)
       return await $.sidebar.isOpen()
     }
-    return await $.sidebar.set({ ...SECTION, title: 'cache window', lines: [{ text }], until: 'session', order: 20 })
+    return await $.sidebar.set({ ...SECTION, title: 'cache window', lines: [{ text, kind }], until: 'session', order: 20 })
   } catch {
     // The sidebar mod is not installed.
     return false
@@ -69,7 +70,7 @@ async function toSidebar($: EngineInterface, text: string | undefined): Promise<
 
 async function showStatusAt($: EngineInterface, s: State, now: number): Promise<void> {
   const text = statusText(s, now)
-  $.ui.status((await toSidebar($, text)) ? undefined : text)
+  $.ui.status((await toSidebar($, text, statusTone(s, now))) ? undefined : text)
 }
 
 async function showStatus($: EngineInterface, s: State): Promise<void> {

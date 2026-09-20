@@ -13,6 +13,7 @@ import {
   resetForClear,
   seedFromResume,
   statusText,
+  statusTone,
 } from '../hooks/warm.ts'
 
 tier('user')
@@ -125,6 +126,19 @@ describe('resume and clear', () => {
 describe('text', () => {
   test('the status line is empty while off', async () => {
     expect(statusText(freshState(), NOW)).toBe(undefined)
+  })
+
+  test('the sidebar colour follows the window: red stopped, yellow near its end, green while it holds', async () => {
+    const s = freshState()
+    s.deadline = NOW + 6 * HOUR
+    s.every = 5 * MIN
+    expect(statusTone(s, NOW)).toBe('dim')
+    s.lastRequestAt = NOW - MIN
+    expect(statusTone(s, NOW)).toBe('ok')
+    s.deadline = NOW + 3 * MIN
+    expect(statusTone(s, NOW)).toBe('warn')
+    s.stopped = 'the cache was already gone'
+    expect(statusTone(s, NOW)).toBe('error')
   })
 
   test('the card names the always switch while off', async () => {

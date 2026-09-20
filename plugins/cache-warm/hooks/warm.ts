@@ -136,6 +136,17 @@ export function statusText(s: State, now: number): string | undefined {
   return `${fmtDuration(s.deadline - now)} left${next}${ping}`
 }
 
+/**
+ * The colour of that line in the sidebar: red for a window the mod stopped, yellow while the window
+ * ends within one ping period (no further ping renews it), green while it holds, faint before the
+ * first turn, when there is nothing to keep warm yet.
+ */
+export function statusTone(s: State, now: number): 'ok' | 'warn' | 'error' | 'dim' {
+  if (s.stopped) return 'error'
+  if (!s.lastRequestAt || s.compacted) return 'dim'
+  return s.deadline - now <= s.every ? 'warn' : 'ok'
+}
+
 export type ResumeFields = {
   source: string
   model?: string

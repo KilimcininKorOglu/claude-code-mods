@@ -33,7 +33,7 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
     cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05
     cache-warm: stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone
 
-While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. The section goes when the window ends. With the sidebar closed, or without that mod installed, the status line is drawn as above.
+While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. The section goes when the window ends. There the line is coloured: a stopped window red, a window whose end is nearer than one ping period yellow, a window that holds green, and the wait for the first turn faint. With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
 **The card** of `/cache-status`:
 
