@@ -21,6 +21,11 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
        i18n-watch: this edit uses translation keys the locale files lack: checkout.total (missing in tr, de) · checkout.vat (missing in every locale). Add them to each locale file.
 
    At most 10 keys are named, the rest counted.
+5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the keys alone, without the instruction:
+
+       i18n-watch: keys the locale files lack: checkout.total (missing in tr, de) · checkout.vat (missing in every locale)
+
+   The note and the line are separate channels: the model never reads the line, and you never read the note.
 
 The locale files are read at the first edit of a turn that adds a key, and again after an Edit or Write of a locale file. A project without these directories gets nothing. A locale file that cannot be read or parsed is skipped and logged once per session.
 
@@ -49,13 +54,13 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.store.get, $.store.set (via runCommand), $.ui.log (via catalogOf)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir), $.fs.list (via walkLocales), $.fs.read (via loadCatalog), $.fs.stat (via isDir), $.session.cwd (via catalogOf), $.store.get, $.store.set (via runCommand), $.ui.log (via afterEdit, catalogOf)
 
 Reach L1, reads files.
 
     1. Reads:    the text of each Edit and Write call; the locale directories under the session directory and their files
     2. Runs:     nothing
-    3. Sends:    a note to the model after an edit that uses missing keys; nothing leaves the machine
+    3. Sends:    a note to the model after an edit that uses missing keys, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting; the locale keys live in memory for one turn
     5. Hostile input: locale files are only parsed as data (JSON.parse and line regexes), never run; PHP files are not executed
 

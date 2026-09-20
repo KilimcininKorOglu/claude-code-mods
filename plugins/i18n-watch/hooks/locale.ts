@@ -142,8 +142,17 @@ export function missingKeys(catalog: Catalog, keys: string[]): Missing[] {
 /** At most this many keys are named in the note, the rest counted. */
 const MAX_NAMED = 10
 
-export function noteText(missing: Missing[]): string {
+function namedKeys(missing: Missing[]): string {
   const named = missing.slice(0, MAX_NAMED).map(m => `${m.key} (missing in ${m.langs === 'all' ? 'every locale' : m.langs.join(', ')})`)
   if (missing.length > MAX_NAMED) named.push(`${missing.length - MAX_NAMED} more`)
-  return `i18n-watch: this edit uses translation keys the locale files lack: ${named.join(' · ')}. Add them to each locale file.`
+  return named.join(' · ')
+}
+
+export function noteText(missing: Missing[]): string {
+  return `i18n-watch: this edit uses translation keys the locale files lack: ${namedKeys(missing)}. Add them to each locale file.`
+}
+
+/** The transcript line: the keys alone, without the instruction the model reads. The engine adds the mod name. */
+export function logText(missing: Missing[]): string {
+  return `keys the locale files lack: ${namedKeys(missing)}`
 }

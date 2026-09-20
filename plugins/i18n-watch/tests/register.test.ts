@@ -57,12 +57,15 @@ const LOCALES = {
 }
 
 describe('i18n-watch', () => {
-  test('an edit that calls keys some locales lack gets the note', async ($, on) => {
-    world(on, LOCALES)
+  test('an edit that calls keys some locales lack gets the note, and the person sees one line', async ($, on) => {
+    const w = world(on, LOCALES)
     await started($)
     const r = await edit($, 'src/Cart.vue', "{{ $t('checkout.title') }}", "{{ $t('checkout.title') }} {{ $t('checkout.total') }} {{ $t('checkout.vat') }} {{ $t('checkout.fee') }}")
     expect(r.context).toEqual([
       'i18n-watch: this edit uses translation keys the locale files lack: checkout.total (missing in de) · checkout.vat (missing in de, tr) · checkout.fee (missing in every locale). Add them to each locale file.',
+    ])
+    expect(w.logs).toEqual([
+      'keys the locale files lack: checkout.total (missing in de) · checkout.vat (missing in de, tr) · checkout.fee (missing in every locale)',
     ])
   })
 
@@ -110,8 +113,9 @@ describe('i18n-watch', () => {
     expect((await edit($, 'src/a.ts', '', "t('checkout.total')")).context?.[0]).toContain('checkout.total (missing in de)')
     await $.turn.start({ text: 'again', turnId: 't2' } as never)
     await edit($, 'src/a.ts', '', "t('checkout.vat')")
-    expect(w.logs).toHaveLength(1)
-    expect(w.logs[0]).toMatch(/^some locale files were not read: locales\/fr\.json: /)
+    const read = w.logs.filter(l => l.startsWith('some locale files were not read'))
+    expect(read).toHaveLength(1)
+    expect(read[0]).toMatch(/^some locale files were not read: locales\/fr\.json: /)
   })
 
   test('a project without locale directories gets nothing', async ($, on) => {

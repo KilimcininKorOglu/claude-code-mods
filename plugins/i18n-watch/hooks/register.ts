@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { isSource, newKeys } from './keys.ts'
-import { addFile, isLocalePath, LOCALE_DIRS, LOCALE_EXT, missingKeys, noteText, type Catalog } from './locale.ts'
+import { addFile, isLocalePath, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, noteText, type Catalog } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -81,7 +81,10 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
   const keys = state.enabled && isSource(path) ? newKeys(before, after) : []
   if (keys.length === 0) return r
   const missing = missingKeys(await catalogOf($, state), keys)
-  return missing.length === 0 ? r : { ...r, context: [...(r.context ?? []), noteText(missing)] }
+  if (missing.length === 0) return r
+  // The note goes to the model, the log line to the person: neither reads the other's channel.
+  $.ui.log(logText(missing))
+  return { ...r, context: [...(r.context ?? []), noteText(missing)] }
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
