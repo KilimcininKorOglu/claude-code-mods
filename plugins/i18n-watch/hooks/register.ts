@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { isSource, newKeys } from './keys.ts'
-import { addFile, denyText, doneLines, doneLog, isGuarded, isLocalePath, openKeys, LOCALE_DIRS, LOCALE_EXT, logText, missingKeys, modeOf, noteText, sectionKey, shownPath, sidebarLines, type Catalog, type Mode } from './locale.ts'
+import { callKeys, isSource, keyLines, newKeys } from './keys.ts'
+import { addFile, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isLocalePath, isNarrowable, LOCALE_DIRS, LOCALE_EXT, logText, modeOf, noteText, sectionKey, shownPath, sidebarLines, verdict, type Catalog, type Lines, type Mode } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -17,13 +17,20 @@ const MAX_FILES = 200
 const MAX_BYTES = 2_000_000
 
 /**
+ * One reported file: where it is on disk, the keys reported of it, and the line each key was called on.
+ * The keys are a claim, never an answer: every measure reads the file again and drops the keys it no
+ * longer calls, so a key the code deleted cannot hold a finding open.
+ */
+type Open = { path: string; keys: string[]; lines: Lines }
+
+/**
  * The catalog of the session directory's locale files, read at the first edit that uses a new key and
  * dropped at each turn and each edit of a locale file; `reported` makes a read error logged once.
- * `open` holds the keys each reported file still lacks, so an edit that adds them closes the finding.
- * `root` is the directory the session started in. Locale files are looked for under it and a path is
- * shown against it, because a Bash `cd` moves `$.session.cwd()` away from the project.
+ * `open` holds each reported file's claim, so an edit that adds the keys, and an edit that stops using
+ * them, both close the finding. `root` is the directory the session started in. Locale files are looked
+ * for under it and a path is shown against it, because a Bash `cd` moves `$.session.cwd()` away.
  */
-type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, string[]>; root?: string }
+type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, Open>; root?: string }
 
 /** A locale file and the locale directory it was found under. */
 type Found = { root: string; path: string }
@@ -106,15 +113,45 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
   }
 }
 
-/** Measures every finding still open after an edit of a locale file, and reports the ones it closed. */
-async function closeResolved($: EngineInterface, state: State): Promise<void> {
+/**
+ * The keys a source file calls now, and the line of each, read from disk. `undefined` says the file could
+ * not be measured, and then no key is dropped; a file that is gone answers an empty measure, because the
+ * code it held calls nothing any more.
+ */
+async function usedNow($: EngineInterface, path: string): Promise<{ used: Set<string>; lines: Lines } | undefined> {
+  try {
+    if (!(await $.fs.exists(path))) return { used: new Set(), lines: {} }
+    const text = String(await $.fs.read(path))
+    return { used: callKeys(text), lines: keyLines(text) }
+  } catch {
+    // The file is there and was not read: the finding is left as it stands.
+    return undefined
+  }
+}
+
+/**
+ * Measures one file's claim against the file itself and against the locale files, then writes what still
+ * stands. The finding closes when nothing it named is missing any more, whether the locales gained the
+ * keys or the code stopped calling them, and the person reads one line that says which of the two it was.
+ */
+async function measureFile($: EngineInterface, state: State, file: string, open: Open): Promise<void> {
+  const now = await usedNow($, open.path)
+  const v = verdict(await catalogOf($, state), open.keys, now?.used)
+  const lines = now?.lines ?? open.lines
+  if (v.missing.length > 0) {
+    state.open.set(file, { path: open.path, keys: v.missing.map(m => m.key), lines })
+    return
+  }
+  state.open.delete(file)
+  await dropEntry($, file)
+  await toPerson($, file, doneTitle(v.added, v.gone), doneLines(file, v.added, v.gone), doneLog(file, v.added, v.gone))
+}
+
+/** Measures every finding still open, and reports the ones it closed. */
+async function recheckOpen($: EngineInterface, state: State, skip?: string): Promise<void> {
   if (!state.enabled || state.open.size === 0) return
-  const catalog = await catalogOf($, state)
-  for (const [file, keys] of [...state.open]) {
-    if (missingKeys(catalog, keys).length > 0) continue
-    state.open.delete(file)
-    await dropEntry($, file)
-    await toPerson($, file, 'translation keys added', doneLines(file, keys), doneLog(file, keys))
+  for (const [file, open] of [...state.open]) {
+    if (file !== skip) await measureFile($, state, file, open)
   }
 }
 
@@ -123,30 +160,86 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
   if (r.deny !== undefined || r.isError === true) return r
   if (isLocalePath(path)) {
     state.catalog = undefined
-    await closeResolved($, state)
+    await recheckOpen($, state)
     return r
   }
-  const keys = state.enabled && isSource(path) ? newKeys(before, after) : []
-  if (keys.length === 0) return r
-  const missing = missingKeys(await catalogOf($, state), keys)
-  if (missing.length === 0) return r
+  if (!state.enabled || !isSource(path)) return r
   const shown = shownPath(path, await rootOf($, state))
-  state.open.set(shown, openKeys(state.open.get(shown), missing))
-  // The note goes to the model, the line to the person: neither reads the other's channel.
-  await toPerson($, shown, 'missing translation keys', sidebarLines(missing), logText(missing))
-  return { ...r, context: [...(r.context ?? []), noteText(missing)] }
+  // Every other file's finding is measured too, because this edit may have moved a key into one of them.
+  await recheckOpen($, state, shown)
+  const added = newKeys(before, after)
+  const claim = [...new Set([...(state.open.get(shown)?.keys ?? []), ...added])]
+  if (claim.length === 0) return r
+  return noteFor($, state, shown, path, claim, added, r)
+}
+
+/** Writes this file's finding and answers the edit: the note to the model, the line to the person. */
+async function noteFor($: EngineInterface, state: State, shown: string, path: string, claim: string[], added: string[], r: ToolCallResult): Promise<ToolCallResult> {
+  // Measured again here, because a boolean helper does not narrow the result union for the spread below.
+  if (r.deny !== undefined || r.isError === true) return r
+  const held = state.open.get(shown)
+  const now = await usedNow($, path)
+  const v = verdict(await catalogOf($, state), claim, now?.used)
+  const lines = now?.lines ?? {}
+  if (v.missing.length === 0) {
+    if (held !== undefined) await measureFile($, state, shown, { ...held, keys: claim, lines })
+    return r
+  }
+  state.open.set(shown, { path, keys: v.missing.map(m => m.key), lines })
+  // Only the keys this edit added are reported; a key reported before is held open without saying it again.
+  const fresh = v.missing.filter(m => added.includes(m.key))
+  if (fresh.length === 0) return r
+  await toPerson($, shown, 'missing translation keys', sidebarLines(fresh, lines), logText(fresh, lines))
+  return { ...r, context: [...(r.context ?? []), noteText(fresh, lines)] }
 }
 
 /**
- * The gate of the `deny` mode: it reads the locale files again, so keys the model added since the finding
- * close it and the command runs. A file that still lacks a key stops the command, and there is no bypass.
+ * The files this commit holds, by absolute path, or undefined when git did not answer. Read before the
+ * command runs, so it is the index as the commit will take it.
+ */
+async function stagedPaths($: EngineInterface, state: State): Promise<Set<string> | undefined> {
+  try {
+    const cwd = await rootOf($, state)
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const staged = await $.process.run(['git', 'diff', '--cached', '--name-only', '-z'], { cwd })
+    if (top.exitCode !== 0 || staged.exitCode !== 0) return undefined
+    const base = top.stdout.trim()
+    return new Set(staged.stdout.split('\0').filter(Boolean).map(p => `${base}/${p}`))
+  } catch {
+    // No git here, or the command did not run: the findings are not narrowed.
+    return undefined
+  }
+}
+
+/**
+ * The findings this command answers for. A `git commit` answers for its own files alone, so a finding of
+ * a file the commit does not hold lets it run. A `push` or a `merge` holds no index to read, so every
+ * finding stands there.
+ */
+async function scopeOf($: EngineInterface, state: State, command: string): Promise<{ file: string; keys: string[]; lines: Lines }[]> {
+  const all = [...state.open].map(([file, open]) => ({ file, keys: open.keys, lines: open.lines, path: open.path }))
+  if (!isCommit(command) || !isNarrowable(command)) return all
+  const staged = await stagedPaths($, state)
+  return staged === undefined ? all : all.filter(o => staged.has(o.path))
+}
+
+/**
+ * The gate of the `deny` mode: it measures every open finding again, so a key the model added and a key
+ * the code stopped calling both close it and the command runs. A file this command holds that still lacks
+ * a key stops it, and there is no bypass.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
-  if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command)) return undefined
+  if (!state.enabled || state.open.size === 0 || !isGuarded(command)) return undefined
+  // Measured in both modes, so a finding the code or the locales settled does not stand in the pane.
   state.catalog = undefined
-  await closeResolved($, state)
-  if (state.open.size === 0) return undefined
-  return denyText([...state.open].map(([file, keys]) => ({ file, keys })))
+  await recheckOpen($, state)
+  if (state.mode !== 'deny' || state.open.size === 0) return undefined
+  const scoped = await scopeOf($, state, command)
+  if (scoped.length === 0) {
+    $.ui.log(`${state.open.size} file(s) still lack translation keys, and this command holds none of them`)
+    return undefined
+  }
+  return denyText(scoped)
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {

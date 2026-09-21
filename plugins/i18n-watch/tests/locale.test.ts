@@ -68,11 +68,12 @@ describe('locale files', () => {
       { key: 'nope', langs: 'all' },
     ])
     expect(missingKeys(new Map(), ['x'])).toEqual([])
-    expect(noteText(missing.slice(1, 2).concat(missing.slice(3)))).toBe(
-      'i18n-watch: this edit uses translation keys the locale files lack: checkout:vat (missing in de, tr) · nope (missing in every locale). Add them to each locale file.',
+    // The line of each key is named where it was measured, and left out where it was not.
+    expect(noteText(missing.slice(1, 2).concat(missing.slice(3)), { 'checkout:vat': 42 })).toBe(
+      'i18n-watch: this edit uses translation keys the locale files lack: checkout:vat:42 (missing in de, tr) · nope (missing in every locale). Add them to each locale file.',
     )
     const many = Array.from({ length: 12 }, (_, i) => ({ key: `k${i}`, langs: 'all' as const }))
-    expect(noteText(many)).toContain('k9 (missing in every locale) · 2 more.')
+    expect(noteText(many, {})).toContain('k9 (missing in every locale) · 2 more.')
   })
 
   test('the gate stops a commit, a push and a merge, and says why', () => {
@@ -80,8 +81,8 @@ describe('locale files', () => {
     for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)
     expect(modeOf('deny')).toBe('deny')
     expect(modeOf('x')).toBe(undefined)
-    expect(denyText([{ file: 'src/Cart.vue', keys: ['checkout.fee'] }])).toBe(
-      'stopped: 1 file(s) use translation keys the locale files lack: src/Cart.vue (checkout.fee). Add the keys to every locale file, then run the command again; there is no way around this gate.',
+    expect(denyText([{ file: 'src/Cart.vue', keys: ['checkout.fee'], lines: { 'checkout.fee': 7 } }])).toBe(
+      'stopped: 1 file(s) use translation keys the locale files lack: src/Cart.vue (checkout.fee:7). Add the keys to every locale file, then run the command again; there is no way around this gate.',
     )
   })
 })

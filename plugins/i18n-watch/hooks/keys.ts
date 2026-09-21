@@ -34,3 +34,19 @@ export function newKeys(before: string, after: string): string[] {
   const old = callKeys(before)
   return [...callKeys(after)].filter(k => !old.has(k))
 }
+
+/** The 1-based line of each key's first call in `text`, so a finding names where the key is. */
+export function keyLines(text: string): Record<string, number> {
+  const out: Record<string, number> = {}
+  let at = 0
+  let line = 1
+  for (const m of text.matchAll(CALL)) {
+    // The key's own end, because the match starts one character before the call and a call can span lines.
+    const end = (m.index ?? 0) + m[0].length
+    for (let i = at; i < end; i += 1) if (text[i] === '\n') line += 1
+    at = end
+    const key = unescape(m[2] ?? '')
+    if (key.trim() !== '' && !key.startsWith('.') && out[key] === undefined) out[key] = line
+  }
+  return out
+}

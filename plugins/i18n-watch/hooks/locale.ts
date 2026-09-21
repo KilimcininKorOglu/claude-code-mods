@@ -142,29 +142,33 @@ export function missingKeys(catalog: Catalog, keys: string[]): Missing[] {
 /** At most this many keys are named in the note, the rest counted. */
 const MAX_NAMED = 10
 
-function namedKeys(missing: Missing[]): string {
-  const named = missing.slice(0, MAX_NAMED).map(m => `${m.key} (missing in ${m.langs === 'all' ? 'every locale' : m.langs.join(', ')})`)
+/** Where each key is called, by line, so a finding says which line holds it. */
+export type Lines = Record<string, number>
+
+/** One key as every text names it: the key, and the line it is called on when that was measured. */
+function at(key: string, lines: Lines): string {
+  const line = lines[key]
+  return line === undefined ? key : `${key}:${line}`
+}
+
+function namedKeys(missing: Missing[], lines: Lines): string {
+  const named = missing.slice(0, MAX_NAMED).map(m => `${at(m.key, lines)} (missing in ${m.langs === 'all' ? 'every locale' : m.langs.join(', ')})`)
   if (missing.length > MAX_NAMED) named.push(`${missing.length - MAX_NAMED} more`)
   return named.join(' · ')
 }
 
-export function noteText(missing: Missing[]): string {
-  return `i18n-watch: this edit uses translation keys the locale files lack: ${namedKeys(missing)}. Add them to each locale file.`
+export function noteText(missing: Missing[], lines: Lines): string {
+  return `i18n-watch: this edit uses translation keys the locale files lack: ${namedKeys(missing, lines)}. Add them to each locale file.`
 }
 
 /** The transcript line: the keys alone, without the instruction the model reads. The engine adds the mod name. */
-export function logText(missing: Missing[]): string {
-  return `keys the locale files lack: ${namedKeys(missing)}`
+export function logText(missing: Missing[], lines: Lines): string {
+  return `keys the locale files lack: ${namedKeys(missing, lines)}`
 }
 
 /** One sidebar line per missing key, so the section reads as a list. */
-export function sidebarLines(missing: Missing[]): { text: string; kind: 'error' }[] {
-  return namedKeys(missing).split(' · ').map(text => ({ text, kind: 'error' }))
-}
-
-/** The keys a file's finding holds open after a new report: the earlier ones and the new ones, each once. */
-export function openKeys(before: string[] | undefined, missing: Missing[]): string[] {
-  return [...new Set([...(before ?? []), ...missing.map(m => m.key)])]
+export function sidebarLines(missing: Missing[], lines: Lines): { text: string; kind: 'error' }[] {
+  return namedKeys(missing, lines).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
 function namedPlain(keys: string[]): string {
@@ -173,14 +177,43 @@ function namedPlain(keys: string[]): string {
   return named.join(' · ')
 }
 
-/** The transcript line of a finding an edit of a locale file closed. */
-export function doneLog(file: string, keys: string[]): string {
-  return `every locale now has the keys ${file} lacked: ${namedPlain(keys)}`
+/**
+ * What a reported file's keys read as now: the ones a locale still lacks, the ones the code stopped
+ * calling, and the ones every locale gained. `used` is the keys the file calls now, or undefined when
+ * the file could not be read, where every key counts as still called.
+ */
+export type Verdict = { missing: Missing[]; gone: string[]; added: string[] }
+
+export function verdict(catalog: Catalog, claim: readonly string[], used: Set<string> | undefined): Verdict {
+  const gone = used === undefined ? [] : claim.filter(k => !used.has(k))
+  const alive = claim.filter(k => !gone.includes(k))
+  const missing = alive.length === 0 ? [] : missingKeys(catalog, alive)
+  const added = alive.filter(k => !missing.some(m => m.key === k))
+  return { missing, gone, added }
 }
 
-/** The sidebar lines of a closed finding: the file, then the keys every locale now has. */
-export function doneLines(file: string, keys: string[]): { text: string; kind: 'ok' }[] {
-  return [{ text: file, kind: 'ok' }, ...namedPlain(keys).split(' · ').map(text => ({ text, kind: 'ok' as const }))]
+/** The title of a closed finding, by what closed it. */
+export function doneTitle(added: readonly string[], gone: readonly string[]): string {
+  if (gone.length === 0) return 'translation keys added'
+  return added.length === 0 ? 'translation keys gone' : 'translation keys resolved'
+}
+
+function doneParts(file: string, added: string[], gone: string[]): string[] {
+  const parts: string[] = []
+  if (added.length > 0) parts.push(`every locale now has the keys ${file} lacked: ${namedPlain(added)}`)
+  if (gone.length > 0) parts.push(`${file} no longer uses: ${namedPlain(gone)}`)
+  return parts
+}
+
+/** The transcript line of a finding that closed: the keys the locales gained, the keys the code dropped. */
+export function doneLog(file: string, added: string[], gone: string[]): string {
+  return doneParts(file, added, gone).join(' · ')
+}
+
+/** The sidebar lines of a closed finding: the file, then each key with what happened to it. */
+export function doneLines(file: string, added: string[], gone: string[]): { text: string; kind: 'ok' }[] {
+  const keys = [...added.slice(0, MAX_NAMED), ...gone.slice(0, MAX_NAMED).map(k => `${k} (no longer used)`)]
+  return [{ text: file, kind: 'ok' }, ...keys.map(text => ({ text, kind: 'ok' as const }))]
 }
 
 /** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
@@ -194,6 +227,20 @@ export function isGuarded(command: string): boolean {
   return GUARDED.test(command) && !ASKING.test(command)
 }
 
+/** Whether the command is a `git commit`, the one guarded command whose own files can be measured. */
+export function isCommit(command: string): boolean {
+  return GUARDED.exec(command)?.[2] === 'commit'
+}
+
+/**
+ * Whether the index alone says what this commit holds. A `-a` or `-am` commit stages the tracked files
+ * as it runs, and a pathspec after `--` commits paths the index does not hold, so neither is narrowed.
+ */
+export function isNarrowable(command: string): boolean {
+  const words = command.split(/\s+/)
+  return !words.includes('--') && !words.some(w => w === '--all' || /^-[A-Za-z]*a/.test(w))
+}
+
 /** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
 export type Mode = 'note' | 'deny'
 
@@ -203,8 +250,8 @@ export function modeOf(arg: string): Mode | undefined {
 }
 
 /** The deny text both the model and the person read: which file lacks which keys, and the one way out. */
-export function denyText(open: readonly { file: string; keys: string[] }[]): string {
-  const named = open.slice(0, MAX_NAMED).map(o => `${o.file} (${namedPlain(o.keys)})`)
+export function denyText(open: readonly { file: string; keys: string[]; lines: Lines }[]): string {
+  const named = open.slice(0, MAX_NAMED).map(o => `${o.file} (${namedPlain(o.keys.map(k => at(k, o.lines)))})`)
   if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
   return `stopped: ${open.length} file(s) use translation keys the locale files lack: ${named.join(' · ')}. Add the keys to every locale file, then run the command again; there is no way around this gate.`
 }
