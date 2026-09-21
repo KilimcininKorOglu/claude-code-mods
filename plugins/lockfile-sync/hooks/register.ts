@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, isNarrowable, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -183,6 +183,32 @@ async function recheckNow($: EngineInterface, state: State): Promise<boolean> {
 }
 
 /**
+ * The pairs this command answers for. A `git commit` answers for its own files alone, so a manifest the
+ * commit does not hold lets it run. A `push` or a `merge` holds no index to read, so every pair stands
+ * there. The index is read before the command runs, as the commit will take it.
+ */
+async function scopeOf($: EngineInterface, stale: readonly Stale[], root: string, command: string): Promise<Stale[]> {
+  if (!isCommit(command) || !isNarrowable(command)) return [...stale]
+  try {
+    const staged = await git($, root, ['diff', '--cached', '--name-only', '-z'])
+    if (!staged.ok) return [...stale]
+    const held = new Set(staged.out.split('\0').filter(Boolean))
+    return stale.filter(s => held.has(s.manifest))
+  } catch {
+    // git did not run: the pairs are not narrowed.
+    return [...stale]
+  }
+}
+
+/** The deny of the pairs this command answers for, or undefined when it holds none of their manifests. */
+async function denyFor($: EngineInterface, stale: readonly Stale[], root: string, command: string): Promise<{ deny: string } | undefined> {
+  const scoped = await scopeOf($, stale, root, command)
+  if (scoped.length > 0) return { deny: denyText(scoped) }
+  $.ui.log(`${stale.length} lockfile(s) are still behind their manifest, and this command holds none of those manifests`)
+  return undefined
+}
+
+/**
  * The gate: in deny mode a commit, push or merge waits while a lockfile is still behind its manifest.
  * The working tree is read again first, so a lockfile the model updated opens the gate itself.
  */
@@ -193,7 +219,7 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
     const before = await beforeCommit($, state, command)
     if (before === undefined) return undefined
     await closeResolved($, state, await caughtUp($, before.root, open.stale), await settled($, before.root, open.stale))
-    return state.open === undefined ? undefined : { deny: denyText(state.open.stale) }
+    return state.open === undefined ? undefined : denyFor($, state.open.stale, before.root, command)
   } catch (err) {
     report($, state, err)
     return undefined

@@ -44,7 +44,7 @@ const DEP_DIFF = '@@ -1,5 +1,5 @@\n {\n   "dependencies": {\n-    "left-pad": "^
  */
 type World = {
   head: string; next: string; names: string; files: Set<string>; argv: string[]; logs: string[]
-  commitFails: boolean; showFails: boolean; notRepo: boolean; lockDirty: boolean
+  commitFails: boolean; showFails: boolean; notRepo: boolean; lockDirty: boolean; staged: string[]
   /** The commit that last wrote the lockfile, and the manifest's diff against it. */
   lockCommit: string; sinceLock: string
 }
@@ -65,6 +65,7 @@ function gitAnswer(w: World, cmd: string): Ran {
   if (cmd === 'git rev-parse HEAD') return ok(`${w.head}\n`)
   if (cmd.startsWith('git status')) return ok(w.lockDirty ? ' M package-lock.json\n' : '')
   if (cmd.startsWith('git log')) return ok(w.lockCommit === '' ? '' : `${w.lockCommit}\n`)
+  if (cmd.startsWith('git diff --cached')) return ok(w.staged.join('\0'))
   if (cmd.startsWith('git diff')) return ok(w.sinceLock)
   return gitShow(w, cmd)
 }
@@ -72,7 +73,7 @@ function gitAnswer(w: World, cmd: string): Ran {
 function world(on: On): World {
   const w: World = {
     head: 'aaa', next: 'bbb', names: 'M\tpackage.json\n', files: new Set([`${ROOT}/package-lock.json`]),
-    argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false,
+    argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false, staged: ['package.json'],
     lockCommit: 'a1b2c3', sinceLock: DEP_DIFF,
   }
   mock.store(on, {})
@@ -197,6 +198,26 @@ describe('lockfile-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('a later change brought the lockfiles along: package-lock.json')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a commit that holds none of the open manifests runs, and a push still stops', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    await $.command.run(run('mode deny'))
+    // The index holds another file: the pair stands, and the commit runs.
+    w.staged = ['README.md']
+    w.names = 'M\tREADME.md\n'
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m docs' })).deny).toBe(undefined)
+    expect(w.logs).toContain('1 lockfile(s) are still behind their manifest, and this command holds none of those manifests')
+    // A push holds no index, so every pair stands there.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('package-lock.json behind package.json')
+    // The index holds the manifest now: the commit stops.
+    w.staged = ['package.json']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })).deny).toContain('package-lock.json behind package.json')
+    // A `git commit -a` stages as it runs, so the index does not say what it holds and nothing is narrowed.
+    w.staged = ['README.md']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -am wip' })).deny).toContain('package-lock.json behind package.json')
   })
 
   test('the turn end measures the open pair again and the next prompt carries the note', async ($, on) => {

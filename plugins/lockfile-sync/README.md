@@ -62,7 +62,7 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the commit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs both measures, so a lockfile the package manager just wrote, and a dependency change that was taken back, each open the gate themselves. There is no bypass; only the person turns the gate off with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs both measures, so a lockfile the package manager just wrote, and a dependency change that was taken back, each open the gate themselves. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`) and lets the commit run when it holds none of the open manifests, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every pair stands there. There is no bypass; only the person turns the gate off with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -93,12 +93,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
 
 Reach L2, runs processes.
 
     1. Reads:    the Bash command text; whether lockfiles exist in the repository; through git, the commit's file list and manifest diffs
-    2. Runs:     git rev-parse, git show, git status, git log and git diff, read-only, by argv: four per commit, one per manifest without its lockfile, and two per open pair at each measure, also at the turn's end
+    2. Runs:     git rev-parse, git show, git status, git log, git diff and git diff --cached --name-only, read-only, by argv: four per commit, one per manifest without its lockfile, and two per open pair at each measure, also at the turn's end
     3. Sends:    a note to the model after the commit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; manifest paths reach git as one argv entry after --
@@ -112,6 +112,7 @@ Reach L2, runs processes.
 - A merge commit's combined diff is not read.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/lockfile-sync mode note`.
 - The gate reads any change to the lockfile in the working tree as the fix; it does not check what that change holds.
+- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open pair stands for those.
 
 ## Development
 

@@ -18,6 +18,15 @@ export function isGuarded(command: string): boolean {
   return GUARDED.test(command) && !NOT_A_COMMIT.test(command)
 }
 
+/**
+ * Whether the index alone says what this commit holds. A `-a` or `-am` commit stages the tracked files
+ * as it runs, and a pathspec after `--` commits paths the index does not hold, so neither is narrowed.
+ */
+export function isNarrowable(command: string): boolean {
+  const words = command.split(/\s+/)
+  return !words.includes('--') && !words.some(w => w === '--all' || /^-[A-Za-z]*a/.test(w))
+}
+
 /** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
 export type Mode = 'note' | 'deny'
 
