@@ -138,6 +138,41 @@ export function cut(text: string, columns: number): string {
   return text.length <= width ? text : `${text.slice(0, width - 1)}…`
 }
 
+/** What a wrapped line's second and further rows are written under, so a list reads as one finding. */
+const INDENT = '  '
+
+/** Rows one line may take; a line longer than that is cut, so one finding cannot fill the pane. */
+export const MAX_WRAP_ROWS = 4
+
+/**
+ * Where a row of at most `room` characters ends: after the last space that fits, so a word is not
+ * broken, and at `room` itself when the space sits too far left to be a break worth taking.
+ */
+function breakAt(text: string, room: number): number {
+  const space = text.lastIndexOf(' ', room)
+  return space > Math.floor(room / 2) ? space : room
+}
+
+/**
+ * One line as the rows the pane draws: the text is wrapped at the body's width instead of cut, so the
+ * person reads all of it. Every row after the first is indented. A line that asks for more than
+ * `MAX_WRAP_ROWS` rows has its last row cut, because one line must not take the whole pane.
+ */
+export function wrapped(text: string, columns: number): string[] {
+  const width = Math.max(8, columns)
+  const out: string[] = []
+  let rest = text.trimEnd()
+  while (out.length + 1 < MAX_WRAP_ROWS) {
+    const room = width - INDENT.length
+    if (rest.length <= (out.length === 0 ? width : room)) break
+    const at = breakAt(rest, out.length === 0 ? width : room)
+    out.push(out.length === 0 ? rest.slice(0, at).trimEnd() : INDENT + rest.slice(0, at).trimEnd())
+    rest = rest.slice(at).trimStart()
+  }
+  out.push(out.length === 0 ? cut(rest, width) : INDENT + cut(rest, width - INDENT.length))
+  return out
+}
+
 /** One drawn line of a section, with the tone it is drawn in. */
 export type Row = { text: string; tone?: SidebarLine['kind'] }
 
@@ -162,10 +197,15 @@ export function headText(section: Kept): string {
 }
 
 function drawSection(section: Kept, columns: number, left: number): Drawn {
-  const rows: Row[] = section.lines
-    .slice(0, Math.max(0, left))
-    .map(line => ({ text: cut(line.text, columns), ...(line.kind === undefined ? {} : { tone: line.kind }) }))
-  const hidden = section.more + Math.max(0, section.lines.length - rows.length)
+  const rows: Row[] = []
+  let drawn = 0
+  for (const line of section.lines) {
+    const wrap = wrapped(line.text, columns)
+    if (rows.length + wrap.length > Math.max(0, left)) break
+    for (const text of wrap) rows.push({ text, ...(line.kind === undefined ? {} : { tone: line.kind }) })
+    drawn += 1
+  }
+  const hidden = section.more + (section.lines.length - drawn)
   if (hidden > 0 && rows.length < left) rows.push({ text: cut(`+${hidden} more line(s)`, columns), tone: 'dim' })
   return { id: section.id, head: cut(headText(section), columns), rows, buttons: section.buttons }
 }

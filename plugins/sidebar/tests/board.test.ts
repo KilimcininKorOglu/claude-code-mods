@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { cut, dayOf, drawn, dropTurn, headText, isLogOf, logKept, logLineOf, logName, projectOf, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logKept, logLineOf, logName, projectOf, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -102,6 +102,26 @@ describe('board', () => {
     expect(cut('abcdefghij', 40)).toBe('abcdefghij')
     expect(cut('abcdefghij', 5)).toBe('abcdefg…')
     expect(cut('abcdefghij', 9)).toBe('abcdefgh…')
+  })
+
+  test('wraps a line at the width instead of cutting it', () => {
+    expect(wrapped('short one', 40)).toEqual(['short one'])
+    // The break takes the last space that fits, and every row after the first is indented.
+    expect(wrapped('23 uncommitted file(s): includes/functions.php, index.php, lang/az.mo', 40)).toEqual([
+      '23 uncommitted file(s):',
+      '  includes/functions.php, index.php,',
+      '  lang/az.mo',
+    ])
+    // A line longer than the rows it may take has its last row cut.
+    const long = wrapped('word '.repeat(80), 20)
+    expect(long).toHaveLength(MAX_WRAP_ROWS)
+    expect(long.at(-1)?.endsWith('…')).toBe(true)
+  })
+
+  test('a wrapped line takes its rows from the section, and the rest are counted', () => {
+    const board = boardOf(section({ lines: [{ text: 'a'.repeat(30) }, { text: 'b' }] }))
+    const [one] = drawn(board, [], 20, 3)
+    expect(one?.rows).toEqual([{ text: 'aaaaaaaaaaaaaaaaaaaa' }, { text: '  aaaaaaaaaa' }])
   })
 
   test('draws the heading, the lines and the count of the lines left out', () => {

@@ -93,7 +93,7 @@ Reach L2, it writes a file.
     2. Runs:     the slash command a button names, through $.command.run, on the person's press only
     3. Sends:    nothing
     4. Persists: in $.store, whether the sidebar is open; in ~/.claude/stream, one log file per project and day, holding the stream entries other mods wrote
-    5. Hostile input: a section comes from another plugin and is read as data: the consumer, key and title are checked, every line and button of another shape is dropped, the text is folded to one line and cut to the width, and the counts are capped. A log line is read the same way, so a hand-edited or truncated file loses that line and nothing else.
+    5. Hostile input: a section comes from another plugin and is read as data: the consumer, key and title are checked, every line and button of another shape is dropped, the text is folded to one line and wrapped to the width, and the counts are capped. A log line is read the same way, so a hand-edited or truncated file loses that line and nothing else.
 
 ## Limits
 
@@ -105,6 +105,7 @@ Reach L2, it writes a file.
 - One day's file keeps its newest 500 lines. Nothing removes an old day's file; that is yours to clean.
 - The whole file is rewritten at each entry, because the engine's `$.fs` has no append. A write that fails is passed over and the pane keeps working.
 - A stream entry's time is the moment the mod wrote it, read from `$.clock.now()` and drawn in the machine's own time zone. It is not the moment the finding happened, and it does not change afterwards.
+- A line longer than the pane's width is wrapped, at the last space that fits, over at most 4 rows, each row after the first indented by two spaces. A line longer than those 4 rows has its last row cut with `…`. A heading is cut, not wrapped.
 - The stream keeps 20 entries per consumer and 100 in all. Over its own count a mod drops its own oldest entry, never another mod's.
 - A button can only run a slash command. A mod that wants a button must serve a command for it.
 - The pane's scroll window belongs to the engine; this mod adds no scrolling of its own.
