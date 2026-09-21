@@ -90,6 +90,14 @@ export function uncheckedNote(failures: readonly string[]): string {
   return `dep-sentinel could not check every package, so the install ran unchecked for: ${failures.join(' · ')}. Tell the user.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(names: readonly string[]): string {
+  return `dep-sentinel: ${names.length} package(s) are still installed unchecked: ${names.join(' · ')}. Run the install again so the registry and OSV.dev answer, or take the package out.`
+}
+
 /** The transcript line: the unchecked packages alone, without the instruction the model reads. The engine adds the mod name. */
 export function uncheckedLog(failures: readonly string[]): string {
   return `the install ran unchecked for: ${failures.join(' · ')}`

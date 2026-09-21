@@ -160,6 +160,34 @@ describe('dep-sentinel', () => {
     expect((await $.command.run(run(''))).text).toContain('no package is open')
   })
 
+  test('the turn end runs the owed check again and the next prompt carries the note', async ($, on) => {
+    const w = world(on)
+    const notes: string[][] = []
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    on('prompt.submit', (_, e) => {
+      notes.push([...(e.context ?? [])])
+      return { text: e.text }
+    })
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+    // No turn has ended yet, so the model is owed nothing.
+    await prompt('first')
+    expect(notes[0]).toEqual([])
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await prompt('second')
+    expect(notes[1]?.[0]).toBe('dep-sentinel: 1 package(s) are still installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, or take the package out.')
+    // One note per turn: the next prompt without a turn in between carries none.
+    await prompt('third')
+    expect(notes[2]).toEqual([])
+    // The registry answers now: the turn's end closes the finding and owes no note.
+    w.down = false
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe('the registry and OSV.dev answered for the packages that stayed unchecked: lodash')
+    await prompt('fourth')
+    expect(notes[3]).toEqual([])
+  })
+
   test('in deny mode a commit stops while a package stayed unchecked, and runs once a later install checked it', async ($, on) => {
     const w = world(on)
     w.down = true

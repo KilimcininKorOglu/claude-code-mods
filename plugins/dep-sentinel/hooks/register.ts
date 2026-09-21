@@ -1,7 +1,7 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
-import { checkedLog, denyText, doneLines, gateCheckedLog, gateText, isGuarded, lateReasonLog, missingReason, modeOf, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
+import { checkedLog, denyText, doneLines, gateCheckedLog, gateText, isGuarded, lateReasonLog, missingReason, modeOf, openNote, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -19,9 +19,10 @@ type Outcome = { reasons: string[]; failure?: string }
 
 /**
  * The packages an earlier install could not check, each with the install it came from, so the check can
- * be run again: by a later install of the same package, and by the gate itself.
+ * be run again: by a later install of the same package, by the gate itself and at each turn's end.
+ * `owed` says the model is owed a note for the packages that were still open at the turn's end.
  */
-type State = { mode: Mode; open: Map<string, Install> }
+type State = { mode: Mode; open: Map<string, Install>; owed: boolean }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -188,7 +189,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { mode: 'note', open: new Map() }
+  const state: State = { mode: 'note', open: new Map(), owed: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -199,6 +200,26 @@ export const register: Register = on => {
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'dep-sentinel' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  /*
+   * The turn's end runs the owed check again and owes the model a note for the packages that are still
+   * open, because a finding it did not close would otherwise stand in the pane and reach it never again.
+   * The check asks the registry and OSV.dev, once per open package, and a package they answer for closes.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || state.open.size === 0 || !(await isEnabled($))) return r
+    await recheckOpen($, state, await $.clock.now())
+    state.owed = state.open.size > 0
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    if (!state.owed || state.open.size === 0) return next(e)
+    state.owed = false
+    return next({ ...e, context: [...(e.context ?? []), openNote([...state.open.keys()])] })
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const stop = await gate($, state, e.command)

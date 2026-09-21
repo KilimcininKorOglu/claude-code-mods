@@ -39,7 +39,13 @@ A Claude Code Mod that checks each package the model installs before the install
 
    With the sidebar closed the same texts are transcript lines. The model reads nothing of this.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stayed unchecked. The gate runs the owed check first, so the package that only failed because the network was down opens the gate by itself; a package the registry still does not answer for stops the command. There is no bypass; only the person turns the gate off with `/dep-sentinel mode note`. `note` mode is the default and stops no git command, but it runs the same check at a git command, so a settled finding does not stay in the pane. An install is stopped in both modes, as above.
+9. The same check runs at the end of each main-loop turn, and the packages that are still open reach the model as one note with its next prompt:
+
+       dep-sentinel: 1 package(s) are still installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, or take the package out.
+
+   One note per turn, not one per prompt. Without this the finding would be said once, at the install, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
+
+10. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stayed unchecked. The gate runs the owed check first, so the package that only failed because the network was down opens the gate by itself; a package the registry still does not answer for stops the command. There is no bypass; only the person turns the gate off with `/dep-sentinel mode note`. `note` mode is the default and stops no git command, but it runs the same check at a git command, so a settled finding does not stay in the pane. An install is stopped in both modes, as above.
 
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 
@@ -67,14 +73,14 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, tool.call{tool=Bash}
+    ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, turn.complete, prompt.submit, tool.call{tool=Bash}
     ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
 
 Reach L3, reaches the network.
 
     1. Reads:    the Bash command text
     2. Runs:     nothing
-    3. Sends:    each package name, and its version, to its public registry and to api.osv.dev, at an install and again at a guarded git command while a finding is open; a note to the model and one line to the transcript when a check failed; nothing else leaves the machine
+    3. Sends:    each package name, and its version, to its public registry and to api.osv.dev, at an install and again at a guarded git command and at each turn's end while a finding is open; a note to the model and one line to the transcript when a check failed, and one more note with the next prompt while a finding stands; nothing else leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a package name comes from the model's command; it reaches a registry only inside a URL path or a JSON body, and a registry answer is read as data
 
