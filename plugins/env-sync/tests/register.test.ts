@@ -38,6 +38,10 @@ const run = (args: string): CommandRunInput => ({
 
 const DIFF = '+++ b/src/pay.ts\n@@ -0,0 +1,2 @@\n+const k = process.env.STRIPE_KEY\n+const d = process.env.DB_URL\n'
 
+/** The committed file as it sits on disk, the source every finding is measured against. */
+const PAY = `${ROOT}/src/pay.ts`
+const SOURCE = 'const k = process.env.STRIPE_KEY\nconst d = process.env.DB_URL\n'
+
 /**
  * `head` moves to `next` when the commit runs; `files` are the files on disk; `showFails` makes git show fail;
  * `notRepo` makes the directory no repository.
@@ -46,7 +50,7 @@ type World = { head: string; next: string; files: Map<string, string>; argv: str
 
 function world(on: On): World {
   const w: World = {
-    head: 'aaa', next: 'bbb', files: new Map([[`${ROOT}/.env.example`, 'DB_URL=postgres://localhost/app\n']]),
+    head: 'aaa', next: 'bbb', files: new Map([[`${ROOT}/.env.example`, 'DB_URL=postgres://localhost/app\n'], [PAY, SOURCE]]),
     argv: [], logs: [], commitFails: false, showFails: false, notRepo: false,
   }
   mock.store(on, {})
@@ -108,7 +112,7 @@ describe('env-sync', () => {
 
   test('the finding stays open while one variable is still missing', async ($, on) => {
     const w = world(on)
-    w.files = new Map([[`${ROOT}/.env.example`, '']])
+    w.files = new Map([[`${ROOT}/.env.example`, ''], [PAY, SOURCE]])
     await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
     w.files.set(`${ROOT}/.env.example`, 'STRIPE_KEY=\n')
     w.next = 'ccc'
@@ -120,15 +124,16 @@ describe('env-sync', () => {
     w.files.set(`${ROOT}/.env.example`, 'STRIPE_KEY=\nDB_URL=\n')
     w.next = 'ddd'
     await $.tool.call({ tool: 'Bash', command: 'git commit -m rest' })
-    expect(w.logs[2]).toBe('.env.example now lists the variables it lacked: STRIPE_KEY · DB_URL')
+    // The closing line names what was left, because a variable the file gained earlier already left the finding.
+    expect(w.logs[2]).toBe('.env.example now lists the variables it lacked: DB_URL')
   })
 
   test('the first commit of a repository is checked, and .env.sample is read when .env.example is missing', async ($, on) => {
     const w = world(on)
     w.head = ''
-    w.files = new Map([[`${ROOT}/.env.sample`, 'export STRIPE_KEY=\n# DB_URL=\n']])
+    w.files = new Map([[`${ROOT}/.env.sample`, 'export STRIPE_KEY=\n# DB_URL=\n'], [PAY, SOURCE]])
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m first' })).context).toBe(undefined)
-    w.files = new Map([[`${ROOT}/.env.dist`, '']])
+    w.files = new Map([[`${ROOT}/.env.dist`, ''], [PAY, SOURCE]])
     w.next = 'ccc'
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m second' })).context?.[0]).toContain('reads env variables .env.dist lacks: STRIPE_KEY (src/pay.ts:1) · DB_URL (src/pay.ts:2)')
   })
@@ -168,6 +173,22 @@ describe('env-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('.env.example now lists the variables it lacked: STRIPE_KEY')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a variable the code stopped reading closes the finding, and an unreadable file keeps it', async ($, on) => {
+    const w = world(on)
+    w.files.set(`${ROOT}/.env.example`, '')
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    await $.command.run(run('mode deny'))
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('STRIPE_KEY · DB_URL')
+    // The file reads one of them now, and nothing reads the other.
+    w.files.set(PAY, 'const d = process.env.DB_URL\n')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('1 variable(s): DB_URL')
+    // The file is gone: nothing reads either, so the finding closes and the gate opens.
+    w.files.delete(PAY)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('the code no longer reads: DB_URL')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · no variable is open')
   })
 
   test('a git error is logged once and the commit result stays', async ($, on) => {

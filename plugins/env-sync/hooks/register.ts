@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, denyText, diffReads, doneLines, doneLog, isCommit, isGuarded, listedNames, logText, modeOf, noteText, openNames, REFERENCE_FILES, sectionKey, sidebarLines, type Mode } from './env.ts'
+import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, listedNames, logText, modeOf, noteText, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Mode, type Open } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -11,7 +11,7 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
  * logged once. `open` holds the variables the last finding named, so a commit that adds them all
  * closes it, and in `deny` mode it also holds the gate shut.
  */
-type State = { enabled: boolean; mode: Mode; lastError?: string; open: string[] }
+type State = { enabled: boolean; mode: Mode; lastError?: string; open: Open[] }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -75,13 +75,39 @@ async function dropEntry($: EngineInterface, reference: string): Promise<void> {
   }
 }
 
-/** Closes the open finding when the reference file lists every variable it named, and reports it. */
-async function closeResolved($: EngineInterface, state: State, reference: string, listed: ReadonlySet<string>): Promise<void> {
-  const added = state.open
-  if (added.length === 0 || added.some(name => !listed.has(name))) return
-  state.open = []
+/**
+ * Whether the file whose added lines read this variable still reads it. A file that is no longer there
+ * reads nothing; one that is there and cannot be read counts as still reading, because it proves nothing.
+ */
+async function stillRead($: EngineInterface, root: string, open: Open): Promise<boolean> {
+  const path = `${root}/${open.file}`
+  try {
+    if (!(await $.fs.exists(path))) return false
+    return fileReads(String(await $.fs.read(path))).has(open.name)
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Measures the open finding again and closes it when nothing it named stands: the reference file gained
+ * the variable, or the code stopped reading it. Each measure reads the source again, so the finding is a
+ * claim and never an answer.
+ */
+async function recheckOpen($: EngineInterface, state: State, root: string, reference: string, listed: ReadonlySet<string>): Promise<void> {
+  if (state.open.length === 0) return
+  const added: string[] = []
+  const gone: string[] = []
+  const left: Open[] = []
+  for (const open of state.open) {
+    if (listed.has(open.name)) added.push(open.name)
+    else if (await stillRead($, root, open)) left.push(open)
+    else gone.push(open.name)
+  }
+  state.open = left
+  if (left.length > 0 || added.length + gone.length === 0) return
   await dropEntry($, reference)
-  await toPerson($, reference, `env variables ${reference} gained`, doneLines(added), doneLog(added, reference))
+  await toPerson($, reference, doneTitle(added, gone, reference), doneLines(added, gone), doneLog(added, gone, reference))
 }
 
 /** The note for the commit that moved HEAD, or undefined when it reads no variable the reference file lacks. */
@@ -92,10 +118,10 @@ async function commitNote($: EngineInterface, state: State, before: Before): Pro
   const diff = await git($, before.root, ['show', '--format=', '--unified=0', '--no-color', '--no-ext-diff', 'HEAD'])
   if (!diff.ok) throw new Error('git show HEAD failed')
   const listed = listedNames(await $.fs.read(`${before.root}/${reference}`))
-  await closeResolved($, state, reference, listed)
+  await recheckOpen($, state, before.root, reference, listed)
   const missing = diffReads(diff.out).filter(r => !listed.has(r.name))
   if (missing.length === 0) return undefined
-  state.open = openNames(state.open, missing)
+  state.open = openReads(state.open, missing)
   // The note goes to the model, the finding to the person: neither reads the other's channel.
   await toPerson($, reference, `env variables ${reference} lacks`, sidebarLines(missing), logText(missing, reference))
   return noteText(missing, reference)
@@ -123,8 +149,8 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
     const before = await beforeCommit($, state, command)
     const reference = before === undefined ? undefined : await referenceFile($, before.root)
     if (before === undefined || reference === undefined) return undefined
-    await closeResolved($, state, reference, listedNames(await $.fs.read(`${before.root}/${reference}`)))
-    return state.open.length === 0 ? undefined : { deny: denyText(state.open, reference) }
+    await recheckOpen($, state, before.root, reference, listedNames(await $.fs.read(`${before.root}/${reference}`)))
+    return state.open.length === 0 ? undefined : { deny: denyText(state.open.map(o => o.name), reference) }
   } catch (err) {
     report($, state, err)
     return undefined
@@ -151,7 +177,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each commit is checked for env reads .env.example lacks' : 'off: commits are not checked'
   }
   if (word !== '') return USAGE
-  const open = state.open.length === 0 ? 'no variable is open' : `${state.open.join(' · ')} still missing`
+  const open = state.open.length === 0 ? 'no variable is open' : `${state.open.map(o => o.name).join(' · ')} still missing`
   return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
 

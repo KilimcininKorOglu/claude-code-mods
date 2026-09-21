@@ -1,6 +1,6 @@
 {
   "name": "env-sync",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Tells the model when a commit reads env variables that .env.example lacks. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

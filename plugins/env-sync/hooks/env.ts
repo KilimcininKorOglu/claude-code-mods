@@ -141,9 +141,19 @@ export function sidebarLines(missing: readonly EnvRead[]): { text: string; kind:
   return namedReads(missing).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
+/** Every variable a whole file reads, so a finding is measured against the file it came from. */
+export function fileReads(text: string): Set<string> {
+  return new Set(lineReads(text))
+}
+
+/** One open variable and the file whose added lines read it; the file is the measure that can close it. */
+export type Open = { name: string; file: string }
+
 /** The variables a finding holds open after a new report: the earlier ones and the new ones, each once. */
-export function openNames(before: readonly string[], missing: readonly EnvRead[]): string[] {
-  return [...new Set([...before, ...missing.map(r => r.name)])]
+export function openReads(before: readonly Open[], missing: readonly EnvRead[]): Open[] {
+  const out = new Map(before.map(o => [o.name, o]))
+  for (const r of missing) if (!out.has(r.name)) out.set(r.name, { name: r.name, file: r.file })
+  return [...out.values()]
 }
 
 function namedPlain(names: readonly string[]): string {
@@ -152,14 +162,24 @@ function namedPlain(names: readonly string[]): string {
   return named.join(' · ')
 }
 
-/** The transcript line of a finding a later commit closed. */
-export function doneLog(names: readonly string[], reference: string): string {
-  return `${reference} now lists the variables it lacked: ${namedPlain(names)}`
+/** The title of a closed finding, by what closed it. */
+export function doneTitle(added: readonly string[], gone: readonly string[], reference: string): string {
+  if (gone.length === 0) return `env variables ${reference} gained`
+  return added.length === 0 ? 'env reads gone' : 'env variables settled'
 }
 
-/** One sidebar line per variable the reference file gained. */
-export function doneLines(names: readonly string[]): { text: string; kind: 'ok' }[] {
-  return namedPlain(names).split(' · ').map(text => ({ text, kind: 'ok' as const }))
+/** The transcript line of a finding that closed: the variables the reference file gained, the reads the code dropped. */
+export function doneLog(added: readonly string[], gone: readonly string[], reference: string): string {
+  const parts: string[] = []
+  if (added.length > 0) parts.push(`${reference} now lists the variables it lacked: ${namedPlain(added)}`)
+  if (gone.length > 0) parts.push(`the code no longer reads: ${namedPlain(gone)}`)
+  return parts.join(' · ')
+}
+
+/** One sidebar line per variable, the ones the file gained and the ones nothing reads any more. */
+export function doneLines(added: readonly string[], gone: readonly string[]): { text: string; kind: 'ok' }[] {
+  const names = [...added.slice(0, MAX_NAMED), ...gone.slice(0, MAX_NAMED).map(n => `${n} (no longer read)`)]
+  return names.map(text => ({ text, kind: 'ok' as const }))
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one reference file keeps one section. */

@@ -32,13 +32,19 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those variables go there instead, one line per variable, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding stays open until the variables are listed. After each later commit the mod measures the names it reported against the reference file again. When none of them is missing any more, its sidebar entry is cleared and a new entry takes its place:
+7. A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, reads both sources again, so it closes two ways:
+
+   - the reference file lists the variable;
+   - the file whose added lines read it does not read it any more, because the code was changed or reverted. A file that is gone reads nothing either.
+
+   A variable that settled leaves the finding at once, and the entry is cleared when nothing is left:
 
        env-sync: .env.example now lists the variables it lacked: STRIPE_KEY · REDIS_URL
+       env-sync: the code no longer reads: STRIPE_KEY
 
-   With the sidebar closed the same text is one transcript line. The model reads nothing of this: it added the variables itself, so a note would only repeat what it just did.
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this: the finding closed by its own work, so a note would only repeat what it just did. A file that is there and cannot be read keeps its variable open, because an unread file proves nothing.
 
-8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it reads the reference file again, so a commit that added the variables opens the gate itself. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
+8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it measures both sources again, so a commit that added the variables, and one that took the reads out, each open the gate themselves. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -69,11 +75,11 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile), $.fs.read (via commitNote, gate), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile, stillRead), $.fs.read (via commitNote, gate, stillRead), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 
-    1. Reads:    the Bash command text; the reference file at the repository root; through git, the commit's added lines
+    1. Reads:    the Bash command text; the reference file at the repository root; each file an open finding came from, again; through git, the commit's added lines
     2. Runs:     git rev-parse and git show, read-only, by argv, at most four times per commit
     3. Sends:    a note to the model after the commit's result, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
@@ -87,6 +93,7 @@ Reach L2, runs processes.
 - A merge commit's combined diff is not read.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/env-sync mode note`.
 - The gate reads the command as text, so a commit through a script or an alias passes it.
+- A finding is measured against the file the commit read the variable in. A read moved to another file counts as gone there, and the commit that adds it elsewhere reports it again.
 
 ## Development
 
