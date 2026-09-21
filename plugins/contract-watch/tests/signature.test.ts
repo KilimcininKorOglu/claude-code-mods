@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { blockingLine, changedSignatures, denyText, isBlocking, isGuarded, logText, modeOf, noteText, parseCheck, sidebarLines, signaturesIn } from '../hooks/signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, parseCheck, sidebarLines, signaturesIn } from '../hooks/signature.ts'
 
 tier('user')
 
@@ -87,5 +87,13 @@ describe('edit-check', () => {
     expect(denyText([blockingLine(blocking)])).toBe(
       'stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate.',
     )
+  })
+
+  test('a closing line names the measure that closed the finding', () => {
+    expect(doneLog('parse', true)).toBe('every caller matches parse again')
+    expect(doneLog('parse', false)).toBe('no caller of parse carries the mismatch mark any more')
+    expect(doneLines('parse', true)).toEqual([{ text: 'every caller matches parse again', kind: 'ok' }])
+    expect(isReported({ sym: 'parse', status: 'contract-change', incompatible: 0, callers: [{ name: 'main', at: 'main.go:5', mismatch: false }] })).toBe(true)
+    expect(isReported({ sym: 'parse', status: 'unchanged', incompatible: 0, callers: [{ name: 'main', at: 'main.go:5', mismatch: false }] })).toBe(false)
   })
 })

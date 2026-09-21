@@ -104,7 +104,7 @@ function namedCallers(c: Check): string {
 }
 
 /** Whether this check has something to report: a changed contract that something calls. */
-function isReported(c: Check): boolean {
+export function isReported(c: Check): boolean {
   return c.status === 'contract-change' && c.callers.length > 0
 }
 
@@ -160,14 +160,20 @@ export function blockingLine(c: Check): string {
   return `${c.sym} ${paramsText(c)}, ${c.incompatible} caller(s) do not match`
 }
 
-/** The transcript line of a finding a later check closed. */
-export function doneLog(sym: string): string {
-  return `every caller matches ${sym} again`
+/**
+ * The transcript line of a finding a later check closed. `matched` says which measure closed it: the
+ * contract reads the same as the last commit again, or it still differs and no caller carries ripwire's
+ * mismatch mark any more. The second text names what was measured, because a call graph that binds by
+ * name cannot prove every caller right.
+ */
+export function doneLog(sym: string, matched: boolean): string {
+  if (matched) return `every caller matches ${sym} again`
+  return `no caller of ${sym} carries the mismatch mark any more`
 }
 
 /** The sidebar lines of a closed finding. */
-export function doneLines(sym: string): { text: string; kind: 'ok' }[] {
-  return [{ text: doneLog(sym), kind: 'ok' }]
+export function doneLines(sym: string, matched: boolean): { text: string; kind: 'ok' }[] {
+  return [{ text: doneLog(sym, matched), kind: 'ok' }]
 }
 
 /** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */

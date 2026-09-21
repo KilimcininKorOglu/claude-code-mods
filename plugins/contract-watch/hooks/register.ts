@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, logText, modeOf, noteText, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -67,7 +67,8 @@ async function askRipwire($: EngineInterface, root: string, rel: string, sym: st
 async function checkOne($: EngineInterface, state: State, place: { root: string; rel: string }, name: string): Promise<string | undefined> {
   const check = await askRipwire($, place.root, place.rel, name)
   if (check === undefined) return undefined
-  if (isBlocking(check)) state.open.set(`${place.rel}:${check.sym}`, { root: place.root, rel: place.rel, sym: check.sym })
+  // The finding the person reads is the one the mod holds, so every reported symbol is closed later too.
+  if (isReported(check)) state.open.set(`${place.rel}:${check.sym}`, { root: place.root, rel: place.rel, sym: check.sym })
   // The note goes to the model, the line to the person: neither reads the other's channel.
   const line = logText(check)
   if (line !== undefined) await toPerson($, check.sym, 'changed signatures', sidebarLines(check), line)
@@ -85,7 +86,11 @@ async function notesFor($: EngineInterface, state: State, file: string, names: r
   return notes
 }
 
-/** Asks ripwire about each open symbol again and closes the ones whose callers caught up. */
+/**
+ * Asks ripwire about each open symbol again, closes the ones no caller misses any more, and answers the
+ * lines of the ones that still do. A symbol ripwire marks as incompatible stays open; one it no longer
+ * marks closes, and the closing line says which of the two measures closed it.
+ */
 async function recheckOpen($: EngineInterface, state: State): Promise<string[]> {
   const lines: string[] = []
   for (const [key, held] of [...state.open]) {
@@ -94,9 +99,10 @@ async function recheckOpen($: EngineInterface, state: State): Promise<string[]> 
       lines.push(blockingLine(check))
       continue
     }
+    const matched = check === undefined || !isReported(check)
     state.open.delete(key)
     await dropEntry($, held.sym)
-    await toPerson($, held.sym, 'callers caught up', doneLines(held.sym), doneLog(held.sym))
+    await toPerson($, held.sym, 'callers caught up', doneLines(held.sym, matched), doneLog(held.sym, matched))
   }
   return lines
 }
@@ -114,13 +120,15 @@ function withNotes(r: ToolCallResult, notes: readonly string[]): ToolCallResult 
 }
 
 /**
- * The gate of the `deny` mode: it asks ripwire about each open symbol again, so a caller the model
- * brought to the new signature opens the gate itself. A symbol a caller still misses stops the command.
+ * What a `git commit`, `push` or `merge` attempt does, in both modes: ripwire measures each open symbol
+ * again, so a finding the model fixed closes itself with a green line, as in the other finding mods. The
+ * measurement runs before the command, because `--edit-check` compares the working tree against HEAD and
+ * a commit leaves it nothing to compare. In `deny` mode a symbol a caller still misses stops the command.
  */
-async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
-  if (state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
+async function atGitCommand($: EngineInterface, state: State, command: string): Promise<string | undefined> {
+  if (state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
   const lines = await recheckOpen($, state)
-  return lines.length === 0 ? undefined : denyText(lines)
+  return state.mode === 'deny' && lines.length > 0 ? denyText(lines) : undefined
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
@@ -132,7 +140,7 @@ async function setMode($: EngineInterface, state: State, word: string): Promise<
 }
 
 async function statusText($: EngineInterface, state: State): Promise<string> {
-  const open = state.open.size === 0 ? 'no signature is open' : `${state.open.size} signature(s) leave a caller behind`
+  const open = state.open.size === 0 ? 'no signature is open' : `${state.open.size} signature(s) have callers to check`
   return `${(await isEnabled($)) ? 'on' : 'off'} · mode ${state.mode} · ${open}; it needs ripwire on PATH`
 }
 
@@ -161,7 +169,7 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     try {
-      const stop = await gate($, state, e.command)
+      const stop = await atGitCommand($, state, e.command)
       if (stop !== undefined) return { deny: stop }
     } catch (err) {
       report($, state, err)
