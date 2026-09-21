@@ -338,6 +338,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "error-poke",
+      "source": "./plugins/error-poke",
+      "description": "Sends one continue prompt after a turn an API error killed, at most 5 times in a row.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
