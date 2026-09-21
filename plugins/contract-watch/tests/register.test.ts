@@ -111,6 +111,34 @@ describe('contract-watch', () => {
     expect((await $.command.run(run(''))).text).toBe('on · mode note · no signature is open; it needs ripwire on PATH')
   })
 
+  test('the turn end asks ripwire again and the next prompt carries the note', async ($, on) => {
+    const w = world(on)
+    const notes: string[][] = []
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    on('prompt.submit', (_, e) => {
+      notes.push([...(e.context ?? [])])
+      return { text: e.text }
+    })
+    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
+    const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+    // No turn has ended yet, so the model is owed nothing.
+    await prompt('first')
+    expect(notes[0]).toEqual([])
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await prompt('second')
+    expect(notes[1]?.[0]).toBe('contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.')
+    // One note per turn: the next prompt without a turn in between carries none.
+    await prompt('third')
+    expect(notes[2]).toEqual([])
+    // The callers match now: the turn's end closes the finding and owes no note.
+    w.ripwire = { exitCode: 0, stdout: UNCHANGED, stderr: '' }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe('every caller matches parse again')
+    await prompt('fourth')
+    expect(notes[3]).toEqual([])
+  })
+
   test('a ripwire failure is logged once and the edit result stays', async ($, on) => {
     const w = world(on)
     w.ripwire = { exitCode: 127, stdout: '', stderr: 'ripwire: command not found' }

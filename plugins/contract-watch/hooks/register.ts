@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -9,8 +9,11 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 /** One symbol whose callers do not match it: where it lives, so the gate can measure it again. */
 type Open = { root: string; rel: string; sym: string }
 
-/** The last error logged, so the same one is logged once, the mode, and the symbols the gate holds. */
-type State = { lastError?: string; mode: Mode; open: Map<string, Open> }
+/**
+ * The last error logged, so the same one is logged once, the mode, the symbols the gate holds, and the
+ * lines the model is owed a note for, measured at the turn's end.
+ */
+type State = { lastError?: string; mode: Mode; open: Map<string, Open>; owed: string[] }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -155,7 +158,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { mode: 'note', open: new Map() }
+  const state: State = { mode: 'note', open: new Map(), owed: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -166,6 +169,30 @@ export const register: Register = on => {
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'contract-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  /*
+   * The turn's end asks ripwire about each open symbol again and owes the model a note for the ones a
+   * caller still misses, because a finding it did not close would otherwise stand in the pane and reach
+   * it never again. ripwire runs on this machine alone, once per open symbol.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || state.open.size === 0 || !(await isEnabled($))) return r
+    try {
+      state.owed = await recheckOpen($, state)
+    } catch (err) {
+      report($, state, err)
+    }
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    if (state.owed.length === 0) return next(e)
+    const note = openNote(state.owed)
+    state.owed = []
+    return next({ ...e, context: [...(e.context ?? []), note] })
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     try {

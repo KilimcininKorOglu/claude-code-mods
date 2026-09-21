@@ -200,6 +200,14 @@ export function denyText(lines: readonly string[]): string {
   return `stopped: ${lines.length} changed signature(s) leave a caller behind: ${lines.join(' · ')}. Bring each caller to the new signature, then run the command again; there is no way around this gate.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(lines: readonly string[]): string {
+  return `contract-watch: ${lines.length} changed signature(s) still leave a caller behind: ${lines.join(' · ')}. Bring each caller to the new signature, or take the signature change back.`
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one symbol keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'

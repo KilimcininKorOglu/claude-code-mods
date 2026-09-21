@@ -34,7 +34,12 @@ The note lists every caller, not only the ones ripwire proves incompatible: in a
        contract-watch: no caller of parse carries the mismatch mark any more
 
    The measurement runs before the command, not after it: `--edit-check` compares the working tree against git HEAD, so once a commit has landed there is nothing left to compare and every finding would read as closed.
-8. In `deny` mode that same moment also stops the command while a changed signature leaves a caller behind. The gate takes a narrower measure than the note: only a check whose `incompatible` count is above zero holds it, the callers ripwire names by fixed-arity evidence. There is no bypass; only the person turns the gate off with `/contract-watch mode note`. `note` mode is the default and stops nothing.
+8. A finding the model did not close is measured the same way at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt. ripwire runs on this machine, once per open symbol:
+
+       contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.
+
+   One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
+9. In `deny` mode that same moment also stops the command while a changed signature leaves a caller behind. The gate takes a narrower measure than the note: only a check whose `incompatible` count is above zero holds it, the callers ripwire names by fixed-arity evidence. There is no bypass; only the person turns the gate off with `/contract-watch mode note`. `note` mode is the default and stops nothing.
 
 In the live check the model read the note after its Edit and said that the two callers would not compile until they were updated.
 
@@ -63,14 +68,14 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=contract-watch}, tool.call{tool=Bash}, tool.call{tool=Edit}
+    ❯ ./register.ts hooks: session.start, command.run{command=contract-watch}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}
     ❯ ./register.ts calls: $.command.register, $.process.run (via askRipwire, locate), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 
     1. Reads:    the old and new text of each Edit; the Bash command text; through ripwire, the repository's source and git HEAD
-    2. Runs:     git rev-parse and ripwire --edit-check, read-only, by argv, after an edit that changed a signature, and once per open symbol before a git commit, push or merge
-    3. Sends:    a note to the model after the Edit's result, and one line to the transcript; nothing leaves the machine
+    2. Runs:     git rev-parse and ripwire --edit-check, read-only, by argv, after an edit that changed a signature, and once per open symbol before a git commit, push or merge and at each turn's end
+    3. Sends:    a note to the model after the Edit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a function name comes from the edited text and reaches ripwire as one argv item, never through a shell
 
