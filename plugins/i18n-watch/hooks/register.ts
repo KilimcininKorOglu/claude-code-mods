@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { callKeys, isSource, keyLines, newKeys } from './keys.ts'
-import { addFile, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isLocalePath, isNarrowable, LOCALE_DIRS, LOCALE_EXT, logText, modeOf, noteText, sectionKey, shownPath, sidebarLines, verdict, type Catalog, type Lines, type Mode } from './locale.ts'
+import { addFile, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isLocalePath, isNarrowable, LOCALE_DIRS, LOCALE_EXT, logText, modeOf, noteText, openNote, sectionKey, shownPath, sidebarLines, verdict, type Catalog, type Lines, type Mode } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -30,7 +30,7 @@ type Open = { path: string; keys: string[]; lines: Lines }
  * them, both close the finding. `root` is the directory the session started in. Locale files are looked
  * for under it and a path is shown against it, because a Bash `cd` moves `$.session.cwd()` away.
  */
-type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, Open>; root?: string }
+type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, Open>; root?: string; owed: boolean }
 
 /** A locale file and the locale directory it was found under. */
 type Found = { root: string; path: string }
@@ -267,7 +267,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, mode: 'note', reported: false, open: new Map() }
+  const state: State = { enabled: true, mode: 'note', reported: false, open: new Map(), owed: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -289,6 +289,27 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const stop = await gate($, state, e.command)
     return stop === undefined ? next(e) : { deny: stop }
+  })
+
+  /*
+   * The turn's end measures every finding again and owes the model a note for what is left, because a
+   * finding it did not close would otherwise stand in the pane and reach it never again.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined) return r
+    state.catalog = undefined
+    await recheckOpen($, state)
+    state.owed = state.open.size > 0
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    if (!state.owed || state.open.size === 0) return next(e)
+    state.owed = false
+    const note = openNote([...state.open].map(([file, open]) => ({ file, keys: open.keys, lines: open.lines })))
+    return next({ ...e, context: [...(e.context ?? []), note] })
   })
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => afterEdit($, state, e.file_path, e.old_string, e.new_string, await next(e)))

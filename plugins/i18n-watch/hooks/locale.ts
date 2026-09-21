@@ -256,6 +256,16 @@ export function denyText(open: readonly { file: string; keys: string[]; lines: L
   return `stopped: ${open.length} file(s) use translation keys the locale files lack: ${named.join(' · ')}. Add the keys to every locale file, then run the command again; there is no way around this gate.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(open: readonly { file: string; keys: string[]; lines: Lines }[]): string {
+  const named = open.slice(0, MAX_NAMED).map(o => `${o.file} (${namedPlain(o.keys.map(k => at(k, o.lines)))})`)
+  if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
+  return `i18n-watch: ${open.length} file(s) still use translation keys the locale files lack: ${named.join(' · ')}. Add the keys to every locale file, or take the calls out.`
+}
+
 /** `path` shown relative to the session's directory when it is inside it. */
 export function shownPath(path: string, cwd: string): string {
   const base = `${cwd.replace(/\/+$/, '')}/`

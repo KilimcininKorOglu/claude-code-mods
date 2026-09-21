@@ -182,6 +182,30 @@ describe('i18n-watch', () => {
     expect((await bash($, 'git commit -am x')).deny).toContain('index.php')
   })
 
+  test("the turn's end owes the model a note, and the next prompt carries it once", async ($, on) => {
+    const w = world(on, LOCALES)
+    const contexts: (readonly string[] | undefined)[] = []
+    on('prompt.submit', (_, e) => { contexts.push(e.context); return { text: e.text } })
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    const ends = (turnId: string) => $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId, reason: 'answer' } as never)
+    const asks = () => $.prompt.submit({ text: 'carry on', origin: { kind: 'composer' }, wait: false } as never)
+    await started($)
+    await edit(w, $, 'index.php', '', "__('Unauthorized Access')")
+    await ends('t1')
+    await asks()
+    expect(contexts.at(-1)).toEqual([
+      'i18n-watch: 1 file(s) still use translation keys the locale files lack: index.php (Unauthorized Access:1). Add the keys to every locale file, or take the calls out.',
+    ])
+    // The note is owed once per turn, not at every prompt.
+    await asks()
+    expect(contexts.at(-1)).toBe(undefined)
+    // A turn that closed the finding owes nothing.
+    await edit(w, $, 'index.php', "__('Unauthorized Access')", 'modalUnauthorized()', 'modalUnauthorized()')
+    await ends('t2')
+    await asks()
+    expect(contexts.at(-1)).toBe(undefined)
+  })
+
   withSidebar('an open sidebar takes the keys and the transcript stays clean', async ($, on) => {
     const w = world(on, LOCALES)
     const bar: Bar = { open: true, sections: [], cleared: [] }
