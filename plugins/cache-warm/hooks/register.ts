@@ -13,6 +13,7 @@ import {
   fmtTok,
   fmtUsd,
   freshState,
+  idleText,
   isColdWrite,
   isWarmPing,
   parseWarmArgs,
@@ -65,12 +66,8 @@ function logEvent($: EngineInterface, s: State, text: string, short: string): vo
  * holds, the second what the mod last did. A closed sidebar, and a sidebar mod that is not installed,
  * both answer false, so the status line is drawn instead.
  */
-async function toSidebar($: EngineInterface, s: State, text: string | undefined, kind: 'ok' | 'warn' | 'error' | 'dim'): Promise<boolean> {
+async function toSidebar($: EngineInterface, s: State, text: string, kind: 'ok' | 'warn' | 'error' | 'dim'): Promise<boolean> {
   try {
-    if (text === undefined) {
-      await $.sidebar.clear(SECTION)
-      return await $.sidebar.isOpen()
-    }
     const lines = [{ text, kind }, ...(s.event === undefined ? [] : [{ text: s.event, kind: 'dim' as const }])]
     return await $.sidebar.set({ ...SECTION, title: 'cache window', lines, until: 'session', order: 20 })
   } catch {
@@ -79,9 +76,15 @@ async function toSidebar($: EngineInterface, s: State, text: string | undefined,
   }
 }
 
+/**
+ * Draws the window's state. The sidebar keeps a line either way: the window's own line, or the faint
+ * idle line while none runs, so the section is never a snapshot of a window that ended. The status line
+ * is unchanged: with no window and no stop reason it carries nothing.
+ */
 async function showStatusAt($: EngineInterface, s: State, now: number): Promise<void> {
   const text = statusText(s, now)
-  $.ui.status((await toSidebar($, s, text, statusTone(s, now))) ? undefined : text)
+  const taken = await toSidebar($, s, text ?? idleText(s), text === undefined ? 'dim' : statusTone(s, now))
+  $.ui.status(taken ? undefined : text)
 }
 
 async function showStatus($: EngineInterface, s: State): Promise<void> {
@@ -129,13 +132,13 @@ async function stop($: EngineInterface, s: State, why: string | null, forgetAlwa
 /** Schedules the next ping one period after the last request. */
 async function arm($: EngineInterface, s: State): Promise<void> {
   disarm(s)
-  if (!s.deadline) return
   const now = await $.clock.now()
-  if (now >= s.deadline) return stop($, s, null)
-  if (s.lastRequestAt && !s.compacted) {
+  if (s.deadline && now >= s.deadline) return stop($, s, null)
+  if (s.deadline && s.lastRequestAt && !s.compacted) {
     const delay = Math.max(1000, s.lastRequestAt + s.every - now)
     s.pending = $.clock.after(delay, () => { void runPing($, s) })
   }
+  // A session with no window draws too, so the pane follows the state instead of holding the last one.
   await showStatusAt($, s, now)
 }
 
@@ -245,6 +248,12 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
   // turn.step stamps each request; when no step of this turn did, the turn's end is the floor.
   if (now - s.lastRequestAt > durationMs) s.lastRequestAt = now
   s.compacted = false
+  // The stop reason and the line under it belong to the window that ended: one turn later the pane
+  // carries the idle line instead, and the reason stays in the transcript.
+  if (s.stopped) {
+    s.stopped = null
+    s.event = undefined
+  }
   if (usage) await measure($, s, usage, now)
   await arm($, s)
 }

@@ -139,6 +139,19 @@ export function statusText(s: State, now: number): string | undefined {
 }
 
 /**
+ * The sidebar line while no window runs: what this session paid for cold writes and how large the
+ * context is. It replaces the stop reason at the next turn, so the pane holds a measurement of now
+ * instead of one sentence of the window that ended. The transcript keeps the reason.
+ */
+export function idleText(s: State): string {
+  const count = s.coldWrites.length
+  const paid = s.coldWrites.reduce((sum, w) => sum + (w.usd ?? 0), 0)
+  const writes = count === 0 ? 'no cold write' : `${count} cold write${count === 1 ? '' : 's'} paid ${fmtUsd(paid)}`
+  const context = s.ctx > 0 ? ` · context ${fmtTok(s.ctx)} tokens` : ''
+  return `off · ${writes}${context}`
+}
+
+/**
  * The colour of that line in the sidebar: red for a window the mod stopped, yellow while the window
  * ends within one ping period (no further ping renews it), green while it holds, faint before the
  * first turn, when there is nothing to keep warm yet.

@@ -136,6 +136,21 @@ describe('keep warm', () => {
     expect(bar.sections.at(-1)?.lines).toEqual(['6h left · ping in 50m', 'cold write 201k tokens paid ($4.01)'])
   })
 
+  withSidebar('the stop reason gives way to the idle line at the next turn', async ($, on) => {
+    const w = world(on, [{ read: 0, write: 180_000 }])
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    w.live.tokens = 315_000
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(bar.sections.at(-1)?.lines).toEqual(['stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone'])
+    await $.turn.complete(turn())
+    expect(bar.sections.at(-1)?.lines).toEqual(['off · no cold write · context 315k tokens'])
+    expect(w.logs).toEqual([])
+  })
+
   test('a new turn moves the ping later', async ($, on) => {
     const w = world(on, [warm])
     await $.session.start(session)
