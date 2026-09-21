@@ -29,7 +29,7 @@ A Claude Code Mod that tells the model when an edit builds SQL by joining string
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those places go there instead, one line each, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding stays open until the file no longer holds those lines. After a later Edit or Write the mod reads each open file again, and a file whose lines are all gone closes:
+7. A finding stays open until the file no longer holds those lines. After a later Edit or Write the mod reads each open file again, and a file whose lines are all gone closes. A file that is no longer there closes too, because it holds no line any more; a file that is there and cannot be read keeps its finding, because an unread file proves nothing:
 
        sql-concat-watch: the SQL built from strings is gone from src/db.ts: src/db.ts:14 · src/db.ts:22
 
@@ -64,7 +64,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=sql-concat-watch}, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, toPerson)
 
 Reach L1, reads files.
 

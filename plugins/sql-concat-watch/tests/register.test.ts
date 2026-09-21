@@ -30,16 +30,17 @@ const run = (args: string): CommandRunInput => ({
   command: 'sql-concat-watch', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** `file` is the edited file's text after the edit; `readFails` makes the read fail. */
-type World = { file: string; readFails: boolean; reads: number; logs: string[] }
+/** `file` is the edited file's text after the edit; `readFails` makes the read fail, `gone` deletes it. */
+type World = { file: string; readFails: boolean; gone: boolean; reads: number; logs: string[] }
 
 function world(on: On): World {
-  const w: World = { file: '', readFails: false, reads: 0, logs: [] }
+  const w: World = { file: '', readFails: false, gone: false, reads: 0, logs: [] }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
+  on('fs.exists', () => ({ value: !w.gone }))
   on('fs.read', () => {
     w.reads++
     if (w.readFails) throw new Error('EACCES')
@@ -114,6 +115,20 @@ describe('sql-concat-watch', () => {
     w.file = 'const q = "SELECT * FROM users WHERE id = ?"\n'
     await edit($, 'src/other.ts', 'x', 'const y = 1')
     expect(bar.sections.at(-1)).toEqual({ key: 'src-users.ts', lines: ['src/users.ts', 'src/users.ts:1'] })
+  })
+
+  test('a file the code deleted closes its finding, and one that cannot be read keeps it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = `${QUERY}\n`
+    await edit($, 'src/users.ts', 'const q = ""', QUERY)
+    await $.command.run(run('mode deny'))
+    // The file is there and unreadable: nothing is proven, so the gate holds.
+    w.readFails = true
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).deny).toContain('src/users.ts:1')
+    w.gone = true
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('the SQL built from strings is gone from src/users.ts: src/users.ts:1')
   })
 
   test('in deny mode a commit stops while a file joins SQL, and runs once the file is fixed', async ($, on) => {

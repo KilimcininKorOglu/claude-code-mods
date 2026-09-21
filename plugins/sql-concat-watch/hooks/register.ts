@@ -17,6 +17,16 @@ type Finding = { path: string; lines: string[]; places: string[] }
  */
 type State = { enabled: boolean; mode: Mode; reported: boolean; open: Map<string, Finding>; root?: string }
 
+/** Whether the file is no longer there, so a finding of it closes instead of standing for good. */
+async function isGone($: EngineInterface, path: string): Promise<boolean> {
+  try {
+    return !(await $.fs.exists(path))
+  } catch {
+    // The path was not measured: the finding is left as it stands.
+    return false
+  }
+}
+
 /** The file's text after the edit, or undefined when it cannot be read; the first failure is logged. */
 async function fileText($: EngineInterface, state: State, path: string): Promise<string | undefined> {
   try {
@@ -58,7 +68,8 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
 async function closeResolved($: EngineInterface, state: State, skip?: string): Promise<void> {
   for (const [shown, found] of [...state.open]) {
     if (shown === skip) continue
-    const text = await fileText($, state, found.path)
+    // A file that is gone holds no line any more; one that is there and unreadable proves nothing.
+    const text = (await isGone($, found.path)) ? '' : await fileText($, state, found.path)
     if (text === undefined || found.lines.some(l => text.includes(l))) continue
     state.open.delete(shown)
     await dropEntry($, shown)
