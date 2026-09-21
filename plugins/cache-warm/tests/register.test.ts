@@ -81,6 +81,7 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
   on('session.usage', () => ({ value: { context: { window: 1_000_000, tokens: w.live.tokens }, rateLimits: [] } }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
   on('session.compact', (_, e) => ({ messages: e.messages }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
@@ -248,6 +249,34 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
+  test('the next message arms the window again, as long as the one that ran out', async ($, on) => {
+    const w = world(on, [warm, warm, warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', '3m every 1m'))
+    await $.turn.complete(turn())
+    await w.clock.advance(6 * MIN)
+    expect(w.statuses.at(-1)).toBe(undefined)
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off · 3m again at your next message · no cold write · context 201k tokens')
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    expect(w.logs.at(-1)).toBe('the 3m window ran out; this message arms another one. /cache-warm off stops it.')
+    expect(w.store.get('every:S1')).toBe(MIN)
+    await $.turn.complete(turn())
+    await w.clock.advance(MIN)
+    expect(w.forks).toBe(3)
+  })
+
+  test('a window the ping stopped is not armed again', async ($, on) => {
+    const w = world(on, [{ read: 0, write: 180_000 }])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', '3h'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.statuses.at(-1)).toMatch(/^stopped: /)
+    await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toMatch(/^stopped: /)
+    expect(w.store.has('deadline:S1')).toBe(false)
+  })
+
   test('off cancels the ping and clears the status', async ($, on) => {
     const w = world(on, [warm])
     await $.session.start(session)
@@ -258,7 +287,7 @@ describe('keep warm', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
     await w.clock.advance(2 * HOUR)
     expect(w.forks).toBe(0)
-    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off')
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off · no cold write · context 201k tokens')
   })
 
   test('an argument it cannot read changes nothing', async ($, on) => {
@@ -365,7 +394,7 @@ describe('store per session', () => {
   test('another session\'s window does not arm this one and is left alone', async ($, on) => {
     const w = world(on, [warm], { sid: 'mine', store: [['deadline:other', START + HOUR], ['every:other', MIN]] })
     await $.session.start(session)
-    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off')
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off · no cold write')
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(0)

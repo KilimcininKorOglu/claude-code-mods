@@ -40,6 +40,15 @@ A stop reason stands for one turn. At the next turn the section carries the idle
     cache window
     off · 2 cold writes paid $6.30 · context 315k tokens
 
+A window that runs out of time is armed again by your next message, as long as the one that ended and with the same ping period, and the idle line says so while it waits:
+
+    cache window
+    off · 6h again at your next message · 1 cold write paid $4.01 · context 201k tokens
+
+    cache-warm: the 6h window ran out; this message arms another one. /cache-warm off stops it.
+
+Only a window that ran out of time comes back. A window a ping stopped does not: the cache is already gone there, and the cold write of your next message arms its own 6h window. `/cache-warm off` forgets a window waiting to come back.
+
 The section holds a second, faint line under the window: the last transcript line, shortened. The window line says how long the cache is kept, the second line says what the mod last did:
 
     cache window
@@ -92,12 +101,12 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
 
 Reach L2, drives Claude.
 
-    1. Reads:    the time of each main-loop model request; the token counts and model id of each turn and of each ping; the live context size; the resume fields Claude Code computes for settings hooks; the session id and model; its own $.store. It never reads a prompt, a file or a tool result.
+    1. Reads:    the time of each main-loop model request; the token counts and model id of each turn and of each ping; the live context size; the origin of each message, to arm a window again; the resume fields Claude Code computes for settings hooks; the session id and model; its own $.store. It never reads a prompt's text, a file or a tool result.
     2. Runs:     one $.model.fork per idle stretch inside an armed window, 50 minutes after the last request unless the test setting is used (floor 1 minute); never outside a window, never after a ping that found the cache gone
     3. Sends:    only the fork, an API request over the session's own transcript with a fixed one-line prompt
     4. Persists: in $.store, the window end and the ping period under this session's id, and the global always switch; this session's ended window is deleted at stop and at its next start, another session's window one week after it ended; the cold-write tally lives in memory and ends with the session

@@ -133,7 +133,15 @@ async function stop($: EngineInterface, s: State, why: string | null, forgetAlwa
 async function arm($: EngineInterface, s: State): Promise<void> {
   disarm(s)
   const now = await $.clock.now()
-  if (s.deadline && now >= s.deadline) return stop($, s, null)
+  if (s.deadline && now >= s.deadline) {
+    // A window that ran out of time is armed again by the next message, as long as this one was. A
+    // window the ping stopped is not: the cache is gone there, and the cold write of the next message
+    // arms its own window.
+    const again = { window: s.window, every: s.every }
+    await stop($, s, null)
+    s.renew = again
+    return showStatusAt($, s, now)
+  }
   if (s.deadline && s.lastRequestAt && !s.compacted) {
     const delay = Math.max(1000, s.lastRequestAt + s.every - now)
     s.pending = $.clock.after(delay, () => { void runPing($, s) })
@@ -173,6 +181,8 @@ async function runPing($: EngineInterface, s: State): Promise<void> {
 
 async function startWindow($: EngineInterface, s: State, windowMs: number, every: number): Promise<void> {
   s.every = every
+  s.window = windowMs
+  s.renew = null
   s.deadline = await $.clock.now() + windowMs
   s.stopped = null
   await $.store.set(deadlineKey(s), s.deadline)
@@ -201,9 +211,10 @@ async function warmCommand($: EngineInterface, s: State, args: string): Promise<
     case 'error':
       return command.text
     case 'status':
-      return statusText(s, await $.clock.now()) ?? 'off'
+      return statusText(s, await $.clock.now()) ?? idleText(s)
     case 'off': {
       const wasAlways = s.always
+      s.renew = null
       await stop($, s, null, true)
       return wasAlways ? 'off, and no longer arms itself at session start' : 'off'
     }
@@ -223,6 +234,23 @@ async function clearSession($: EngineInterface, s: State): Promise<void> {
   resetForClear(s)
   s.sid = await $.session.id()
   if (s.always) await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
+}
+
+/** The origins of a message the person sent themselves, which is what arms a window again. */
+const USER_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
+
+/**
+ * Arms the window again with the person's next message, as long as the one that ran out of time was and
+ * with the same ping period. A message whose origin the engine does not name arms nothing, so a plugin's
+ * own prompt never renews a window the person let end.
+ */
+async function renewWindow($: EngineInterface, s: State, kind: string | undefined): Promise<void> {
+  const again = s.renew
+  if (again === null || s.deadline || kind === undefined || !USER_ORIGINS.includes(kind)) return
+  // The line is written before the window starts, so the sidebar's redraw already carries it.
+  const text = `the ${fmtDuration(again.window)} window ran out; this message arms another one. /cache-warm off stops it.`
+  logEvent($, s, text, `window armed again for ${fmtDuration(again.window)}`)
+  await startWindow($, s, again.window, again.every)
 }
 
 /** Scores a turn that re-wrote the context, and keeps the cache warm after it. */
@@ -288,6 +316,13 @@ export const register: Register = on => {
     const line = seedFromResume(s, e, await $.clock.now())
     s.model ??= await $.session.model()
     if (line) logEvent($, s, line, eventShort(line))
+    return r
+  })
+
+  // Only the origin is read; the prompt text passes through untouched.
+  on('prompt.submit', async ($, e, next) => {
+    const r = await next(e)
+    await renewWindow($, s, (e.origin as { kind?: string } | undefined)?.kind)
     return r
   })
 

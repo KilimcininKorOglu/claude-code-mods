@@ -35,6 +35,10 @@ export interface State {
   sid: string
   /** When the keep-warm window ends; 0 means off. */
   deadline: number
+  /** How long the running window was armed for, so one that runs out can start again as long. */
+  window: number
+  /** The window the next message of the person starts again; null when none ran out. */
+  renew: { window: number; every: number } | null
   every: number
   always: boolean
   lastRequestAt: number
@@ -51,7 +55,7 @@ export interface State {
 
 export function freshState(): State {
   return {
-    sid: '', deadline: 0, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, ctx: 0,
+    sid: '', deadline: 0, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, ctx: 0,
     compacted: false, coldWrites: [], pending: null, lastPing: null, stopped: null,
   }
 }
@@ -148,7 +152,8 @@ export function idleText(s: State): string {
   const paid = s.coldWrites.reduce((sum, w) => sum + (w.usd ?? 0), 0)
   const writes = count === 0 ? 'no cold write' : `${count} cold write${count === 1 ? '' : 's'} paid ${fmtUsd(paid)}`
   const context = s.ctx > 0 ? ` · context ${fmtTok(s.ctx)} tokens` : ''
-  return `off · ${writes}${context}`
+  const again = s.renew ? ` · ${fmtDuration(s.renew.window)} again at your next message` : ''
+  return `off${again} · ${writes}${context}`
 }
 
 /**
@@ -207,6 +212,7 @@ export function resetForClear(s: State): void {
   s.lastPing = null
   s.stopped = null
   s.event = undefined
+  s.renew = null
 }
 
 function stateLine(s: State, now: number): string {
@@ -220,6 +226,7 @@ function warmLine(s: State, now: number): string {
   const always = s.always ? ' (always)' : ''
   if (s.deadline) return `on, ${statusText(s, now) ?? ''}${always}`
   if (s.stopped) return `stopped, ${s.stopped}${always}`
+  if (s.renew) return `off, ${fmtDuration(s.renew.window)} again at your next message${always}`
   if (s.always) return `off until the next session start or /clear, which arm ${fmtDuration(DEFAULT_WINDOW_MS)} (always)`
   return `off (/cache-warm arms it for ${fmtDuration(DEFAULT_WINDOW_MS)})`
 }
