@@ -131,7 +131,7 @@ export function modeOf(arg: string): Mode | undefined {
 export function denyText(refs: readonly string[]): string {
   const rows = refs.slice(0, MAX_NAMED)
   if (refs.length > MAX_NAMED) rows.push(`${refs.length - MAX_NAMED} more`)
-  return `stopped: ${refs.length} action(s) are used by a moving ref: ${rows.join(' · ')}. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate, and only the person turns it off with /action-pin mode note.`
+  return `stopped: ${refs.length} action(s) are used by a moving ref: ${rows.join(' · ')}. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate.`
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */

@@ -70,7 +70,7 @@ export function isGuarded(command: string): boolean {
 export function denyText(open: readonly string[]): string {
   const named = open.slice(0, MAX_NAMED)
   if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
-  return `stopped: ${open.length} file(s) do not parse: ${named.join(' · ')}. Fix them and run the command again; there is no way around this gate, and only the person turns it off with /config-parse mode note.`
+  return `stopped: ${open.length} file(s) do not parse: ${named.join(' · ')}. Fix them and run the command again; there is no way around this gate.`
 }
 
 /** At most this many files are named in the deny text, the rest counted. */

@@ -149,7 +149,7 @@ describe('dep-sentinel', () => {
     await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
     expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a package stayed unchecked')
     const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
-    expect(denied.deny).toBe('stopped: 1 package(s) were installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate, and only the person turns it off with /dep-sentinel mode note.')
+    expect(denied.deny).toBe('stopped: 1 package(s) were installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate.')
     expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 package(s) still unchecked; npm, PyPI, Go, crates.io and Packagist installs are checked')
     expect((await $.tool.call({ tool: 'Bash', command: 'git status' })).result).toBe('ok')
     w.down = false

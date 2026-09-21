@@ -60,7 +60,7 @@ describe('sql', () => {
     expect(modeOf('deny')).toBe('deny')
     expect(modeOf('x')).toBe(undefined)
     expect(denyText(['src/db.ts:14'])).toBe(
-      'stopped: 1 place(s) build SQL from strings: src/db.ts:14. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate, and only the person turns it off with /sql-concat-watch mode note.',
+      'stopped: 1 place(s) build SQL from strings: src/db.ts:14. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate.',
     )
   })
 })

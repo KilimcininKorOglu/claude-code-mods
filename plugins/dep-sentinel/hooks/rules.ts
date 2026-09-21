@@ -82,7 +82,7 @@ export function modeOf(arg: string): Mode | undefined {
 
 /** The gate text both the model and the person read: which packages stayed unchecked, and the one way out. */
 export function gateText(names: readonly string[]): string {
-  return `stopped: ${names.length} package(s) were installed unchecked: ${names.join(' · ')}. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate, and only the person turns it off with /dep-sentinel mode note.`
+  return `stopped: ${names.length} package(s) were installed unchecked: ${names.join(' · ')}. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate.`
 }
 
 /** The note the model reads after an install whose check could not finish. */

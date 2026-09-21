@@ -135,7 +135,7 @@ export function modeOf(arg: string): Mode | undefined {
 
 /** The deny text both the model and the person read: where the SQL is built, and the one way out. */
 export function denyText(places: readonly string[]): string {
-  return `stopped: ${places.length} place(s) build SQL from strings: ${namedPlaces([...places])}. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate, and only the person turns it off with /sql-concat-watch mode note.`
+  return `stopped: ${places.length} place(s) build SQL from strings: ${namedPlaces([...places])}. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate.`
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */

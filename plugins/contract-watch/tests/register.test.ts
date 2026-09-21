@@ -88,7 +88,7 @@ describe('contract-watch', () => {
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a caller does not match a changed signature')
     const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
-    expect(denied.deny).toBe('stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate, and only the person turns it off with /contract-watch mode note.')
+    expect(denied.deny).toBe('stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate.')
     expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 signature(s) leave a caller behind; it needs ripwire on PATH')
     expect((await $.tool.call({ tool: 'Bash', command: 'git status' } as never)).result).toBe('ok')
     // The caller takes the new signature now: ripwire says so and the gate opens.

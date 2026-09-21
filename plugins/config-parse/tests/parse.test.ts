@@ -54,7 +54,7 @@ describe('parse', () => {
   })
 
   test('says why the command stopped and names the files, the rest counted', async () => {
-    expect(denyText(['a.json'])).toBe('stopped: 1 file(s) do not parse: a.json. Fix them and run the command again; there is no way around this gate, and only the person turns it off with /config-parse mode note.')
+    expect(denyText(['a.json'])).toBe('stopped: 1 file(s) do not parse: a.json. Fix them and run the command again; there is no way around this gate.')
     expect(denyText(Array.from({ length: 10 }, (_, i) => `f${i}.json`))).toContain('f7.json · 2 more.')
     expect(modeOf('deny')).toBe('deny')
     expect(modeOf('note')).toBe('note')

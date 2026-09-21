@@ -81,7 +81,7 @@ describe('rules', () => {
     expect(modeOf('note')).toBe('note')
     expect(modeOf('')).toBe(undefined)
     expect(gateText(['lodash'])).toBe(
-      'stopped: 1 package(s) were installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate, and only the person turns it off with /dep-sentinel mode note.',
+      'stopped: 1 package(s) were installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, then run the command again; there is no way around this gate.',
     )
   })
 })

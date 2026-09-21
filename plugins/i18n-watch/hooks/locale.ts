@@ -206,7 +206,7 @@ export function modeOf(arg: string): Mode | undefined {
 export function denyText(open: readonly { file: string; keys: string[] }[]): string {
   const named = open.slice(0, MAX_NAMED).map(o => `${o.file} (${namedPlain(o.keys)})`)
   if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
-  return `stopped: ${open.length} file(s) use translation keys the locale files lack: ${named.join(' · ')}. Add the keys to every locale file, then run the command again; there is no way around this gate, and only the person turns it off with /i18n-watch mode note.`
+  return `stopped: ${open.length} file(s) use translation keys the locale files lack: ${named.join(' · ')}. Add the keys to every locale file, then run the command again; there is no way around this gate.`
 }
 
 /** `path` shown relative to the session's directory when it is inside it. */

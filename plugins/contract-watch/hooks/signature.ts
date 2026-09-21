@@ -160,7 +160,7 @@ export function modeOf(arg: string): Mode | undefined {
 
 /** The deny text both the model and the person read: which callers do not match, and the one way out. */
 export function denyText(lines: readonly string[]): string {
-  return `stopped: ${lines.length} changed signature(s) leave a caller behind: ${lines.join(' · ')}. Bring each caller to the new signature, then run the command again; there is no way around this gate, and only the person turns it off with /contract-watch mode note.`
+  return `stopped: ${lines.length} changed signature(s) leave a caller behind: ${lines.join(' · ')}. Bring each caller to the new signature, then run the command again; there is no way around this gate.`
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one symbol keeps one section. */

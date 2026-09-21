@@ -51,7 +51,7 @@ describe('pairs', () => {
     expect(modeOf('note')).toBe('note')
     expect(modeOf('')).toBe(undefined)
     expect(denyText([{ manifest: 'package.json', lock: 'package-lock.json' }])).toBe(
-      'stopped: 1 lockfile(s) are behind their manifest: package-lock.json behind package.json. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate, and only the person turns it off with /lockfile-sync mode note.',
+      'stopped: 1 lockfile(s) are behind their manifest: package-lock.json behind package.json. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate.',
     )
   })
 })

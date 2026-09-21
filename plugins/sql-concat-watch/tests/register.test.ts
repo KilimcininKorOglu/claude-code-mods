@@ -123,7 +123,7 @@ describe('sql-concat-watch', () => {
     await edit($, 'src/users.ts', 'const q = ""', QUERY)
     expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a file builds SQL from strings')
     const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
-    expect(denied.deny).toBe('stopped: 1 place(s) build SQL from strings: src/users.ts:1. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate, and only the person turns it off with /sql-concat-watch mode note.')
+    expect(denied.deny).toBe('stopped: 1 place(s) build SQL from strings: src/users.ts:1. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate.')
     expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 file(s) still build SQL from strings')
     expect((await $.tool.call({ tool: 'Bash', command: 'git status' } as never)).result).toBe('ok')
     // The value is a query parameter now: the gate reads the file again and opens.

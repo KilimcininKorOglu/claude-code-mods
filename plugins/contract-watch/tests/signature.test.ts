@@ -67,7 +67,7 @@ describe('edit-check', () => {
     expect(modeOf('deny')).toBe('deny')
     expect(modeOf('x')).toBe(undefined)
     expect(denyText([blockingLine(blocking)])).toBe(
-      'stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate, and only the person turns it off with /contract-watch mode note.',
+      'stopped: 1 changed signature(s) leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, then run the command again; there is no way around this gate.',
     )
   })
 })

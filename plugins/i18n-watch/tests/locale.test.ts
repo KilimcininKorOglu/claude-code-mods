@@ -81,7 +81,7 @@ describe('locale files', () => {
     expect(modeOf('deny')).toBe('deny')
     expect(modeOf('x')).toBe(undefined)
     expect(denyText([{ file: 'src/Cart.vue', keys: ['checkout.fee'] }])).toBe(
-      'stopped: 1 file(s) use translation keys the locale files lack: src/Cart.vue (checkout.fee). Add the keys to every locale file, then run the command again; there is no way around this gate, and only the person turns it off with /i18n-watch mode note.',
+      'stopped: 1 file(s) use translation keys the locale files lack: src/Cart.vue (checkout.fee). Add the keys to every locale file, then run the command again; there is no way around this gate.',
     )
   })
 })

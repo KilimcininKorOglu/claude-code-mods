@@ -187,7 +187,7 @@ export function logText(stale: readonly Stale[]): string {
 /** What the deny says: why the command stopped, and the one setting that turns the gate off. */
 export function denyText(stale: readonly Stale[]): string {
   const pairs = stale.map(s => `${s.lock} behind ${s.manifest}`).join(' · ')
-  return `stopped: ${stale.length} lockfile(s) are behind their manifest: ${pairs}. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate, and only the person turns it off with /lockfile-sync mode note.`
+  return `stopped: ${stale.length} lockfile(s) are behind their manifest: ${pairs}. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate.`
 }
 
 /** One sidebar line per pair, so the section reads as a list. */

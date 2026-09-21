@@ -84,6 +84,6 @@ describe('commits', () => {
     for (const command of ['git status', 'git push --dry-run', 'git log', 'echo "gitcommit"']) expect(isGuarded(command), command).toBe(false)
     expect(modeOf('deny')).toBe('deny')
     expect(modeOf('x')).toBe(undefined)
-    expect(denyText(['A', 'B'], '.env.example')).toBe('stopped: .env.example still lacks 2 variable(s): A · B. Add them with a placeholder value and run the command again; there is no way around this gate, and only the person turns it off with /env-sync mode note.')
+    expect(denyText(['A', 'B'], '.env.example')).toBe('stopped: .env.example still lacks 2 variable(s): A · B. Add them with a placeholder value and run the command again; there is no way around this gate.')
   })
 })

@@ -28,7 +28,7 @@ export function modeOf(arg: string): Mode | undefined {
 
 /** What the deny says: why the command stopped, and the one setting that turns the gate off. */
 export function denyText(open: readonly string[], reference: string): string {
-  return `stopped: ${reference} still lacks ${open.length} variable(s): ${namedPlain(open)}. Add them with a placeholder value and run the command again; there is no way around this gate, and only the person turns it off with /env-sync mode note.`
+  return `stopped: ${reference} still lacks ${open.length} variable(s): ${namedPlain(open)}. Add them with a placeholder value and run the command again; there is no way around this gate.`
 }
 
 const unquote = (word: string): string => word.replace(/^(["'])(.*)\1$/, '$2')

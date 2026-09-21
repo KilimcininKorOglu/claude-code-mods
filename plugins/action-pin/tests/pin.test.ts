@@ -56,7 +56,7 @@ describe('pin', () => {
     expect(refOf({ action: 'actions/checkout', ref: 'v4', sha: SHA })).toBe('actions/checkout@v4')
     expect(openRefs(['a@1'], [{ action: 'a', ref: '1' }, { action: 'b', ref: '2' }])).toEqual(['a@1', 'b@2'])
     expect(denyText(['actions/checkout@v4'])).toBe(
-      'stopped: 1 action(s) are used by a moving ref: actions/checkout@v4. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate, and only the person turns it off with /action-pin mode note.',
+      'stopped: 1 action(s) are used by a moving ref: actions/checkout@v4. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate.',
     )
   })
 })
