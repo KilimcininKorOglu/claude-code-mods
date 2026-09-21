@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { cut, drawn, dropTurn, headText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { cut, dayOf, drawn, dropTurn, headText, isLogOf, logKept, logLineOf, logName, projectOf, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -171,16 +171,51 @@ describe('the heading', () => {
   })
 })
 
+describe('the log', () => {
+  test('names the file of a project and a day', () => {
+    expect(projectOf('/Users/u/Desktop/claude-code-mods/')).toBe('claude-code-mods')
+    expect(projectOf('/')).toBe('project')
+    expect(projectOf('/Users/u/my project!')).toBe('my-project-')
+    expect(dayOf(AT)).toBe('2026-09-21')
+    expect(logName('mods', AT)).toBe('mods-2026-09-21.log')
+    expect(isLogOf('mods', 'mods-2026-09-21.log')).toBe(true)
+    expect(isLogOf('mods', 'other-2026-09-21.log')).toBe(false)
+    expect(isLogOf('mods', 'mods-2026-09-21.txt')).toBe(false)
+  })
+
+  test('reads back what it wrote and drops a line of another shape', () => {
+    const one = { ...kept(section({ until: 'stream' })), at: AT }
+    const text = [logLineOf(one), 'not json', '{"at":"soon"}', '{"at":1,"consumer":"a mod","key":"k","title":"t","lines":[]}'].join('\n')
+    const read = readLog(text)
+    expect(read).toHaveLength(1)
+    expect(read[0]?.section.title).toBe('the 5th edit')
+    expect(readLog('')).toEqual([])
+  })
+
+  test('keeps the newest lines of a day and tails the newest entries', () => {
+    const lines = Array.from({ length: 502 }, (_, i) => `l${i}`)
+    expect(logKept(lines, 'new')).toHaveLength(500)
+    expect(logKept(lines, 'new').at(-1)).toBe('new')
+    const one = { ...kept(section({ until: 'stream' })), at: AT }
+    expect(tailText('/l.log', readLog(logLineOf(one)))).toBe('/l.log\n21.09 14:32 edit-loop: the 5th edit')
+    expect(tailText('/l.log', [])).toBe('/l.log: no entry yet')
+  })
+})
+
 describe('$.sidebar', () => {
-  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open })
+  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open, dir: '', file: '', log: [] })
 
   /** The clock the engine hands the noun; a fixed time keeps a stream entry's stamp readable. */
   const NOW = async (): Promise<number> => AT
 
+  /** The log the engine hands the noun; the lines land here instead of on disk. */
+  const logged: string[] = []
+  const LOG = async (entry: Kept): Promise<void> => { logged.push(logLineOf(entry)) }
+
   test('keeps nothing while the sidebar is closed', async () => {
     const state = stateOf(false)
     let draws = 0
-    const bar = createSidebar(() => { draws += 1 }, NOW, state)
+    const bar = createSidebar(() => { draws += 1 }, NOW, LOG, state)
     expect(await bar.set(section())).toBe(false)
     expect(await bar.isOpen()).toBe(false)
     expect(state.board.size).toBe(0)
@@ -190,7 +225,7 @@ describe('$.sidebar', () => {
   test('writes, replaces and clears a section while it is open', async () => {
     const state = stateOf(true)
     let draws = 0
-    const bar = createSidebar(() => { draws += 1 }, NOW, state)
+    const bar = createSidebar(() => { draws += 1 }, NOW, LOG, state)
     expect(await bar.set(section())).toBe(true)
     expect(await bar.set(section({ title: 'again' }))).toBe(true)
     expect(state.board.size).toBe(1)
@@ -203,7 +238,7 @@ describe('$.sidebar', () => {
 
   test('a stream section adds an entry instead of replacing one, and clear drops every entry of that key', async () => {
     const state = stateOf(true)
-    const bar = createSidebar(() => {}, NOW, state)
+    const bar = createSidebar(() => {}, NOW, LOG, state)
     await bar.set(section({ until: 'stream' }))
     await bar.set(section({ until: 'stream', title: 'again' }))
     await bar.set(section({ until: 'stream', key: 'other' }))
@@ -211,10 +246,13 @@ describe('$.sidebar', () => {
     expect(state.board.size).toBe(0)
     await bar.clear({ consumer: 'edit-loop', key: 'note' })
     expect(state.stream.map(s => s.key)).toEqual(['other'])
+    // Each stream entry also went to the log, with its own time.
+    expect(logged).toHaveLength(3)
+    expect(readLog(logged.join('\n'))[0]).toEqual({ at: AT, section: { consumer: 'edit-loop', key: 'note', title: 'the 5th edit', lines: [{ text: 'src/app.ts: 5 edits' }], until: 'stream' } })
   })
 
   test('refuses a section of another shape', async () => {
-    const bar = createSidebar(() => {}, NOW, stateOf(true))
+    const bar = createSidebar(() => {}, NOW, LOG, stateOf(true))
     await expect(bar.set(section({ key: 'a key' }))).rejects.toThrow('key must be')
   })
 })

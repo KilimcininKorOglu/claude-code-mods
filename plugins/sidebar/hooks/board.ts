@@ -248,3 +248,77 @@ export function pushed(stream: readonly Kept[], entry: Kept): Kept[] {
 
 /** The line a pane with no section draws. */
 export const EMPTY_TEXT = 'No mod wrote anything yet. A mod writes here while the sidebar is open.'
+
+/** Lines one day's log file keeps; the oldest go when the file passes it. */
+export const LOG_MAX = 500
+
+/** Stream entries a new session takes back from the log. */
+export const LOG_RESTORE = 10
+
+/** One logged entry: what a stream entry was, and when it was written. */
+export type Logged = { at: number; section: SidebarSection }
+
+/** The project a directory names, as the log file's own name spells it. */
+export function projectOf(cwd: string): string {
+  const last = cwd.split('/').filter(p => p !== '').pop() ?? 'project'
+  return last.replace(/[^A-Za-z0-9._-]+/g, '-').slice(0, 64) || 'project'
+}
+
+/** The day a time falls on, as the log file's own name spells it: `2026-09-21`. */
+export function dayOf(at: number): string {
+  const d = new Date(at)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** The log file of one project and one day. */
+export function logName(project: string, at: number): string {
+  return `${project}-${dayOf(at)}.log`
+}
+
+/** Whether a file name is the log of that project, so another project's log is left alone. */
+export function isLogOf(project: string, name: string): boolean {
+  return name.startsWith(`${project}-`) && name.endsWith('.log')
+}
+
+/** One line of the log: the entry as data, on one line, so a log is read back line by line. */
+export function logLineOf(entry: Kept): string {
+  const { consumer, key, title, lines } = entry
+  return JSON.stringify({ at: entry.at ?? 0, consumer, key, title, lines })
+}
+
+/** The log's own lines, newest last, cut to what one file keeps. */
+export function logKept(lines: readonly string[], line: string): string[] {
+  return [...lines, line].slice(-LOG_MAX)
+}
+
+/**
+ * The entries one log file holds, oldest first. A line of another shape is dropped without a word,
+ * because a log file is read as untrusted data: a hand-edited or truncated line must not stop a session.
+ */
+export function readLog(text: string): Logged[] {
+  const out: Logged[] = []
+  for (const line of text.split('\n')) {
+    if (line.trim() === '') continue
+    const one = loggedOf(line)
+    if (one !== undefined) out.push(one)
+  }
+  return out
+}
+
+function loggedOf(line: string): Logged | undefined {
+  try {
+    const read = JSON.parse(line) as { at?: unknown; consumer?: unknown; key?: unknown; title?: unknown; lines?: unknown }
+    if (typeof read.at !== 'number' || !isName(read.consumer) || !isName(read.key) || typeof read.title !== 'string') return undefined
+    const lines = listOf(read.lines, lineOf, MAX_SECTION_LINES)
+    return { at: read.at, section: { consumer: read.consumer, key: read.key, title: read.title, lines, until: 'stream' } }
+  } catch {
+    return undefined
+  }
+}
+
+/** The `/sidebar log` answer: where the log is, and its newest entries with their own times. */
+export function tailText(path: string, entries: readonly Logged[]): string {
+  if (entries.length === 0) return `${path}: no entry yet`
+  const rows = entries.slice(-LOG_RESTORE).reverse()
+  return [path, ...rows.map(one => `${stamp(one.at)} ${one.section.consumer}: ${one.section.title}`)].join('\n')
+}

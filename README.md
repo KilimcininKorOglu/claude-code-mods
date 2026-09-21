@@ -63,7 +63,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [sql-concat-watch](plugins/sql-concat-watch) | After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters. | L1 |
 | [lockfile-sync](plugins/lockfile-sync) | After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix). | L2 |
 | [bg-tasks](plugins/bg-tasks) | Shows the running background shell tasks on the status line with the oldest one's age, and stops one from the `/bg-tasks` pane. | L2 |
-| [sidebar](plugins/sidebar) | Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through `$.sidebar`. | L0 |
+| [sidebar](plugins/sidebar) | Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through `$.sidebar`; each finding is stamped with its time and kept in a per-project log the next session takes back. | L2 |
 | [action-pin](plugins/action-pin) | After an edit that adds a GitHub Actions step pinned to a tag or a branch, names each one with the commit SHA to write instead, from the GitHub API. | L3 |
 | [error-poke](plugins/error-poke) | Submits one continue prompt after a turn an API error killed, so the half-done work carries on instead of the session going idle, at most 99 times in a row. | L2 |
 | [output-flood](plugins/output-flood) | Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question. | L1 |

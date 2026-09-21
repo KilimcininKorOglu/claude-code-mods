@@ -15,13 +15,37 @@ const run = (args: string): CommandRunInput => ({
 
 const PANE = { title: 'Sidebar', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['Pane']
 
-/** The store as a record the test can read back, and the panes the plugin opened. */
-type World = { store: Record<string, unknown>; panes: UiPane[] }
+/** Where the logs live for the home this world answers with. */
+const LOG_DIR = '/Users/u/.claude/stream'
 
-function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { store, panes: [] }
+/** Two local times, one per day, so a restored entry's own stamp is readable. */
+const OLD = new Date(2026, 8, 19, 13, 0).getTime()
+const NOW = new Date(2026, 8, 20, 13, 0).getTime()
+
+/** One line of a log file, as the mod writes it. */
+const LINE = (consumer: string, title: string, at: number) =>
+  JSON.stringify({ at, consumer, key: 'note', title, lines: [{ text: 'a finding', kind: 'error' }] })
+
+/** The store as a record the test can read back, the panes the plugin opened, and the log files. */
+type World = { store: Record<string, unknown>; panes: UiPane[]; files: Map<string, string> }
+
+function world(on: On, store: Record<string, unknown> = {}, files: Map<string, string> = new Map()): World {
+  const w: World = { store, panes: [], files }
   mock.clock(on, { now: Date.parse('2026-09-20T10:00:00Z') })
+  mock.env(on, { HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.cwd', () => ({ value: ROOT }))
+  on('fs.read', (_, e) => {
+    const text = w.files.get(e.path)
+    if (text === undefined) throw new Error(`ENOENT ${e.path}`)
+    return { value: text }
+  })
+  on('fs.write', (_, e) => { w.files.set(e.path, e.text); return { value: undefined } })
+  on('fs.list', (_, e) => ({
+    value: [...w.files.keys()]
+      .filter(p => p.startsWith(`${e.path}/`))
+      .map(p => ({ name: p.slice(e.path.length + 1), kind: 'file' as const, size: 0, isLink: false })),
+  }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
@@ -54,6 +78,25 @@ describe('sidebar', () => {
     await started($)
     expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
     expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 0 in the stream')
+  })
+
+  test("an open pane takes this project's newest log entries back into the stream", async ($, on) => {
+    // Two days of this project's log, and another project's file the restore must leave alone.
+    const files = new Map([
+      [`${LOG_DIR}/app-2026-09-19.log`, `${LINE('edit-loop', 'yesterday', OLD)}\n`],
+      [`${LOG_DIR}/app-2026-09-20.log`, `${LINE('env-sync', 'today', NOW)}\n`],
+      [`${LOG_DIR}/other-2026-09-20.log`, `${LINE('env-sync', 'another project', NOW)}\n`],
+    ])
+    world(on, { open: true }, files)
+    await started($)
+    expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 2 in the stream')
+    const log = (await $.command.run(run('log'))).text ?? ''
+    expect(log).toContain(`${LOG_DIR}/app-2026-09-20.log`)
+    expect(log).toContain('20.09 13:00 env-sync: today')
+    expect(log).not.toContain('another project')
+    const pane = await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: PANE })
+    // The restored entry keeps the day and time it was first written, not this session's.
+    expect(await pane.find({ text: 'edit-loop: yesterday (19.09 13:00)' })).toBeDefined()
   })
 
   // The test engine raises no `ui.close`, so the person's close is measured in a live session.

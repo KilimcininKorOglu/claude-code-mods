@@ -10,6 +10,7 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. A stream entry's heading also carries the day and time it was written, in the machine's own time zone (`edit-loop: edit loop (21.09 14:32)`), so the person reads the log after the fact; a standing section carries none, because it is rewritten at every measure. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
 5. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane. The mod that offers the button serves that command itself. The label turns red under the pointer, so what a press would run is plain before the press.
 6. The three lifetimes: `session` stands at the top until the mod replaces or clears it, `stream` joins the log under it, `turn` goes when the turn ends.
+7. Every stream entry is also written to this project's own log file, `~/.claude/stream/<project>-<YYYY-MM-DD>.log`, one JSON object per line. When the pane opens, the newest 10 entries of that project's logs come back into the stream, each with the day and time it was first written, so a session started tomorrow still shows what yesterday found. A restored entry is not written to the log again. `/sidebar log` prints the file's path and its newest 10 entries.
 
 ## The API other mods use
 
@@ -60,6 +61,7 @@ Limits per section: 50 lines and 5 buttons; the lines left out are counted in th
     /sidebar            opens the pane, or closes it while it is open
     /sidebar on | off   the same, named
     /sidebar status     on or off, how many sections are up and how many entries the stream holds
+    /sidebar log        the path of this project's log of today, and its newest 10 entries
 
 ## Install
 
@@ -81,22 +83,27 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
     ❯ ./register.tsx hooks: engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via openPane), $.ui.panes (via closePane), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.list (via logFiles), $.fs.read (via readOrEmpty), $.fs.write, $.session.cwd (via openLog, restoreLog), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via openPane), $.ui.panes (via closePane), $.ui.resolve
+    ❯ ./register.tsx env writes: nothing
+    ❯ ./register.tsx env reads: HOME
 
-Reach L0, it draws and remembers.
+Reach L2, it writes a file.
 
-    1. Reads:    the sections other mods hand over, and the clock for a stream entry's own time; no file, no process, no network
+    1. Reads:    the sections other mods hand over, the clock for a stream entry's own time, HOME, the session's directory, and this project's own log files under ~/.claude/stream
     2. Runs:     the slash command a button names, through $.command.run, on the person's press only
     3. Sends:    nothing
-    4. Persists: in $.store, whether the sidebar is open; the sections live in memory for one session
-    5. Hostile input: a section comes from another plugin and is read as data: the consumer, key and title are checked, every line and button of another shape is dropped, the text is folded to one line and cut to the width, and the counts are capped
+    4. Persists: in $.store, whether the sidebar is open; in ~/.claude/stream, one log file per project and day, holding the stream entries other mods wrote
+    5. Hostile input: a section comes from another plugin and is read as data: the consumer, key and title are checked, every line and button of another shape is dropped, the text is folded to one line and cut to the width, and the counts are capped. A log line is read the same way, so a hand-edited or truncated file loses that line and nothing else.
 
 ## Limits
 
 - The pane is placed beside the transcript only under the fullscreen layout; otherwise it opens above the prompt.
 - A session that opens the sidebar from the stored choice opens it as the plugin, not as the person: the engine leaves such a pane undrawn below 144 terminal columns, 110 once the person opened that pane themselves. `/sidebar` in that session places it at any width.
 - Closing the sidebar drops every section and the whole stream. Neither comes back when it is opened again; each mod writes its own at the next update.
-- The stream holds the session only. It is not written to disk, so it does not survive a restart.
+- The stream in the pane holds the session; the log on disk is what survives a restart, and only its newest 10 entries come back.
+- The log is per project and per day. The project is the last part of the directory the session started in, so two checkouts of one repository share a log file.
+- One day's file keeps its newest 500 lines. Nothing removes an old day's file; that is yours to clean.
+- The whole file is rewritten at each entry, because the engine's `$.fs` has no append. A write that fails is passed over and the pane keeps working.
 - A stream entry's time is the moment the mod wrote it, read from `$.clock.now()` and drawn in the machine's own time zone. It is not the moment the finding happened, and it does not change afterwards.
 - The stream keeps 20 entries per consumer and 100 in all. Over its own count a mod drops its own oldest entry, never another mod's.
 - A button can only run a slash command. A mod that wants a button must serve a command for it.

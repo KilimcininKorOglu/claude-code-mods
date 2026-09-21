@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { drawn, dropTurn, pushed, readSection, sectionId, type Board, type Drawn, type Kept, type Row, EMPTY_TEXT, MAX_BOARD_LINES } from './board.ts'
+import { drawn, dropTurn, isLogOf, logKept, logLineOf, logName, projectOf, pushed, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -10,16 +10,29 @@ const PANE_TITLE = 'Sidebar'
 
 const OPEN_KEY = 'open'
 
-const USAGE = 'expects nothing (open or close), on, off or status'
+const USAGE = 'expects nothing (open or close), on, off, status or log'
+
+/** Where the logs of every project live, under the person's own Claude directory. */
+const LOG_DIR = '.claude/stream'
 
 /**
  * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
- * each stream entry's id its own, whether the pane is open, and the last button's answer.
+ * each stream entry's id its own, whether the pane is open, the last button's answer, and the log: the
+ * project it belongs to, the file of today, and that file's own lines.
  */
-export type State = { board: Board; stream: Kept[]; written: number; open: boolean; message?: string }
+export type State = {
+  board: Board
+  stream: Kept[]
+  written: number
+  open: boolean
+  message?: string
+  dir: string
+  file: string
+  log: string[]
+}
 
 function emptyState(): State {
-  return { board: new Map(), stream: [], written: 0, open: false }
+  return { board: new Map(), stream: [], written: 0, open: false, dir: '', file: '', log: [] }
 }
 
 /** Takes down every section and stream entry, because a closed sidebar keeps nothing. */
@@ -47,6 +60,8 @@ async function pressButton($: EngineInterface, state: State, command: string, ar
 async function openPane($: EngineInterface, state: State): Promise<void> {
   await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
   state.open = true
+  // An open pane starts with what this project's log last held, because a closed sidebar keeps nothing.
+  await restoreLog($, state)
 }
 
 async function closePane($: EngineInterface, state: State): Promise<void> {
@@ -66,9 +81,65 @@ async function setOpen($: EngineInterface, state: State, open: boolean): Promise
   return 'off: the sidebar is closed and each mod shows its own lines again'
 }
 
+/** Where this project's log of today lives, and the lines it already holds. */
+async function openLog($: EngineInterface, state: State, at: number): Promise<void> {
+  const home = (await $.env.get('HOME')) ?? ''
+  if (home === '') return
+  state.dir = `${home}/${LOG_DIR}`
+  state.file = `${state.dir}/${logName(projectOf(await $.session.cwd()), at)}`
+  state.log = readLines(await readOrEmpty($, state.file))
+}
+
+/** A file's text, or an empty string when it is missing or unreadable. */
+async function readOrEmpty($: EngineInterface, path: string): Promise<string> {
+  try {
+    return String(await $.fs.read(path))
+  } catch {
+    // The file is not written yet, or the person removed it.
+    return ''
+  }
+}
+
+function readLines(text: string): string[] {
+  return text.split('\n').filter(line => line.trim() !== '')
+}
+
+/** This project's log files, newest day first. */
+async function logFiles($: EngineInterface, state: State, project: string): Promise<string[]> {
+  try {
+    const names = (await $.fs.list(state.dir)).filter(e => e.kind === 'file' && isLogOf(project, e.name)).map(e => e.name)
+    return names.sort().reverse()
+  } catch {
+    // No log directory yet.
+    return []
+  }
+}
+
+/**
+ * Takes the newest entries of this project's log back into the stream, oldest first, each with the day
+ * and time it was first written. A restored entry is never written to the log again, because it is put
+ * into the stream directly rather than through `$.sidebar.set`.
+ */
+async function restoreLog($: EngineInterface, state: State): Promise<void> {
+  if (state.dir === '') return
+  const project = projectOf(await $.session.cwd())
+  const found = []
+  for (const name of await logFiles($, state, project)) {
+    found.unshift(...readLog(await readOrEmpty($, `${state.dir}/${name}`)))
+    if (found.length >= LOG_RESTORE) break
+  }
+  for (const one of found.slice(-LOG_RESTORE)) {
+    const kept = readSection(one.section)
+    if (typeof kept === 'string') continue
+    state.stream = pushed(state.stream, { ...kept, id: `${kept.id}#${++state.written}`, at: one.at })
+  }
+  if (found.length > 0) $.ui.invalidate('ui.render')
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') return setOpen($, state, word === 'on')
+  if (word === 'log') return state.file === '' ? 'no log file: HOME was not read' : tailText(state.file, readLog(await readOrEmpty($, state.file)))
   if (word === 'status') return state.open ? `on, ${state.board.size} section(s), ${state.stream.length} in the stream` : 'off'
   return word === '' ? setOpen($, state, !state.open) : USAGE
 }
@@ -78,7 +149,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
  * engine call the `engine.create` hook closes over, because the validator refuses that engine as an
  * argument.
  */
-export function createSidebar(redraw: () => void, now: () => Promise<number>, state: State): Sidebar {
+export function createSidebar(redraw: () => void, now: () => Promise<number>, log: (entry: Kept) => Promise<void>, state: State): Sidebar {
   return {
     set: async (section: SidebarSection) => {
       if (!state.open) return false
@@ -87,8 +158,11 @@ export function createSidebar(redraw: () => void, now: () => Promise<number>, st
       // A stream entry never replaces another, so the same key twice reads as two entries of a log.
       // It also carries the time it was written, which its heading draws; a standing section does not,
       // because that one is rewritten at every measure and its time would say nothing.
-      if (kept.until === 'stream') state.stream = pushed(state.stream, { ...kept, id: `${kept.id}#${++state.written}`, at: await now() })
-      else state.board.set(kept.id, kept)
+      if (kept.until === 'stream') {
+        const entry = { ...kept, id: `${kept.id}#${++state.written}`, at: await now() }
+        state.stream = pushed(state.stream, entry)
+        await log(entry)
+      } else state.board.set(kept.id, kept)
       redraw()
       return true
     },
@@ -148,12 +222,23 @@ export const register: Register = on => {
 
   on('engine.create', async (_, e, next) => {
     const below = await next(e)
-    return { ...below, sidebar: createSidebar(() => below.ui.invalidate('ui.render'), () => below.clock.now(), state) }
+    /** Writes one stream entry to this project's log of today, so a later session takes it back. */
+    const log = async (entry: Kept): Promise<void> => {
+      if (state.file === '') return
+      state.log = logKept(state.log, logLineOf(entry))
+      try {
+        await below.fs.write(state.file, `${state.log.join('\n')}\n`)
+      } catch {
+        // The log is a convenience; a write that fails must not break the pane.
+      }
+    }
+    return { ...below, sidebar: createSidebar(() => below.ui.invalidate('ui.render'), () => below.clock.now(), log, state) }
   })
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status (sidebar)', argumentHint: '[on | off | status]' })
+    await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status, log (sidebar)', argumentHint: '[on | off | status | log]' })
+    await openLog($, state, await $.clock.now())
     if ((await $.store.get(OPEN_KEY)) === true) await openPane($, state)
     return r
   })
