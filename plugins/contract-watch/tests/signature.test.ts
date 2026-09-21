@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { blockingLine, changedSignatures, denyText, isBlocking, isGuarded, modeOf, noteText, parseCheck, signaturesIn } from '../hooks/signature.ts'
+import { blockingLine, changedSignatures, denyText, isBlocking, isGuarded, logText, modeOf, noteText, parseCheck, sidebarLines, signaturesIn } from '../hooks/signature.ts'
 
 tier('user')
 
@@ -42,22 +42,40 @@ const OUTPUT = '<!-- legend -->\n<edit-check sym="parse" t="fn" p="main.go:3" st
 describe('edit-check', () => {
   test('reads the output and names every caller of a changed contract', async () => {
     const check = parseCheck(OUTPUT)
-    expect(check).toEqual({ sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 0, callers: [{ name: 'main', at: 'main.go:5' }, { name: 'other', at: 'main.go:9' }] })
+    expect(check).toEqual({
+      sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 0,
+      callers: [{ name: 'main', at: 'main.go:5', mismatch: false }, { name: 'other', at: 'main.go:9', mismatch: false }],
+    })
     if (check === undefined) throw new Error('parsed')
     expect(noteText(check)).toBe('contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; check each caller: main (main.go:5), other (main.go:9).')
   })
 
+  test('a caller ripwire marks is named first, the same-named ones after it', async () => {
+    const marked = parseCheck('<edit-check sym="parse" status="contract-change" params_was="1" params_now="2" incompatible="1"><c n="main" p="main.go:5" incompatible="1"/><c n="other" p="lib.go:9"/></edit-check>')
+    if (marked === undefined) throw new Error('parsed')
+    expect(noteText(marked)).toBe(
+      'contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; these callers do not match the new arity: main (main.go:5). Other callers of that name, which the call graph binds by name and may belong to another type: other (lib.go:9). Check each.',
+    )
+    expect(logText(marked)).toBe('parse changed from 1 to 2 parameter(s); do not match: main (main.go:5); same name: other (lib.go:9)')
+    expect(sidebarLines(marked)).toEqual([
+      { text: 'parse changed from 1 to 2 parameter(s)', kind: 'error' },
+      { text: 'main (main.go:5)', kind: 'error' },
+      { text: 'same name, may be another type', kind: 'dim' },
+      { text: 'other (lib.go:9)', kind: 'dim' },
+    ])
+  })
+
   test('says nothing for an unchanged contract, no callers, or no edit-check element', async () => {
-    expect(noteText({ sym: 'a', status: 'unchanged', incompatible: 0, callers: [{ name: 'b', at: 'x:1' }] })).toBe(undefined)
+    expect(noteText({ sym: 'a', status: 'unchanged', incompatible: 0, callers: [{ name: 'b', at: 'x:1', mismatch: false }] })).toBe(undefined)
     expect(noteText({ sym: 'a', status: 'contract-change', incompatible: 0, callers: [] })).toBe(undefined)
     expect(parseCheck('ripwire: no symbol a')).toBe(undefined)
-    const many = { sym: 'a', status: 'contract-change', paramsWas: 2, paramsNow: 2, incompatible: 0, callers: Array.from({ length: 12 }, (_, i) => ({ name: `c${i}`, at: `f:${i}` })) }
+    const many = { sym: 'a', status: 'contract-change', paramsWas: 2, paramsNow: 2, incompatible: 0, callers: Array.from({ length: 12 }, (_, i) => ({ name: `c${i}`, at: `f:${i}`, mismatch: false })) }
     expect(noteText(many)).toContain('changed its parameters since the last commit')
     expect(noteText(many)).toContain('c9 (f:9) and 2 more.')
   })
 
   test('the gate stops only a check ripwire calls incompatible, and says why', () => {
-    const blocking = { sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 1, callers: [{ name: 'main', at: 'main.go:5' }] }
+    const blocking = { sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 1, callers: [{ name: 'main', at: 'main.go:5', mismatch: true }] }
     expect(isBlocking(blocking)).toBe(true)
     expect(isBlocking({ ...blocking, incompatible: 0 })).toBe(false)
     expect(isBlocking({ ...blocking, status: 'unchanged' })).toBe(false)

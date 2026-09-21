@@ -49,8 +49,15 @@ export function changedSignatures(before: string, after: string): string[] {
   return [...signaturesIn(after)].filter(([name, params]) => old.has(name) && old.get(name) !== params).map(([name]) => name)
 }
 
+/**
+ * One caller `ripwire --edit-check` names. `mismatch` is ripwire's own mark on that caller: every folded
+ * definition it sees disagrees with the new arity. Without it the caller only shares the symbol's name,
+ * and a call of another type's method of that name reads the same, because the call graph binds by name.
+ */
+export type Caller = { name: string; at: string; mismatch: boolean }
+
 /** What `ripwire --edit-check` says of one symbol: whether its contract changed, and who calls it. */
-export type Check = { sym: string; status: string; paramsWas?: number; paramsNow?: number; incompatible: number; callers: { name: string; at: string }[] }
+export type Check = { sym: string; status: string; paramsWas?: number; paramsNow?: number; incompatible: number; callers: Caller[] }
 
 function attr(tag: string, name: string): string | undefined {
   return new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1]
@@ -66,7 +73,7 @@ export function parseCheck(output: string): Check | undefined {
   const text = output.replace(/<!--[\s\S]*?-->/g, '')
   const head = /<edit-check\b[^>]*>/.exec(text)?.[0]
   if (head === undefined) return undefined
-  const callers = [...text.matchAll(/<c\b[^>]*\/>/g)].map(m => ({ name: attr(m[0], 'n') ?? '?', at: attr(m[0], 'p') ?? '?' }))
+  const callers = [...text.matchAll(/<c\b[^>]*\/>/g)].map(m => ({ name: attr(m[0], 'n') ?? '?', at: attr(m[0], 'p') ?? '?', mismatch: attr(m[0], 'incompatible') === '1' }))
   return { sym: attr(head, 'sym') ?? '?', status: attr(head, 'status') ?? '', paramsWas: count(head, 'params_was'), paramsNow: count(head, 'params_now'), incompatible: count(head, 'incompatible') ?? 0, callers }
 }
 
@@ -78,9 +85,22 @@ function paramsText(c: Check): string {
   return `changed from ${c.paramsWas} to ${c.paramsNow} parameter(s)`
 }
 
+function listed(rows: readonly Caller[]): string {
+  const named = rows.slice(0, MAX_CALLERS).map(x => `${x.name} (${x.at})`).join(', ')
+  return rows.length > MAX_CALLERS ? `${named} and ${rows.length - MAX_CALLERS} more` : named
+}
+
+/** The callers ripwire marks as not matching the new arity, and the ones that only share the name. */
+function split(c: Check): { bad: Caller[]; same: Caller[] } {
+  return { bad: c.callers.filter(x => x.mismatch), same: c.callers.filter(x => !x.mismatch) }
+}
+
+/** The caller part of the model's note: the marked callers first, the same-named ones after them. */
 function namedCallers(c: Check): string {
-  const named = c.callers.slice(0, MAX_CALLERS).map(x => `${x.name} (${x.at})`).join(', ')
-  return c.callers.length > MAX_CALLERS ? `${named} and ${c.callers.length - MAX_CALLERS} more` : named
+  const { bad, same } = split(c)
+  if (bad.length === 0) return `check each caller: ${listed(same)}`
+  const rest = same.length === 0 ? '' : ` Other callers of that name, which the call graph binds by name and may belong to another type: ${listed(same)}.`
+  return `these callers do not match the new arity: ${listed(bad)}.${rest} Check each`
 }
 
 /** Whether this check has something to report: a changed contract that something calls. */
@@ -91,7 +111,7 @@ function isReported(c: Check): boolean {
 /** The note for one changed contract, or undefined when nothing calls it. */
 export function noteText(c: Check): string | undefined {
   if (!isReported(c)) return undefined
-  return `contract-watch: ${c.sym} ${paramsText(c)} since the last commit; check each caller: ${namedCallers(c)}.`
+  return `contract-watch: ${c.sym} ${paramsText(c)} since the last commit; ${namedCallers(c)}.`
 }
 
 /**
@@ -100,18 +120,29 @@ export function noteText(c: Check): string | undefined {
  */
 export function logText(c: Check): string | undefined {
   if (!isReported(c)) return undefined
-  return `${c.sym} ${paramsText(c)}; callers: ${namedCallers(c)}`
+  const { bad, same } = split(c)
+  if (bad.length === 0) return `${c.sym} ${paramsText(c)}; callers: ${listed(same)}`
+  const rest = same.length === 0 ? '' : `; same name: ${listed(same)}`
+  return `${c.sym} ${paramsText(c)}; do not match: ${listed(bad)}${rest}`
 }
 
 /** A sidebar line, as the sidebar mod's contract names it. */
 type Line = { text: string; kind: 'error' | 'dim' }
 
-/** The change on the first line, then one line per caller, so the section reads as a list. */
+function rowsOf(callers: readonly Caller[], kind: 'error' | 'dim'): Line[] {
+  const out: Line[] = callers.slice(0, MAX_CALLERS).map(x => ({ text: `${x.name} (${x.at})`, kind }))
+  const rest = callers.length - MAX_CALLERS
+  if (rest > 0) out.push({ text: `${rest} more`, kind })
+  return out
+}
+
+/** The change on the first line, then the marked callers in red and the same-named ones faint under them. */
 export function sidebarLines(c: Check): Line[] {
-  const named = c.callers.slice(0, MAX_CALLERS).map(x => ({ text: `${x.name} (${x.at})`, kind: 'dim' as const }))
-  const rest = c.callers.length - MAX_CALLERS
-  if (rest > 0) named.push({ text: `${rest} more`, kind: 'dim' })
-  return [{ text: `${c.sym} ${paramsText(c)}`, kind: 'error' }, ...named]
+  const { bad, same } = split(c)
+  const head: Line = { text: `${c.sym} ${paramsText(c)}`, kind: 'error' }
+  if (bad.length === 0) return [head, ...rowsOf(same, 'dim')]
+  const tail = same.length === 0 ? [] : [{ text: 'same name, may be another type', kind: 'dim' as const }, ...rowsOf(same, 'dim')]
+  return [head, ...rowsOf(bad, 'error'), ...tail]
 }
 
 /**

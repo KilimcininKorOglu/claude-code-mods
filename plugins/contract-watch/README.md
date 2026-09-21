@@ -11,13 +11,17 @@ A Claude Code Mod that tells the model which callers to check after it changes a
 
        contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; check each caller: main (main.go:5), other (main.go:9).
 
-   A caller is named with the definition it sits in; at most 10 are named, the rest counted.
+   A caller is named with the definition it sits in; at most 10 are named, the rest counted. When ripwire marks a caller `incompatible="1"`, every folded definition it sees disagrees with the new arity, and those callers come first, under their own sentence:
+
+       contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; these callers do not match the new arity: main (main.go:5). Other callers of that name, which the call graph binds by name and may belong to another type: other (lib.go:9). Check each.
+
+   The second group matters in a codebase where several types define a method of one name: the call graph binds a call by its name, so `Messaging::sendAlert` reads the same as `SNMP_Monitor::sendAlert`. Neither group is dropped.
 5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the finding alone, without the instruction:
 
-       contract-watch: parse changed from 1 to 2 parameter(s); callers: main (main.go:5), other (main.go:9)
+       contract-watch: parse changed from 1 to 2 parameter(s); do not match: main (main.go:5); same name: other (lib.go:9)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, that finding goes there instead, the change on the first line and one line per caller, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, that finding goes there instead, the change on the first line, the marked callers in red under it and the same-named ones faint after a `same name, may be another type` line, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 The note lists every caller, not only the ones ripwire proves incompatible: in a live check on Go, ripwire reported `incompatible="0"` while both callers still passed one argument (measured with ripwire on 2.1.278).
 
