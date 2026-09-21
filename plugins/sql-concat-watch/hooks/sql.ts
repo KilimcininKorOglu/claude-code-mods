@@ -89,6 +89,14 @@ export function noteText(places: string[]): string {
   return `sql-concat-watch: this edit builds SQL from strings: ${namedPlaces(places)}. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(places: string[]): string {
+  return `sql-concat-watch: ${places.length} place(s) still build SQL from strings: ${namedPlaces(places)}. Pass the values as query parameters (?, $1, :name), or take the lines out.`
+}
+
 /** The transcript line: the places alone, without the instruction the model reads. The engine adds the mod name. */
 export function logText(places: string[]): string {
   return `SQL built from strings: ${namedPlaces(places)}`

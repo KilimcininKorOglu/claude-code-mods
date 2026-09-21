@@ -1,6 +1,6 @@
 {
   "name": "sql-concat-watch",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Tells the model when an edit builds SQL by joining strings instead of passing query parameters. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, isGuarded, isSource, lineOf, logText, modeOf, noteText, openPlaces, sectionKey, shownPath, sidebarLines, sqlLines, type Mode } from './sql.ts'
+import { denyText, doneLines, doneLog, isGuarded, isSource, lineOf, logText, modeOf, noteText, openNote, openPlaces, sectionKey, shownPath, sidebarLines, sqlLines, type Mode } from './sql.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -11,11 +11,11 @@ type Finding = { path: string; lines: string[]; places: string[] }
 
 /**
  * The on/off setting read at session start, the mode, whether a read error was logged, the open findings
- * by shown path, and the directory the session started in. A path is shown against that directory, not
+ * by shown path, whether the model is owed a note for them, and the directory the session started in. A path is shown against that directory, not
  * against `$.session.cwd()`, because a Bash `cd` moves the session's directory and would then leave every
  * path outside it written in full.
  */
-type State = { enabled: boolean; mode: Mode; reported: boolean; open: Map<string, Finding>; root?: string }
+type State = { enabled: boolean; mode: Mode; reported: boolean; open: Map<string, Finding>; owed: boolean; root?: string }
 
 /** Whether the file is no longer there, so a finding of it closes instead of standing for good. */
 async function isGone($: EngineInterface, path: string): Promise<boolean> {
@@ -138,7 +138,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, mode: 'note', reported: false, open: new Map() }
+  const state: State = { enabled: true, mode: 'note', reported: false, open: new Map(), owed: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -151,6 +151,26 @@ export const register: Register = on => {
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'sql-concat-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  /*
+   * The turn's end reads every open file again and owes the model a note for what is left, because a
+   * finding it did not close would otherwise stand in the pane and reach it never again.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || !state.enabled) return r
+    await closeResolved($, state)
+    state.owed = state.open.size > 0
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    if (!state.owed || state.open.size === 0) return next(e)
+    state.owed = false
+    const note = openNote([...state.open.values()].flatMap(f => f.places))
+    return next({ ...e, context: [...(e.context ?? []), note] })
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const stop = await gate($, state, e.command)

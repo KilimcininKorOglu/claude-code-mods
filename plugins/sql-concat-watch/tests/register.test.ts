@@ -148,6 +148,35 @@ describe('sql-concat-watch', () => {
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
+  test('the turn end reads the open file again and the next prompt carries the note', async ($, on) => {
+    const w = world(on)
+    const notes: string[][] = []
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    on('prompt.submit', (_, e) => {
+      notes.push([...(e.context ?? [])])
+      return { text: e.text }
+    })
+    await started($)
+    w.file = `${QUERY}\n`
+    await edit($, 'src/users.ts', 'const q = ""', QUERY)
+    const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+    // No turn has ended yet, so the model is owed nothing.
+    await prompt('first')
+    expect(notes[0]).toEqual([])
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await prompt('second')
+    expect(notes[1]?.[0]).toBe('sql-concat-watch: 1 place(s) still build SQL from strings: src/users.ts:1. Pass the values as query parameters (?, $1, :name), or take the lines out.')
+    // One note per turn: the next prompt without a turn in between carries none.
+    await prompt('third')
+    expect(notes[2]).toEqual([])
+    // The value is a query parameter now: the turn's end closes the finding and owes no note.
+    w.file = 'const q = "SELECT * FROM users WHERE id = ?"\n'
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe('the SQL built from strings is gone from src/users.ts: src/users.ts:1')
+    await prompt('fourth')
+    expect(notes[3]).toEqual([])
+  })
+
   test('a failed read leaves the line number out and is logged once', async ($, on) => {
     const w = world(on)
     await started($)
