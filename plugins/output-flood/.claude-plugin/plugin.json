@@ -1,0 +1,11 @@
+{
+  "name": "output-flood",
+  "version": "0.1.0",
+  "description": "Notes a Bash result over a size limit and names the way to narrow it. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

@@ -349,6 +349,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "output-flood",
+      "source": "./plugins/output-flood",
+      "description": "Notes a Bash result over a size limit and names the way to narrow it.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
