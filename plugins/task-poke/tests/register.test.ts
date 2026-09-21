@@ -10,6 +10,8 @@ import type {
   TurnCompleteReason,
 } from 'claude-code'
 
+import { DEFAULT_MAX_POKES, limitOf } from '../hooks/register.ts'
+
 tier('user')
 
 const session: SessionStartInput = { surface: 'terminal', isInteractive: true, cwd: '/work' }
@@ -112,7 +114,7 @@ describe('task-poke', () => {
     await $.turn.complete(turn())
     await flush()
     expect(w.submitted).toHaveLength(1)
-    expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/5')
+    expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/99')
   })
 
   test('stays idle when every TodoWrite task is completed', async ($, on) => {
@@ -170,21 +172,38 @@ describe('task-poke', () => {
     expect(w.submitted).toHaveLength(0)
   })
 
-  test('stops after five pokes and a user prompt resets the count', async ($, on) => {
+  test('stops after the last poke and a user prompt resets the count', async ($, on) => {
     const w = world(on)
     w.setMessages([todoWrite('pending')])
     await $.session.start(session)
-    for (let i = 0; i < 7; i += 1) {
+    for (let i = 0; i < DEFAULT_MAX_POKES + 2; i += 1) {
       await $.turn.complete(turn())
       await flush()
     }
-    expect(w.submitted).toHaveLength(5)
-    expect(w.logs.filter(l => l.includes('stopped after 5 pokes'))).toHaveLength(1)
+    expect(w.submitted).toHaveLength(DEFAULT_MAX_POKES)
+    expect(w.logs.filter(l => l.includes('stopped after 99 pokes'))).toHaveLength(1)
 
     await $.prompt.submit(typed())
     await $.turn.complete(turn())
     await flush()
-    expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(6)
+    expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(DEFAULT_MAX_POKES + 1)
+  })
+
+  test('the limit the person sets holds, and an argument it cannot read changes nothing', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    for (const bad of ['0', '1000', 'many', '']) expect(limitOf(bad), bad).toBe(undefined)
+    expect(limitOf('2')).toBe(2)
+    expect((await $.command.run(run('limit x'))).text).toBe('limit expects a whole number from 1 to 999')
+    expect((await $.command.run(run('limit 2'))).text).toBe('limit 2: at most 2 poke(s) go out for one stretch of unfinished tasks')
+    for (let i = 0; i < 4; i += 1) {
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(w.submitted).toHaveLength(2)
+    expect(w.logs.filter(l => l.includes('stopped after 2 pokes'))).toHaveLength(1)
+    expect((await $.command.run(run(''))).text).toContain('2/2 pokes')
   })
 
   test('does not poke after an interrupted turn, a subagent turn or a question to the user', async ($, on) => {
@@ -236,7 +255,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     await $.turn.complete(turn())
     await flush()
-    expect(bar.sections).toEqual([{ key: 'pokes', title: 'task list', lines: [{ text: '2 unfinished tasks, poke 1/5', kind: 'ok' }], until: 'session' }])
+    expect(bar.sections).toEqual([{ key: 'pokes', title: 'task list', lines: [{ text: '2 unfinished tasks, poke 1/99', kind: 'ok' }], until: 'session' }])
     expect(w.logs).toEqual([])
   })
 
@@ -246,15 +265,18 @@ describe('task-poke', () => {
     seatSidebar(on, bar)
     w.setMessages([todoWrite('pending')])
     await $.session.start(session)
-    for (let i = 0; i < 7; i += 1) {
+    for (let i = 0; i < DEFAULT_MAX_POKES + 2; i += 1) {
       await $.turn.complete(turn())
       await flush()
     }
-    expect(bar.sections.map(s => s.lines[0]?.kind)).toEqual(['ok', 'ok', 'ok', 'warn', 'error', 'error', 'error', 'error'])
+    // One entry per turn, plus the limit entry: green up to the last poke, then yellow, then red.
+    const kinds = bar.sections.map(s => s.lines[0]?.kind)
+    expect(kinds.slice(0, DEFAULT_MAX_POKES - 2)).toEqual(Array.from({ length: DEFAULT_MAX_POKES - 2 }, () => 'ok'))
+    expect(kinds.slice(DEFAULT_MAX_POKES - 2)).toEqual(['warn', 'error', 'error', 'error', 'error'])
     const stopped = bar.sections.filter(s => s.key === 'limit')
     expect(stopped).toHaveLength(1)
     expect(stopped[0]?.until).toBe('stream')
-    expect(stopped[0]?.lines[0]).toEqual({ text: 'stopped after 5 pokes with unfinished tasks. Send a prompt to reset the count.', kind: 'error' })
+    expect(stopped[0]?.lines[0]).toEqual({ text: 'stopped after 99 pokes with unfinished tasks. Send a prompt to reset the count.', kind: 'error' })
     expect(w.logs).toEqual([])
   })
 

@@ -1,8 +1,16 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { readTurn } from './tasks.ts'
 
-const MAX_POKES = 5
+/** Pokes sent for one stretch of unfinished tasks, until the person sets another limit. */
+export const DEFAULT_MAX_POKES = 99
+
+/** The band `/task-poke limit <n>` takes; a value outside it is refused, never clamped. */
+const MIN_LIMIT = 1
+const MAX_LIMIT = 999
+
 const ENABLED_KEY = 'enabled'
+const LIMIT_KEY = 'limit'
+const USAGE = 'expects nothing (the status), on, off or limit <n>'
 const USER_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
 const POKE_TEXT =
   'The task list still has unfinished tasks. Continue with the next pending or in-progress task. ' +
@@ -13,24 +21,37 @@ const SECTION = { consumer: 'task-poke', key: 'pokes' }
 
 type Decision = { kind: 'idle' } | { kind: 'poke'; open: number } | { kind: 'limit' }
 
-/** The on/off setting, the pokes sent since the last user prompt, and the last error logged. */
-type State = { enabled: boolean; pokes: number; limitLogged: boolean; lastError?: string }
+/** The on/off setting, the limit, the pokes sent since the last user prompt, and the last error logged. */
+type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastError?: string }
 
 /** Decides what to do after a main-loop turn. `pokes` counts the pokes sent since the last user prompt. */
-export function decide(open: number, askedUser: boolean, pokes: number): Decision {
+export function decide(open: number, askedUser: boolean, pokes: number, max: number): Decision {
   if (open === 0 || askedUser) return { kind: 'idle' }
-  if (pokes >= MAX_POKES) return { kind: 'limit' }
+  if (pokes >= max) return { kind: 'limit' }
   return { kind: 'poke', open }
 }
 
-/** The count line's colour: red once the pokes stopped, yellow at the last one, green below. */
-function countTone(pokes: number): 'ok' | 'warn' | 'error' {
-  if (pokes >= MAX_POKES) return 'error'
-  return pokes >= MAX_POKES - 1 ? 'warn' : 'ok'
+/** The limit a `/task-poke limit <word>` argument names, or undefined when it is not one. */
+export function limitOf(arg: string): number | undefined {
+  if (!/^\d{1,3}$/.test(arg)) return undefined
+  const n = Number(arg)
+  return n >= MIN_LIMIT && n <= MAX_LIMIT ? n : undefined
 }
 
-function countText(open: number, pokes: number): string {
-  return `${open} unfinished tasks, poke ${pokes}/${MAX_POKES}`
+/** The answer of `/task-poke limit <n>`, or of an argument it cannot read. */
+function limitText(limit: number | undefined): string {
+  if (limit === undefined) return `limit expects a whole number from ${MIN_LIMIT} to ${MAX_LIMIT}`
+  return `limit ${limit}: at most ${limit} poke(s) go out for one stretch of unfinished tasks`
+}
+
+/** The count line's colour: red once the pokes stopped, yellow at the last one, green below. */
+function countTone(pokes: number, max: number): 'ok' | 'warn' | 'error' {
+  if (pokes >= max) return 'error'
+  return pokes >= max - 1 ? 'warn' : 'ok'
+}
+
+function countText(open: number, pokes: number, max: number): string {
+  return `${open} unfinished tasks, poke ${pokes}/${max}`
 }
 
 /**
@@ -38,10 +59,10 @@ function countText(open: number, pokes: number): string {
  * sidebar closed, and without that mod installed, only a turn that sent a poke writes the line, as
  * before, because a line per turn would fill the transcript.
  */
-async function toCount($: EngineInterface, open: number, pokes: number, log: boolean): Promise<void> {
-  const text = countText(open, pokes)
+async function toCount($: EngineInterface, open: number, pokes: number, max: number, log: boolean): Promise<void> {
+  const text = countText(open, pokes, max)
   try {
-    if (await $.sidebar.set({ ...SECTION, title: 'task list', lines: [{ text, kind: countTone(pokes) }], until: 'session', order: 20 })) return
+    if (await $.sidebar.set({ ...SECTION, title: 'task list', lines: [{ text, kind: countTone(pokes, max) }], until: 'session', order: 20 })) return
   } catch {
     // The sidebar mod is not installed.
   }
@@ -81,10 +102,25 @@ function sendPoke($: EngineInterface): void {
 
 /** The limit: the count turns red, and one entry says the pokes stopped. */
 async function atLimit($: EngineInterface, state: State, open: number): Promise<void> {
-  await toCount($, open, state.pokes, false)
+  await toCount($, open, state.pokes, state.max, false)
   if (state.limitLogged) return
   state.limitLogged = true
-  await toStream($, 'limit', 'pokes stopped', `stopped after ${MAX_POKES} pokes with unfinished tasks. Send a prompt to reset the count.`)
+  await toStream($, 'limit', 'pokes stopped', `stopped after ${state.max} pokes with unfinished tasks. Send a prompt to reset the count.`)
+}
+
+/** Writes the limit the person set; it holds across sessions, because it lives in $.store. */
+async function setLimit($: EngineInterface, state: State, arg: string): Promise<string> {
+  const limit = limitOf(arg)
+  if (limit === undefined) return limitText(undefined)
+  state.max = limit
+  await $.store.set(LIMIT_KEY, limit)
+  return limitText(limit)
+}
+
+/** The stored limit, or the default when nothing is stored and when the stored value is not one. */
+async function readLimit($: EngineInterface): Promise<number> {
+  const stored = await $.store.get(LIMIT_KEY)
+  return typeof stored === 'number' && limitOf(String(stored)) !== undefined ? stored : DEFAULT_MAX_POKES
 }
 
 /**
@@ -100,16 +136,16 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
     return
   }
   state.lastError = undefined
-  const decision = decide(reading.open, reading.askedUser, state.pokes)
+  const decision = decide(reading.open, reading.askedUser, state.pokes, state.max)
   if (decision.kind === 'limit') return atLimit($, state, reading.open)
-  if (decision.kind === 'idle') return reading.open === 0 ? clearCount($) : toCount($, reading.open, state.pokes, false)
+  if (decision.kind === 'idle') return reading.open === 0 ? clearCount($) : toCount($, reading.open, state.pokes, state.max, false)
   state.pokes += 1
-  await toCount($, decision.open, state.pokes, true)
+  await toCount($, decision.open, state.pokes, state.max, true)
   sendPoke($)
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, pokes: 0, limitLogged: false }
+  const state: State = { enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false }
 
   const resetCount = (): void => {
     state.pokes = 0
@@ -118,6 +154,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.max = await readLimit($)
     // Claude Code offers TaskCreate and TodoWrite on some models only, and without them there is nothing
     // to count. Turn them on unless the user set the variable. It must be set before next(e).
     if (state.enabled && (await $.env.get('CLAUDE_CODE_ENABLE_TODO_TOOLS')) === undefined) {
@@ -127,8 +164,8 @@ export const register: Register = on => {
     resetCount()
     await $.command.register({
       name: 'task-poke',
-      description: 'Continue automatically while the task list has unfinished tasks: on, off or status (task-poke)',
-      argumentHint: '[on | off | status]',
+      description: 'Continue automatically while the task list has unfinished tasks: status, on, off, limit (task-poke)',
+      argumentHint: '[on | off | limit <n>]',
       immediate: true,
     })
     return r
@@ -141,8 +178,12 @@ export const register: Register = on => {
       await $.store.set(ENABLED_KEY, state.enabled)
       resetCount()
       if (!state.enabled) await clearCount($)
+    } else if (arg.startsWith('limit')) {
+      return { text: await setLimit($, state, arg.slice(5).trim()) }
+    } else if (arg !== '' && arg !== 'status') {
+      return { text: USAGE }
     }
-    return { text: `task-poke is ${state.enabled ? 'on' : 'off'}, ${state.pokes}/${MAX_POKES} pokes since your last prompt` }
+    return { text: `task-poke is ${state.enabled ? 'on' : 'off'}, ${state.pokes}/${state.max} pokes since your last prompt` }
   })
 
   // Only the origin is read. The prompt text passes through untouched. This hook never sees its own pokes.
