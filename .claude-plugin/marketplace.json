@@ -342,7 +342,7 @@
     {
       "name": "error-poke",
       "source": "./plugins/error-poke",
-      "description": "Sends one continue prompt after a turn an API error killed, at most 5 times in a row.",
+      "description": "Sends one continue prompt after a turn an API error killed, at most 99 times in a row by default.",
       "category": "development",
       "tags": [
         "mods",
