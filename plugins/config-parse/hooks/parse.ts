@@ -73,6 +73,16 @@ export function denyText(open: readonly string[]): string {
   return `stopped: ${open.length} file(s) do not parse: ${named.join(' · ')}. Fix them and run the command again; there is no way around this gate.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(open: readonly string[]): string {
+  const named = open.slice(0, MAX_NAMED)
+  if (open.length > MAX_NAMED) named.push(`${open.length - MAX_NAMED} more`)
+  return `config-parse: ${open.length} file(s) still do not parse: ${named.join(' · ')}. Fix them.`
+}
+
 /** At most this many files are named in the deny text, the rest counted. */
 const MAX_NAMED = 8
 

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, envError, isGuarded, isMissingTool, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
+import { denyText, doneLines, doneLog, envError, isGuarded, isMissingTool, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -10,11 +10,11 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /**
  * The on/off setting, the mode, the files whose finding still stands (by the path shown, each with the
- * path on disk and its kind), the kinds this machine cannot parse, and the directory the session
- * started in. A path is shown against that directory, not against `$.session.cwd()`, because a Bash
- * `cd` moves the session's directory.
+ * path on disk and its kind), whether the model is owed a note for them, the kinds this machine cannot
+ * parse, and the directory the session started in. A path is shown against that directory, not against
+ * `$.session.cwd()`, because a Bash `cd` moves the session's directory.
  */
-type State = { enabled: boolean; mode: Mode; open: Map<string, { path: string; kind: Kind }>; skipped: Set<Kind>; reported: boolean; root?: string }
+type State = { enabled: boolean; mode: Mode; open: Map<string, { path: string; kind: Kind }>; owed: boolean; skipped: Set<Kind>; reported: boolean; root?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -125,7 +125,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, mode: 'note', open: new Map(), skipped: new Set(), reported: false }
+  const state: State = { enabled: true, mode: 'note', open: new Map(), owed: false, skipped: new Set(), reported: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -141,6 +141,25 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => afterEdit($, state, e.file_path, await next(e)))
   on('tool.call', { tool: 'Write' }, async ($, e, next) => afterEdit($, state, e.file_path, await next(e)))
+
+  /*
+   * The turn's end parses every open file again and owes the model a note for what is left, because a
+   * finding it did not close would otherwise stand in the pane and reach it never again.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || !state.enabled) return r
+    await recheckOpen($, state)
+    state.owed = state.open.size > 0
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    if (!state.owed || state.open.size === 0) return next(e)
+    state.owed = false
+    return next({ ...e, context: [...(e.context ?? []), openNote([...state.open.keys()])] })
+  })
 
   // The gate: in deny mode a commit, push or merge waits until every open file parses again.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {

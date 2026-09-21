@@ -1,6 +1,6 @@
 {
   "name": "config-parse",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Checks each JSON, YAML, TOML or .env file an Edit or Write touches, and notes the parse error at once instead of at the next build. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
