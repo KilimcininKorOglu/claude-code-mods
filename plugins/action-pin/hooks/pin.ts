@@ -90,9 +90,15 @@ export function sidebarLines(uses: readonly Unpinned[]): { text: string; kind: '
   return named(uses).split(' · ').map(text => ({ text, kind: 'error' }))
 }
 
-/** The transcript line of a finding a later edit closed. */
-export function doneLog(file: string, refs: readonly string[]): string {
-  return `every action of ${file} is pinned to a commit now: ${refs.join(' · ')}`
+/** The transcript line of a finding a later edit closed, by what closed it. */
+export function doneLog(file: string, refs: readonly string[], gone = false): string {
+  const what = gone ? `${file} is no longer there` : `every action of ${file} is pinned to a commit now`
+  return `${what}: ${refs.join(' · ')}`
+}
+
+/** The title of a closed finding, by what closed it. */
+export function doneTitle(gone: boolean): string {
+  return gone ? 'workflow gone' : 'actions pinned'
 }
 
 /** The sidebar lines of a closed finding: the file, then the refs that are gone. */

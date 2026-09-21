@@ -33,10 +33,10 @@ const run = (args: string): CommandRunInput => ({
 })
 
 /** `fails` makes api.github.com answer HTTP 403; `urls` holds every URL asked. */
-type World = { urls: string[]; logs: string[]; fails: boolean; files: Map<string, string> }
+type World = { urls: string[]; logs: string[]; fails: boolean; readFails: boolean; files: Map<string, string> }
 
 function world(on: On): World {
-  const w: World = { urls: [], logs: [], fails: false, files: new Map() }
+  const w: World = { urls: [], logs: [], fails: false, readFails: false, files: new Map() }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -46,8 +46,10 @@ function world(on: On): World {
     const answer = w.fails ? { status: 403, ok: false, text: 'rate limit exceeded' } : { status: 200, ok: true, text: `${SHA}\n` }
     return { value: { ...answer, headers: {}, url: e.url } } as never
   })
+  on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
   on('fs.read', (_, e) => {
     const text = w.files.get(e.path)
+    if (w.readFails) throw new Error('EACCES')
     if (text === undefined) throw new Error('ENOENT')
     return { value: text } as never
   })
@@ -118,6 +120,21 @@ describe('action-pin', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
     expect(w.logs.at(-1)).toBe(`every action of ${ROOT}/${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a workflow the code deleted closes its finding, and an unreadable one keeps it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await edit($, WORKFLOW, '', '  - uses: actions/checkout@v4')
+    await $.command.run(run('mode deny'))
+    // The workflow is there and unreadable: nothing is proven, so the gate holds.
+    w.files.set(`${ROOT}/${WORKFLOW}`, '  - uses: actions/checkout@v4\n')
+    w.readFails = true
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).deny).toContain('actions/checkout@v4')
+    w.files.delete(`${ROOT}/${WORKFLOW}`)
+    w.readFails = false
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe(`${ROOT}/${WORKFLOW} is no longer there: actions/checkout@v4`)
   })
 
   test('a failed lookup keeps the note without the SHA and is logged once', async ($, on) => {

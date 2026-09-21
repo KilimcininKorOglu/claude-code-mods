@@ -19,9 +19,10 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those actions go there instead, one line per action as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding stays open until the workflow pins those actions. After a later Edit or Write the mod reads each open workflow again, and one whose refs are all pinned closes:
+7. A finding stays open until the workflow pins those actions. After a later Edit or Write the mod reads each open workflow again, and one whose refs are all pinned closes. A workflow that is no longer there closes too, because it uses no action any more; one that is there and cannot be read keeps its finding, because an unread file proves nothing:
 
        action-pin: every action of .github/workflows/ci.yml is pinned to a commit now: actions/checkout@v4
+       action-pin: .github/workflows/ci.yml is no longer there: actions/checkout@v4
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: it wrote the SHA itself.
 
@@ -52,7 +53,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L3, reaches the network.
 

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, denyText, doneLines, doneLog, isGuarded, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
+import { commitUrl, denyText, doneLines, doneLog, doneTitle, isGuarded, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -77,13 +77,26 @@ async function dropEntry($: EngineInterface, path: string): Promise<void> {
   }
 }
 
-/** The refs of one open file that still move, or undefined when the file cannot be read. */
+/**
+ * The refs of one open file that still move, or undefined when the file is there and cannot be read. A
+ * workflow that is gone uses no action any more, so it answers an empty list and its finding closes.
+ */
+async function isThere($: EngineInterface, path: string): Promise<boolean> {
+  try {
+    return await $.fs.exists(path)
+  } catch {
+    // The path was not measured: it counts as there, so no finding closes on it.
+    return true
+  }
+}
+
 async function stillMoving($: EngineInterface, path: string, refs: readonly string[]): Promise<string[] | undefined> {
   try {
+    if (!(await isThere($, path))) return []
     const held = new Set(unpinnedUses('', await $.fs.read(path)).map(refOf))
     return refs.filter(ref => held.has(ref))
   } catch {
-    // The file was moved or cannot be read: the finding stays as it was.
+    // The file is there and was not read: the finding stays as it was.
     return undefined
   }
 }
@@ -99,7 +112,8 @@ async function closeResolved($: EngineInterface, state: State, skip?: string): P
     }
     state.open.delete(path)
     await dropEntry($, path)
-    await toPerson($, path, 'actions pinned', doneLines(path, refs), doneLog(path, refs))
+    const gone = path !== skip && !(await isThere($, path))
+    await toPerson($, path, doneTitle(gone), doneLines(path, refs), doneLog(path, refs, gone))
   }
   return left
 }
