@@ -371,6 +371,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "subagent-ledger",
+      "source": "./plugins/subagent-ledger",
+      "description": "Shows each subagent of the session with its turns, duration, model and tokens, and marks a costly one.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
