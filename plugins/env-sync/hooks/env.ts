@@ -182,6 +182,15 @@ export function doneLines(added: readonly string[], gone: readonly string[]): { 
   return names.map(text => ({ text, kind: 'ok' as const }))
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(open: readonly Open[], reference: string): string {
+  const named = namedPlain(open.map(o => `${o.name} (${o.file})`))
+  return `env-sync: ${reference} still lacks ${open.length} env variable(s) the code reads: ${named}. Add them to ${reference} with a placeholder value, or take the reads out.`
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one reference file keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, listedNames, logText, modeOf, noteText, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Mode, type Open } from './env.ts'
+import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, listedNames, logText, modeOf, noteText, openNote, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Mode, type Open } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -9,9 +9,10 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 /**
  * The on/off setting read at session start, the mode, and the last error logged, so the same one is
  * logged once. `open` holds the variables the last finding named, so a commit that adds them all
- * closes it, and in `deny` mode it also holds the gate shut.
+ * closes it, and in `deny` mode it also holds the gate shut. `owed` is the reference file the model is
+ * owed a note against, set at the turn's end while the finding stands.
  */
-type State = { enabled: boolean; mode: Mode; lastError?: string; open: Open[] }
+type State = { enabled: boolean; mode: Mode; lastError?: string; open: Open[]; owed?: string }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -110,6 +111,26 @@ async function recheckOpen($: EngineInterface, state: State, root: string, refer
   await toPerson($, reference, doneTitle(added, gone, reference), doneLines(added, gone), doneLog(added, gone, reference))
 }
 
+/**
+ * Measures the open finding outside a commit: the repository root and its reference file are read again.
+ * It answers the reference file while the finding still stands, and undefined when nothing is left, no
+ * repository holds this directory, or the repository has no reference file.
+ */
+async function recheckNow($: EngineInterface, state: State): Promise<string | undefined> {
+  try {
+    const top = await git($, await $.session.cwd(), ['rev-parse', '--show-toplevel'])
+    if (!top.ok) return undefined
+    const root = top.out.trim()
+    const reference = await referenceFile($, root)
+    if (reference === undefined) return undefined
+    await recheckOpen($, state, root, reference, listedNames(await $.fs.read(`${root}/${reference}`)))
+    return state.open.length === 0 ? undefined : reference
+  } catch (err) {
+    report($, state, err)
+    return undefined
+  }
+}
+
 /** The note for the commit that moved HEAD, or undefined when it reads no variable the reference file lacks. */
 async function commitNote($: EngineInterface, state: State, before: Before): Promise<string | undefined> {
   const head = await git($, before.root, ['rev-parse', 'HEAD'])
@@ -194,6 +215,25 @@ export const register: Register = on => {
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'env-sync' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  /*
+   * The turn's end measures the open finding again and owes the model a note for what is left, because a
+   * finding it did not close would otherwise stand in the pane and reach it never again.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || !state.enabled || state.open.length === 0) return r
+    state.owed = await recheckNow($, state)
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    const reference = state.owed
+    if (reference === undefined || state.open.length === 0) return next(e)
+    state.owed = undefined
+    return next({ ...e, context: [...(e.context ?? []), openNote(state.open, reference)] })
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const stopped = await gate($, state, e.command)

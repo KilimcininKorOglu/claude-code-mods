@@ -175,6 +175,33 @@ describe('env-sync', () => {
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
+  test('the turn end measures the open variable again and the next prompt carries the note', async ($, on) => {
+    const w = world(on)
+    const notes: string[][] = []
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    on('prompt.submit', (_, e) => {
+      notes.push([...(e.context ?? [])])
+      return { text: e.text }
+    })
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+    // No turn has ended yet, so the model is owed nothing.
+    await prompt('first')
+    expect(notes[0]).toEqual([])
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await prompt('second')
+    expect(notes[1]?.[0]).toBe('env-sync: .env.example still lacks 1 env variable(s) the code reads: STRIPE_KEY (src/pay.ts). Add them to .env.example with a placeholder value, or take the reads out.')
+    // One note per turn: the next prompt without a turn in between carries none.
+    await prompt('third')
+    expect(notes[2]).toEqual([])
+    // The reference file lists it now: the turn's end closes the finding and owes no note.
+    w.files.set(`${ROOT}/.env.example`, 'DB_URL=\nSTRIPE_KEY=\n')
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe('.env.example now lists the variables it lacked: STRIPE_KEY')
+    await prompt('fourth')
+    expect(notes[3]).toEqual([])
+  })
+
   test('a variable the code stopped reading closes the finding, and an unreadable file keeps it', async ($, on) => {
     const w = world(on)
     w.files.set(`${ROOT}/.env.example`, '')

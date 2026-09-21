@@ -44,7 +44,13 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: the finding closed by its own work, so a note would only repeat what it just did. A file that is there and cannot be read keeps its variable open, because an unread file proves nothing.
 
-8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it measures both sources again, so a commit that added the variables, and one that took the reads out, each open the gate themselves. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
+8. A finding the model did not close is measured again at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt:
+
+       env-sync: .env.example still lacks 1 env variable(s) the code reads: STRIPE_KEY (src/pay.ts). Add them to .env.example with a placeholder value, or take the reads out.
+
+   One note per turn, not one per prompt. Without this the finding would be said once, at the commit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
+
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it measures both sources again, so a commit that added the variables, and one that took the reads out, each open the gate themselves. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -74,15 +80,15 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile, stillRead), $.fs.read (via commitNote, gate, stillRead), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile, stillRead), $.fs.read (via commitNote, gate, recheckNow, stillRead), $.process.run (via git), $.session.cwd (via beforeCommit, recheckNow), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L2, runs processes.
 
-    1. Reads:    the Bash command text; the reference file at the repository root; each file an open finding came from, again; through git, the commit's added lines
-    2. Runs:     git rev-parse and git show, read-only, by argv, at most four times per commit
-    3. Sends:    a note to the model after the commit's result, and one line to the transcript; nothing leaves the machine
-    4. Persists: in $.store, the on/off setting
+    1. Reads:    the Bash command text; the reference file at the repository root; each file an open finding came from, again, also at the turn's end; through git, the commit's added lines
+    2. Runs:     git rev-parse and git show, read-only, by argv, at most four times per commit, and git rev-parse at the turn's end while a finding stands
+    3. Sends:    a note to the model after the commit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
+    4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; the note names variables, never a value from .env.example
 
 ## Limits
