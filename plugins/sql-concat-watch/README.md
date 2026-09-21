@@ -41,7 +41,7 @@ A Claude Code Mod that tells the model when an edit builds SQL by joining string
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a file still builds SQL from strings. Before it stops one it reads each open file again, so a file the model fixed opens the gate itself. There is no bypass; only the person turns the gate off with `/sql-concat-watch mode note`. `note` mode is the default and stops nothing.
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a file still builds SQL from strings. Before it stops one it reads each open file again, so a file the model fixed opens the gate itself. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`) and lets the commit run when it holds none of the open files, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only the person turns the gate off with `/sql-concat-watch mode note`. `note` mode is the default and stops nothing.
 
 In the live check the model put `` db.query(`SELECT * FROM users WHERE id = ${id}`) `` into a file with one Edit, read the note naming `src/users.ts:3`, and named the parameterized form in its answer.
 
@@ -70,12 +70,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=sql-concat-watch}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, gate, toPerson)
 
-Reach L1, reads files.
+Reach L2, it runs git to read the index.
 
     1. Reads:    the text of each Edit and Write call; the Bash command text; the edited file after an Edit that joins SQL, for the line numbers, and each open file again while a finding stands
-    2. Runs:     nothing
+    2. Runs:     git rev-parse --show-toplevel and git diff --cached --name-only, at a commit in deny mode, to read which files the commit holds
     3. Sends:    a note to the model after an edit that joins SQL, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: the edited text is only matched by regular expressions and printed as file:line, never run
@@ -89,6 +89,8 @@ Reach L1, reads files.
 - A finding closes when the reported lines are gone from the file. A line moved to another file keeps it open.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/sql-concat-watch mode note`.
 - The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
+- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
+- The index is read before the command runs. A commit whose files change between the read and the run is measured against what the index held at the read.
 
 ## Development
 

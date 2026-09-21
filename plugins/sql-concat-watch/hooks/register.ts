@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, isGuarded, isSource, lineOf, logText, modeOf, noteText, openNote, openPlaces, sectionKey, shownPath, sidebarLines, sqlLines, type Mode } from './sql.ts'
+import { denyText, doneLines, doneLog, isCommit, isGuarded, isNarrowable, isSource, lineOf, logText, modeOf, noteText, openNote, openPlaces, sectionKey, shownPath, sidebarLines, sqlLines, type Mode } from './sql.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -103,14 +103,50 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
 }
 
 /**
+ * The files this commit holds, by absolute path, or undefined when git did not answer. Read before the
+ * command runs, so it is the index as the commit will take it.
+ */
+async function stagedPaths($: EngineInterface, state: State): Promise<Set<string> | undefined> {
+  try {
+    const cwd = state.root ?? (await $.session.cwd())
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const staged = await $.process.run(['git', 'diff', '--cached', '--name-only', '-z'], { cwd })
+    if (top.exitCode !== 0 || staged.exitCode !== 0) return undefined
+    const base = top.stdout.trim()
+    return new Set(staged.stdout.split('\0').filter(Boolean).map(p => `${base}/${p}`))
+  } catch {
+    // No git here, or the command did not run: the findings are not narrowed.
+    return undefined
+  }
+}
+
+/**
+ * The findings this command answers for. A `git commit` answers for its own files alone, so a finding of
+ * a file the commit does not hold lets it run. A `push` or a `merge` holds no index to read, so every
+ * finding stands there.
+ */
+async function scopeOf($: EngineInterface, state: State, command: string): Promise<Finding[]> {
+  const all = [...state.open.values()]
+  if (!isCommit(command) || !isNarrowable(command)) return all
+  const staged = await stagedPaths($, state)
+  return staged === undefined ? all : all.filter(f => staged.has(f.path))
+}
+
+/**
  * The gate of the `deny` mode: it reads each open file again, so a file the model fixed without a new
- * finding opens the gate too. A file that still builds SQL from strings stops the command, with no bypass.
+ * finding opens the gate too. A file this command holds that still builds SQL from strings stops it, and
+ * there is no bypass.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
   if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command)) return undefined
   await closeResolved($, state)
   if (state.open.size === 0) return undefined
-  return denyText([...state.open.values()].flatMap(f => f.places))
+  const scoped = await scopeOf($, state, command)
+  if (scoped.length === 0) {
+    $.ui.log(`${state.open.size} file(s) still build SQL from strings, and this command holds none of them`)
+    return undefined
+  }
+  return denyText(scoped.flatMap(f => f.places))
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {

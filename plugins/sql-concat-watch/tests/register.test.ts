@@ -148,6 +148,31 @@ describe('sql-concat-watch', () => {
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
+  test('a commit that holds none of the open files runs, and a push still stops', async ($, on) => {
+    const w = world(on)
+    const staged: string[] = ['src/other.ts']
+    on('process.run', (_, e) => {
+      const cmd = e.argv.join(' ')
+      const out = cmd.includes('--show-toplevel') ? `${ROOT}\n` : staged.join('\0')
+      return { value: { exitCode: 0, stdout: out, stderr: '' } }
+    })
+    await started($)
+    w.file = `${QUERY}\n`
+    await edit($, 'src/users.ts', 'const q = ""', QUERY)
+    await $.command.run(run('mode deny'))
+    // The index holds another file: the finding stands, and the commit runs.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m other' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('1 file(s) still build SQL from strings, and this command holds none of them')
+    // A push holds no index, so every finding stands there.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toContain('src/users.ts:1')
+    // The index holds the file now: the commit stops.
+    staged[0] = 'src/users.ts'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m fix' } as never)).deny).toContain('src/users.ts:1')
+    // A `git commit -a` stages as it runs, so the index does not say what it holds and nothing is narrowed.
+    staged[0] = 'src/other.ts'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -am wip' } as never)).deny).toContain('src/users.ts:1')
+  })
+
   test('the turn end reads the open file again and the next prompt carries the note', async ($, on) => {
     const w = world(on)
     const notes: string[][] = []
