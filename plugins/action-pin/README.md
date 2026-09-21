@@ -26,7 +26,13 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: it wrote the SHA itself.
 
-8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a workflow still uses an action by a moving ref. Before it stops one it reads each open workflow again, so a file the model pinned opens the gate itself. There is no bypass; only the person turns the gate off with `/action-pin mode note`. `note` mode is the default and stops nothing.
+8. A finding the model did not close is measured again at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt. The SHAs are already in memory, so this asks GitHub nothing:
+
+       action-pin: 1 action(s) are still used by a moving ref: actions/checkout@v4. Pin each to the commit SHA of that ref, or take the step out.
+
+   One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
+
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a workflow still uses an action by a moving ref. Before it stops one it reads each open workflow again, so a file the model pinned opens the gate itself. There is no bypass; only the person turns the gate off with `/action-pin mode note`. `note` mode is the default and stops nothing.
 
 ## Command
 
@@ -52,12 +58,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
+    ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
     ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
 
 Reach L3, reaches the network.
 
-    1. Reads:    the path and the new text of each Edit and Write; the Bash command text; each open workflow again while a finding stands
+    1. Reads:    the path and the new text of each Edit and Write; the Bash command text; each open workflow again while a finding stands, also at the turn's end
     2. Runs:     nothing
     3. Sends:    the public action name and its ref (for example actions/checkout and v4) to api.github.com, at most 10 per edit, once each per session; no token, no repository content, no file path
     4. Persists: in $.store, the on/off setting and the mode; the resolved SHAs live in memory for one session

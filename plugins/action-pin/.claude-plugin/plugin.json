@@ -1,6 +1,6 @@
 {
   "name": "action-pin",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Notes each GitHub Actions step an edit pins to a moving tag, with the commit SHA to use instead. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

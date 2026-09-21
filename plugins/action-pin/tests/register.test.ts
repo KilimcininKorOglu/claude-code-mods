@@ -137,6 +137,35 @@ describe('action-pin', () => {
     expect(w.logs.at(-1)).toBe(`${ROOT}/${WORKFLOW} is no longer there: actions/checkout@v4`)
   })
 
+  test('the turn end reads the open workflow again and the next prompt carries the note', async ($, on) => {
+    const w = world(on)
+    const notes: string[][] = []
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    on('prompt.submit', (_, e) => {
+      notes.push([...(e.context ?? [])])
+      return { text: e.text }
+    })
+    await started($)
+    await edit($, WORKFLOW, '', '  - uses: actions/checkout@v4')
+    w.files.set(`${ROOT}/${WORKFLOW}`, '  - uses: actions/checkout@v4\n')
+    const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+    // No turn has ended yet, so the model is owed nothing.
+    await prompt('first')
+    expect(notes[0]).toEqual([])
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await prompt('second')
+    expect(notes[1]?.[0]).toBe('action-pin: 1 action(s) are still used by a moving ref: actions/checkout@v4. Pin each to the commit SHA of that ref, or take the step out.')
+    // One note per turn: the next prompt without a turn in between carries none.
+    await prompt('third')
+    expect(notes[2]).toEqual([])
+    // The workflow names the commit now: the turn's end closes the finding and owes no note.
+    w.files.set(`${ROOT}/${WORKFLOW}`, `  - uses: actions/checkout@${SHA} # v4\n`)
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe(`every action of ${ROOT}/${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
+    await prompt('fourth')
+    expect(notes[3]).toEqual([])
+  })
+
   test('a failed lookup keeps the note without the SHA and is logged once', async ($, on) => {
     const w = world(on)
     w.fails = true

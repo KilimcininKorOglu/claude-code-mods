@@ -140,6 +140,16 @@ export function denyText(refs: readonly string[]): string {
   return `stopped: ${refs.length} action(s) are used by a moving ref: ${rows.join(' · ')}. Pin each to the commit SHA of that ref, with the ref as a trailing comment, then run the command again; there is no way around this gate.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(refs: readonly string[]): string {
+  const rows = refs.slice(0, MAX_NAMED)
+  if (refs.length > MAX_NAMED) rows.push(`${refs.length - MAX_NAMED} more`)
+  return `action-pin: ${refs.length} action(s) are still used by a moving ref: ${rows.join(' · ')}. Pin each to the commit SHA of that ref, or take the step out.`
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'

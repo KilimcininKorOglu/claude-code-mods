@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, denyText, doneLines, doneLog, doneTitle, isGuarded, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
+import { commitUrl, denyText, doneLines, doneLog, doneTitle, isGuarded, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -11,9 +11,10 @@ const HEADERS = { Accept: 'application/vnd.github.sha', 'User-Agent': 'action-pi
 
 /**
  * The on/off setting read at session start, the SHAs already resolved in this session, so one workflow
- * does not ask GitHub twice, and the last error, so the same one is logged once.
+ * does not ask GitHub twice, the refs the model is owed a note for, and the last error, so the same one
+ * is logged once.
  */
-type State = { enabled: boolean; mode: Mode; shas: Map<string, string>; open: Map<string, string[]>; lastError?: string }
+type State = { enabled: boolean; mode: Mode; shas: Map<string, string>; open: Map<string, string[]>; owed: string[]; lastError?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -169,7 +170,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, mode: 'note', shas: new Map(), open: new Map() }
+  const state: State = { enabled: true, mode: 'note', shas: new Map(), open: new Map(), owed: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -181,6 +182,26 @@ export const register: Register = on => {
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'action-pin' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  /*
+   * The turn's end reads every open workflow again and owes the model a note for the refs that still
+   * move, because a finding it did not close would otherwise stand in the pane and reach it never again.
+   * The commit SHAs are already in `state.shas`, so this asks GitHub nothing.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || !state.enabled) return r
+    state.owed = await closeResolved($, state)
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    if (state.owed.length === 0) return next(e)
+    const note = openNote(state.owed)
+    state.owed = []
+    return next({ ...e, context: [...(e.context ?? []), note] })
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const stop = await gate($, state, e.command)
