@@ -360,6 +360,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "ua-fallback",
+      "source": "./plugins/ua-fallback",
+      "description": "Notes the fallback User-Agent after a curl or wget that answered 403 or 429, with its limits.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
