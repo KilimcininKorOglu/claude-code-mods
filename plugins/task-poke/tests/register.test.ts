@@ -45,6 +45,8 @@ const todoWrite = (...statuses: string[]): SessionMessage =>
   assistant(use('TodoWrite', { todos: statuses.map((status, i) => ({ content: `t${i}`, status, activeForm: `t${i}` })) }))
 const created = (id: string): ToolUseSummary => use('TaskCreate', { subject: id, description: id }, { task: { id, subject: id } })
 const updated = (taskId: string, status: string): ToolUseSummary => use('TaskUpdate', { taskId, status })
+const listed = (...rows: { id: string; status: string }[]): ToolUseSummary =>
+  use('TaskList', {}, { tasks: rows.map(r => ({ ...r, subject: r.id, blockedBy: [] })) })
 
 type World = { submitted: string[]; logs: string[]; envSets: string[]; setMessages: (m: SessionMessage[]) => void }
 
@@ -132,9 +134,39 @@ describe('task-poke', () => {
     await $.session.start(session)
     await $.turn.complete(turn())
     await flush()
-    expect(w.logs.at(-1)).toContain('1 unfinished tasks')
+    expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/99')
 
     w.setMessages([assistant(created('1'), created('2')), assistant(updated('1', 'completed'), updated('2', 'deleted'))])
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(1)
+  })
+
+  test('counts a task the transcript window no longer holds', async ($, on) => {
+    const w = world(on)
+    w.setMessages([assistant(created('1'))])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/99')
+
+    // The window moved past the TaskCreate: only the list of the last reading holds that task.
+    w.setMessages([])
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.logs.at(-1)).toContain('1 unfinished task, poke 2/99')
+    expect(w.submitted).toHaveLength(2)
+  })
+
+  test('a TaskList result replaces the list the replay built', async ($, on) => {
+    const w = world(on)
+    w.setMessages([assistant(created('1'), created('2'))])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(1)
+
+    w.setMessages([assistant(listed({ id: '1', status: 'completed' }, { id: '2', status: 'completed' }))])
     await $.turn.complete(turn())
     await flush()
     expect(w.submitted).toHaveLength(1)

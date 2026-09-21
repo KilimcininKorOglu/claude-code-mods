@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { readTurn } from './tasks.ts'
+import { readTurn, type Tasks } from './tasks.ts'
 
 /** Pokes sent for one stretch of unfinished tasks, until the person sets another limit. */
 export const DEFAULT_MAX_POKES = 99
@@ -21,8 +21,13 @@ const SECTION = { consumer: 'task-poke', key: 'pokes' }
 
 type Decision = { kind: 'idle' } | { kind: 'poke'; open: number } | { kind: 'limit' }
 
-/** The on/off setting, the limit, the pokes sent since the last user prompt, and the last error logged. */
-type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastError?: string }
+/**
+ * The on/off setting, the limit, the pokes sent since the last user prompt, the last error logged,
+ * and the task list the last reading built. The list is kept because `$.session.messages()` answers
+ * the newest messages of a long transcript alone: a task created before that window and never
+ * updated inside it is in no later reading of the transcript.
+ */
+type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastError?: string; tasks: Tasks | null }
 
 /** Decides what to do after a main-loop turn. `pokes` counts the pokes sent since the last user prompt. */
 export function decide(open: number, askedUser: boolean, pokes: number, max: number): Decision {
@@ -51,7 +56,7 @@ function countTone(pokes: number, max: number): 'ok' | 'warn' | 'error' {
 }
 
 function countText(open: number, pokes: number, max: number): string {
-  return `${open} unfinished tasks, poke ${pokes}/${max}`
+  return `${open} unfinished task${open === 1 ? '' : 's'}, poke ${pokes}/${max}`
 }
 
 /**
@@ -124,18 +129,20 @@ async function readLimit($: EngineInterface): Promise<number> {
 }
 
 /**
- * Reads the task list after a main-loop turn and acts on it. The parser reads the whole transcript on
- * every turn, so a bad record fails every later turn too: each distinct error is reported once, and no
- * poke is sent while the list is unreadable.
+ * Reads the task list after a main-loop turn and acts on it. The transcript window the engine answers
+ * is replayed over the list of the last reading, so a task older than the window still counts. The
+ * parser reads that window on every turn, so a bad record fails every later turn too: each distinct
+ * error is reported once, and no poke is sent while the list is unreadable.
  */
 async function afterTurn($: EngineInterface, state: State): Promise<void> {
-  const reading = readTurn(await $.session.messages())
+  const reading = readTurn(await $.session.messages(), state.tasks)
   if (!reading.ok) {
     if (reading.error !== state.lastError) await toStream($, 'unreadable', 'task list', `cannot read the task list, no poke is sent: ${reading.error}`)
     state.lastError = reading.error
     return
   }
   state.lastError = undefined
+  state.tasks = reading.tasks
   const decision = decide(reading.open, reading.askedUser, state.pokes, state.max)
   if (decision.kind === 'limit') return atLimit($, state, reading.open)
   if (decision.kind === 'idle') return reading.open === 0 ? clearCount($) : toCount($, reading.open, state.pokes, state.max, false)
@@ -145,7 +152,7 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false }
+  const state: State = { enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false, tasks: null }
 
   const resetCount = (): void => {
     state.pokes = 0

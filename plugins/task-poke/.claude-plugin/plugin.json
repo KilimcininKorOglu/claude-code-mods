@@ -1,7 +1,7 @@
 {
   "name": "task-poke",
-  "version": "0.3.0",
-  "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 5 times in a row. Turns the task tools on for every model unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set. Needs function hooks (early access).",
+  "version": "0.4.0",
+  "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 99 times in a row by default. Turns the task tools on for every model unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

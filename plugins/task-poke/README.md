@@ -5,9 +5,16 @@ A Claude Code Mod. When a main-loop turn ends and the task list still has pendin
 It reads both task formats:
 
 - `TodoWrite`: each call replaces the whole list.
-- `TaskCreate` and `TaskUpdate` (default since Claude Code 2.1.142): `TaskCreate` adds a task, and the id comes from its tool result (`{ task: { id } }`). `TaskUpdate` patches a task by `taskId` (the raw `id` and `task_id` keys are also read). `status: "deleted"` removes a task.
+- `TaskCreate`, `TaskUpdate` and `TaskList` (default since Claude Code 2.1.142): `TaskCreate` adds a task, and the id comes from its tool result (`{ task: { id } }`). `TaskUpdate` patches a task by `taskId` (the raw `id` and `task_id` keys are also read). `status: "deleted"` removes a task. A `TaskList` result carries the whole list, so it replaces what the replay held, and the rows after it apply on top.
 
 A later `TodoWrite` replaces any state built from the Task tools.
+
+## The count and the transcript window
+
+`$.session.messages()` answers the newest messages of a long transcript alone, so a replay of that window sees no task created before it. The mod therefore replays each window over the list of its last reading: a task created 8000 messages ago and never touched since still counts. Two things still read low:
+
+- a session the mod did not watch from its start, because it has no earlier reading to keep. A `TaskList` call inside the window repairs that count, because its result is the whole list.
+- a task list built before the mod was loaded or reloaded, for the same reason.
 
 ## Task tools on every model
 
@@ -25,7 +32,7 @@ While the [sidebar](../sidebar) is open, the count stands there as a `task list`
     task-poke: task list
     3 unfinished tasks, poke 2/99
 
-The line is green below the last poke, yellow at it, and red once the pokes stopped. The section goes down when nothing is unfinished. Three findings go into the stream instead, in red, so the next count does not take them off the pane: the stop after 5 pokes, a poke the engine dropped, and a task list the parser cannot read.
+The line is green below the last poke, yellow at it, and red once the pokes stopped. The section goes down when nothing is unfinished. Three findings go into the stream instead, in red, so the next count does not take them off the pane: the stop at the limit of pokes, a poke the engine dropped, and a task list the parser cannot read.
 
 With the sidebar closed, or without that mod installed, only a turn that sent a poke writes its line to the transcript, and the three findings are transcript lines, as before.
 
@@ -76,16 +83,17 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 
 Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 
-    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate and AskUserQuestion); the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
+    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
     2. Runs:     one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) and the poke limit in $.store; the environment variable lasts for the process only
-    5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status or a TaskCreate result without task.id stops the pokes, and one line names the error until the error changes
+    5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status, a TaskCreate result without task.id or a TaskList row without an id stops the pokes, and one line names the error until the error changes
 
 ## Limits
 
-- `$.session.messages()` returns the newest 4096 messages. A task created before that window and never updated inside it is not counted.
-- A task list read through `TaskList` or `TaskGet` results is not parsed. Only `TaskCreate` and `TaskUpdate` build the state.
+- `$.session.messages()` returns the newest 4096 messages. The mod keeps the list of its last reading, so a task older than that window still counts, but a session it did not watch from the start reads low until a `TaskList` call lands in the window.
+- A `TaskGet` result is not parsed. `TodoWrite`, `TaskCreate`, `TaskUpdate` and `TaskList` build the state.
+- The list the mod keeps lives in the session's plugin state, so a `/reload-plugins` starts it over from the transcript window.
 
 ## Development
 

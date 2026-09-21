@@ -7,13 +7,19 @@ const STATUSES: readonly string[] = ['pending', 'in_progress', 'completed']
 
 /**
  * Rebuilds the task list from the transcript. Returns null when the session
- * never used TodoWrite or the Task tools.
+ * never used TodoWrite or the Task tools, and `seed` holds nothing either.
  *
  * TodoWrite replaces the whole list. TaskCreate adds one task and TaskUpdate
- * patches one task by id. A later TodoWrite replaces everything before it.
+ * patches one task by id. A TaskList result is the whole list at that point,
+ * so it replaces what the replay held. A later TodoWrite replaces everything
+ * before it.
+ *
+ * `seed` is the list an earlier reading of this session built. A long transcript
+ * answers its newest messages alone, so a task created before that window and
+ * never updated inside it is only in the seed.
  */
-export function taskState(messages: readonly SessionMessage[]): Tasks | null {
-  let tasks: Tasks | null = null
+export function taskState(messages: readonly SessionMessage[], seed: Tasks | null = null): Tasks | null {
+  let tasks: Tasks | null = seed === null ? null : new Map(seed)
   for (const message of messages) {
     for (const use of message.toolUses) tasks = applyUse(tasks, use)
   }
@@ -28,16 +34,20 @@ export function unfinishedCount(tasks: Tasks | null): number {
   return count
 }
 
-export type Reading = { ok: true; open: number; askedUser: boolean } | { ok: false; error: string }
+export type Reading =
+  | { ok: true; open: number; askedUser: boolean; tasks: Tasks | null }
+  | { ok: false; error: string }
 
 /**
  * Reads the unfinished task count and the AskUserQuestion state from the transcript.
  * A transcript the parser cannot read returns the parser's error instead of a count,
- * so the caller can report it rather than guess a count.
+ * so the caller can report it rather than guess a count. The list it built comes back
+ * with it, to seed the next reading.
  */
-export function readTurn(messages: readonly SessionMessage[]): Reading {
+export function readTurn(messages: readonly SessionMessage[], seed: Tasks | null = null): Reading {
   try {
-    return { ok: true, open: unfinishedCount(taskState(messages)), askedUser: asksUser(messages) }
+    const tasks = taskState(messages, seed)
+    return { ok: true, open: unfinishedCount(tasks), askedUser: asksUser(messages), tasks }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -58,6 +68,8 @@ function applyUse(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
       return withCreate(tasks, use)
     case 'TaskUpdate':
       return withUpdate(tasks, use)
+    case 'TaskList':
+      return fromTaskList(tasks, use)
     default:
       return tasks
   }
@@ -91,6 +103,20 @@ function withUpdate(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
   const next = new Map(tasks ?? [])
   if (input.status === 'deleted') next.delete(String(id))
   else next.set(String(id), parseStatus(input.status))
+  return next
+}
+
+// The TaskList result carries the whole list, so it is the list at that point of the transcript and
+// replaces what the replay held. A result without a tasks array says nothing, and leaves the list alone.
+function fromTaskList(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
+  const rows = field(use.result, 'tasks')
+  if (!Array.isArray(rows)) return tasks
+  const next: Tasks = new Map()
+  for (const row of rows) {
+    const id = field(row, 'id')
+    if (typeof id !== 'string' && typeof id !== 'number') throw new Error('task-poke: a TaskList row has no id')
+    next.set(String(id), parseStatus(field(row, 'status')))
+  }
   return next
 }
 
