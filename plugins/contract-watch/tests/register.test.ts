@@ -30,15 +30,16 @@ const run = (args: string): CommandRunInput => ({
 
 const CHECK = '<edit-check sym="parse" status="contract-change" params_was="1" params_now="2"><c n="main" p="cmd/main.go:5"/></edit-check>'
 
-type World = { argv: string[][]; logs: string[]; store: Map<string, unknown>; ripwire: { exitCode: number; stdout: string; stderr: string } }
+type World = { argv: string[][]; logs: string[]; store: Map<string, unknown>; staged: string[]; ripwire: { exitCode: number; stdout: string; stderr: string } }
 
 function world(on: On): World {
-  const w: World = { argv: [], logs: [], store: new Map(), ripwire: { exitCode: 0, stdout: CHECK, stderr: '' } }
+  const w: World = { argv: [], logs: [], store: new Map(), staged: ['cmd/parse.go'], ripwire: { exitCode: 0, stdout: CHECK, stderr: '' } }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('process.run', (_, e) => {
     w.argv.push([...e.argv, `cwd=${e.init?.cwd}`])
+    if (e.argv[1] === 'diff') return { value: { exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
     if (e.argv[0] === 'git') return { value: { exitCode: 0, stdout: '/src/app\ncmd/\n', stderr: '' } }
     return { value: w.ripwire }
   })
@@ -109,6 +110,25 @@ describe('contract-watch', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('every caller matches parse again')
     expect((await $.command.run(run(''))).text).toBe('on · mode note · no signature is open; it needs ripwire on PATH')
+  })
+
+  test('a commit that holds none of the open files runs, and a push still stops', async ($, on) => {
+    const w = world(on)
+    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
+    await $.command.run(run('mode deny'))
+    // The index holds another file: the finding stands, and the commit runs.
+    w.staged = ['cmd/other.go']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m other' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('1 changed signature(s) still leave a caller behind, and this command holds none of their files')
+    // A push holds no index, so every finding stands there.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toContain('parse changed from 1 to 2 parameter(s)')
+    // The index holds the file now: the commit stops.
+    w.staged = ['cmd/parse.go']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m fix' } as never)).deny).toContain('parse changed from 1 to 2 parameter(s)')
+    // A `git commit -a` stages as it runs, so the index does not say what it holds and nothing is narrowed.
+    w.staged = ['cmd/other.go']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -am wip' } as never)).deny).toContain('parse changed from 1 to 2 parameter(s)')
   })
 
   test('the turn end asks ripwire again and the next prompt carries the note', async ($, on) => {

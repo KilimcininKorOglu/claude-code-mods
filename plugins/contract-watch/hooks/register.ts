@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isCommit, isGuarded, isNarrowable, isReported, logText, modeOf, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -8,6 +8,9 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /** One symbol whose callers do not match it: where it lives, so the gate can measure it again. */
 type Open = { root: string; rel: string; sym: string }
+
+/** One symbol a caller still misses: the file it lives in, so a commit can be narrowed, and its line. */
+type Blocking = { root: string; rel: string; line: string }
 
 /**
  * The last error logged, so the same one is logged once, the mode, the symbols the gate holds, and the
@@ -94,12 +97,12 @@ async function notesFor($: EngineInterface, state: State, file: string, names: r
  * lines of the ones that still do. A symbol ripwire marks as incompatible stays open; one it no longer
  * marks closes, and the closing line says which of the two measures closed it.
  */
-async function recheckOpen($: EngineInterface, state: State): Promise<string[]> {
-  const lines: string[] = []
+async function recheckOpen($: EngineInterface, state: State): Promise<Blocking[]> {
+  const lines: Blocking[] = []
   for (const [key, held] of [...state.open]) {
     const check = await askRipwire($, held.root, held.rel, held.sym)
     if (check !== undefined && isBlocking(check)) {
-      lines.push(blockingLine(check))
+      lines.push({ root: held.root, rel: held.rel, line: blockingLine(check) })
       continue
     }
     const matched = check === undefined || !isReported(check)
@@ -108,6 +111,35 @@ async function recheckOpen($: EngineInterface, state: State): Promise<string[]> 
     await toPerson($, held.sym, 'callers caught up', doneLines(held.sym, matched), doneLog(held.sym, matched))
   }
   return lines
+}
+
+/** The files the index of one repository holds, repo-relative, or undefined when git did not answer. */
+async function stagedIn($: EngineInterface, root: string): Promise<Set<string> | undefined> {
+  try {
+    const staged = await $.process.run(['git', 'diff', '--cached', '--name-only', '-z'], { cwd: root, timeoutMs: 10_000 })
+    if (staged.exitCode !== 0) return undefined
+    return new Set(staged.stdout.split('\0').filter(Boolean))
+  } catch {
+    // No git here, or the command did not run: the findings are not narrowed.
+    return undefined
+  }
+}
+
+/**
+ * The findings this command answers for. A `git commit` answers for its own files alone, so a signature in
+ * a file the commit does not hold lets it run. A `push` or a `merge` holds no index to read, so every
+ * finding stands there. The index is read once per repository.
+ */
+async function scopeOf($: EngineInterface, blocking: readonly Blocking[], command: string): Promise<Blocking[]> {
+  if (!isCommit(command) || !isNarrowable(command)) return [...blocking]
+  const seen = new Map<string, Set<string> | undefined>()
+  const out: Blocking[] = []
+  for (const b of blocking) {
+    if (!seen.has(b.root)) seen.set(b.root, await stagedIn($, b.root))
+    const staged = seen.get(b.root)
+    if (staged === undefined || staged.has(b.rel)) out.push(b)
+  }
+  return out
 }
 
 /** Logs an error once until a different one comes. */
@@ -131,7 +163,13 @@ function withNotes(r: ToolCallResult, notes: readonly string[]): ToolCallResult 
 async function atGitCommand($: EngineInterface, state: State, command: string): Promise<string | undefined> {
   if (state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
   const lines = await recheckOpen($, state)
-  return state.mode === 'deny' && lines.length > 0 ? denyText(lines) : undefined
+  if (state.mode !== 'deny' || lines.length === 0) return undefined
+  const scoped = await scopeOf($, lines, command)
+  if (scoped.length === 0) {
+    $.ui.log(`${lines.length} changed signature(s) still leave a caller behind, and this command holds none of their files`)
+    return undefined
+  }
+  return denyText(scoped.map(b => b.line))
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
@@ -179,7 +217,7 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.agentId !== undefined || state.open.size === 0 || !(await isEnabled($))) return r
     try {
-      state.owed = await recheckOpen($, state)
+      state.owed = (await recheckOpen($, state)).map(b => b.line)
     } catch (err) {
       report($, state, err)
     }

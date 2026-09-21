@@ -39,7 +39,7 @@ The note lists every caller, not only the ones ripwire proves incompatible: in a
        contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
-9. In `deny` mode that same moment also stops the command while a changed signature leaves a caller behind. The gate takes a narrower measure than the note: only a check whose `incompatible` count is above zero holds it, the callers ripwire names by fixed-arity evidence. There is no bypass; only the person turns the gate off with `/contract-watch mode note`. `note` mode is the default and stops nothing.
+9. In `deny` mode that same moment also stops the command while a changed signature leaves a caller behind. The gate takes a narrower measure than the note: only a check whose `incompatible` count is above zero holds it, the callers ripwire names by fixed-arity evidence. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`, once per repository) and lets the commit run when it holds none of the files those signatures live in, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only the person turns the gate off with `/contract-watch mode note`. `note` mode is the default and stops nothing.
 
 In the live check the model read the note after its Edit and said that the two callers would not compile until they were updated.
 
@@ -69,12 +69,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=contract-watch}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}
-    ❯ ./register.ts calls: $.command.register, $.process.run (via askRipwire, locate), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via askRipwire, locate, stagedIn), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via atGitCommand, report, toPerson)
 
 Reach L2, runs processes.
 
     1. Reads:    the old and new text of each Edit; the Bash command text; through ripwire, the repository's source and git HEAD
-    2. Runs:     git rev-parse and ripwire --edit-check, read-only, by argv, after an edit that changed a signature, and once per open symbol before a git commit, push or merge and at each turn's end
+    2. Runs:     git rev-parse, git diff --cached --name-only and ripwire --edit-check, read-only, by argv, after an edit that changed a signature, and once per open symbol before a git commit, push or merge and at each turn's end
     3. Sends:    a note to the model after the Edit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a function name comes from the edited text and reaches ripwire as one argv item, never through a shell
@@ -88,8 +88,8 @@ Reach L2, runs processes.
 - Outside a git repository nothing runs.
 - The gate follows ripwire's `incompatible` count, which is itself a floor: a caller ripwire cannot bind by name does not hold the gate. The note stays the wider measure.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/contract-watch mode note`.
-- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped, and a finding is not measured again either, so it stays open until such a command runs.
-- A finding is measured again only at a `git commit`, `git push` or `git merge`. A session that never runs one keeps the finding open.
+- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped, and the finding is then measured at the next turn's end instead.
+- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
 
 ## Development
 
