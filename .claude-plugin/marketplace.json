@@ -386,7 +386,7 @@
     {
       "name": "mod-doctor",
       "source": "./plugins/mod-doctor",
-      "description": "Names each installed mod of a marketplace whose clone offers a newer version.",
+      "description": "Names each installed plugin whose marketplace clone offers a newer version.",
       "category": "development",
       "tags": [
         "mods",

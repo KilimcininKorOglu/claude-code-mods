@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On } from 'claude-code'
+import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
 
-import { installedOf, isNewer, marketplaceOf, rowText, sidebarLines, statusText, versionOf } from '../hooks/doctor.ts'
+import { installedOf, isNewer, marketplaceOf, rowText, sidebarLines, sourcesOf, statusText, versionOf } from '../hooks/doctor.ts'
 
 tier('user')
 
@@ -31,86 +31,132 @@ const run = (args: string): CommandRunInput => ({
   command: 'mod-doctor', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The record file of the host, as this mod reads it. */
+/** The record file of the host: two marketplaces of this person, and a plugin of a third. */
 const RECORD = JSON.stringify({
   plugins: {
     'sidebar@kilimcininkoroglu-mods': [{ version: '0.4.1' }],
     'cache-warm@kilimcininkoroglu-mods': [{ version: '0.5.0' }],
+    'turkish-native@turkish-native': [{ version: '1.0.0' }],
     'code-review@claude-plugins-official': [{ version: 'c447c320' }],
   },
 })
 
-/** The versions each marketplace clone offers, by the path this mod reads them from. */
-const CLONE: Record<string, string> = {
-  sidebar: '0.5.0',
-  'cache-warm': '0.5.0',
+/** Each marketplace clone's own manifest: one holds its plugins under plugins/, one is a plugin itself. */
+const MANIFESTS: Record<string, string> = {
+  'kilimcininkoroglu-mods': JSON.stringify({ plugins: [{ name: 'sidebar', source: './plugins/sidebar' }, { name: 'cache-warm', source: './plugins/cache-warm' }] }),
+  'turkish-native': JSON.stringify({ plugins: [{ name: 'turkish-native', source: './' }] }),
+  'claude-plugins-official': JSON.stringify({ plugins: [{ name: 'code-review', source: { source: 'git-subdir', url: 'https://x' } }] }),
 }
 
-/** The logged lines of the person's channel. */
-type World = { logs: string[]; reads: string[] }
+/** The version each clone offers, by the path this mod reads it from, as the host normalises it. */
+const CLONE: Record<string, string> = {
+  'kilimcininkoroglu-mods/plugins/sidebar': '0.5.0',
+  'kilimcininkoroglu-mods/plugins/cache-warm': '0.5.0',
+  'turkish-native': '1.2.0',
+}
+
+/** The logged lines of the person's channel, the paths read, and the record file of this world. */
+type World = { logs: string[]; reads: string[]; record: string }
 
 function world(on: On, record: string): World {
-  const w: World = { logs: [], reads: [] }
+  const w: World = { logs: [], reads: [], record }
   mock.store(on, {})
+  mock.env(on, { HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
-  mock.env(on, { HOME: '/Users/u' })
+  on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
   on('fs.read', (_, e) => {
     w.reads.push(e.path)
-    if (e.path.endsWith('installed_plugins.json')) return { value: record }
-    const mod = e.path.split('/plugins/')[2]?.split('/')[0] ?? ''
-    const version = CLONE[mod]
-    if (version === undefined) throw new Error('missing')
-    return { value: JSON.stringify({ version }) }
+    if (e.path.endsWith('installed_plugins.json')) return { value: w.record }
+    const rest = e.path.split('/marketplaces/')[1] ?? ''
+    const market = rest.split('/')[0] ?? ''
+    if (e.path.endsWith('marketplace.json')) return answer(MANIFESTS[market])
+    const version = CLONE[rest.slice(0, rest.length - '/.claude-plugin/plugin.json'.length)]
+    return answer(version === undefined ? undefined : JSON.stringify({ version }))
   })
   return w
 }
 
+/** A file that is not in the world is read as missing, exactly as the host would answer. */
+function answer(text: string | undefined): { value: string } {
+  if (text === undefined) throw new Error('ENOENT')
+  return { value: text }
+}
+
 const started = ($: Engine): Promise<unknown> => $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
+
+let turns = 0
+const turn = (): TurnCompleteInput => ({ answer: 'done', durationMs: 1000, isAborted: false, turnId: `t${++turns}`, reason: 'answer' })
 
 describe('mod-doctor', () => {
   test('reads the records, the manifests, the versions and the texts', () => {
-    expect([...installedOf(RECORD, 'kilimcininkoroglu-mods').keys()]).toEqual(['sidebar', 'cache-warm'])
-    expect(installedOf(RECORD, 'nobody-mods').size).toBe(0)
+    expect(installedOf(RECORD, 'all')).toHaveLength(4)
+    expect(installedOf(RECORD, 'turkish-native')).toEqual([{ name: 'turkish-native', marketplace: 'turkish-native', version: '1.0.0' }])
+    expect(installedOf(RECORD, 'nobody-mods')).toEqual([])
+    expect(sourcesOf(MANIFESTS['turkish-native'] ?? '').get('turkish-native')).toBe('./')
+    // A plugin whose source is a git subdirectory of another repository has no version on disk here.
+    expect(sourcesOf(MANIFESTS['claude-plugins-official'] ?? '').size).toBe(0)
     expect(versionOf('{"version":"0.5.0"}')).toBe('0.5.0')
     expect(versionOf('{"name":"x"}')).toBe(undefined)
     expect(isNewer('0.10.0', '0.9.0')).toBe(true)
     expect(isNewer('0.5.0', '0.5.0')).toBe(false)
-    expect(isNewer('0.4.1', '0.5.0')).toBe(false)
     expect(isNewer('1.0.0', '0.99.9')).toBe(true)
-    expect(rowText({ name: 'sidebar', installed: '0.4.1', offered: '0.5.0' })).toBe('sidebar 0.4.1 → 0.5.0')
+    // A marketplace that versions by commit sha never asks for an update.
+    expect(isNewer('d51a9f10', 'c447c320')).toBe(false)
+    expect(rowText({ name: 'sidebar', marketplace: 'my-mods', installed: '0.4.1', offered: '0.5.0' })).toBe('sidebar 0.4.1 → 0.5.0')
     for (const bad of ['', 'a b', 'a/b']) expect(marketplaceOf(bad), bad).toBe(undefined)
-    expect(statusText(true, 'my-mods', 3, [])).toBe('on · my-mods · 3 mod(s) installed, each at its clone\'s version')
+    expect(statusText(true, 'all', 3, [])).toBe("on · every marketplace · 3 plugin(s) installed, each at its clone's version")
   })
 
   test('the pane draws eight rows, counts the rest, and ends with the update command', () => {
-    const mods = Array.from({ length: 10 }, (_, i) => ({ name: `m${i}`, installed: '0.1.0', offered: '0.2.0' }))
-    const lines = sidebarLines('my-mods', mods)
+    const mods = Array.from({ length: 10 }, (_, i) => ({ name: `m${i}`, marketplace: 'my-mods', installed: '0.1.0', offered: '0.2.0' }))
+    const lines = sidebarLines(mods)
     expect(lines).toHaveLength(10)
     expect(lines[0]).toEqual({ text: 'm0 0.1.0 → 0.2.0', kind: 'error' })
-    expect(lines[8]).toEqual({ text: '2 more mod(s) behind', kind: 'dim' })
+    expect(lines[8]).toEqual({ text: '2 more plugin(s) behind', kind: 'dim' })
     expect(lines[9]?.text).toContain('claude plugin update m0@my-mods')
   })
 
-  test('a mod behind its clone is named, and the one at its clone is not', async ($, on) => {
+  test('every marketplace is read, each plugin against its own clone', async ($, on) => {
     const w = world(on, RECORD)
     await started($)
-    expect(w.logs).toEqual(['1 mod(s) of kilimcininkoroglu-mods are behind their clone: sidebar 0.4.1 → 0.5.0'])
-    expect(w.reads[0]).toBe('/Users/u/.claude/plugins/installed_plugins.json')
+    expect(w.logs).toEqual(['2 plugin(s) are behind their clone: sidebar 0.4.1 → 0.5.0, turkish-native 1.0.0 → 1.2.0'])
     const text = (await $.command.run(run(''))).text
-    expect(text).toContain('on · kilimcininkoroglu-mods · 1 of 2 mod(s) behind')
-    expect(text).toContain('claude plugin update sidebar@kilimcininkoroglu-mods')
+    expect(text).toContain('on · every marketplace · 2 of 4 plugin(s) behind')
+    expect(text).toContain('claude plugin update sidebar@kilimcininkoroglu-mods turkish-native@turkish-native')
   })
 
-  test('another marketplace with no record says so, and off measures nothing', async ($, on) => {
+  test('one marketplace alone is read when the person names it', async ($, on) => {
+    world(on, RECORD)
+    await started($)
+    expect((await $.command.run(run('marketplace turkish-native'))).text).toBe('marketplace turkish-native: that marketplace alone is checked from now on')
+    expect((await $.command.run(run(''))).text).toContain('on · turkish-native · 1 of 1 plugin(s) behind')
+    expect((await $.command.run(run('marketplace all'))).text).toContain('every marketplace')
+    expect((await $.command.run(run(''))).text).toContain('2 of 4 plugin(s) behind')
+  })
+
+  test("the turn's end measures again, so an update made meanwhile settles by itself", async ($, on) => {
+    const w = world(on, RECORD)
+    await started($)
+    expect(w.logs).toHaveLength(1)
+    // The person ran the update in another window while this session was open.
+    w.record = JSON.stringify({ plugins: { 'cache-warm@kilimcininkoroglu-mods': [{ version: '0.5.0' }] } })
+    await $.turn.complete(turn())
+    expect((await $.command.run(run(''))).text).toBe("on · every marketplace · 1 plugin(s) installed, each at its clone's version")
+    // Nothing was said twice, and a later turn measures nothing at all.
+    await $.turn.complete(turn())
+    expect(w.logs).toHaveLength(1)
+  })
+
+  test('a scope with no installed plugin says so, and off measures nothing', async ($, on) => {
     const w = world(on, RECORD)
     await started($)
     expect((await $.command.run(run('marketplace a b'))).text).toContain('marketplace expects a name')
-    expect((await $.command.run(run('marketplace nobody-mods'))).text).toBe('marketplace nobody-mods: the mods of that marketplace are checked from now on')
-    expect((await $.command.run(run(''))).text).toBe('no install record of nobody-mods was read; the marketplace name may be another one')
+    await $.command.run(run('marketplace nobody-mods'))
+    expect((await $.command.run(run(''))).text).toBe('no installed plugin of nobody-mods was read; the marketplace name may be another one')
     expect((await $.command.run(run('off'))).text).toBe('off: nothing is measured')
-    expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or marketplace <name>')
+    expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or marketplace <name | all>')
     expect(w.logs).toHaveLength(1)
   })
 
