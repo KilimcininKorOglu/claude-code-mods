@@ -6,8 +6,8 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 
 1. `/sidebar` opens the pane and `/sidebar off` closes it. The choice is kept in `$.store`, so a session started later opens the sidebar again by itself.
 2. While it is open, any mod writes a section: `$.sidebar.set({ consumer, key, title, lines, buttons, until, order })` answers `true`. While it is closed nothing is kept and the call answers `false`, so the mod keeps showing its own transcript line or status line instead.
-3. A section is drawn as a bold heading (`<consumer>: <title>`), its lines (`ok` green, `warn` yellow, `error` red, `dim` faint) and its buttons. The pane has two parts: the standing sections at the top (`until: 'session'`, then `until: 'turn'`, each group by `order`, then consumer, then key), and the stream under them.
-4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
+3. A section is drawn as a bold heading (`<consumer>: <title>`, plus the time for a stream entry), its lines (`ok` green, `warn` yellow, `error` red, `dim` faint) and its buttons. The pane has two parts: the standing sections at the top (`until: 'session'`, then `until: 'turn'`, each group by `order`, then consumer, then key), and the stream under them.
+4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. A stream entry's heading also carries the day and time it was written, in the machine's own time zone (`edit-loop: edit loop (21.09 14:32)`), so the person reads the log after the fact; a standing section carries none, because it is rewritten at every measure. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
 5. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane. The mod that offers the button serves that command itself. The label turns red under the pointer, so what a press would run is plain before the press.
 6. The three lifetimes: `session` stands at the top until the mod replaces or clears it, `stream` joins the log under it, `turn` goes when the turn ends.
 
@@ -81,11 +81,11 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
     ❯ ./register.tsx hooks: engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
-    ❯ ./register.tsx calls: $.command.register, $.command.run (via pressButton), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via openPane), $.ui.panes (via closePane), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via openPane), $.ui.panes (via closePane), $.ui.resolve
 
 Reach L0, it draws and remembers.
 
-    1. Reads:    the sections other mods hand over; no file, no process, no network
+    1. Reads:    the sections other mods hand over, and the clock for a stream entry's own time; no file, no process, no network
     2. Runs:     the slash command a button names, through $.command.run, on the person's press only
     3. Sends:    nothing
     4. Persists: in $.store, whether the sidebar is open; the sections live in memory for one session
@@ -97,6 +97,7 @@ Reach L0, it draws and remembers.
 - A session that opens the sidebar from the stored choice opens it as the plugin, not as the person: the engine leaves such a pane undrawn below 144 terminal columns, 110 once the person opened that pane themselves. `/sidebar` in that session places it at any width.
 - Closing the sidebar drops every section and the whole stream. Neither comes back when it is opened again; each mod writes its own at the next update.
 - The stream holds the session only. It is not written to disk, so it does not survive a restart.
+- A stream entry's time is the moment the mod wrote it, read from `$.clock.now()` and drawn in the machine's own time zone. It is not the moment the finding happened, and it does not change afterwards.
 - The stream keeps 20 entries per consumer and 100 in all. Over its own count a mod drops its own oldest entry, never another mod's.
 - A button can only run a slash command. A mod that wants a button must serve a command for it.
 - The pane's scroll window belongs to the engine; this mod adds no scrolling of its own.

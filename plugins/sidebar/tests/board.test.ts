@@ -1,10 +1,13 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { cut, drawn, dropTurn, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, type Board, type Kept } from '../hooks/board.ts'
+import { cut, drawn, dropTurn, headText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
+
+/** One fixed local time, so the stamp of a stream entry is the same on every run of this file. */
+const AT = new Date(2026, 8, 21, 14, 32, 7).getTime()
 
 const section = (over: Partial<SidebarSection> = {}): SidebarSection => ({
   consumer: 'edit-loop',
@@ -160,13 +163,24 @@ describe('stream', () => {
   })
 })
 
+describe('the heading', () => {
+  test('a stream entry carries the day and the time, a standing section none', () => {
+    expect(stamp(AT)).toBe('21.09 14:32')
+    expect(headText({ ...kept(section({ until: 'stream' })), at: AT })).toBe('edit-loop: the 5th edit (21.09 14:32)')
+    expect(headText(kept(section()))).toBe('edit-loop: the 5th edit')
+  })
+})
+
 describe('$.sidebar', () => {
   const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open })
+
+  /** The clock the engine hands the noun; a fixed time keeps a stream entry's stamp readable. */
+  const NOW = async (): Promise<number> => AT
 
   test('keeps nothing while the sidebar is closed', async () => {
     const state = stateOf(false)
     let draws = 0
-    const bar = createSidebar(() => { draws += 1 }, state)
+    const bar = createSidebar(() => { draws += 1 }, NOW, state)
     expect(await bar.set(section())).toBe(false)
     expect(await bar.isOpen()).toBe(false)
     expect(state.board.size).toBe(0)
@@ -176,7 +190,7 @@ describe('$.sidebar', () => {
   test('writes, replaces and clears a section while it is open', async () => {
     const state = stateOf(true)
     let draws = 0
-    const bar = createSidebar(() => { draws += 1 }, state)
+    const bar = createSidebar(() => { draws += 1 }, NOW, state)
     expect(await bar.set(section())).toBe(true)
     expect(await bar.set(section({ title: 'again' }))).toBe(true)
     expect(state.board.size).toBe(1)
@@ -189,7 +203,7 @@ describe('$.sidebar', () => {
 
   test('a stream section adds an entry instead of replacing one, and clear drops every entry of that key', async () => {
     const state = stateOf(true)
-    const bar = createSidebar(() => {}, state)
+    const bar = createSidebar(() => {}, NOW, state)
     await bar.set(section({ until: 'stream' }))
     await bar.set(section({ until: 'stream', title: 'again' }))
     await bar.set(section({ until: 'stream', key: 'other' }))
@@ -200,7 +214,7 @@ describe('$.sidebar', () => {
   })
 
   test('refuses a section of another shape', async () => {
-    const bar = createSidebar(() => {}, stateOf(true))
+    const bar = createSidebar(() => {}, NOW, stateOf(true))
     await expect(bar.set(section({ key: 'a key' }))).rejects.toThrow('key must be')
   })
 })

@@ -78,14 +78,16 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
  * engine call the `engine.create` hook closes over, because the validator refuses that engine as an
  * argument.
  */
-export function createSidebar(redraw: () => void, state: State): Sidebar {
+export function createSidebar(redraw: () => void, now: () => Promise<number>, state: State): Sidebar {
   return {
     set: async (section: SidebarSection) => {
       if (!state.open) return false
       const kept = readSection(section)
       if (typeof kept === 'string') throw new Error(kept)
       // A stream entry never replaces another, so the same key twice reads as two entries of a log.
-      if (kept.until === 'stream') state.stream = pushed(state.stream, { ...kept, id: `${kept.id}#${++state.written}` })
+      // It also carries the time it was written, which its heading draws; a standing section does not,
+      // because that one is rewritten at every measure and its time would say nothing.
+      if (kept.until === 'stream') state.stream = pushed(state.stream, { ...kept, id: `${kept.id}#${++state.written}`, at: await now() })
       else state.board.set(kept.id, kept)
       redraw()
       return true
@@ -146,7 +148,7 @@ export const register: Register = on => {
 
   on('engine.create', async (_, e, next) => {
     const below = await next(e)
-    return { ...below, sidebar: createSidebar(() => below.ui.invalidate('ui.render'), state) }
+    return { ...below, sidebar: createSidebar(() => below.ui.invalidate('ui.render'), () => below.clock.now(), state) }
   })
 
   on('session.start', async ($, e, next) => {

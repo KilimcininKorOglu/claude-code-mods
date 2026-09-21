@@ -40,6 +40,8 @@ export type Kept = {
   order: number
   /** Lines over `MAX_SECTION_LINES`, counted instead of drawn. */
   more: number
+  /** When the entry was written, in milliseconds since the epoch; a stream entry alone carries it. */
+  at?: number
 }
 
 export type Board = Map<string, Kept>
@@ -142,13 +144,30 @@ export type Row = { text: string; tone?: SidebarLine['kind'] }
 /** One section as the pane draws it: its heading, its lines cut to the width, and its buttons. */
 export type Drawn = { id: string; head: string; rows: Row[]; buttons: SidebarButton[] }
 
+const pad = (n: number): string => String(n).padStart(2, '0')
+
+/** When a stream entry was written, in the machine's own time zone: `21.09 14:32`. */
+export function stamp(at: number): string {
+  const d = new Date(at)
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+/**
+ * The heading of one section: the consumer and the title, and for a stream entry the day and time it
+ * was written, because that log keeps every entry and the person reads it after the fact.
+ */
+export function headText(section: Kept): string {
+  const head = `${section.consumer}: ${section.title}`
+  return section.at === undefined ? head : `${head} (${stamp(section.at)})`
+}
+
 function drawSection(section: Kept, columns: number, left: number): Drawn {
   const rows: Row[] = section.lines
     .slice(0, Math.max(0, left))
     .map(line => ({ text: cut(line.text, columns), ...(line.kind === undefined ? {} : { tone: line.kind }) }))
   const hidden = section.more + Math.max(0, section.lines.length - rows.length)
   if (hidden > 0 && rows.length < left) rows.push({ text: cut(`+${hidden} more line(s)`, columns), tone: 'dim' })
-  return { id: section.id, head: cut(`${section.consumer}: ${section.title}`, columns), rows, buttons: section.buttons }
+  return { id: section.id, head: cut(headText(section), columns), rows, buttons: section.buttons }
 }
 
 /** Draws one section into `out` with `left` rows to spend; answers the rows it took, 0 for none. */
