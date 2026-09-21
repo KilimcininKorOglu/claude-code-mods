@@ -1,6 +1,6 @@
 # error-poke
 
-A Claude Code Mod that continues a turn an API error killed. When the engine ends a turn with `API Error: Connection lost mid-response` or another error that exhausted its retries, the session goes idle with the work half done. The mod submits one continue prompt so the model carries on, at most 5 times in a row.
+A Claude Code Mod that continues a turn an API error killed. When the engine ends a turn with `API Error: Connection lost mid-response` or another error that exhausted its retries, the session goes idle with the work half done. The mod submits one continue prompt so the model carries on, at most 99 times in a row, or as many as you set with `/error-poke limit <n>`.
 
 ## What it does
 
@@ -13,11 +13,11 @@ A Claude Code Mod that continues a turn an API error killed. When the engine end
    The interrupted turn's own work is still in the transcript, so the prompt asks the model to carry on rather than repeat it.
 4. The same moment writes one line to the transcript, so you see why the session moved by itself:
 
-       error-poke: the turn died on an API error, continuing (1/5)
+       error-poke: the turn died on an API error, continuing (1/99)
 
-5. At most 5 prompts go out for one stretch of failures. At the limit the mod says so once and stops:
+5. At most 99 prompts go out for one stretch of failures, or as many as `/error-poke limit <n>` says. At the limit the mod says so once and stops:
 
-       error-poke: stopped after 5 continue prompts; the API keeps failing. Send a prompt to reset the count.
+       error-poke: stopped after 99 continue prompts; the API keeps failing. Send a prompt to reset the count.
 
 6. Your own prompt (the composer, the bridge, the SDK) resets the count, so the next failure starts from 1 again.
 7. While the [sidebar](../sidebar) is open, those lines go there instead, as entries in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
@@ -29,6 +29,7 @@ The engine's own value for `reason` is what the mod reads, and `/error-poke` pri
 
     /error-poke            on or off, the count, and how the last turn ended
     /error-poke on | off   on by default
+    /error-poke limit <n>  at most n continue prompts in a row; 1 to 999, 99 by default, kept across sessions
 
 ## Install
 
@@ -55,7 +56,7 @@ Reach L2, drives Claude.
     1. Reads:    how each main-loop turn ended, and the origin of each prompt; no file, no command
     2. Runs:     nothing
     3. Sends:    one fixed continue prompt to your own session, and one line to the transcript; nothing leaves the machine
-    4. Persists: in $.store, the on/off setting; the count lives in memory for one stretch of failures
+    4. Persists: in $.store, the on/off setting and the limit; the count lives in memory for one stretch of failures
     5. Hostile input: the prompt text is a constant in the mod; no transcript or API text is copied into it
 
 ## Limits

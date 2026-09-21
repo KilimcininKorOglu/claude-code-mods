@@ -1,7 +1,11 @@
 /** When a turn an API error killed is worth one continue prompt, and the texts the person reads. */
 
-/** Continue prompts sent for one stretch of failures; a prompt of the person resets the count. */
-export const MAX_POKES = 5
+/** Continue prompts sent for one stretch of failures, until the person sets another limit. */
+export const DEFAULT_MAX_POKES = 99
+
+/** The band `/error-poke limit <n>` takes; a value outside it is refused, never clamped. */
+export const MIN_LIMIT = 1
+export const MAX_LIMIT = 999
 
 /**
  * The prompt the mod sends. It names the cause and asks the model to carry on where it stopped, because
@@ -18,26 +22,39 @@ export type Decision = 'idle' | 'poke' | 'limit'
  * Whether the turn's end asks for a continue prompt. Only `error` counts: the engine reports a turn the
  * user interrupted as `aborted` and a model refusal as `refusal`, and neither is a failure to retry.
  */
-export function decide(reason: string, pokes: number): Decision {
+export function decide(reason: string, pokes: number, max: number): Decision {
   if (reason !== 'error') return 'idle'
-  return pokes >= MAX_POKES ? 'limit' : 'poke'
+  return pokes >= max ? 'limit' : 'poke'
+}
+
+/** The limit a `/error-poke limit <word>` argument names, or undefined when it is not one. */
+export function limitOf(arg: string): number | undefined {
+  if (!/^\d{1,3}$/.test(arg)) return undefined
+  const n = Number(arg)
+  return n >= MIN_LIMIT && n <= MAX_LIMIT ? n : undefined
+}
+
+/** The answer of `/error-poke limit <n>`, or of an argument it cannot read. */
+export function limitText(limit: number | undefined): string {
+  if (limit === undefined) return `limit expects a whole number from ${MIN_LIMIT} to ${MAX_LIMIT}`
+  return `limit ${limit}: at most ${limit} continue prompt(s) go out for one stretch of failures`
 }
 
 /** The line the person reads when a prompt goes out. The engine adds the mod name. */
-export function pokeLog(pokes: number): string {
-  return `the turn died on an API error, continuing (${pokes}/${MAX_POKES})`
+export function pokeLog(pokes: number, max: number): string {
+  return `the turn died on an API error, continuing (${pokes}/${max})`
 }
 
 /** The line the person reads once the mod stops trying. */
-export function limitLog(): string {
-  return `stopped after ${MAX_POKES} continue prompts; the API keeps failing. Send a prompt to reset the count.`
+export function limitLog(max: number): string {
+  return `stopped after ${max} continue prompts; the API keeps failing. Send a prompt to reset the count.`
 }
 
 /**
  * The `/error-poke` answer. `reason` is how the last main-loop turn ended, so the person can tell whether
  * the engine reported their own error as `error` at all; it is empty until a turn has ended.
  */
-export function statusText(enabled: boolean, pokes: number, reason?: string): string {
+export function statusText(enabled: boolean, pokes: number, max: number, reason?: string): string {
   const last = reason === undefined ? 'no turn has ended yet' : `last turn: ${reason}`
-  return `${enabled ? 'on' : 'off'} · ${pokes}/${MAX_POKES} continue prompts since your last prompt · ${last}`
+  return `${enabled ? 'on' : 'off'} · ${pokes}/${max} continue prompts since your last prompt · ${last}`
 }

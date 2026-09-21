@@ -1,6 +1,6 @@
 {
   "name": "error-poke",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sends one continue prompt after a turn an API error killed, at most 5 times in a row. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

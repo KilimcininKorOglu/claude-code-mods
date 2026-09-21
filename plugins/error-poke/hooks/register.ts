@@ -1,13 +1,16 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { decide, limitLog, POKE_TEXT, pokeLog, statusText } from './poke.ts'
+import { DEFAULT_MAX_POKES, decide, limitLog, limitOf, limitText, POKE_TEXT, pokeLog, statusText } from './poke.ts'
 
 const ENABLED_KEY = 'enabled'
+const LIMIT_KEY = 'limit'
+
+const USAGE = 'expects nothing (the status), on, off or limit <n>'
 
 /** The origins of a prompt the person sent themselves, which resets the count. */
 const USER_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
 
-/** The on/off setting, the prompts sent since the last prompt of the person, and how the last turn ended. */
-type State = { enabled: boolean; pokes: number; limitLogged: boolean; lastReason?: string }
+/** The on/off setting, the limit, the prompts sent since the last prompt of the person, and how the last turn ended. */
+type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastReason?: string }
 
 /**
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
@@ -36,21 +39,36 @@ function sendPoke($: EngineInterface): void {
 
 /** Acts on one main-loop turn that ended: a continue prompt, the limit, or nothing. */
 async function afterTurn($: EngineInterface, state: State, reason: string): Promise<void> {
-  const decision = decide(reason, state.pokes)
+  const decision = decide(reason, state.pokes, state.max)
   if (decision === 'idle') return
   if (decision === 'limit') {
     if (state.limitLogged) return
     state.limitLogged = true
-    await toPerson($, 'limit', 'continue prompts stopped', limitLog())
+    await toPerson($, 'limit', 'continue prompts stopped', limitLog(state.max))
     return
   }
   state.pokes += 1
-  await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', pokeLog(state.pokes))
+  await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', pokeLog(state.pokes, state.max))
   sendPoke($)
 }
 
+/** Writes the limit the person set; it holds across sessions, because it lives in $.store. */
+async function setLimit($: EngineInterface, state: State, arg: string): Promise<string> {
+  const limit = limitOf(arg)
+  if (limit === undefined) return limitText(undefined)
+  state.max = limit
+  await $.store.set(LIMIT_KEY, limit)
+  return limitText(limit)
+}
+
+/** The stored limit, or the default when nothing is stored and when the stored value is not one. */
+async function readLimit($: EngineInterface): Promise<number> {
+  const stored = await $.store.get(LIMIT_KEY)
+  return typeof stored === 'number' && limitOf(String(stored)) !== undefined ? stored : DEFAULT_MAX_POKES
+}
+
 export const register: Register = on => {
-  const state: State = { enabled: true, pokes: 0, limitLogged: false }
+  const state: State = { enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false }
 
   const resetCount = (): void => {
     state.pokes = 0
@@ -60,11 +78,12 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.max = await readLimit($)
     resetCount()
     await $.command.register({
       name: 'error-poke',
-      description: 'Continue automatically after a turn an API error killed: status, on, off (error-poke)',
-      argumentHint: '[on | off]',
+      description: 'Continue automatically after a turn an API error killed: status, on, off, limit (error-poke)',
+      argumentHint: '[on | off | limit <n>]',
       immediate: true,
     })
     return r
@@ -77,8 +96,12 @@ export const register: Register = on => {
       state.enabled = arg === 'on'
       await $.store.set(ENABLED_KEY, state.enabled)
       resetCount()
+    } else if (arg.startsWith('limit')) {
+      return { text: await setLimit($, state, arg.slice(5).trim()) }
+    } else if (arg !== '') {
+      return { text: USAGE }
     }
-    return { text: statusText(state.enabled, state.pokes, state.lastReason) }
+    return { text: statusText(state.enabled, state.pokes, state.max, state.lastReason) }
   })
 
   // Only the origin is read. The prompt text passes through untouched. A prompt whose origin the engine
