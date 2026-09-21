@@ -50,7 +50,7 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the commit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it measures both sources again, so a commit that added the variables, and one that took the reads out, each open the gate themselves. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a finding is open. Before it stops one it measures both sources again, so a commit that added the variables, and one that took the reads out, each open the gate themselves. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`) and lets the commit run when it holds none of the files that read the missing variables, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only the person turns the gate off with `/env-sync mode note`. `note` mode is the default and stops nothing.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -81,12 +81,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=env-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile, stillRead), $.fs.read (via commitNote, gate, recheckNow, stillRead), $.process.run (via git), $.session.cwd (via beforeCommit, recheckNow), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via referenceFile, stillRead), $.fs.read (via commitNote, gate, recheckNow, stillRead), $.process.run (via git, scopeOf), $.session.cwd (via beforeCommit, recheckNow), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
 
 Reach L2, runs processes.
 
     1. Reads:    the Bash command text; the reference file at the repository root; each file an open finding came from, again, also at the turn's end; through git, the commit's added lines
-    2. Runs:     git rev-parse and git show, read-only, by argv, at most four times per commit, and git rev-parse at the turn's end while a finding stands
+    2. Runs:     git rev-parse, git show and git diff --cached --name-only, read-only, by argv, at most four times per commit, and git rev-parse at the turn's end while a finding stands
     3. Sends:    a note to the model after the commit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; the note names variables, never a value from .env.example
@@ -99,6 +99,7 @@ Reach L2, runs processes.
 - A merge commit's combined diff is not read.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/env-sync mode note`.
 - The gate reads the command as text, so a commit through a script or an alias passes it.
+- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
 - A finding is measured against the file the commit read the variable in. A read moved to another file counts as gone there, and the commit that adds it elsewhere reports it again.
 
 ## Development

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, listedNames, logText, modeOf, noteText, openNote, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Mode, type Open } from './env.ts'
+import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, isNarrowable, listedNames, logText, modeOf, noteText, openNote, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Mode, type Open } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -161,6 +161,32 @@ async function afterCommit($: EngineInterface, state: State, before: Before, r: 
 }
 
 /**
+ * The findings this command answers for. A `git commit` answers for its own files alone, so a variable a
+ * file the commit does not hold reads lets it run. A `push` or a `merge` holds no index to read, so every
+ * finding stands there. The index is read before the command runs, as the commit will take it.
+ */
+async function scopeOf($: EngineInterface, state: State, root: string, command: string): Promise<Open[]> {
+  if (!isCommit(command) || !isNarrowable(command)) return [...state.open]
+  try {
+    const staged = await $.process.run(['git', 'diff', '--cached', '--name-only', '-z'], { cwd: root, timeoutMs: 10_000 })
+    if (staged.exitCode !== 0) return [...state.open]
+    const held = new Set(staged.stdout.split('\0').filter(Boolean))
+    return state.open.filter(o => held.has(o.file))
+  } catch {
+    // git did not run: the findings are not narrowed.
+    return [...state.open]
+  }
+}
+
+/** The deny of the findings this command answers for, or undefined when it holds none of their files. */
+async function denyFor($: EngineInterface, state: State, root: string, reference: string, command: string): Promise<{ deny: string } | undefined> {
+  const scoped = await scopeOf($, state, root, command)
+  if (scoped.length > 0) return { deny: denyText(scoped.map(o => o.name), reference) }
+  $.ui.log(`${reference} still lacks ${state.open.length} variable(s), and this command holds none of the files that read them`)
+  return undefined
+}
+
+/**
  * The gate: in deny mode a commit, push or merge waits while the reference file still lacks a variable.
  * The reference file is read again first, so a commit that added the variables opens the gate itself.
  */
@@ -171,7 +197,7 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
     const reference = before === undefined ? undefined : await referenceFile($, before.root)
     if (before === undefined || reference === undefined) return undefined
     await recheckOpen($, state, before.root, reference, listedNames(await $.fs.read(`${before.root}/${reference}`)))
-    return state.open.length === 0 ? undefined : { deny: denyText(state.open.map(o => o.name), reference) }
+    return state.open.length === 0 ? undefined : denyFor($, state, before.root, reference, command)
   } catch (err) {
     report($, state, err)
     return undefined

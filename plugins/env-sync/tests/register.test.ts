@@ -46,12 +46,12 @@ const SOURCE = 'const k = process.env.STRIPE_KEY\nconst d = process.env.DB_URL\n
  * `head` moves to `next` when the commit runs; `files` are the files on disk; `showFails` makes git show fail;
  * `notRepo` makes the directory no repository.
  */
-type World = { head: string; next: string; files: Map<string, string>; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean }
+type World = { head: string; next: string; files: Map<string, string>; staged: string[]; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean }
 
 function world(on: On): World {
   const w: World = {
     head: 'aaa', next: 'bbb', files: new Map([[`${ROOT}/.env.example`, 'DB_URL=postgres://localhost/app\n'], [PAY, SOURCE]]),
-    argv: [], logs: [], commitFails: false, showFails: false, notRepo: false,
+    staged: ['src/pay.ts'], argv: [], logs: [], commitFails: false, showFails: false, notRepo: false,
   }
   mock.store(on, {})
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -63,6 +63,7 @@ function world(on: On): World {
     w.argv.push(cmd)
     if (cmd === 'git rev-parse --show-toplevel') return { value: w.notRepo ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : { exitCode: 0, stdout: `${ROOT}\n`, stderr: '' } }
     if (cmd === 'git rev-parse HEAD') return { value: w.head === '' ? { exitCode: 128, stdout: '', stderr: 'unknown revision' } : { exitCode: 0, stdout: `${w.head}\n`, stderr: '' } }
+    if (cmd.startsWith('git diff --cached')) return { value: { exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
     return { value: w.showFails ? { exitCode: 128, stdout: '', stderr: 'bad' } : { exitCode: 0, stdout: DIFF, stderr: '' } }
   })
   on('tool.call', { tool: 'Bash' }, (_, e) => {
@@ -173,6 +174,26 @@ describe('env-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('.env.example now lists the variables it lacked: STRIPE_KEY')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a commit that holds none of the reading files runs, and a push still stops', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    await $.command.run(run('mode deny'))
+    // The index holds another file: the finding stands, and the commit runs.
+    w.staged = ['README.md']
+    w.next = 'ccc'
+    // The commit runs; its own note comes after it, because the world's git show still holds the read.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m docs' })).deny).toBe(undefined)
+    expect(w.logs).toContain('.env.example still lacks 1 variable(s), and this command holds none of the files that read them')
+    // A push holds no index, so every finding stands there.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('STRIPE_KEY')
+    // The index holds the reading file now: the commit stops.
+    w.staged = ['src/pay.ts']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })).deny).toContain('STRIPE_KEY')
+    // A `git commit -a` stages as it runs, so the index does not say what it holds and nothing is narrowed.
+    w.staged = ['README.md']
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -am wip' })).deny).toContain('STRIPE_KEY')
   })
 
   test('the turn end measures the open variable again and the next prompt carries the note', async ($, on) => {

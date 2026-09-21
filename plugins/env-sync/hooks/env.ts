@@ -183,6 +183,15 @@ export function doneLines(added: readonly string[], gone: readonly string[]): { 
 }
 
 /**
+ * Whether the index alone says what this commit holds. A `-a` or `-am` commit stages the tracked files
+ * as it runs, and a pathspec after `--` commits paths the index does not hold, so neither is narrowed.
+ */
+export function isNarrowable(command: string): boolean {
+  const words = command.split(/\s+/)
+  return !words.includes('--') && !words.some(w => w === '--all' || /^-[A-Za-z]*a/.test(w))
+}
+
+/**
  * The note the model reads at the next prompt while a finding stands, so a finding it did not close
  * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
  */
