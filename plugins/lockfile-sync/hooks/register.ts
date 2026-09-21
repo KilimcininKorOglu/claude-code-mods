@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, lockCandidates, logText, modeOf, noteText, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -12,9 +12,10 @@ type Open = { key: string; stale: Stale[] }
 /**
  * The on/off setting read at session start, the mode, and the last error logged, so the same one is
  * logged once. `open` holds the last finding, so a later commit that brings its lockfiles along closes
- * it, and in `deny` mode it also holds the gate shut.
+ * it, and in `deny` mode it also holds the gate shut. `owed` says the model is owed a note for the
+ * finding that stood at the turn's end.
  */
-type State = { enabled: boolean; mode: Mode; lastError?: string; open?: Open }
+type State = { enabled: boolean; mode: Mode; lastError?: string; open?: Open; owed: boolean }
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -165,6 +166,23 @@ async function caughtUp($: EngineInterface, root: string, stale: readonly Stale[
 }
 
 /**
+ * Measures the open finding outside a commit, from the working tree and from git, and answers whether it
+ * still stands. A directory no repository holds, and a git error, leave the finding as it was.
+ */
+async function recheckNow($: EngineInterface, state: State): Promise<boolean> {
+  const open = state.open
+  if (open === undefined) return false
+  try {
+    const before = await beforeCommit($, state, '')
+    if (before === undefined) return state.open !== undefined
+    await closeResolved($, state, await caughtUp($, before.root, open.stale), await settled($, before.root, open.stale))
+  } catch (err) {
+    report($, state, err)
+  }
+  return state.open !== undefined
+}
+
+/**
  * The gate: in deny mode a commit, push or merge waits while a lockfile is still behind its manifest.
  * The working tree is read again first, so a lockfile the model updated opens the gate itself.
  */
@@ -207,7 +225,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, mode: 'note' }
+  const state: State = { enabled: true, mode: 'note', owed: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -219,6 +237,25 @@ export const register: Register = on => {
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'lockfile-sync' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  /*
+   * The turn's end measures the open finding again and owes the model a note while it stands, because a
+   * finding it did not close would otherwise stand in the pane and reach it never again.
+   */
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || !state.enabled) return r
+    state.owed = await recheckNow($, state)
+    return r
+  })
+
+  // The note goes to the model alone; the person reads the pane, which carries the same finding.
+  on('prompt.submit', async (_, e, next) => {
+    const open = state.open
+    if (!state.owed || open === undefined) return next(e)
+    state.owed = false
+    return next({ ...e, context: [...(e.context ?? []), openNote(open.stale)] })
+  })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const stopped = await gate($, state, e.command)

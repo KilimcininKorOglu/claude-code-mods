@@ -190,6 +190,15 @@ export function denyText(stale: readonly Stale[]): string {
   return `stopped: ${stale.length} lockfile(s) are behind their manifest: ${pairs}. Install the dependencies so the lockfile is written, then run the command again; there is no way around this gate.`
 }
 
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(stale: readonly Stale[]): string {
+  const pairs = stale.map(s => `${s.lock} behind ${s.manifest}`).join(' · ')
+  return `lockfile-sync: ${stale.length} lockfile(s) are still behind their manifest: ${pairs}. Run the package manager's install so the lockfile is written, or take the dependency change back.`
+}
+
 /** One sidebar line per pair, so the section reads as a list. */
 export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'error' }[] {
   return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'error' }))

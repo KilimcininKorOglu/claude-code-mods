@@ -49,6 +49,26 @@ type World = {
   lockCommit: string; sinceLock: string
 }
 
+type Ran = { exitCode: number; stdout: string; stderr: string }
+
+const ok = (stdout: string): Ran => ({ exitCode: 0, stdout, stderr: '' })
+const failed = (stderr: string): Ran => ({ exitCode: 128, stdout: '', stderr })
+
+/** What the world's git answers for one command; `git show` is the only one `showFails` breaks. */
+function gitShow(w: World, cmd: string): Ran {
+  if (w.showFails) return failed('bad')
+  return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
+}
+
+function gitAnswer(w: World, cmd: string): Ran {
+  if (cmd === 'git rev-parse --show-toplevel') return w.notRepo ? failed('not a git repository') : ok(`${ROOT}\n`)
+  if (cmd === 'git rev-parse HEAD') return ok(`${w.head}\n`)
+  if (cmd.startsWith('git status')) return ok(w.lockDirty ? ' M package-lock.json\n' : '')
+  if (cmd.startsWith('git log')) return ok(w.lockCommit === '' ? '' : `${w.lockCommit}\n`)
+  if (cmd.startsWith('git diff')) return ok(w.sinceLock)
+  return gitShow(w, cmd)
+}
+
 function world(on: On): World {
   const w: World = {
     head: 'aaa', next: 'bbb', names: 'M\tpackage.json\n', files: new Set([`${ROOT}/package-lock.json`]),
@@ -62,14 +82,7 @@ function world(on: On): World {
   on('process.run', (_, e) => {
     const cmd = e.argv.join(' ')
     w.argv.push(cmd)
-    const ok = (stdout: string) => ({ value: { exitCode: 0, stdout, stderr: '' } })
-    if (cmd === 'git rev-parse --show-toplevel') return w.notRepo ? { value: { exitCode: 128, stdout: '', stderr: 'not a git repository' } } : ok(`${ROOT}\n`)
-    if (cmd === 'git rev-parse HEAD') return ok(`${w.head}\n`)
-    if (cmd.startsWith('git status')) return ok(w.lockDirty ? ' M package-lock.json\n' : '')
-    if (cmd.startsWith('git log')) return ok(w.lockCommit === '' ? '' : `${w.lockCommit}\n`)
-    if (cmd.startsWith('git diff')) return ok(w.sinceLock)
-    if (w.showFails) return { value: { exitCode: 128, stdout: '', stderr: 'bad' } }
-    return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
+    return { value: gitAnswer(w, cmd) }
   })
   on('tool.call', { tool: 'Bash' }, (_, e) => {
     if (w.commitFails) return { result: 'Error: Exit code 1', text: 'Exit code 1', isError: true } as never
@@ -184,6 +197,33 @@ describe('lockfile-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('a later change brought the lockfiles along: package-lock.json')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('the turn end measures the open pair again and the next prompt carries the note', async ($, on) => {
+    const w = world(on)
+    const notes: string[][] = []
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    on('prompt.submit', (_, e) => {
+      notes.push([...(e.context ?? [])])
+      return { text: e.text }
+    })
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+    // No turn has ended yet, so the model is owed nothing.
+    await prompt('first')
+    expect(notes[0]).toEqual([])
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    await prompt('second')
+    expect(notes[1]?.[0]).toBe("lockfile-sync: 1 lockfile(s) are still behind their manifest: package-lock.json behind package.json. Run the package manager's install so the lockfile is written, or take the dependency change back.")
+    // One note per turn: the next prompt without a turn in between carries none.
+    await prompt('third')
+    expect(notes[2]).toEqual([])
+    // The package manager wrote the lockfile: the turn's end closes the finding and owes no note.
+    w.lockDirty = true
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe('a later change brought the lockfiles along: package-lock.json')
+    await prompt('fourth')
+    expect(notes[3]).toEqual([])
   })
 
   test('a git error is logged once and the commit result stays', async ($, on) => {
