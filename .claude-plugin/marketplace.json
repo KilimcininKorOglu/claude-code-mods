@@ -393,6 +393,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "commit-cadence",
+      "source": "./plugins/commit-cadence",
+      "description": "Names the uncommitted files at the end of each turn, so finished work is committed as it lands.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
