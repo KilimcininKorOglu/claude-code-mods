@@ -32,7 +32,7 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a workflow still uses an action by a moving ref. Before it stops one it reads each open workflow again, so a file the model pinned opens the gate itself. There is no bypass; only the person turns the gate off with `/action-pin mode note`. `note` mode is the default and stops nothing.
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a workflow still uses an action by a moving ref. Before it stops one it reads each open workflow again, so a file the model pinned opens the gate itself. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`) and lets the commit run when it holds none of the open workflows, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only the person turns the gate off with `/action-pin mode note`. `note` mode is the default and stops nothing.
 
 ## Command
 
@@ -59,12 +59,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)
 
 Reach L3, reaches the network.
 
     1. Reads:    the path and the new text of each Edit and Write; the Bash command text; each open workflow again while a finding stands, also at the turn's end
-    2. Runs:     nothing
+    2. Runs:     git rev-parse --show-toplevel and git diff --cached --name-only, at a commit in deny mode, to read which files the commit holds
     3. Sends:    the public action name and its ref (for example actions/checkout and v4) to api.github.com, at most 10 per edit, once each per session; no token, no repository content, no file path
     4. Persists: in $.store, the on/off setting and the mode; the resolved SHAs live in memory for one session
     5. Hostile input: the answer is used only when it is 40 hex characters, and it is written into the note alone; the mod never edits a file
@@ -78,6 +78,8 @@ Reach L3, reaches the network.
 - A finding closes only when the workflow no longer uses those actions by a ref. A file that cannot be read keeps it open.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/action-pin mode note`.
 - The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
+- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
+- The index is read in the repository of the session's own directory. A finding of a workflow in another repository never matches it, so such a commit runs.
 
 ## Development
 

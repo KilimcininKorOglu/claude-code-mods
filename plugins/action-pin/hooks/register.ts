@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, denyText, doneLines, doneLog, doneTitle, isGuarded, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
+import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -91,6 +91,9 @@ async function isThere($: EngineInterface, path: string): Promise<boolean> {
   }
 }
 
+/** One workflow whose finding still stands, and the refs of it that still move. */
+type Left = { path: string; refs: string[] }
+
 async function stillMoving($: EngineInterface, path: string, refs: readonly string[]): Promise<string[] | undefined> {
   try {
     if (!(await isThere($, path))) return []
@@ -103,12 +106,12 @@ async function stillMoving($: EngineInterface, path: string, refs: readonly stri
 }
 
 /** Reads each open workflow again and closes the findings whose refs are pinned now. */
-async function closeResolved($: EngineInterface, state: State, skip?: string): Promise<string[]> {
-  const left: string[] = []
+async function closeResolved($: EngineInterface, state: State, skip?: string): Promise<Left[]> {
+  const left: Left[] = []
   for (const [path, refs] of [...state.open]) {
     const moving = path === skip ? refs : await stillMoving($, path, refs)
     if (moving === undefined || moving.length > 0) {
-      left.push(...(moving ?? refs))
+      left.push({ path, refs: [...(moving ?? refs)] })
       continue
     }
     state.open.delete(path)
@@ -136,13 +139,49 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
 }
 
 /**
+ * The files this commit holds, by absolute path, or undefined when git did not answer. Read before the
+ * command runs, so it is the index as the commit will take it.
+ */
+async function stagedPaths($: EngineInterface): Promise<Set<string> | undefined> {
+  try {
+    const cwd = await $.session.cwd()
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const staged = await $.process.run(['git', 'diff', '--cached', '--name-only', '-z'], { cwd })
+    if (top.exitCode !== 0 || staged.exitCode !== 0) return undefined
+    const base = top.stdout.trim()
+    return new Set(staged.stdout.split('\0').filter(Boolean).map(p => `${base}/${p}`))
+  } catch {
+    // No git here, or the command did not run: the findings are not narrowed.
+    return undefined
+  }
+}
+
+/**
+ * The findings this command answers for. A `git commit` answers for its own files alone, so a finding of
+ * a workflow the commit does not hold lets it run. A `push` or a `merge` holds no index to read, so every
+ * finding stands there.
+ */
+async function scopeOf($: EngineInterface, left: readonly Left[], command: string): Promise<Left[]> {
+  if (!isCommit(command) || !isNarrowable(command)) return [...left]
+  const staged = await stagedPaths($)
+  return staged === undefined ? [...left] : left.filter(l => staged.has(l.path))
+}
+
+/**
  * The gate of the `deny` mode: it reads each open workflow again, so a ref the model pinned without a
- * new finding opens the gate too. A ref that still moves stops the command, and there is no bypass.
+ * new finding opens the gate too. A ref of a workflow this command holds that still moves stops it, and
+ * there is no bypass.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
   if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command)) return undefined
   const left = await closeResolved($, state)
-  return left.length === 0 ? undefined : denyText(left)
+  if (left.length === 0) return undefined
+  const scoped = await scopeOf($, left, command)
+  if (scoped.length === 0) {
+    $.ui.log(`${left.length} workflow(s) still use a moving ref, and this command holds none of them`)
+    return undefined
+  }
+  return denyText(scoped.flatMap(l => l.refs))
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
@@ -191,7 +230,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     if (e.agentId !== undefined || !state.enabled) return r
-    state.owed = await closeResolved($, state)
+    state.owed = (await closeResolved($, state)).flatMap(l => l.refs)
     return r
   })
 

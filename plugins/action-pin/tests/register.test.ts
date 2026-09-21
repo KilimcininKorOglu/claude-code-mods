@@ -137,6 +137,31 @@ describe('action-pin', () => {
     expect(w.logs.at(-1)).toBe(`${ROOT}/${WORKFLOW} is no longer there: actions/checkout@v4`)
   })
 
+  test('a commit that holds none of the open workflows runs, and a push still stops', async ($, on) => {
+    const w = world(on)
+    const staged: string[] = ['src/main.ts']
+    on('session.cwd', () => ({ value: ROOT }))
+    on('process.run', (_, e) => {
+      const out = e.argv.includes('--show-toplevel') ? `${ROOT}\n` : staged.join('\0')
+      return { value: { exitCode: 0, stdout: out, stderr: '' } }
+    })
+    await started($)
+    await edit($, WORKFLOW, '', '  - uses: actions/checkout@v4')
+    w.files.set(`${ROOT}/${WORKFLOW}`, '  - uses: actions/checkout@v4\n')
+    await $.command.run(run('mode deny'))
+    // The index holds another file: the finding stands, and the commit runs.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m other' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('1 workflow(s) still use a moving ref, and this command holds none of them')
+    // A push holds no index, so every finding stands there.
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toContain('actions/checkout@v4')
+    // The index holds the workflow now: the commit stops.
+    staged[0] = WORKFLOW
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m ci' } as never)).deny).toContain('actions/checkout@v4')
+    // A `git commit -a` stages as it runs, so the index does not say what it holds and nothing is narrowed.
+    staged[0] = 'src/main.ts'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -am wip' } as never)).deny).toContain('actions/checkout@v4')
+  })
+
   test('the turn end reads the open workflow again and the next prompt carries the note', async ($, on) => {
     const w = world(on)
     const notes: string[][] = []
