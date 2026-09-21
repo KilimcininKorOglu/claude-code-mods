@@ -143,6 +143,23 @@ describe('dep-sentinel', () => {
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
   })
 
+  test('the gate runs the owed check itself, so the network coming back opens it', async ($, on) => {
+    const w = world(on)
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    await $.command.run(run('mode deny'))
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })).deny).toContain('installed unchecked: lodash')
+    // The registry answers now: the gate's own check closes the finding, with no second install.
+    w.down = false
+    w.osv = OSV_BAD
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })).result).toBe('ok')
+    expect(w.logs.slice(1)).toEqual([
+      'the registry and OSV.dev answered for the packages that stayed unchecked: lodash',
+      'the check that was owed says: lodash@4.17.21 has 1 known vulnerability(ies) on OSV.dev: GHSA-29mw-wpgm-hmr9; no fixed version is listed',
+    ])
+    expect((await $.command.run(run(''))).text).toContain('no package is open')
+  })
+
   test('in deny mode a commit stops while a package stayed unchecked, and runs once a later install checked it', async ($, on) => {
     const w = world(on)
     w.down = true

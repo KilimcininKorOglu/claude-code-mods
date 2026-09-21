@@ -1,6 +1,6 @@
 {
   "name": "dep-sentinel",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

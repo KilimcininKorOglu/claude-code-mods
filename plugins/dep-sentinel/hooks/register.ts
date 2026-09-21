@@ -1,7 +1,7 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
-import { checkedLog, denyText, doneLines, gateText, isGuarded, missingReason, modeOf, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
+import { checkedLog, denyText, doneLines, gateCheckedLog, gateText, isGuarded, lateReasonLog, missingReason, modeOf, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -17,8 +17,11 @@ const GO_PARENT_TRIES = 4
 /** One package's check: reasons to stop it, or why it could not be checked. */
 type Outcome = { reasons: string[]; failure?: string }
 
-/** The packages an earlier install could not check, so a later one that checks them closes the finding. */
-type State = { mode: Mode; open: Set<string> }
+/**
+ * The packages an earlier install could not check, each with the install it came from, so the check can
+ * be run again: by a later install of the same package, and by the gate itself.
+ */
+type State = { mode: Mode; open: Map<string, Install> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -116,7 +119,7 @@ function splitNames(installs: readonly Install[], outcomes: readonly Outcome[]):
 /** Closes the unchecked finding once every package it named was checked, and reports it. */
 async function closeChecked($: EngineInterface, state: State, checked: readonly string[]): Promise<void> {
   if (state.open.size === 0) return
-  const named = [...state.open]
+  const named = [...state.open.keys()]
   for (const name of checked) state.open.delete(name)
   if (state.open.size > 0) return
   await dropEntry($, 'unchecked')
@@ -129,12 +132,36 @@ function withNote(r: ToolCallResult, note: string): ToolCallResult {
 }
 
 /**
- * The gate of the `deny` mode. It holds no check of its own: a package the registry or OSV.dev did not
- * answer for stays open until a later install checks it, because a gate must not wait on the network.
+ * Runs the owed check again for every package still open, and closes the finding when the registry and
+ * OSV.dev answer for all of them. A package they still do not answer for stays open. What a late answer
+ * has to say is written as its own finding, because the install it belongs to already ran.
+ */
+async function recheckOpen($: EngineInterface, state: State, now: number): Promise<void> {
+  if (state.open.size === 0) return
+  const named = [...state.open.keys()]
+  const reasons: string[] = []
+  for (const [name, install] of [...state.open]) {
+    const outcome = await checkOne($, install, now)
+    if (outcome.failure !== undefined) continue
+    state.open.delete(name)
+    reasons.push(...outcome.reasons)
+  }
+  if (state.open.size > 0) return
+  await dropEntry($, 'unchecked')
+  await toPerson($, 'unchecked', 'packages checked after all', doneLines(named), gateCheckedLog(named))
+  if (reasons.length > 0) await toPerson($, 'late', 'the late check has something to say', sidebarLines(reasons), lateReasonLog(reasons))
+}
+
+/**
+ * The gate of the `deny` mode. The owed check is run again first, in both modes, so a package the
+ * registry did not answer for earlier closes its own finding instead of waiting for another install.
+ * A package they still do not answer for stops the command.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
-  if (state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
-  return gateText([...state.open])
+  if (state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
+  await recheckOpen($, state, await $.clock.now())
+  if (state.mode !== 'deny' || state.open.size === 0) return undefined
+  return gateText([...state.open.keys()])
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
@@ -161,7 +188,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { mode: 'note', open: new Set() }
+  const state: State = { mode: 'note', open: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -192,7 +219,7 @@ export const register: Register = on => {
     const failures = outcomes.map(o => o.failure).filter((f): f is string => f !== undefined)
     const r = await next(e)
     if (failures.length === 0) return r
-    for (const name of names.unchecked) state.open.add(name)
+    plan.installs.forEach((p, i) => { if (outcomes[i]?.failure !== undefined) state.open.set(p.name, p) })
     // The note goes to the model, the finding to the person: neither reads the other's channel.
     await toPerson($, 'unchecked', 'packages the install did not check', sidebarLines(failures), uncheckedLog(failures))
     return withNote(r, uncheckedNote(failures))

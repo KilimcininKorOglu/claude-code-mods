@@ -105,6 +105,16 @@ export function checkedLog(names: readonly string[]): string {
   return `a later install checked the packages that stayed unchecked: ${names.join(' · ')}`
 }
 
+/** The transcript line of an unchecked finding the gate's own check closed. */
+export function gateCheckedLog(names: readonly string[]): string {
+  return `the registry and OSV.dev answered for the packages that stayed unchecked: ${names.join(' · ')}`
+}
+
+/** The transcript line of a package the gate's check answered for, with something to say about it. */
+export function lateReasonLog(reasons: readonly string[]): string {
+  return `the check that was owed says: ${reasons.join(' · ')}`
+}
+
 /** One sidebar line per package a later install checked. */
 export function doneLines(names: readonly string[]): { text: string; kind: 'ok' }[] {
   return names.map(text => ({ text, kind: 'ok' as const }))

@@ -28,13 +28,18 @@ A Claude Code Mod that checks each package the model installs before the install
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
 
-8. An unchecked finding stays open until the packages are checked. When a later install checks every package the finding named, its sidebar entry is cleared and a new entry takes its place:
+8. An unchecked finding is never a remembered answer: the check it is owed is run again, so it closes two ways. A later install of the package checks it, and a guarded git command runs the check itself, in both modes. The entry is cleared and a new one takes its place:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
+       dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash
 
-   With the sidebar closed the same text is one transcript line. The model reads nothing of this.
+   What a late answer has to say is written as its own red entry, because the install it belongs to already ran:
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stayed unchecked. The gate runs no check of its own, because it must not wait on the network: the package opens the gate when a later install checks it. There is no bypass; only the person turns the gate off with `/dep-sentinel mode note`. `note` mode is the default and stops no git command. An install is stopped in both modes, as above.
+       dep-sentinel: the check that was owed says: lodash@4.17.21 has 1 known vulnerability(ies) on OSV.dev: GHSA-29mw-wpgm-hmr9; fixed in 4.17.22
+
+   With the sidebar closed the same texts are transcript lines. The model reads nothing of this.
+
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stayed unchecked. The gate runs the owed check first, so the package that only failed because the network was down opens the gate by itself; a package the registry still does not answer for stops the command. There is no bypass; only the person turns the gate off with `/dep-sentinel mode note`. `note` mode is the default and stops no git command, but it runs the same check at a git command, so a settled finding does not stay in the pane. An install is stopped in both modes, as above.
 
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 
@@ -69,7 +74,7 @@ Reach L3, reaches the network.
 
     1. Reads:    the Bash command text
     2. Runs:     nothing
-    3. Sends:    each package name, and its version, to its public registry and to api.osv.dev; a note to the model and one line to the transcript when a check failed; nothing else leaves the machine
+    3. Sends:    each package name, and its version, to its public registry and to api.osv.dev, at an install and again at a guarded git command while a finding is open; a note to the model and one line to the transcript when a check failed; nothing else leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a package name comes from the model's command; it reaches a registry only inside a URL path or a JSON body, and a registry answer is read as data
 
@@ -80,6 +85,7 @@ Reach L3, reaches the network.
 - npm package documents are large (16 MB for typescript, measured), so a check takes up to a few seconds.
 - An install that a script, an alias or a lockfile runs (`npm ci`, `pip install -r`) is not checked.
 - The `deny` mode has no bypass. When a registry stays unreachable, the person turns the gate off with `/dep-sentinel mode note`.
+- A git command while a finding is open waits for that check, so the first commit after a failed install takes as long as the registry does.
 - The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
 
 ## Development
