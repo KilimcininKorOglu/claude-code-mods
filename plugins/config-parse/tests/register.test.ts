@@ -34,11 +34,11 @@ const run = (args: string): CommandRunInput => ({
   command: 'config-parse', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The text every read answers with, what python answers, and the lines logged. */
-type World = { file: string; python: { exitCode: number; stderr: string }; argv: (readonly string[])[]; logs: string[] }
+/** The text every read answers with, what python answers, what the index holds, and the lines logged. */
+type World = { file: string; python: { exitCode: number; stderr: string }; staged: string[]; argv: (readonly string[])[]; logs: string[] }
 
 function world(on: On): World {
-  const w: World = { file: '', python: { exitCode: 0, stderr: '' }, argv: [], logs: [] }
+  const w: World = { file: '', python: { exitCode: 0, stderr: '' }, staged: ['package.json', '.env'], argv: [], logs: [] }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
@@ -47,6 +47,10 @@ function world(on: On): World {
   on('fs.read', () => ({ value: w.file }) as never)
   on('process.run', (_, e) => {
     w.argv.push(e.argv)
+    if (e.argv[0] === 'git') {
+      const out = e.argv.includes('--show-toplevel') ? `${ROOT}\n` : w.staged.join('\0')
+      return { value: { exitCode: 0, stdout: out, stderr: '' } }
+    }
     return { value: { exitCode: w.python.exitCode, stdout: '', stderr: w.python.stderr } }
   })
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }) as never)
@@ -147,6 +151,26 @@ describe('config-parse', () => {
     expect(w.logs.at(-1)).toBe('package.json parses as JSON again')
     expect((await $.command.run(run(''))).text).toBe('on · mode deny · no file is open')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a commit that holds none of the open files runs, and a push still stops', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = '{"a": 1,}'
+    await edit($, 'package.json')
+    await $.command.run(run('mode deny'))
+    // The index holds another file: the finding stands, and the commit runs.
+    w.staged = ['src/main.ts']
+    expect((await bash($, 'git commit -m other')).result).toBe('ran')
+    expect(w.logs.at(-1)).toBe('1 file(s) still do not parse, and this command holds none of them')
+    // A push holds no index, so every finding stands there.
+    expect((await bash($, 'git push')).deny).toContain('package.json')
+    // The index holds the file now: the commit stops.
+    w.staged = ['package.json']
+    expect((await bash($, 'git commit -m fix')).deny).toContain('package.json')
+    // A `git commit -a` stages as it runs, so the index does not say what it holds and nothing is narrowed.
+    w.staged = ['src/main.ts']
+    expect((await bash($, 'git commit -am wip')).deny).toContain('package.json')
   })
 
   test('the turn end measures the open file again and the next prompt carries the note', async ($, on) => {

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, envError, isGuarded, isMissingTool, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
+import { denyText, doneLines, doneLog, envError, isCommit, isGuarded, isMissingTool, isNarrowable, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -100,6 +100,37 @@ async function recheckOpen($: EngineInterface, state: State): Promise<void> {
   }
 }
 
+/**
+ * The files this commit holds, by absolute path, or undefined when git did not answer. Read before the
+ * command runs, so it is the index as the commit will take it.
+ */
+async function stagedPaths($: EngineInterface, state: State): Promise<Set<string> | undefined> {
+  try {
+    const cwd = state.root ?? (await $.session.cwd())
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const staged = await $.process.run(['git', 'diff', '--cached', '--name-only', '-z'], { cwd })
+    if (top.exitCode !== 0 || staged.exitCode !== 0) return undefined
+    const base = top.stdout.trim()
+    return new Set(staged.stdout.split('\0').filter(Boolean).map(p => `${base}/${p}`))
+  } catch {
+    // No git here, or the command did not run: the findings are not narrowed.
+    return undefined
+  }
+}
+
+/**
+ * The findings this command answers for. A `git commit` answers for its own files alone, so a finding of
+ * a file the commit does not hold lets it run. A `push` or a `merge` holds no index to read, so every
+ * finding stands there.
+ */
+async function scopeOf($: EngineInterface, state: State, command: string): Promise<string[]> {
+  const all = [...state.open]
+  if (!isCommit(command) || !isNarrowable(command)) return all.map(([shown]) => shown)
+  const staged = await stagedPaths($, state)
+  if (staged === undefined) return all.map(([shown]) => shown)
+  return all.filter(([, open]) => staged.has(open.path)).map(([shown]) => shown)
+}
+
 async function setMode($: EngineInterface, state: State, arg: string): Promise<string> {
   const mode = modeOf(arg)
   if (mode === undefined) return 'mode expects note or deny'
@@ -161,11 +192,19 @@ export const register: Register = on => {
     return next({ ...e, context: [...(e.context ?? []), openNote([...state.open.keys()])] })
   })
 
-  // The gate: in deny mode a commit, push or merge waits until every open file parses again.
+  /*
+   * The gate: in deny mode a commit, push or merge waits until every open file parses again. A commit
+   * answers for its own files alone, so an unrelated file's finding does not stop it.
+   */
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(e.command)) return next(e)
     await recheckOpen($, state)
     if (state.open.size === 0) return next(e)
-    return { deny: denyText([...state.open.keys()]) }
+    const scoped = await scopeOf($, state, e.command)
+    if (scoped.length === 0) {
+      $.ui.log(`${state.open.size} file(s) still do not parse, and this command holds none of them`)
+      return next(e)
+    }
+    return { deny: denyText(scoped) }
   })
 }

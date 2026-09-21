@@ -66,6 +66,20 @@ export function isGuarded(command: string): boolean {
   return GUARDED.test(command) && !ASKING.test(command)
 }
 
+/** Whether the command is a `git commit`, the one guarded command whose own files can be measured. */
+export function isCommit(command: string): boolean {
+  return GUARDED.exec(command)?.[2] === 'commit'
+}
+
+/**
+ * Whether the index alone says what this commit holds. A `-a` or `-am` commit stages the tracked files
+ * as it runs, and a pathspec after `--` commits paths the index does not hold, so neither is narrowed.
+ */
+export function isNarrowable(command: string): boolean {
+  const words = command.split(/\s+/)
+  return !words.includes('--') && !words.some(w => w === '--all' || /^-[A-Za-z]*a/.test(w))
+}
+
 /** What the deny says: why the command stopped, and the one setting that turns the gate off. */
 export function denyText(open: readonly string[]): string {
   const named = open.slice(0, MAX_NAMED)
