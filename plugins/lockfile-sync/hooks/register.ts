@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, denyText, doneLines, doneLog, isCommit, isGuarded, isManifest, lockCandidates, logText, modeOf, noteText, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, lockCandidates, logText, modeOf, noteText, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -87,15 +87,38 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
   }
 }
 
-/** Closes the open finding when this commit changed every lockfile it named, and reports it. */
-async function closeResolved($: EngineInterface, state: State, changed: ReadonlySet<string>): Promise<void> {
+/**
+ * The manifests of the open finding that ask for no lockfile change any more: their dependencies read
+ * as they did at the commit that last wrote the lockfile, so the change that opened the finding is gone.
+ * A lockfile no commit ever wrote has nothing to compare against and is left alone.
+ */
+async function settled($: EngineInterface, root: string, stale: readonly Stale[]): Promise<Set<string>> {
+  const out = new Set<string>()
+  for (const s of stale) {
+    const at = await git($, root, ['log', '-1', '--format=%H', '--', s.lock])
+    const base = at.ok ? at.out.trim() : ''
+    if (base === '') continue
+    const diff = await git($, root, ['diff', '--unified=20', '--no-color', '--no-ext-diff', base, '--', s.manifest])
+    if (diff.ok && !touchesDependencies(s.manifest, diff.out)) out.add(s.lock)
+  }
+  return out
+}
+
+/**
+ * Closes the open finding when nothing it named stands: the lockfile was written, or the manifest no
+ * longer asks for one. Both are measured from git, never remembered, so a change that was reverted
+ * closes the finding as well as a lockfile that caught up.
+ */
+async function closeResolved($: EngineInterface, state: State, changed: ReadonlySet<string>, back: ReadonlySet<string>): Promise<void> {
   const open = state.open
   if (open === undefined) return
-  const left = open.stale.filter(s => !changed.has(s.lock))
+  const left = open.stale.filter(s => !changed.has(s.lock) && !back.has(s.lock))
   state.open = left.length === 0 ? undefined : { key: open.key, stale: left }
   if (left.length > 0) return
+  const updated = open.stale.filter(s => changed.has(s.lock))
+  const settledPairs = open.stale.filter(s => !changed.has(s.lock))
   await dropEntry($, open.key)
-  await toPerson($, open.key, 'lockfiles updated', doneLines(open.stale), doneLog(open.stale))
+  await toPerson($, open.key, doneTitle(updated, settledPairs), doneLines(updated, settledPairs), doneLog(updated, settledPairs))
 }
 
 /** The note for the commit that moved HEAD, or undefined when every changed manifest has its lockfile along. */
@@ -106,7 +129,7 @@ async function commitNote($: EngineInterface, state: State, before: Before): Pro
   if (!names.ok) throw new Error('git show --name-status HEAD failed')
   const files = changedFiles(names.out)
   const changed = new Set(files)
-  await closeResolved($, state, changed)
+  await closeResolved($, state, changed, await settled($, before.root, state.open?.stale ?? []))
   const stale: Stale[] = []
   for (const manifest of files.filter(isManifest)) {
     const s = await staleLock($, before.root, manifest, changed)
@@ -151,7 +174,7 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
   try {
     const before = await beforeCommit($, state, command)
     if (before === undefined) return undefined
-    await closeResolved($, state, await caughtUp($, before.root, open.stale))
+    await closeResolved($, state, await caughtUp($, before.root, open.stale), await settled($, before.root, open.stale))
     return state.open === undefined ? undefined : { deny: denyText(state.open.stale) }
   } catch (err) {
     report($, state, err)

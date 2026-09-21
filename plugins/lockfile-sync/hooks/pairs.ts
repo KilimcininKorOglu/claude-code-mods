@@ -195,14 +195,29 @@ export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'er
   return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'error' }))
 }
 
-/** The transcript line of a finding a later commit closed. */
-export function doneLog(stale: readonly Stale[]): string {
-  return `a later commit brought the lockfiles along: ${stale.map(s => s.lock).join(' · ')}`
+/** The title of a closed finding, by what closed it. */
+export function doneTitle(updated: readonly Stale[], settled: readonly Stale[]): string {
+  if (settled.length === 0) return 'lockfiles updated'
+  return updated.length === 0 ? 'manifests back in step' : 'lockfiles settled'
 }
 
-/** One sidebar line per lockfile a later commit updated. */
-export function doneLines(stale: readonly Stale[]): { text: string; kind: 'ok' }[] {
-  return stale.map(s => ({ text: `${s.lock} now matches ${s.manifest}`, kind: 'ok' as const }))
+/**
+ * The transcript line of a finding that closed: the lockfiles a later change brought along, and the
+ * manifests that no longer ask for one, because their dependencies match the lockfile's own commit again.
+ */
+export function doneLog(updated: readonly Stale[], settled: readonly Stale[]): string {
+  const parts: string[] = []
+  if (updated.length > 0) parts.push(`a later change brought the lockfiles along: ${updated.map(s => s.lock).join(' · ')}`)
+  if (settled.length > 0) parts.push(`the dependencies match the lockfile again: ${settled.map(s => s.manifest).join(' · ')}`)
+  return parts.join(' · ')
+}
+
+/** One sidebar line per pair that closed, with what closed it. */
+export function doneLines(updated: readonly Stale[], settled: readonly Stale[]): { text: string; kind: 'ok' }[] {
+  return [
+    ...updated.map(s => ({ text: `${s.lock} now matches ${s.manifest}`, kind: 'ok' as const })),
+    ...settled.map(s => ({ text: `${s.manifest} asks for no lockfile change any more`, kind: 'ok' as const })),
+  ]
 }
 
 /** A sidebar section key: the manifests of this commit, cut to what the sidebar takes. */

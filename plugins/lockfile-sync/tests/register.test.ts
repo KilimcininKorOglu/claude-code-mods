@@ -42,12 +42,18 @@ const DEP_DIFF = '@@ -1,5 +1,5 @@\n {\n   "dependencies": {\n-    "left-pad": "^
  * `head` moves to `next` when a commit runs; `names` is the commit's name-status; `files` are the paths on disk;
  * `showFails` makes git show fail; `notRepo` makes the directory no repository.
  */
-type World = { head: string; next: string; names: string; files: Set<string>; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean; lockDirty: boolean }
+type World = {
+  head: string; next: string; names: string; files: Set<string>; argv: string[]; logs: string[]
+  commitFails: boolean; showFails: boolean; notRepo: boolean; lockDirty: boolean
+  /** The commit that last wrote the lockfile, and the manifest's diff against it. */
+  lockCommit: string; sinceLock: string
+}
 
 function world(on: On): World {
   const w: World = {
     head: 'aaa', next: 'bbb', names: 'M\tpackage.json\n', files: new Set([`${ROOT}/package-lock.json`]),
     argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false,
+    lockCommit: 'a1b2c3', sinceLock: DEP_DIFF,
   }
   mock.store(on, {})
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -60,6 +66,8 @@ function world(on: On): World {
     if (cmd === 'git rev-parse --show-toplevel') return w.notRepo ? { value: { exitCode: 128, stdout: '', stderr: 'not a git repository' } } : ok(`${ROOT}\n`)
     if (cmd === 'git rev-parse HEAD') return ok(`${w.head}\n`)
     if (cmd.startsWith('git status')) return ok(w.lockDirty ? ' M package-lock.json\n' : '')
+    if (cmd.startsWith('git log')) return ok(w.lockCommit === '' ? '' : `${w.lockCommit}\n`)
+    if (cmd.startsWith('git diff')) return ok(w.sinceLock)
     if (w.showFails) return { value: { exitCode: 128, stdout: '', stderr: 'bad' } }
     return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
   })
@@ -114,7 +122,19 @@ describe('lockfile-sync', () => {
     w.names = 'M\tpackage-lock.json\n'
     w.next = 'ccc'
     await $.tool.call({ tool: 'Bash', command: 'git commit -m lock' })
-    expect(w.logs[1]).toBe('a later commit brought the lockfiles along: package-lock.json')
+    expect(w.logs[1]).toBe('a later change brought the lockfiles along: package-lock.json')
+  })
+
+  test('a manifest whose dependency change was reverted closes its finding', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    await $.command.run(run('mode deny'))
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('package-lock.json behind package.json')
+    // The manifest reads as it did at the commit that last wrote the lockfile: nothing asks for one now.
+    w.sinceLock = ''
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('the dependencies match the lockfile again: package.json')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · no lockfile is open')
   })
 
   test('a workspace manifest pairs with the root lockfile', async ($, on) => {
@@ -162,7 +182,7 @@ describe('lockfile-sync', () => {
     // The package manager wrote the lockfile: the gate reads the working tree and opens.
     w.lockDirty = true
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
-    expect(w.logs.at(-1)).toBe('a later commit brought the lockfiles along: package-lock.json')
+    expect(w.logs.at(-1)).toBe('a later change brought the lockfiles along: package-lock.json')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 

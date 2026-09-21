@@ -44,13 +44,19 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding stays open until the lockfile catches up. When a later commit changes every lockfile the finding named, its sidebar entry is cleared and a new entry takes its place:
+7. A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, asks git again, so it closes two ways:
 
-       lockfile-sync: a later commit brought the lockfiles along: package-lock.json
+   - the lockfile was written: a later commit changed it, or `git status --porcelain` shows it changed in the working tree;
+   - the manifest asks for no lockfile change any more: `git log -1 -- <lockfile>` names the commit that last wrote the lockfile, and the manifest's diff against that commit touches no dependency. A change that was reverted reads this way.
 
-   With the sidebar closed the same text is one transcript line. The model reads nothing of this: it committed the lockfile itself, so a note would only repeat what it just did.
+   The entry is cleared and a new one says which of the two it was:
 
-8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs `git status --porcelain` on each lockfile it named, so a lockfile the package manager just wrote opens the gate itself. There is no bypass; only the person turns the gate off with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
+       lockfile-sync: a later change brought the lockfiles along: package-lock.json
+       lockfile-sync: the dependencies match the lockfile again: package.json
+
+   With the sidebar closed the same text is one transcript line. The model reads nothing of this: the finding closed by its own work, so a note would only repeat what it just did.
+
+8. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs both measures, so a lockfile the package manager just wrote, and a dependency change that was taken back, each open the gate themselves. There is no bypass; only the person turns the gate off with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
 
 A git error is logged once, and the commit's result stays as it was.
 
@@ -86,7 +92,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 Reach L2, runs processes.
 
     1. Reads:    the Bash command text; whether lockfiles exist in the repository; through git, the commit's file list and manifest diffs
-    2. Runs:     git rev-parse and git show, read-only, by argv, four times per commit plus one per manifest without its lockfile
+    2. Runs:     git rev-parse, git show, git status, git log and git diff, read-only, by argv: four per commit, one per manifest without its lockfile, and two per open pair at each measure
     3. Sends:    a note to the model after the commit's result, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; manifest paths reach git as one argv entry after --
@@ -94,6 +100,7 @@ Reach L2, runs processes.
 ## Limits
 
 - The mod compares file names and diff sections. It does not check that the lockfile's content matches the manifest.
+- A lockfile no commit ever wrote has nothing to compare the manifest against, so only the first measure can close its finding.
 - Two lockfiles of one manager in one directory (a `yarn.lock` beside a `package-lock.json`) pair with the first in the table.
 - A commit through a script or an alias that hides `git commit` is not seen. `cd ~/x` is not expanded.
 - A merge commit's combined diff is not read.
