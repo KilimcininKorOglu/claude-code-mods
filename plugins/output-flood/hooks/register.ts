@@ -9,8 +9,12 @@ const USAGE = 'expects nothing (the status), on, off or limit <kb>'
 /** The characters of one KB, as the limit counts them. */
 const KB = 1024
 
-/** The on/off setting, the limit in KB, and the commands already reported, so one repeat is quiet. */
-type State = { enabled: boolean; limitKb: number; noted: Set<string>; total: number }
+/**
+ * The on/off setting, the limit in KB, the commands already reported, so one repeat is quiet, and every
+ * result over the limit, repeats included: how many and their size together, so the status counts the
+ * same results it sizes.
+ */
+type State = { enabled: boolean; limitKb: number; noted: Set<string>; floods: number; total: number }
 
 /**
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
@@ -52,6 +56,7 @@ async function measure($: EngineInterface, state: State, command: string, r: Too
   if (streams === undefined) return undefined
   const chars = sizeOf(streams.stdout, streams.stderr)
   if (chars <= state.limitKb * KB) return undefined
+  state.floods += 1
   state.total += chars
   const key = shownCommand(command)
   if (state.noted.has(key)) return undefined
@@ -85,11 +90,11 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   }
   if (arg.startsWith('limit')) return setLimit($, state, arg.slice(5).trim())
   if (arg !== '' && arg !== 'status') return USAGE
-  return statusText(state.enabled, state.limitKb, state.noted.size, state.total)
+  return statusText(state.enabled, state.limitKb, state.floods, state.total)
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, limitKb: DEFAULT_LIMIT_KB, noted: new Set(), total: 0 }
+  const state: State = { enabled: true, limitKb: DEFAULT_LIMIT_KB, noted: new Set(), floods: 0, total: 0 }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

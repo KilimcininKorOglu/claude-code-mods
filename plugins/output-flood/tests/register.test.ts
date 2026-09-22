@@ -96,6 +96,8 @@ describe('output-flood', () => {
     await $.tool.call(bash('make build'))
     expect((await $.tool.call(bash('make build'))).context).toBe(undefined)
     expect(w.logs).toHaveLength(1)
+    // The repeat is quiet, and still counted: the status counts the results it sizes.
+    expect((await $.command.run(run(''))).text).toBe('on · limit 20 KB · 2 result(s) over it, 60 KB in all')
     w.result = { stdout: 'x'.repeat(30 * 1024), stderr: '', backgroundTaskId: 'b1' }
     expect((await $.tool.call(bash('make watch'))).context).toBe(undefined)
   })
