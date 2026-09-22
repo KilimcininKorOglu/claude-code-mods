@@ -55,7 +55,7 @@ Reach L1, reads the session.
 ## Limits
 
 - The output is already in the context when the note is written. The mod cannot take it back; the note is for the next command.
-- A failed command (a non-zero exit the engine reports as an error) is left alone, because its output is the error the model must read as it stands.
+- A failed command (a non-zero exit the engine reports as an error) is measured from its error text, because a failing test run is the largest output of all. The note rides after the model's own error text, which stays as it is.
 - A backgrounded command is not measured: its result carries a task id, not the output.
 - The advice is matched on the command text. A command hidden behind a script or a `make` target gets the general advice.
 - The size is counted in characters, not tokens. A line of ASCII is about four characters per token, and other text more.

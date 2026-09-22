@@ -31,7 +31,7 @@ const run = (args: string): CommandRunInput => ({
 })
 
 /** The logged lines, and the Bash result the world answers with. */
-type World = { logs: string[]; result: { stdout: string; stderr: string; backgroundTaskId?: string } }
+type World = { logs: string[]; result: { stdout: string; stderr: string; backgroundTaskId?: string }; isError?: true }
 
 function world(on: On): World {
   const w: World = { logs: [], result: { stdout: '', stderr: '' } }
@@ -39,7 +39,13 @@ function world(on: On): World {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
-  on('tool.call', { tool: 'Bash' }, () => ({ result: w.result }) as never)
+  // A non-zero exit is an error result: `result` holds the error text, never the tool's record, and
+  // `text` is what the model reads, `Exit code N` and the output.
+  on('tool.call', { tool: 'Bash' }, () => {
+    if (w.isError !== true) return { result: w.result } as never
+    const text = `Exit code 1\n${w.result.stdout}\n${w.result.stderr}`
+    return { result: text, text, isError: true } as never
+  })
   return w
 }
 
@@ -69,6 +75,18 @@ describe('output-flood', () => {
     expect(r.context?.[0]).toContain('Next time run the one test')
     expect(w.logs).toEqual(['30 KB of output from "pytest tests/ -v", over 20 KB'])
     expect((await $.command.run(run(''))).text).toBe('on · limit 20 KB · 1 result(s) over it, 30 KB in all')
+  })
+
+  test('a failed run over the limit is measured from its error text, which stays as it is', async ($, on) => {
+    const w = world(on)
+    await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
+    w.isError = true
+    w.result = { stdout: 'F'.repeat(30 * 1024), stderr: '' }
+    const r = await $.tool.call(bash('npm test'))
+    expect(r.isError).toBe(true)
+    expect(r.text).toBe(`Exit code 1\n${'F'.repeat(30 * 1024)}\n`)
+    expect(r.context?.[0]).toContain('"npm test" returned 30 KB of output, over the 20 KB limit')
+    expect(w.logs).toEqual(['30 KB of output from "npm test", over 20 KB'])
   })
 
   test('the same command is reported once, and a backgrounded command is not measured', async ($, on) => {

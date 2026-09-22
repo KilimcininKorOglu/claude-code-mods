@@ -55,7 +55,7 @@ Reach L1, session'ı okur.
 ## Sınırlar
 
 - Not yazıldığında çıktı zaten context'tedir. Mod onu geri alamaz; not sonraki komut içindir.
-- Başarısız bir komut (engine'in hata olarak bildirdiği sıfır olmayan bir exit) dokunulmadan bırakılır, çünkü çıktısı modelin olduğu gibi okuması gereken hatadır.
+- Başarısız bir komut (engine'in hata olarak bildirdiği sıfır olmayan bir exit) hata metninden ölçülür, çünkü başarısız bir test koşusu en büyük çıktıdır. Not modelin kendi hata metninin ardından gelir, o metin olduğu gibi kalır.
 - Arka plana alınmış bir komut ölçülmez: sonucu çıktıyı değil bir task id taşır.
 - Tavsiye komut metnine göre eşleştirilir. Bir script ya da bir `make` target'ı arkasına gizlenmiş bir komut genel tavsiyeyi alır.
 - Boyut karakter olarak sayılır, token olarak değil. Bir ASCII satırı token başına yaklaşık dört karakterdir, diğer metinler daha fazla.

@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { DEFAULT_LIMIT_KB, limitOf, limitText, logText, noteText, sectionKey, shownCommand, sidebarLines, sizeOf, statusText } from './flood.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -32,18 +32,23 @@ async function toPerson($: EngineInterface, command: string, chars: number, limi
   $.ui.log(logText(command, chars, limit))
 }
 
-/** The two streams of a Bash result, or undefined for a result that carries none. */
-function streamsOf(result: unknown): { stdout: string; stderr: string } | undefined {
-  const r = result as { stdout?: unknown; stderr?: unknown; backgroundTaskId?: unknown } | undefined
-  if (r === undefined || r.backgroundTaskId !== undefined) return undefined
-  const stdout = typeof r.stdout === 'string' ? r.stdout : ''
-  const stderr = typeof r.stderr === 'string' ? r.stderr : ''
+/**
+ * The output of a Bash result as the model reads it, or undefined for a result that carries none. An
+ * answered call carries its two streams in `result`; a call that exited non-zero is an error result,
+ * whose output is its `text`, the error as the model reads it (`result` is never the tool's record there).
+ */
+function streamsOf(r: ToolCallResult<'Bash'>): { stdout: string; stderr: string } | undefined {
+  if (r.isError === true) return { stdout: r.text ?? (typeof r.result === 'string' ? r.result : ''), stderr: '' }
+  const out = r.result as { stdout?: unknown; stderr?: unknown; backgroundTaskId?: unknown } | undefined
+  if (out === undefined || out.backgroundTaskId !== undefined) return undefined
+  const stdout = typeof out.stdout === 'string' ? out.stdout : ''
+  const stderr = typeof out.stderr === 'string' ? out.stderr : ''
   return { stdout, stderr }
 }
 
 /** Measures one Bash result and answers the model's note, if it flooded the context. */
-async function measure($: EngineInterface, state: State, command: string, result: unknown): Promise<string | undefined> {
-  const streams = streamsOf(result)
+async function measure($: EngineInterface, state: State, command: string, r: ToolCallResult<'Bash'>): Promise<string | undefined> {
+  const streams = streamsOf(r)
   if (streams === undefined) return undefined
   const chars = sizeOf(streams.stdout, streams.stderr)
   if (chars <= state.limitKb * KB) return undefined
@@ -102,12 +107,13 @@ export const register: Register = on => {
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'output-flood' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
-  // A denied or failed call is left alone: the first has no output, and the second's is the error the
-  // model must read as it stands.
+  // A denied call has no output and is left alone. A failed one is measured, because a failing test run
+  // exits non-zero and is the largest output of all; the note rides after the model's own error text,
+  // which stays as it is.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || r.deny !== undefined || r.isError === true) return r
-    const note = await measure($, state, e.command, r.result)
+    if (!state.enabled || r.deny !== undefined) return r
+    const note = await measure($, state, e.command, r)
     return note === undefined ? r : { ...r, context: [...(r.context ?? []), note] }
   })
 }
