@@ -27,7 +27,10 @@ describe('parse', () => {
   })
 
   test('builds the python program of a kind and reads what it printed', async () => {
-    expect(pythonCode('yaml')).toContain('yaml.safe_load')
+    // A `---` stream and an application tag are valid YAML: every document is read, and a tag builds nothing.
+    expect(pythonCode('yaml')).toContain('yaml.load_all(')
+    expect(pythonCode('yaml')).toContain('class L(yaml.SafeLoader)')
+    expect(pythonCode('yaml')).toContain('L.add_multi_constructor("",')
     expect(pythonCode('toml')).toContain('tomllib.load')
     expect(isMissingTool("ModuleNotFoundError: No module named 'yaml'")).toBe(true)
     expect(isMissingTool('yaml.scanner.ScannerError: mapping values are not allowed here')).toBe(false)

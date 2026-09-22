@@ -6,7 +6,7 @@ A Claude Code Mod that parses each JSON, YAML, TOML or `.env` file an Edit or Wr
 
 1. After each Edit or Write that the engine ran, the mod reads the path. A `.json`, `.yml`, `.yaml`, `.toml`, `.env` or `.env.<name>` file is parsed; every other file is left alone.
 2. JSON is parsed by the mod itself, and a `.env` file is read line by line: a line that is not empty, a comment or `KEY=value` is the finding, with its number.
-3. YAML and TOML are parsed by `python3` (`yaml.safe_load` and `tomllib.load`), the file path as one argv item. When python or the module is missing, that kind is skipped for the session and one line says so.
+3. YAML and TOML are parsed by `python3` (`yaml.load_all` with a safe loader, and `tomllib.load`), the file path as one argv item. Every document of a `---` stream is read, and an application tag such as `!Ref` or `!vault` is accepted, because both are valid YAML. When python or the module is missing, that kind is skipped for the session and one line says so.
 4. A file that does not parse is written to two channels: the model gets a `context` note naming the file and the error, and the person gets a red entry in the shared sidebar's stream, or a transcript line where the sidebar is closed. The file is named against the git repository the session started in, or against the session's directory outside a repository; that root is read once at the session's start, because a Bash `cd` moves the session's own directory.
 5. When a later edit makes the same file parse again, the standing entry is cleared and one green line says so. That line goes to the person only, because the model fixed it itself.
 6. The mod never denies an edit. The file is written, then read.

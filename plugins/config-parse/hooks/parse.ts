@@ -35,11 +35,20 @@ export function envError(text: string): string | undefined {
   return undefined
 }
 
+/**
+ * The YAML program: every document of a `---` stream is read, and an application tag (`!Ref`, `!GetAtt`,
+ * `!vault`) builds nothing instead of failing, because both are valid YAML that `safe_load` refuses.
+ */
+const YAML_CODE = [
+  'import sys,yaml',
+  'class L(yaml.SafeLoader):pass',
+  'L.add_multi_constructor("",lambda l,s,n:None)',
+  'for _ in yaml.load_all(open(sys.argv[1],"rb"),L):pass',
+].join('\n')
+
 /** The python program that parses one file of this kind; it prints nothing and fails on a bad file. */
 export function pythonCode(kind: 'yaml' | 'toml'): string {
-  return kind === 'yaml'
-    ? 'import sys,yaml;yaml.safe_load(open(sys.argv[1],"rb"))'
-    : 'import sys,tomllib;tomllib.load(open(sys.argv[1],"rb"))'
+  return kind === 'yaml' ? YAML_CODE : 'import sys,tomllib;tomllib.load(open(sys.argv[1],"rb"))'
 }
 
 /** Whether the failure is a missing python or a missing module, so the kind is skipped instead of reported. */
