@@ -52,7 +52,7 @@ function world(on: On, p: ReturnType<typeof provider>, key?: string): World {
     const reply = w.replies.shift() ?? { status: 200, text: MODELS }
     return { value: { status: reply.status, ok: reply.status < 300, headers: {}, text: reply.text } }
   })
-  on('ui.open', (_, e) => { w.panes.push(`open ${e.id} ${e.title ?? ''}`); return { value: undefined } })
+  on('ui.open', (_, e) => { w.panes.push(`open ${e.id} ${e.title ?? ''}`); return { value: { isPlaced: true as const } } })
   on('ui.close', (_, e) => { w.panes.push(`close ${e.id}`); return { value: undefined } })
   on('ui.toast', (_, e) => { w.toasts.push(e.text); return { value: undefined } })
   return w

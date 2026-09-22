@@ -39,7 +39,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
-  on('session.usage', () => ({ value: { context: { window: 200_000 }, rateLimits: limits } }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: limits } }))
   on('ui.log', (_, e) => {
     w.logs.push(e.text)
     return { value: undefined }
@@ -52,7 +52,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('ui.panes', () => ({ value: w.panes }))
   on('ui.open', (_, e) => {
     w.panes.push({ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true })
-    return { value: undefined }
+    return { value: { isPlaced: true as const } }
   })
   on('ui.close', (_, e) => {
     w.panes = w.panes.filter(p => p.id !== e.id)

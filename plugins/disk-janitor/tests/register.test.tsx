@@ -75,7 +75,7 @@ function world(on: On): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
   on('ui.panes', () => ({ value: w.panes }))
-  on('ui.open', (_, e) => { w.panes.push({ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: true, isPlaced: true }); return { value: undefined } })
+  on('ui.open', (_, e) => { w.panes.push({ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: true, isPlaced: true }); return { value: { isPlaced: true as const } } })
   on('ui.close', (_, e) => { w.panes = w.panes.filter(p => p.id !== e.id); return { value: undefined } })
   return w
 }

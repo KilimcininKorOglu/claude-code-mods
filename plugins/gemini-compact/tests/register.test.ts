@@ -128,7 +128,7 @@ function world(on: On, opts: { key?: string; store?: [string, unknown][]; mode?:
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('ui.toast', (_, e) => { w.toasts.push(e.text); return { value: undefined } })
   on('session.compact', (_, e) => { w.builtIn.push(e.trigger); return { messages: SUMMARY } })
-  on('session.usage', () => ({ value: { context: { window: 1_000_000, percent: w.percent }, rateLimits: [] } }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1_000_000, percent: w.percent }, rateLimits: [] } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
