@@ -39,7 +39,13 @@ function world(on: On): World {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
-  on('tool.call', { tool: 'Bash' }, () => (w.isError === true ? { result: w.result, isError: true } : { result: w.result }) as never)
+  // A non-zero exit is an error result: `result` holds the error text, never the tool's record, and
+  // `text` is what the model reads, `Exit code N` and the output (the shape a transcript stores).
+  on('tool.call', { tool: 'Bash' }, () => {
+    if (w.isError !== true) return { result: w.result } as never
+    const text = `Exit code 22\n${w.result.stdout}\n${w.result.stderr}`
+    return { result: text, text, isError: true } as never
+  })
   return w
 }
 
@@ -91,12 +97,14 @@ describe('ua-fallback', () => {
     expect(w.logs).toHaveLength(1)
   })
 
-  test('a failed call reports to the person only, and off reads nothing', async ($, on) => {
+  test('a failed call is read from its error text, and off reads nothing', async ($, on) => {
     const w = world(on)
     w.isError = true
     await started($)
     w.result = { stdout: '', stderr: 'curl: (22) The requested URL returned error: 403' }
-    expect((await $.tool.call(bash('curl --fail https://example.com'))).context).toBe(undefined)
+    const failed = await $.tool.call(bash('curl --fail https://example.com'))
+    expect(failed.isError).toBe(true)
+    expect(failed.context?.[0]).toContain('example.com answered 403, which is an automated-client filter')
     expect(w.logs).toEqual(['example.com answered 403; a browser User-Agent may pass'])
     expect((await $.command.run(run('off'))).text).toBe('off: requests are not read')
     w.result = { stdout: '429 Too Many Requests', stderr: '' }

@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { hasUserAgent, hostOf, isFetch, logText, noteText, sectionKey, sidebarLines, statusIn, statusText, urlOf } from './fetch.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -28,20 +28,25 @@ async function toPerson($: EngineInterface, url: string, status: string): Promis
   $.ui.log(logText(url, status))
 }
 
-/** The two streams of a Bash result as one text, empty for a result that carries none. */
-function outputOf(result: unknown): string {
-  const r = result as { stdout?: unknown; stderr?: unknown } | undefined
-  const stdout = typeof r?.stdout === 'string' ? r.stdout : ''
-  const stderr = typeof r?.stderr === 'string' ? r.stderr : ''
+/**
+ * What a Bash call printed. An answered call carries its two streams in `result`; a call that exited
+ * non-zero is an error result, whose `result` is the error text and never the tool's record, so its
+ * output is read from `text`, the error as the model reads it.
+ */
+function outputOf(r: ToolCallResult<'Bash'>): string {
+  if (r.isError === true) return r.text ?? (typeof r.result === 'string' ? r.result : '')
+  const out = r.result as { stdout?: unknown; stderr?: unknown } | undefined
+  const stdout = typeof out?.stdout === 'string' ? out.stdout : ''
+  const stderr = typeof out?.stderr === 'string' ? out.stderr : ''
   return `${stdout}\n${stderr}`
 }
 
 /** Reads one finished fetch command and answers the model's note, if a bot filter refused it. */
-async function measure($: EngineInterface, state: State, command: string, result: unknown): Promise<string | undefined> {
+async function measure($: EngineInterface, state: State, command: string, output: string): Promise<string | undefined> {
   if (!isFetch(command) || hasUserAgent(command)) return undefined
   const url = urlOf(command)
   if (url === undefined) return undefined
-  const status = statusIn(outputOf(result))
+  const status = statusIn(output)
   if (status === undefined) return undefined
   const host = hostOf(url)
   if (state.noted.has(host)) return undefined
@@ -80,14 +85,13 @@ export const register: Register = on => {
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'ua-fallback' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
-  // A denied call fetched nothing. A failed one is still read, because `curl --fail` exits non-zero on a
-  // 403 and its status is exactly the finding; the person reads the line, and the model's own error text
-  // is left as it stands.
+  // A denied call fetched nothing. A failed one is still read, because `curl --fail` and `wget` exit
+  // non-zero on a 403 and its status is exactly the finding. The note rides after the model's own error
+  // text, which stays as it is.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
     if (!state.enabled || r.deny !== undefined) return r
-    const note = await measure($, state, e.command, r.result)
-    if (note === undefined || r.isError === true) return r
-    return { ...r, context: [...(r.context ?? []), note] }
+    const note = await measure($, state, e.command, outputOf(r))
+    return note === undefined ? r : { ...r, context: [...(r.context ?? []), note] }
   })
 }

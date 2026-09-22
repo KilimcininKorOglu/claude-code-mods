@@ -56,7 +56,7 @@ Reach L1, session'ı okur.
 - Status, komutun yazdığından okunur. Status metni olmadan yalnız bir body yazan sessiz bir `curl -s` not almaz.
 - Kendi düz metninde "403" yazan bir sayfa filtrelenmiş bir request olarak okunur. Not bir tavsiyedir, response kodunun bir ölçümü değil.
 - Mod komutu yeniden yazmaz ve kendi request'ini göndermez, yani çıktıda göremediği bir filtre bildirilmeden kalır.
-- Başarısız bir çağrı (`curl --fail` bir 403'te verdiği gibi sıfır olmayan bir exit) kişiye bildirilir ama modele bildirilmez, böylece modelin kendi hata metni olduğu gibi kalır.
+- Başarısız bir çağrı (`curl --fail` ve `wget` bir 403'te verdiği gibi sıfır olmayan bir exit) hata metninden okunur, bulgu hem kişiye hem modele gider. Not modelin kendi hata metninin ardından gelir, o metin olduğu gibi kalır.
 - Browser User-Agent'ı `hooks/fetch.ts` içinde bir sabittir ve eskir. Güncel bir sürümü kontrol eden bir site onu reddedebilir.
 
 ## Geliştirme

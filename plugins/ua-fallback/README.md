@@ -56,7 +56,7 @@ Reach L1, reads the session.
 - The status is read from what the command printed. A silent `curl -s` that prints only a body with no status text gets no note.
 - A page that says "403" in its own prose reads as a filtered request. The note is advice, not a measurement of the response code.
 - The mod does not rewrite the command and sends no request of its own, so a filter it cannot see in the output stays unreported.
-- A failed call (a non-zero exit, as `curl --fail` gives on a 403) is reported to the person but not to the model, so the model's own error text stays as it is.
+- A failed call (a non-zero exit, as `curl --fail` and `wget` give on a 403) is read from its error text, and both the person and the model get the finding. The note rides after the model's own error text, which stays as it is.
 - The browser User-Agent is a constant in `hooks/fetch.ts` and ages. A site that checks a current version may refuse it.
 
 ## Development
