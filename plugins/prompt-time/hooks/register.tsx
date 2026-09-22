@@ -4,7 +4,7 @@ import { formatSent, indexTranscript } from './time.ts'
 interface State {
   /** Time in epoch milliseconds, by message or reply block id (the transcript row's uuid). */
   times: Map<string, number>
-  /** Every message id drawn so far; only a new one can take the pending time. */
+  /** Every message and reply block id drawn so far; only a new one can take a time. */
   seen: Set<string>
   /**
    * The last submitted prompt. The engine can draw one prompt under two ids
@@ -70,11 +70,15 @@ function sentAt(state: State, id: string, text: string): number | undefined {
 
 /**
  * The time of a reply block: a block first drawn while a turn runs is written
- * now, and the turn's final block first drawn after it ended takes its end.
+ * now, and the turn's final block first drawn after it ended takes its end. A
+ * block drawn before without a time (a resumed block whose transcript was not
+ * read) keeps none, so a redraw during a later turn does not give it that turn's time.
  */
 function writtenAt(state: State, id: string, text: string, now: number): number | undefined {
   const known = state.times.get(id)
-  if (known !== undefined) return known
+  const isNew = !state.seen.has(id)
+  state.seen.add(id)
+  if (known !== undefined || !isNew) return known
   let at: number | undefined
   if (state.turns.size > 0) at = now
   else if (state.ended !== null && state.ended.text === text.trim()) {

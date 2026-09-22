@@ -119,6 +119,15 @@ describe('prompt-time', () => {
     expect(await ui.drawn()).toMatchObject({ type: 'Text' })
   })
 
+  test('a reply block drawn without a time before a turn does not take the time of a redraw during it', async ($, on) => {
+    world(on)
+    // A resumed block whose transcript was too large to read: drawn at the start, with no time known.
+    const old = await reply($, 'a0', 'old reply')
+    await $.turn.start({ text: 'hello', turnId: 't1' })
+    await old.redraw()
+    expect(await old.find({ type: 'Text', text: LABEL })).toBe(undefined)
+  })
+
   test('the final block first drawn just after its turn ended takes the time, once', async ($, on) => {
     world(on)
     await $.turn.start({ text: 'hello', turnId: 't1' })
