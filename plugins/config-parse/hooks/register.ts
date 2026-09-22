@@ -11,10 +11,25 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 /**
  * The on/off setting, the mode, the files whose finding still stands (by the path shown, each with the
  * path on disk and its kind), whether the model is owed a note for them, the kinds this machine cannot
- * parse, and the directory the session started in. A path is shown against that directory, not against
- * `$.session.cwd()`, because a Bash `cd` moves the session's directory.
+ * parse, and the root read once at the session's start (`shownRootOf`). A path is shown against that root,
+ * not against `$.session.cwd()`, because a Bash `cd` moves the session's directory.
  */
 type State = { enabled: boolean; mode: Mode; open: Map<string, { path: string; kind: Kind }>; owed: boolean; skipped: Set<Kind>; reported: boolean; root?: string }
+
+/**
+ * The git repository the session started in, so a file in a sibling directory of a session opened in a
+ * subdirectory still reads short; the session's own directory where git does not answer.
+ */
+async function shownRootOf($: EngineInterface, cwd: string): Promise<string> {
+  try {
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const root = top.stdout.trim()
+    return top.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    // No git here, or the command did not run: paths are shown against the session's directory.
+    return cwd
+  }
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -163,7 +178,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'config-parse', description: 'JSON, YAML, TOML and .env files an edit broke: status, on, off, mode note | deny (config-parse)', argumentHint: '[on | off | mode note | mode deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
-    state.root = await $.session.cwd()
+    state.root = await shownRootOf($, await $.session.cwd())
     return r
   })
 

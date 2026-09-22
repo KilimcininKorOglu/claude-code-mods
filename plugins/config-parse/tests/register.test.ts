@@ -34,11 +34,14 @@ const run = (args: string): CommandRunInput => ({
   command: 'config-parse', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The text every read answers with, what python answers, what the index holds, and the lines logged. */
-type World = { file: string; python: { exitCode: number; stderr: string }; staged: string[]; argv: (readonly string[])[]; logs: string[] }
+/**
+ * The text every read answers with, what python answers, what the index holds, the lines logged, and the
+ * repository root git answers.
+ */
+type World = { file: string; python: { exitCode: number; stderr: string }; staged: string[]; argv: (readonly string[])[]; logs: string[]; top: string }
 
 function world(on: On): World {
-  const w: World = { file: '', python: { exitCode: 0, stderr: '' }, staged: ['package.json', '.env'], argv: [], logs: [] }
+  const w: World = { file: '', python: { exitCode: 0, stderr: '' }, staged: ['package.json', '.env'], argv: [], logs: [], top: ROOT }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
@@ -48,7 +51,7 @@ function world(on: On): World {
   on('process.run', (_, e) => {
     w.argv.push(e.argv)
     if (e.argv[0] === 'git') {
-      const out = e.argv.includes('--show-toplevel') ? `${ROOT}\n` : w.staged.join('\0')
+      const out = e.argv.includes('--show-toplevel') ? `${w.top}\n` : w.staged.join('\0')
       return { value: { exitCode: 0, stdout: out, stderr: '' } }
     }
     return { value: { exitCode: w.python.exitCode, stdout: '', stderr: w.python.stderr } }
@@ -58,6 +61,9 @@ function world(on: On): World {
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ran' }) as never)
   return w
 }
+
+/** The python runs alone: the session's start also runs git, to find the root paths are shown against. */
+const python = (w: World) => w.argv.filter(a => a[0] === 'python3')
 
 const bash = ($: Engine, command: string) => $.tool.call({ tool: 'Bash', command } as never)
 
@@ -81,13 +87,22 @@ describe('config-parse', () => {
     expect((await edit($, 'other.json')).context).toBe(undefined)
   })
 
+  test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
+    const w = world(on)
+    w.top = '/Users/u'
+    await started($)
+    w.file = '{"a": 1,}'
+    await $.tool.call({ tool: 'Edit', file_path: '/Users/u/lib/a.json', old_string: 'a', new_string: 'b' } as never)
+    expect(w.logs[0]).toMatch(/^lib\/a\.json does not parse as JSON: /)
+  })
+
   test('a YAML file is parsed by python, and its error reaches both channels', async ($, on) => {
     const w = world(on)
     await started($)
     w.python = { exitCode: 1, stderr: 'Traceback\nyaml.scanner.ScannerError: mapping values are not allowed here' }
     const r = await edit($, '.github/workflows/ci.yml')
-    expect(w.argv[0]?.[0]).toBe('python3')
-    expect(w.argv[0]?.at(-1)).toBe(`${ROOT}/.github/workflows/ci.yml`)
+    expect(python(w)).toHaveLength(1)
+    expect(python(w)[0]?.at(-1)).toBe(`${ROOT}/.github/workflows/ci.yml`)
     expect(r.context?.[0]).toContain('does not parse as YAML after this edit: yaml.scanner.ScannerError: mapping values are not allowed here')
     expect(w.logs).toEqual(['.github/workflows/ci.yml does not parse as YAML: yaml.scanner.ScannerError: mapping values are not allowed here'])
   })
@@ -99,7 +114,7 @@ describe('config-parse', () => {
     expect((await edit($, 'a.yml')).context).toBe(undefined)
     expect((await edit($, 'b.yaml')).context).toBe(undefined)
     expect(w.logs).toEqual(["YAML files are not checked on this machine: No module named 'yaml'"])
-    expect(w.argv).toHaveLength(1)
+    expect(python(w)).toHaveLength(1)
   })
 
   withSidebar('the sidebar takes the finding, and the fix clears it with a green line', async ($, on) => {

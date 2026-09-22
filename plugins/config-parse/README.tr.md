@@ -7,7 +7,7 @@ Bir Edit ya da Write'ın dokunduğu her JSON, YAML, TOML ve `.env` dosyasını p
 1. Engine'in çalıştırdığı her Edit ve Write'tan sonra mod path'i okur. `.json`, `.yml`, `.yaml`, `.toml`, `.env` ya da `.env.<name>` dosyası parse edilir; diğer her dosyaya dokunulmaz.
 2. JSON'ı mod kendisi parse eder, `.env` dosyası satır satır okunur: boş olmayan, comment olmayan ve `KEY=value` olmayan bir satır bulgudur, numarasıyla birlikte.
 3. YAML ve TOML `python3` ile parse edilir (`yaml.safe_load` ve `tomllib.load`), dosya path'i tek bir argv değeri olarak. python ya da modül yoksa o tür session boyunca atlanır ve bir satır bunu söyler.
-4. Parse edilmeyen bir dosya iki kanala yazılır: model dosyayı ve hatayı adlandıran bir `context` notu alır, kişi ortak sidebar'ın stream'inde kırmızı bir kayıt alır, sidebar kapalıyken bir transcript satırı.
+4. Parse edilmeyen bir dosya iki kanala yazılır: model dosyayı ve hatayı adlandıran bir `context` notu alır, kişi ortak sidebar'ın stream'inde kırmızı bir kayıt alır, sidebar kapalıyken bir transcript satırı. Dosya, session'ın başladığı git repository'sine göre adlandırılır; repository dışında session'ın dizinine göre. Bu kök session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır.
 5. Sonraki bir edit aynı dosyayı tekrar parse edilir hale getirdiğinde duran kayıt temizlenir ve bir yeşil satır bunu söyler. O satır yalnız kişiye gider, çünkü düzeltmeyi model kendisi yapmıştır.
 6. Mod hiçbir edit'i reddetmez. Dosya önce yazılır, sonra okunur.
 7. Modelin kapatmadığı bir bulgu her main-loop turn sonunda tekrar ölçülür ve geriye kalan, bir sonraki prompt ile modele tek not olarak ulaşır:
@@ -42,15 +42,15 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck, shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
 
 Reach L2, dosya okur ve process çalıştırır.
 
     1. Okur:     her Edit ve Write'ın path'ini, her Bash çağrısının komutunu, düzenlenen JSON ve .env dosyalarının metnini, ve turn sonunda her açık dosyayı tekrar
-    2. Çalıştırır: python3 -c, argv ile, YAML ve TOML dosyalarında; deny modunda bir commit anında git rev-parse --show-toplevel ve git diff --cached --name-only
+    2. Çalıştırır: python3 -c, argv ile, YAML ve TOML dosyalarında; session başlangıcında bir kere git rev-parse --show-toplevel, dosyaları repository köküne göre adlandırmak için; deny modunda bir commit anında git rev-parse --show-toplevel ve git diff --cached --name-only
     3. Gönderir: dosya adını ve parse hatasını modele, bulgu dururken bir sonraki prompt ile bir not daha; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve modu
     5. Düşman girdi: path tool çağrısından gelir ve python'a tek bir argv değeri olarak ulaşır, hiçbir zaman shell üzerinden geçmez; python programı sabit metindir ve sys.argv[1] okur

@@ -7,7 +7,7 @@ A Claude Code Mod that parses each JSON, YAML, TOML or `.env` file an Edit or Wr
 1. After each Edit or Write that the engine ran, the mod reads the path. A `.json`, `.yml`, `.yaml`, `.toml`, `.env` or `.env.<name>` file is parsed; every other file is left alone.
 2. JSON is parsed by the mod itself, and a `.env` file is read line by line: a line that is not empty, a comment or `KEY=value` is the finding, with its number.
 3. YAML and TOML are parsed by `python3` (`yaml.safe_load` and `tomllib.load`), the file path as one argv item. When python or the module is missing, that kind is skipped for the session and one line says so.
-4. A file that does not parse is written to two channels: the model gets a `context` note naming the file and the error, and the person gets a red entry in the shared sidebar's stream, or a transcript line where the sidebar is closed.
+4. A file that does not parse is written to two channels: the model gets a `context` note naming the file and the error, and the person gets a red entry in the shared sidebar's stream, or a transcript line where the sidebar is closed. The file is named against the git repository the session started in, or against the session's directory outside a repository; that root is read once at the session's start, because a Bash `cd` moves the session's own directory.
 5. When a later edit makes the same file parse again, the standing entry is cleared and one green line says so. That line goes to the person only, because the model fixed it itself.
 6. The mod never denies an edit. The file is written, then read.
 7. A finding the model did not close is measured again at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt:
@@ -42,15 +42,15 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck, shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
 
 Reach L2, reads files and runs a process.
 
     1. Reads:    the path of each Edit and Write, the command of each Bash call, and the text of the edited JSON and .env files, and each open file again at the turn's end
-    2. Runs:     python3 -c, by argv, on YAML and TOML files, and git rev-parse --show-toplevel plus git diff --cached --name-only at a commit in deny mode
+    2. Runs:     python3 -c, by argv, on YAML and TOML files; git rev-parse --show-toplevel once at the session's start, to name files against the repository root; and git rev-parse --show-toplevel plus git diff --cached --name-only at a commit in deny mode
     3. Sends:    the file name and the parse error to the model, and one more note with the next prompt while a finding stands; nothing leaves the machine
     4. Persists: the on/off setting and the mode in $.store
     5. Hostile input: the path comes from the tool call and reaches python as one argv item, never through a shell; the python program is fixed text and reads sys.argv[1]
