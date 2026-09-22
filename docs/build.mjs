@@ -1,6 +1,6 @@
 // Builds the public site from the repository itself: the marketplace manifest, each mod's plugin.json
-// and each mod's README. Nothing here is written by hand twice, so a new mod reaches the site with its
-// own commit and no other step.
+// and each mod's two READMEs. Nothing here is written by hand twice, so a new mod reaches the site with
+// its own commit and no other step.
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +32,7 @@ function summaryOf(description) {
 /** The Turkish card sentence: the first paragraph of the mod's Turkish README, as plain text. */
 function leadOf(readme) {
   if (readme === null) return null
-  const paragraph = readme.split(/\n#[^\n]*\n/)[1]?.split(/\n\s*\n/).find(p => p.trim() !== '')
+  const paragraph = readme.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(p => p.trim()).find(p => p !== '' && !p.startsWith('#'))
   if (paragraph === undefined) return null
   return paragraph.replace(/\s+/g, ' ').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*]/g, '').trim()
 }
@@ -66,15 +66,14 @@ async function mods() {
     // The Turkish page comes from the mod's own README.tr.md; a mod without one shows the English body.
     const readmeTr = await readText(join(dir, 'README.tr.md')).catch(() => null)
     found.push({
-      readmeTr,
       name: entry.name,
       version: manifest.version,
-      category: entry.category ?? 'other',
       tags: entry.tags?.filter(t => !['mods', 'function-hooks', 'hooks-module'].includes(t)) ?? [],
       summary: summaryOf(manifest.description ?? entry.description ?? ''),
       summaryTr: leadOf(readmeTr),
       reach: reachOf(readme),
       readme,
+      readmeTr,
     })
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
@@ -84,8 +83,31 @@ async function mods() {
 const both = (key, wrap = t => t) =>
   ['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${wrap(copy[lang][key], lang)}</div>`).join('')
 
-function head(title, depth) {
-  const base = depth === 0 ? '' : '../'
+const pair = (key, wrap = t => t) =>
+  ['tr', 'en'].map(lang => `<span data-lang-block="${lang}">${wrap(copy[lang][key], lang)}</span>`).join('')
+
+/** The fixed left sidebar: the brand, the filter and every mod by name. The mods live here alone. */
+function sidebar(list, current, base) {
+  const rows = list.map(m => {
+    const here = m.name === current ? ' aria-current="page"' : ''
+    const title = escape(m.summaryTr ?? m.summary)
+    return `<li data-search="${escape([m.name, m.summary, m.summaryTr ?? '', ...m.tags].join(' ').toLowerCase())}" data-reach="${m.reach}"><a href="${base}${m.name}.html" title="${title}"${here}><span class="dot ${m.reach}"></span>${escape(m.name)}</a></li>`
+  }).join('')
+  const filters = ['all', 'L0', 'L1', 'L2', 'L3'].map(level => {
+    const label = level === 'all' ? pair('allReach', escape) : level
+    return `<button data-reach="${level}" aria-pressed="${level === 'all'}">${label}</button>`
+  }).join('')
+  return `<aside class="side">
+  <a class="brand" href="${base === '' ? 'index.html' : '../index.html'}">${escape(copy.site.title)}<span>${escape(copy.site.marketplace)}</span></a>
+  <input type="search" id="side-q" placeholder="${escape(copy.tr.searchPlaceholder)}" data-ph-tr="${escape(copy.tr.searchPlaceholder)}" data-ph-en="${escape(copy.en.searchPlaceholder)}" autocomplete="off">
+  <div class="filters">${filters}</div>
+  <h4>${pair('modsTitle')} <span id="side-count">(${list.length})</span></h4>
+  <nav><ol id="side-list">${rows}</ol></nav>
+  <div class="foot"><a href="${REPO}">GitHub</a><a href="${copy.site.author.url}">${escape(copy.site.author.name)}</a></div>
+</aside>`
+}
+
+function page(title, list, current, base, body) {
   return `<!doctype html>
 <html lang="tr" data-lang="tr">
 <head>
@@ -93,8 +115,8 @@ function head(title, depth) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(title)}</title>
 <meta name="description" content="${escape(copy.en.tagline)}">
-<link rel="icon" href="${base}favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="${base}style.css">
+<link rel="icon" href="${base === '' ? '' : '../'}favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="${base === '' ? '' : '../'}style.css">
 <script>
   // The language choice is kept in a cookie, never in localStorage.
   var m = document.cookie.match(/(?:^|; )lang=(tr|en)/)
@@ -102,41 +124,24 @@ function head(title, depth) {
 </script>
 </head>
 <body>
-<header class="top"><div class="wrap">
-  <a class="brand" href="${base}index.html">${escape(copy.site.title)}</a>
-  <nav>
-    <a class="hide-sm" href="${REPO}">GitHub</a>
-    <a class="hide-sm" href="${copy.site.author.url}">${escape(copy.site.author.name)}</a>
+<div class="shell">
+${sidebar(list, current, base)}
+<div class="main">
+  <header class="top"><div class="inner">
+    <a href="${base === '' ? 'index.html' : '../index.html'}#install">${pair('installTitle')}</a>
+    <a href="${base === '' ? 'index.html' : '../index.html'}#reach">${pair('reachTitle')}</a>
     <div class="langs"><button data-set="tr">TR</button><button data-set="en">EN</button></div>
-  </nav>
-</div></header>`
-}
-
-function foot(depth) {
-  const base = depth === 0 ? '' : '../'
-  return `<footer class="bottom"><div class="wrap">
-  ${both('generated', t => `<p>${t}</p>`)}
-  <p><a href="${REPO}">${escape(REPO)}</a> · MIT</p>
-</div></footer>
-<script src="${base}site.js"></script>
+  </div></header>
+${body}
+  <footer class="bottom"><div class="wrap">
+    ${both('generated', t => `<p>${escape(t)}</p>`)}
+    <p><a href="${REPO}">${escape(REPO)}</a> · MIT</p>
+  </div></footer>
+</div>
+</div>
+<script src="${base === '' ? '' : '../'}site.js"></script>
 </body></html>
 `
-}
-
-function card(mod) {
-  const tags = mod.tags.slice(0, 4).map(t => `<span>${escape(t)}</span>`).join('')
-  const turkish = mod.summaryTr ?? mod.summary
-  const search = escape([mod.name, mod.summary, turkish, ...mod.tags].join(' ').toLowerCase())
-  return `<article class="card" data-reach="${mod.reach}" data-search="${search}">
-  <h3><a href="mods/${mod.name}.html">${escape(mod.name)}</a></h3>
-  <p data-lang-block="tr">${escape(turkish)}</p>
-  <p data-lang-block="en">${escape(mod.summary)}</p>
-  <div class="meta">
-    <span class="reach ${mod.reach}">${mod.reach}</span>
-    <span class="version">v${escape(mod.version)}</span>
-    <div class="tags">${tags}</div>
-  </div>
-</article>`
 }
 
 function reachList(lang) {
@@ -155,62 +160,36 @@ claude plugin install &lt;mod&gt;@${escape(copy.site.marketplace)}</code></pre>
 }
 
 function hero(list) {
-  const levels = ['L0', 'L1', 'L2', 'L3'].map(l => list.filter(m => m.reach === l).length)
-  const counts = `<div class="counts">
-    <div><b>${list.length}</b>mod</div>
-    <div><b>${levels[0] + levels[1]}</b>L0 + L1</div>
-    <div><b>${levels[2]}</b>L2</div>
-    <div><b>${levels[3]}</b>L3</div>
-  </div>`
-  return `<div class="hero"><div class="wrap">
+  const at = level => list.filter(m => m.reach === level).length
+  return `<div class="wrap"><div class="hero">
   <h1>${escape(copy.site.title)}</h1>
   ${both('tagline', t => `<p class="tagline">${escape(t)}</p>`)}
   ${both('lead', t => `<p class="lead">${escape(t)}</p>`)}
-  ${counts}
+  <div class="counts">
+    <div><b>${list.length}</b>mod</div>
+    <div><b>${at('L0') + at('L1')}</b>L0 + L1</div>
+    <div><b>${at('L2')}</b>L2</div>
+    <div><b>${at('L3')}</b>L3</div>
+  </div>
 </div></div>`
 }
 
 function indexPage(list) {
-  const filters = ['all', 'L0', 'L1', 'L2', 'L3'].map(level =>
-    `<button data-reach="${level}" aria-pressed="${level === 'all'}">${level === 'all' ? `<span data-lang-block="tr">${escape(copy.tr.allReach)}</span><span data-lang-block="en">${escape(copy.en.allReach)}</span>` : level}</button>`).join('')
-  return `${head(copy.site.title, 0)}
+  const body = `<main>
 ${hero(list)}
-<main>
-<section id="install"><div class="wrap">
-  ${both('installTitle', t => `<h2>${escape(t)}</h2>`)}
-  ${['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${installBlock(lang)}</div>`).join('')}
-</div></section>
-<section id="mods"><div class="wrap"><div class="page">
-${sideNav(list, null, 'mods/')}
-<div>
-  ${both('modsTitle', t => `<h2>${escape(t)}</h2>`)}
-  ${both('modsLead', t => `<p class="sub">${escape(t)}</p>`)}
-  <div class="controls">
-    <input type="search" id="q" placeholder="${escape(copy.tr.searchPlaceholder)}" data-ph-tr="${escape(copy.tr.searchPlaceholder)}" data-ph-en="${escape(copy.en.searchPlaceholder)}" autocomplete="off">
-    <div class="filters">${filters}</div>
-  </div>
-  <div class="grid" id="grid">${list.map(card).join('\n')}</div>
-  <p class="empty" id="empty" hidden>0</p>
-</div></div></div></section>
-<section id="reach"><div class="wrap">
-  ${both('reachTitle', t => `<h2>${escape(t)}</h2>`)}
-  ${['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${reachList(lang)}</div>`).join('')}
-  ${both('docsNote', t => `<p class="sub" style="margin-top:18px">${escape(t)}</p>`)}
-</div></section>
-</main>
-${foot(0)}`
-}
-
-/** Every mod by name, so each page carries the whole list and the one it draws is marked. */
-function sideNav(list, current, base = '') {
-  const rows = list.map(m => {
-    const here = m.name === current ? ' aria-current="page"' : ''
-    return `<li><a href="${base}${m.name}.html"${here}>${escape(m.name)}</a></li>`
-  }).join('')
-  return `<aside class="side">
-  <h4><span data-lang-block="tr">${escape(copy.tr.modsTitle)}</span><span data-lang-block="en">${escape(copy.en.modsTitle)}</span> (${list.length})</h4>
-  <ol>${rows}</ol>
-</aside>`
+<div class="wrap">
+  <section id="install">
+    ${both('installTitle', t => `<h2>${escape(t)}</h2>`)}
+    ${['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${installBlock(lang)}</div>`).join('')}
+  </section>
+  <section id="reach">
+    ${both('reachTitle', t => `<h2>${escape(t)}</h2>`)}
+    ${['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${reachList(lang)}</div>`).join('')}
+    ${both('docsNote', t => `<p class="sub" style="margin-top:18px">${escape(t)}</p>`)}
+  </section>
+</div>
+</main>`
+  return page(copy.site.title, list, null, '', body)
 }
 
 function modPage(mod, list) {
@@ -218,41 +197,33 @@ function modPage(mod, list) {
   const turkish = mod.readmeTr === null
     ? `<p class="sub">${escape(copy.tr.noTurkish)}</p>${english}`
     : markdown(mod.readmeTr, mod.name)
-  const body = `<div data-lang-block="tr">${turkish}</div><div data-lang-block="en">${english}</div>`
-  return `${head(`${mod.name} · ${copy.site.title}`, 1)}
-<main class="wrap"><div class="page">
-${sideNav(list, mod.name)}
-<article class="doc">
+  const body = `<main class="wrap"><article class="doc">
   <div class="docbar">
-    <a href="../index.html"><span data-lang-block="tr">← ${escape(copy.tr.backToIndex)}</span><span data-lang-block="en">← ${escape(copy.en.backToIndex)}</span></a>
     <span class="reach ${mod.reach}">${mod.reach}</span>
     <span class="version">v${escape(mod.version)}</span>
     <a href="${REPO}/tree/main/plugins/${mod.name}">source</a>
   </div>
-  ${body}
-</article></div></main>
-${foot(1)}`
+  <div data-lang-block="tr">${turkish}</div>
+  <div data-lang-block="en">${english}</div>
+</article></main>`
+  return page(`${mod.name} · ${copy.site.title}`, list, mod.name, 'mods/', body)
 }
 
-const SCRIPT = `// The mod filter and the language switch. No framework, no storage but one cookie.
-const grid = document.getElementById('grid')
-const cards = grid === null ? [] : [...grid.querySelectorAll('.card')]
-const box = document.getElementById('q')
-const empty = document.getElementById('empty')
+const SCRIPT = `// The sidebar's filter and the language switch. No framework, no storage but one cookie.
+const rows = [...document.querySelectorAll('#side-list li')]
+const box = document.getElementById('side-q')
+const count = document.getElementById('side-count')
 let reach = 'all'
 
 function apply() {
   const term = (box?.value ?? '').trim().toLowerCase()
   let shown = 0
-  for (const c of cards) {
-    const ok = (reach === 'all' || c.dataset.reach === reach) && (term === '' || c.dataset.search.includes(term))
-    c.hidden = !ok
+  for (const r of rows) {
+    const ok = (reach === 'all' || r.dataset.reach === reach) && (term === '' || r.dataset.search.includes(term))
+    r.hidden = !ok
     if (ok) shown++
   }
-  if (empty !== null) {
-    empty.hidden = shown > 0
-    empty.textContent = document.documentElement.dataset.lang === 'tr' ? 'Eşleşen mod yok.' : 'No mod matches.'
-  }
+  if (count !== null) count.textContent = '(' + shown + ')'
 }
 
 box?.addEventListener('input', apply)
@@ -274,6 +245,9 @@ function setLang(lang) {
 
 for (const b of document.querySelectorAll('.langs button')) b.addEventListener('click', () => setLang(b.dataset.set))
 setLang(document.documentElement.dataset.lang ?? 'tr')
+
+// The open mod is scrolled into view in a long sidebar.
+document.querySelector('#side-list a[aria-current="page"]')?.scrollIntoView({ block: 'center' })
 `
 
 async function build() {
@@ -292,7 +266,8 @@ async function build() {
   const urls = ['index.html', ...list.map(m => `mods/${m.name}.html`)]
     .map(p => `  <url><loc>https://${copy.site.domain}/${p}</loc></url>`).join('\n')
   await writeFile(join(OUT, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`)
-  console.log(`site: ${list.length} mods, ${urls.split('\n').length} pages`)
+  const translated = list.filter(m => m.readmeTr !== null).length
+  console.log(`site: ${list.length} mods, ${translated} with a Turkish README`)
 }
 
 await build()
