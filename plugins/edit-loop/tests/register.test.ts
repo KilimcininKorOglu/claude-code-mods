@@ -13,15 +13,21 @@ const run = (args: string): CommandRunInput => ({
 
 const NOTE = 'edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, re-read the code path and state the root cause before the next edit.'
 
-/** `fail` makes the next edit fail beneath the plugin; `logs` holds the lines the person sees. */
-type World = { fail: boolean; logs: string[] }
+/**
+ * `fail` makes the next edit fail beneath the plugin; `logs` holds the lines the person sees; `cwd` is the
+ * session's directory; `top` is what `git rev-parse --show-toplevel` answers, undefined outside a repository.
+ */
+type World = { fail: boolean; logs: string[]; cwd: string; top?: string }
 
 function world(on: On): World {
-  const w: World = { fail: false, logs: [] }
+  const w: World = { fail: false, logs: [], cwd: ROOT }
   mock.store(on, {})
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('session.cwd', () => ({ value: ROOT }))
+  on('session.cwd', () => ({ value: w.cwd }))
+  on('process.run', () => ({
+    value: w.top === undefined ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } : { exitCode: 0, stdout: `${w.top}\n`, stderr: '' },
+  }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
   const answer = () => (w.fail ? { result: 'Error', text: 'String not found', isError: true } : { result: 'ok' }) as never
@@ -124,6 +130,24 @@ describe('edit-loop', () => {
     await started($)
     for (let i = 0; i < 5; i++) await edit($)
     expect(w.logs).toEqual(['3rd edit of hooks/a.ts in this turn', '5th edit of hooks/a.ts in this turn'])
+  })
+
+  test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
+    const w = world(on)
+    w.cwd = `${ROOT}/plugins/a`
+    w.top = ROOT
+    await started($)
+    for (let i = 0; i < 3; i++) await edit($, `${ROOT}/plugins/b/x.ts`)
+    expect(w.logs).toEqual(['3rd edit of plugins/b/x.ts in this turn'])
+  })
+
+  test('outside a git repository a path is shown against the session directory', async ($, on) => {
+    const w = world(on)
+    w.cwd = `${ROOT}/plugins/a`
+    await started($)
+    for (let i = 0; i < 3; i++) await edit($, `${ROOT}/plugins/a/x.ts`)
+    for (let i = 0; i < 3; i++) await edit($, `${ROOT}/plugins/b/x.ts`)
+    expect(w.logs).toEqual(['3rd edit of x.ts in this turn', `3rd edit of ${ROOT}/plugins/b/x.ts in this turn`])
   })
 
   test('a subagent counts apart from the main loop, and off counts nothing', async ($, on) => {

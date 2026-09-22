@@ -6,11 +6,27 @@ const ENABLED_KEY = 'enabled'
 const USAGE = 'expects nothing (the status), on or off'
 
 /**
- * The edit counts of the running turn, the on/off setting, and the directory the session started in.
- * A path is shown against that directory, not against `$.session.cwd()`, because a Bash `cd` moves
- * the session's directory and would then leave every path outside it written in full.
+ * The edit counts of the running turn, the on/off setting, and the directory paths are shown against,
+ * read once at the session's start (`shownRootOf`), not from `$.session.cwd()` at each edit, because a
+ * Bash `cd` moves the session's directory and would then leave every path outside it written in full.
  */
 type State = { counts: Counts; enabled: boolean; root?: string }
+
+/**
+ * The git repository the session started in, so a file in a sibling directory of a session opened in a
+ * subdirectory still reads short; the session's own directory where git does not answer.
+ */
+async function shownRootOf($: EngineInterface): Promise<string> {
+  const cwd = await $.session.cwd()
+  try {
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const root = top.stdout.trim()
+    return top.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    // No git here, or the command did not run: paths are shown against the session's directory.
+    return cwd
+  }
+}
 
 /**
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
@@ -68,7 +84,7 @@ export const register: Register = on => {
     const r = await next(e)
     await $.command.register({ name: 'edit-loop', description: 'A note at the fifth edit of one file in a turn: status, on, off (edit-loop)', argumentHint: '[on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.root = await $.session.cwd()
+    state.root = await shownRootOf($)
     return r
   })
 

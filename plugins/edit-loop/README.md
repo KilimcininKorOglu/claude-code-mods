@@ -15,7 +15,7 @@ A Claude Code Mod that tells the model when it has edited the same file five tim
 
        edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, re-read the code path and state the root cause before the next edit.
 
-   The path is relative to the directory the session started in when the file is inside it. That directory is read once at the session's start, because a Bash `cd` moves the session's own directory. The note comes once per file and turn; the sixth and later edits get none.
+   The path is relative to the git repository the session started in when the file is inside it, so a session opened in `plugins/a` shows a file of `plugins/b` as `plugins/b/x.ts`. Outside a git repository the path is relative to the directory the session started in. That root is read once at the session's start, because a Bash `cd` moves the session's own directory. The note comes once per file and turn; the sixth and later edits get none.
 5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the finding alone, without the instruction, and it is drawn red:
 
        edit-loop: 5th edit of hooks/a.ts in this turn
@@ -45,15 +45,15 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=edit-loop}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}
-    ❯ ./register.ts calls: $.command.register, $.session.cwd, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via shownRootOf), $.session.cwd (via afterEdit, shownRootOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via toPerson)
 
-Reach L0, remembers.
+Reach L2, runs a process.
 
-    1. Reads:    the file path of each Edit, Write and NotebookEdit call; the session's directory
-    2. Runs:     nothing
+    1. Reads:    the file path of each Edit, Write and NotebookEdit call; the session's directory and its git repository root
+    2. Runs:     `git rev-parse --show-toplevel` once at the session's start, to show paths against the repository root
     3. Sends:    a note to the model after the fifth edit of one file in a turn, and one line to the transcript at the third and the fifth; nothing leaves the machine
     4. Persists: in $.store, the on/off setting; the counts live in memory for one turn
     5. Hostile input: the path is only compared and printed in the note, never opened

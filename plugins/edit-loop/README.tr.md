@@ -15,7 +15,7 @@ Model bir turn içinde aynı dosyayı beş kere düzenlediğinde bunu modele sö
 
        edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, re-read the code path and state the root cause before the next edit.
 
-   Dosya session'ın başladığı dizinin içindeyse path ona göre yazılır. O dizin session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini kaydırır. Not dosya ve turn başına bir kere gelir; altıncı ve sonraki edit'ler not almaz.
+   Dosya session'ın başladığı git repository'sinin içindeyse path o köke göre yazılır. Yani `plugins/a` içinde açılan bir session, `plugins/b` içindeki bir dosyayı `plugins/b/x.ts` olarak gösterir. Git repository'si dışında path session'ın başladığı dizine göre yazılır. Bu kök session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini kaydırır. Not dosya ve turn başına bir kere gelir; altıncı ve sonraki edit'ler not almaz.
 5. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır talimat cümlesi olmadan yalnız bulguyu taşır ve kırmızı çizilir:
 
        edit-loop: 5th edit of hooks/a.ts in this turn
@@ -45,15 +45,15 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=edit-loop}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}
-    ❯ ./register.ts calls: $.command.register, $.session.cwd, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via shownRootOf), $.session.cwd (via afterEdit, shownRootOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via toPerson)
 
-Reach L0, hatırlar.
+Reach L2, bir process çalıştırır.
 
-    1. Okur:     her Edit, Write ve NotebookEdit çağrısının dosya path'ini; session'ın dizinini
-    2. Çalıştırır: hiçbir şey
+    1. Okur:     her Edit, Write ve NotebookEdit çağrısının dosya path'ini; session'ın dizinini ve git repository kökünü
+    2. Çalıştırır: session başlangıcında bir kere `git rev-parse --show-toplevel`, path'leri repository köküne göre göstermek için
     3. Gönderir: bir turn'de bir dosyanın beşinci edit'inden sonra modele bir not, üçüncü ve beşincide transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını; sayaçlar bir turn boyunca bellekte yaşar
     5. Düşman girdi: path yalnız karşılaştırılır ve notta yazılır, hiç açılmaz
