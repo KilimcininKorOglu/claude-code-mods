@@ -60,9 +60,9 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [diagram-render](plugins/diagram-render) | Renders the mermaid blocks of the model's replies with an installed `mmdc` after each turn and draws each picture under its reply. | L2 |
 | [dep-sentinel](plugins/dep-sentinel) | Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one, naming the latest version. | L3 |
 | [edit-loop](plugins/edit-loop) | Adds a note to the fifth edit of one file in one turn, so the model re-reads the code path and states the root cause instead of trying again. | L0 |
-| [i18n-watch](plugins/i18n-watch) | After an edit that calls translation keys, names the keys the JSON, Laravel PHP, YAML or gettext locale files lack, and the languages that lack them. | L1 |
+| [i18n-watch](plugins/i18n-watch) | After an edit that calls translation keys, names the keys the JSON, Laravel PHP, YAML or gettext locale files lack, and the languages that lack them. | L2 |
 | [env-sync](plugins/env-sync) | After each commit the model makes, names the env variables its added lines read that `.env.example` lacks, with the file and line of each. | L2 |
-| [sql-concat-watch](plugins/sql-concat-watch) | After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters. | L1 |
+| [sql-concat-watch](plugins/sql-concat-watch) | After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters. | L2 |
 | [lockfile-sync](plugins/lockfile-sync) | After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix). | L2 |
 | [bg-tasks](plugins/bg-tasks) | Shows the running background shell tasks on the status line with the oldest one's age, and stops one from the `/bg-tasks` pane. | L2 |
 | [sidebar](plugins/sidebar) | Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through `$.sidebar`; each finding is stamped with its time and kept in a per-project log the next session takes back. | L2 |
