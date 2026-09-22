@@ -24,20 +24,42 @@ export type Mod = { name: string; marketplace: string; installed: string; offere
 /** One plugin as the install record names it, before its clone was read. */
 export type Installed = { name: string; marketplace: string; version: string }
 
-/** One record `installed_plugins.json` keeps per `<plugin>@<marketplace>`. */
-type Entry = { version?: unknown }
+/**
+ * One record `installed_plugins.json` keeps per `<plugin>@<marketplace>` and scope. A project or local
+ * install names its project in `projectPath`; a user install names none.
+ */
+type Entry = { version?: unknown; projectPath?: unknown }
+
+/** Whether a record is in force for a session started in `cwd`: a user install, or one of its project. */
+function appliesTo(entry: Entry, cwd: string): boolean {
+  if (typeof entry.projectPath !== 'string') return true
+  return cwd === entry.projectPath || cwd.startsWith(`${entry.projectPath}/`)
+}
+
+/**
+ * The oldest version among the records in force for this session, so an old install is reported even when
+ * another scope of the same plugin is up to date. A record of another project is not read.
+ */
+function versionIn(records: readonly Entry[], cwd: string): string | undefined {
+  let oldest: string | undefined
+  for (const entry of records) {
+    if (!appliesTo(entry, cwd) || typeof entry.version !== 'string') continue
+    if (oldest === undefined || isNewer(oldest, entry.version)) oldest = entry.version
+  }
+  return oldest
+}
 
 /**
  * The plugins installed, read from the install record of the host. `scope` is one marketplace's name, or
- * `all` for every one of them.
+ * `all` for every one of them. `cwd` is the directory the session started in.
  */
-export function installedOf(text: string, scope: string): Installed[] {
+export function installedOf(text: string, scope: string, cwd: string): Installed[] {
   const all = (JSON.parse(text) as { plugins?: Record<string, Entry[]> }).plugins ?? {}
   const out: Installed[] = []
   for (const [id, records] of Object.entries(all)) {
     const [name, marketplace] = id.split('@')
-    const version = records[0]?.version
-    if (name === undefined || marketplace === undefined || typeof version !== 'string') continue
+    const version = versionIn(records, cwd)
+    if (name === undefined || marketplace === undefined || version === undefined) continue
     if (scope !== ALL && marketplace !== scope) continue
     out.push({ name, marketplace, version })
   }

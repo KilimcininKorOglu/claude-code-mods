@@ -91,9 +91,9 @@ const turn = (): TurnCompleteInput => ({ answer: 'done', durationMs: 1000, isAbo
 
 describe('mod-doctor', () => {
   test('reads the records, the manifests, the versions and the texts', () => {
-    expect(installedOf(RECORD, 'all')).toHaveLength(4)
-    expect(installedOf(RECORD, 'turkish-native')).toEqual([{ name: 'turkish-native', marketplace: 'turkish-native', version: '1.0.0' }])
-    expect(installedOf(RECORD, 'nobody-mods')).toEqual([])
+    expect(installedOf(RECORD, 'all', '/work')).toHaveLength(4)
+    expect(installedOf(RECORD, 'turkish-native', '/work')).toEqual([{ name: 'turkish-native', marketplace: 'turkish-native', version: '1.0.0' }])
+    expect(installedOf(RECORD, 'nobody-mods', '/work')).toEqual([])
     expect(sourcesOf(MANIFESTS['turkish-native'] ?? '').get('turkish-native')).toBe('./')
     // A plugin whose source is a git subdirectory of another repository has no version on disk here.
     expect(sourcesOf(MANIFESTS['claude-plugins-official'] ?? '').size).toBe(0)
@@ -158,6 +158,21 @@ describe('mod-doctor', () => {
     expect((await $.command.run(run('off'))).text).toBe('off: nothing is measured')
     expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or marketplace <name | all>')
     expect(w.logs).toHaveLength(1)
+  })
+
+  test("each plugin is read from the records of this session: the user one and this project's, never another project's", async ($, on) => {
+    const w = world(on, JSON.stringify({
+      plugins: {
+        // Another project runs the new version; this session runs the user install.
+        'sidebar@kilimcininkoroglu-mods': [{ scope: 'project', version: '0.5.0', projectPath: '/other' }, { scope: 'user', version: '0.4.1' }],
+        // This project pins an older version over the user install.
+        'cache-warm@kilimcininkoroglu-mods': [{ scope: 'user', version: '0.5.0' }, { scope: 'project', version: '0.4.0', projectPath: '/work' }],
+        // Installed for another project alone.
+        'turkish-native@turkish-native': [{ scope: 'project', version: '1.0.0', projectPath: '/other' }],
+      },
+    }))
+    await started($)
+    expect(w.logs).toEqual(['2 plugin(s) are behind their clone: cache-warm 0.4.0 → 0.5.0, sidebar 0.4.1 → 0.5.0'])
   })
 
   test('CLAUDE_CONFIG_DIR moves the record and the clones, as it moves them for the host', async ($, on) => {

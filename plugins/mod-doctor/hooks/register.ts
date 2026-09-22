@@ -11,9 +11,9 @@ const SECTION = { consumer: 'mod-doctor', key: 'behind' }
 
 /**
  * The on/off setting, the scope read, how many plugins are installed in it, which are behind, the host's
- * config directory, what was last said to the person, and whether the second measure of this session ran.
+ * config directory, the directory the session started in, what was last said to the person, and whether the second measure of this session ran.
  */
-type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; said: string; again: boolean }
+type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; cwd: string; said: string; again: boolean }
 
 /** Where the host keeps the record of every installed plugin. */
 function recordPath(config: string): string {
@@ -40,7 +40,7 @@ async function readInstalled($: EngineInterface, state: State): Promise<Installe
   const text = await readText($, recordPath(state.config))
   if (text === undefined) return undefined
   try {
-    const mods = installedOf(text, state.scope)
+    const mods = installedOf(text, state.scope, state.cwd)
     return mods.length === 0 ? undefined : mods
   } catch {
     // A record file of another shape.
@@ -174,12 +174,13 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', said: '', again: false }
+  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', cwd: '', said: '', again: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.scope = await readScope($)
+    state.cwd = e.cwd
     state.config = configDirOf(await $.env.get('CLAUDE_CONFIG_DIR'), await $.env.get('HOME'))
     await $.command.register({
       name: 'mod-doctor',
