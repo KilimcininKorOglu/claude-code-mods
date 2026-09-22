@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionRateLimit, SessionStartInput, TurnCompleteInput, UiPane } from 'claude-code'
 
 tier('user')
@@ -26,20 +26,28 @@ type World = {
   statuses: (string | undefined)[]
   panes: UiPane[]
   setLimits: (l: SessionRateLimit[]) => void
+  /** How many of the next usage reads fail. */
+  failUsage: number
+  clock: MockClock
 }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { logs: [], statuses: [], panes: [], setLimits: () => undefined }
+  const w: World = { logs: [], statuses: [], panes: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }) }
   let limits: SessionRateLimit[] = []
   w.setLimits = l => {
     limits = l
   }
   mock.store(on, store)
-  on('clock.now', () => ({ value: T0 }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: limits } }))
+  on('session.usage', () => {
+    if (w.failUsage > 0) {
+      w.failUsage -= 1
+      throw new Error('usage down')
+    }
+    return { value: { startedAt: 0, context: { window: 200_000 }, rateLimits: limits } }
+  })
   on('ui.log', (_, e) => {
     w.logs.push(e.text)
     return { value: undefined }
@@ -225,6 +233,16 @@ describe('limit-watch', () => {
     seatSidebar(on, { open: false, sections: [] })
     w.setLimits([fiveHour(23)])
     await $.session.start(session)
+    expect(w.statuses.at(-1)).toContain('5h 23%')
+  })
+
+  test('a failed first read still arms the timer, which samples a minute later', async ($, on) => {
+    const w = world(on)
+    w.failUsage = 1
+    w.setLimits([fiveHour(23)])
+    await $.session.start({ ...session, isInteractive: true })
+    expect(w.logs).toEqual(['cannot read the usage limits: no implementation for session.usage'])
+    await w.clock.advance(60_000)
     expect(w.statuses.at(-1)).toContain('5h 23%')
   })
 

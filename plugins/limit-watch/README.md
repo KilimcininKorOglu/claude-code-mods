@@ -36,7 +36,7 @@ Each warning comes once per limit cycle. A new session in the same cycle does no
 
 ## How the numbers are made
 
-- `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limit-watch` opens the pane.
+- `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limit-watch` opens the pane. A read that fails at session start or on the timer is logged once as `cannot read the usage limits: <error>`, and the 60 second timer keeps running.
 - Every reading is one sample `{ at, percent }`, kept in `$.store` so that a restart keeps the pace.
 - The pace is the change in percent between the first and the last sample of a recent span, per hour. The span is the last hour for the 5-hour limit and the last 24 hours for the 7-day and spend limits, so the pace follows how you work now and not how you worked earlier in the cycle.
 - A pace is shown only when its samples span at least 10 minutes (5-hour limit) or 2 hours (7-day and spend limits). A shorter span gives a pace that one step of the percentage can double.
@@ -71,7 +71,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limits}, ui.render{component=Pane}
+    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
 
 Reach L0, draws and remembers.

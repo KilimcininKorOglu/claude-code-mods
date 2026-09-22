@@ -36,7 +36,7 @@ Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir ses
 
 ## Sayılar nasıl oluşur
 
-- `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana döngü turundan sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur.
+- `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana döngü turundan sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başlangıcında ya da timer'da başarısız olan bir okuma bir kere `cannot read the usage limits: <error>` olarak log'lanır ve 60 saniyelik timer çalışmaya devam eder.
 - Her okuma bir örnektir (`{ at, percent }`) ve `$.store` içinde tutulur, böylece bir restart hızı korur.
 - Hız, yakın bir aralığın ilk ve son örneği arasındaki yüzde değişimidir, saat başına. Aralık 5 saatlik limit için son bir saat, 7 günlük ve spend limitleri için son 24 saattir; böylece hız bugün nasıl çalıştığınızı izler, cycle'ın başında nasıl çalıştığınızı değil.
 - Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (7 günlük ve spend limitleri) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
@@ -71,7 +71,7 @@ Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
 
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limits}, ui.render{component=Pane}
+    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
 
 Reach L0, çizer ve hatırlar.

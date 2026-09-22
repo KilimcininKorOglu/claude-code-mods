@@ -71,18 +71,19 @@ async function sample($: EngineInterface, state: State): Promise<void> {
   $.ui.invalidate('ui.render')
 }
 
-/** A timer sample has no hook to fail, so its error is logged. The same error is logged once. */
-function sampleOnTick($: EngineInterface, state: State): void {
-  sample($, state).then(
-    () => {
-      state.lastError = undefined
-    },
-    (err: unknown) => {
-      const text = err instanceof Error ? err.message : String(err)
-      if (text !== state.lastError) $.ui.log(`cannot read the usage limits: ${text}`)
-      state.lastError = text
-    },
-  )
+/**
+ * Samples and logs a failed read instead of throwing: a timer sample has no hook to fail, and a failed
+ * first read must not stop the hook that arms the timer. The same error is logged once.
+ */
+async function sampleOrLog($: EngineInterface, state: State): Promise<void> {
+  try {
+    await sample($, state)
+    state.lastError = undefined
+  } catch (err) {
+    const text = err instanceof Error ? err.message : String(err)
+    if (text !== state.lastError) $.ui.log(`cannot read the usage limits: ${text}`)
+    state.lastError = text
+  }
 }
 
 export const register: Register = on => {
@@ -98,9 +99,10 @@ export const register: Register = on => {
       description: 'Open or close the usage limits pane (limit-watch)',
       immediate: true,
     })
-    await sample($, state)
-    // A -p run draws nothing, so only an interactive session samples on a timer.
-    if (e.isInteractive) $.clock.every(TICK_MS, () => sampleOnTick($, state))
+    // A -p run draws nothing, so only an interactive session samples on a timer. The timer is armed
+    // before the first read, so a first read that fails does not leave the session without one.
+    if (e.isInteractive) $.clock.every(TICK_MS, () => void sampleOrLog($, state))
+    await sampleOrLog($, state)
     return r
   })
 
