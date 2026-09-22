@@ -12,20 +12,20 @@ const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): Promp
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['AbovePrompt']
 
 /** What reached the engine beneath the plugin, and what the plugin kept in the store. */
-type World = { entered: { text: string; origin?: PromptOrigin }[]; store: Record<string, unknown>; gitFails?: true }
+type World = { entered: { text: string; origin?: PromptOrigin }[]; store: Record<string, unknown>; gitFails?: true; root: string }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { entered: [], store }
+  const w: World = { entered: [], store, root: '/Users/u/app' }
   mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
   // git answers with the repository root, so the project is its last path part.
-  on('session.cwd', () => ({ value: '/Users/u/app' }))
+  on('session.cwd', () => ({ value: w.root }))
   on('process.run', () => {
     // A throwing world hook reaches the mod as a rejected call, as a missing git does.
     if (w.gitFails === true) throw new Error('git: command not found')
-    return { value: { exitCode: 0, stdout: '/Users/u/app\n', stderr: '' } }
+    return { value: { exitCode: 0, stdout: `${w.root}\n`, stderr: '' } }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -105,7 +105,7 @@ describe('prompt-deck', () => {
     await ui.press({ key: 'deck:1' })
     expect(w.entered.at(-1)?.text).toBe(long)
     expect((await $.command.run(run('remove 1'))).text).toBe('removed; 1 prompt(s) left')
-    expect(w.store['pins:app']).toEqual([])
+    expect(w.store['pins:/Users/u/app']).toEqual([])
   })
 
   test('a git that does not run names the project after the session directory', async ($, on) => {
@@ -114,7 +114,23 @@ describe('prompt-deck', () => {
     await started($)
     for (let i = 0; i < 3; i++) await $.prompt.submit(typed('devam et'))
     expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. devam et (3)')
-    expect(w.store['counts:app']).not.toBe(undefined)
+    expect(w.store['counts:/Users/u/app']).not.toBe(undefined)
+  })
+
+  test('a deck kept under the project name alone moves to the root once, and a second checkout of that name starts empty', async ($, on) => {
+    const w = world(on, { 'counts:app': { 'devam et': { n: 4, last: 5 } }, 'pins:app': ['commitle'] })
+    await started($)
+    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (pinned)\n2. devam et (4)')
+    expect(w.store['counts:app']).toBe(undefined)
+    expect(w.store['pins:app']).toBe(undefined)
+    expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 4, last: 5 } })
+    expect(w.store['pins:/Users/u/app']).toEqual(['commitle'])
+    // Another checkout of the same name starts its own deck, and the first keeps its own.
+    w.root = '/Users/u/other/app'
+    await $.session.start({ surface: null, isInteractive: true, cwd: w.root })
+    expect((await $.command.run(run('list'))).text).toContain('no prompt counted yet')
+    for (let i = 0; i < 3; i++) await $.prompt.submit(typed('başka'))
+    expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 4, last: 5 } })
   })
 
   test('the counts of the one shared deck move into this project once, and other projects start empty', async ($, on) => {
@@ -122,6 +138,6 @@ describe('prompt-deck', () => {
     await started($)
     expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. devam et (7)')
     expect(w.store['counts']).toBe(undefined)
-    expect(w.store['counts:app']).toEqual({ 'devam et': { n: 7, last: 5 } })
+    expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 7, last: 5 } })
   })
 })

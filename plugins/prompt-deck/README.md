@@ -9,8 +9,9 @@ A Claude Code Mod that learns the short prompts you send often in this project, 
 3. A prompt reaches the band after 3 uses. The band draws the 5 most used, the latest first on a tie, as `1: commitle  2: devam et ...`, each label cut to its share of the width.
 4. With the prompt box empty, a digit key sends that prompt at once. A click, or ctrl+x tab and Enter, sends it too. A press counts as one more use.
 5. The band is not drawn while a survey holds it, while a turn runs, or while an agent's transcript is in view.
-6. The counts and the pinned prompts live in the plugin store, one deck per project, shared by every session of it. The project is the name of the session's git top level, else of its working directory. At most 200 prompts are kept per project; the least used and oldest go first.
+6. The counts and the pinned prompts live in the plugin store, one deck per project, shared by every session of it. The project is the session's git top level, else its working directory, and the deck is keyed by that full path, so two checkouts named `app` keep two decks; the status names the project by its last path part. At most 200 prompts are kept per project; the least used and oldest go first.
 7. The deck of a version before 0.2.0 counted every project into one. The first project that loads 0.2.0 takes those counts, once, and says so in one line; every other project starts empty.
+8. A deck of a version before 0.5.0 was keyed by the project's name alone. The first checkout of that name that loads 0.5.0 takes it to the key of its path, once, and says so in one line; another checkout of the same name starts empty.
 
 The engine shows a pressed prompt as `The prompt-deck plugin sent a message:` with the prompt under it, and the model answers it as a user turn (measured on 2.1.278). A plugin's own `$.prompt.submit` passes every hook but the calling plugin's, so the mod cannot leave the plugin name out.
 
@@ -43,12 +44,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=deck}, prompt.submit, ui.render{component=AbovePrompt}
-    ❯ ./register.tsx calls: $.clock.now (via countUse), $.command.register, $.process.run (via resolveProject), $.prompt.submit (via sendPressed), $.session.cwd (via resolveProject), $.store.delete (via adoptLegacy), $.store.get (via adoptLegacy, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.now (via countUse), $.command.register, $.process.run (via resolveRoot), $.prompt.submit (via sendPressed), $.session.cwd (via resolveRoot), $.store.delete (via adoptLegacy, adoptNamed), $.store.get (via adoptLegacy, adoptNamed, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy, adoptNamed), $.ui.resolve
 
 Reach L2, runs git and drives Claude: a press submits a prompt.
 
     1. Reads:    the text and origin of each submitted prompt; the session's working directory
-    2. Runs:     git rev-parse --show-toplevel, once per session, to name the project
+    2. Runs:     git rev-parse --show-toplevel, once per session, to find the project's root
     3. Sends:    a stored prompt as a user turn, only on the person's press; nothing leaves the machine
     4. Persists: in $.store, per project, up to 200 short prompts with their use counts and last use time, up to 5 pinned prompts, and the on/off setting
     5. Hostile input: only prompts from the composer or Remote Control are counted, and only a typed /prompt-deck add pins one, so a notification, a peer or a plugin cannot put a prompt on the band
@@ -58,7 +59,6 @@ Reach L2, runs git and drives Claude: a press submits a prompt.
 - A prompt longer than 80 characters or over several lines is never counted. `/prompt-deck add` takes any length on one line.
 - The band is drawn on the terminal only, because the engine raises `AbovePrompt` there only.
 - Two prompts that differ only in case or punctuation count apart.
-- Two projects with the same directory name share one deck, because the project is the name only, not the path.
 - The on/off setting is one setting for every project.
 
 ## Development

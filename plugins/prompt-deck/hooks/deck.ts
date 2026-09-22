@@ -38,9 +38,9 @@ export function ranked(counts: Counts): string[] {
   return Object.entries(counts).sort(byUse).map(([text]) => text)
 }
 
-/** The store key of one project's counts; each project counts its own prompts. */
-export function countsKey(project: string): string {
-  return `counts:${project}`
+/** The store key of one project's counts, by its root path; each project counts its own prompts. */
+export function countsKey(root: string): string {
+  return `counts:${root}`
 }
 
 /** The last part of a path, without a trailing slash: the project name. */
@@ -65,9 +65,9 @@ export function record(counts: Counts, text: string, now: number): Counts {
   return Object.fromEntries(kept)
 }
 
-/** The store key of one project's pinned prompts. */
-export function pinsKey(project: string): string {
-  return `pins:${project}`
+/** The store key of one project's pinned prompts, by its root path. */
+export function pinsKey(root: string): string {
+  return `pins:${root}`
 }
 
 /**

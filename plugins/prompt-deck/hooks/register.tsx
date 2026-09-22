@@ -9,40 +9,43 @@ const USAGE = 'expects nothing (the band), list, add <text>, remove <n>, clear, 
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
-/** The deck of this project as last read or written, so a band draw reads no store. */
-type State = { counts: Counts; pins: string[]; enabled: boolean; project: string }
+/**
+ * The deck of this project as last read or written, so a band draw reads no store; the project's name
+ * the person reads, and its root path, which keys the store, so two checkouts of one name keep two decks.
+ */
+type State = { counts: Counts; pins: string[]; enabled: boolean; project: string; root: string }
 
 /** The person's own prompts: typed at the terminal or sent from a phone. */
 function isPersons(origin: PromptOrigin): boolean {
   return origin.kind === 'composer' || origin.kind === 'bridge'
 }
 
-/** The project the session works in: the name of its git top level, else of its directory. */
-async function resolveProject($: EngineInterface): Promise<string> {
+/** The root of the project the session works in: its git top level, else its directory. */
+async function resolveRoot($: EngineInterface): Promise<string> {
   const cwd = await $.session.cwd()
   try {
     const r = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 10_000 })
-    return projectName(r.exitCode === 0 ? r.stdout.trim() : cwd)
+    return r.exitCode === 0 && r.stdout.trim() !== '' ? r.stdout.trim() : cwd
   } catch {
-    // git is missing, or the command did not run: the session's directory names the project.
-    return projectName(cwd)
+    // git is missing, or the command did not run: the session's directory is the project.
+    return cwd
   }
 }
 
 async function loadDeck($: EngineInterface, state: State): Promise<void> {
-  state.counts = ((await $.store.get(countsKey(state.project))) as Counts | undefined) ?? {}
-  state.pins = ((await $.store.get(pinsKey(state.project))) as string[] | undefined) ?? []
+  state.counts = ((await $.store.get(countsKey(state.root))) as Counts | undefined) ?? {}
+  state.pins = ((await $.store.get(pinsKey(state.root))) as string[] | undefined) ?? []
   state.enabled = (await $.store.get(ENABLED_KEY)) !== false
 }
 
 async function saveCounts($: EngineInterface, state: State, counts: Counts): Promise<void> {
-  await $.store.set(countsKey(state.project), counts)
+  await $.store.set(countsKey(state.root), counts)
   state.counts = counts
   $.ui.invalidate('ui.render')
 }
 
 async function savePins($: EngineInterface, state: State, pins: string[]): Promise<void> {
-  await $.store.set(pinsKey(state.project), pins)
+  await $.store.set(pinsKey(state.root), pins)
   state.pins = pins
   $.ui.invalidate('ui.render')
 }
@@ -69,9 +72,25 @@ async function adoptLegacy($: EngineInterface, state: State): Promise<void> {
   $.ui.log(`the shared deck of ${Object.keys(legacy).length} prompt(s) is now this project's (${state.project}); each project counts its own prompts from here on`)
 }
 
+/**
+ * Moves the deck kept under the project's name alone (up to 0.4) to the key of its root, once. The first
+ * checkout of that name that loads the mod takes it, because the mod cannot tell which checkout it came
+ * from; counts already under the root key are joined with it, and pins already there stay.
+ */
+async function adoptNamed($: EngineInterface, state: State): Promise<void> {
+  const counts = (await $.store.get(countsKey(state.project))) as Counts | undefined
+  const pins = (await $.store.get(pinsKey(state.project))) as string[] | undefined
+  if (counts === undefined && pins === undefined) return
+  if (counts !== undefined) await saveCounts($, state, mergeCounts(state.counts, counts))
+  if (pins !== undefined && state.pins.length === 0) await savePins($, state, pins)
+  await $.store.delete(countsKey(state.project))
+  await $.store.delete(pinsKey(state.project))
+  $.ui.log(`the deck of ${state.project} is now kept for ${state.root}; another checkout named ${state.project} starts its own`)
+}
+
 /** Counts one use, from the stored counts, so another session of the same project is kept. */
 async function countUse($: EngineInterface, state: State, text: string): Promise<void> {
-  const stored = ((await $.store.get(countsKey(state.project))) as Counts | undefined) ?? {}
+  const stored = ((await $.store.get(countsKey(state.root))) as Counts | undefined) ?? {}
   await saveCounts($, state, record(stored, text, await $.clock.now()))
 }
 
@@ -133,13 +152,15 @@ function bandTree(els: Elements, prompts: readonly string[], columns: number, on
 }
 
 export const register: Register = on => {
-  const state: State = { counts: {}, pins: [], enabled: true, project: '' }
+  const state: State = { counts: {}, pins: [], enabled: true, project: '', root: '' }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'prompt-deck', description: 'Prompts you send often in this project, on the keys 1-5: list, add <text>, remove <n>, clear, on, off (prompt-deck)', argumentHint: '[list | add <text> | remove <n> | clear | on | off]' })
-    state.project = await resolveProject($)
+    state.root = await resolveRoot($)
+    state.project = projectName(state.root)
     await loadDeck($, state)
+    await adoptNamed($, state)
     await adoptLegacy($, state)
     $.ui.invalidate('ui.render')
     return r
