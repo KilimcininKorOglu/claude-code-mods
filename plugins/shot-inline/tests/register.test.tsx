@@ -35,7 +35,7 @@ function bmp24(width: number, height: number): string {
 }
 
 /** Files on a fake disk, the commands run, the lines logged. */
-type World = { files: Map<string, { base64: string; size: number }>; argv: string[]; logs: string[]; failNext: boolean }
+type World = { files: Map<string, { base64: string; size: number }>; argv: string[]; logs: string[]; failNext: boolean; reads: string[]; cwd: string }
 
 /** The picture is drawn as pixels when the terminal takes the kitty graphics protocol. */
 function world(on: On, graphics = true): World {
@@ -44,15 +44,20 @@ function world(on: On, graphics = true): World {
     argv: [],
     logs: [],
     failNext: false,
+    reads: [],
+    cwd: ROOT,
   }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('session.cwd', () => ({ value: ROOT }))
+  on('session.cwd', () => ({ value: w.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('env.get', (_, e) => ({ value: e.name === 'TMPDIR' ? '/tmp/t/' : (e.name === 'KITTY_WINDOW_ID' && graphics ? '3' : '') }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file' as const, size: w.files.get(e.path)?.size ?? 0, mtimeMs: 7, isLink: false } }))
-  on('fs.read', (_, e) => ({ value: { base64: w.files.get(e.path)?.base64 ?? '' } }) as never)
+  on('fs.read', (_, e) => {
+    w.reads.push(e.path)
+    return { value: { base64: w.files.get(e.path)?.base64 ?? '' } } as never
+  })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('process.run', (_, e) => {
     w.argv.push(e.argv.join(' '))
@@ -77,8 +82,8 @@ async function started($: Engine): Promise<void> {
   await $.session.start({ surface: null, isInteractive: true, cwd: ROOT })
 }
 
-const row = ($: Engine, id: string, surface: 'terminal' | 'desktop' = 'terminal') =>
-  $.ui.mount({ plugin: 'shot-inline', surface, component: 'ToolUse', requestId: id, props: { tool_use_id: id, tool: 'Read', input: {}, isRunning: false, isErrored: false, isInterrupted: false } as RenderPropsOf['ToolUse'] })
+const row = ($: Engine, id: string, surface: 'terminal' | 'desktop' = 'terminal', columns?: number) =>
+  $.ui.mount({ plugin: 'shot-inline', surface, component: 'ToolUse', requestId: id, ...(columns === undefined ? {} : { viewport: { columns, rows: 40 } }), props: { tool_use_id: id, tool: 'Read', input: {}, isRunning: false, isErrored: false, isInterrupted: false } as RenderPropsOf['ToolUse'] })
 
 describe('shot-inline', () => {
   test('a screenshot draws under its row at its own shape, read from the PNG header', async ($, on) => {
@@ -134,5 +139,22 @@ describe('shot-inline', () => {
     await row($, 't8')
     expect(w.argv.filter(a => a.includes('format bmp'))).toHaveLength(sipsRuns)
     expect((await $.command.run(run(''))).text).toBe('on; 1 picture(s) this session; this terminal has no kitty graphics protocol, so a picture is drawn as half-block cells')
+  })
+
+  test('a resize replaces a picture\'s cells instead of keeping one grid per size', async ($, on) => {
+    const w = world(on, false)
+    await started($)
+    await $.tool.call({ tool: 'mcp__plugin_playwright_playwright__browser_take_screenshot', tool_use_id: 't9' } as never)
+    const bmpReads = () => w.reads.filter(p => p.endsWith('.bmp')).length
+    const wide = await row($, 't9', 'terminal', 84)
+    expect((await wide.find({ type: 'Raster' }))?.props.columns).toBe(55)
+    await wide.unmount()
+    const narrow = await row($, 't9', 'terminal', 40)
+    expect((await narrow.find({ type: 'Raster' }))?.props.columns).toBe(36)
+    await narrow.unmount()
+    expect(bmpReads()).toBe(2)
+    // Back at the first width the kept grid is the narrow one, so the wide one is built again.
+    await row($, 't9', 'terminal', 84)
+    expect(bmpReads()).toBe(3)
   })
 })

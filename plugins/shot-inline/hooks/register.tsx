@@ -23,8 +23,11 @@ type Box = { columns: number; rows: number }
 type State = {
   shots: Map<string, Shot>
   enabled: boolean
-  /** The half-block cells of one picture at one box, keyed by both. */
-  grids: Map<string, string>
+  /**
+   * The half-block cells of each picture at the newest box it was drawn in, keyed by the tool row: one
+   * grid per picture, dropped with its picture, so a resize replaces a grid instead of adding one.
+   */
+  grids: Map<string, { box: string; grid: string }>
   /** The terminal takes the kitty graphics protocol, so the picture itself is drawn. */
   graphics: boolean
   lastError?: string
@@ -89,15 +92,15 @@ async function bmpCopy($: EngineInterface, shot: Shot, box: Box): Promise<string
   return out
 }
 
-/** The half-block cells for one picture at one box, kept until the session ends. */
-async function gridFor($: EngineInterface, state: State, shot: Shot, box: Box, key: string): Promise<string | undefined> {
-  const kept = state.grids.get(key)
-  if (kept !== undefined) return kept
+/** The half-block cells for one picture at one box, kept while the picture is and until the box changes. */
+async function gridFor($: EngineInterface, state: State, id: string, shot: Shot, box: Box, key: string): Promise<string | undefined> {
+  const kept = state.grids.get(id)
+  if (kept?.box === key) return kept.grid
   try {
     const bmp = readBmp(allBytes((await $.fs.read(await bmpCopy($, shot, box), { as: 'bytes' })).base64))
     if (bmp === undefined) throw new Error(`${shot.source}: sips wrote a BMP this reader does not take`)
     const grid = halfBlocks(bmp, box.columns, box.rows)
-    state.grids.set(key, grid)
+    state.grids.set(id, { box: key, grid })
     return grid
   } catch (err) {
     // A redraw drops the dispatch under it, so the work of the old one is not a failure.
@@ -114,7 +117,11 @@ async function remember($: EngineInterface, state: State, id: string, paths: rea
       const shot = await prepare($, absolute(path, cwd))
       if (shot === undefined) continue
       state.shots.set(id, shot)
-      if (state.shots.size > MAX_SHOTS) state.shots.delete(state.shots.keys().next().value ?? '')
+      if (state.shots.size > MAX_SHOTS) {
+        const oldest = state.shots.keys().next().value ?? ''
+        state.shots.delete(oldest)
+        state.grids.delete(oldest)
+      }
       $.ui.invalidate('ui.render')
       return
     }
@@ -178,7 +185,7 @@ export const register: Register = on => {
     const { Box, Image, Raster } = $.ui.resolve(e)
     const box = cells(shot.size, Math.min(80, Math.max(10, (e.viewport?.columns ?? 84) - 4)))
     const key = `${e.requestId}:${box.columns}x${box.rows}`
-    const grid = state.graphics ? undefined : await gridFor($, state, shot, box, key)
+    const grid = state.graphics ? undefined : await gridFor($, state, e.requestId, shot, box, key)
     return (
       <Box flexDirection="column">
         {drawn}

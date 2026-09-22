@@ -11,7 +11,7 @@ Modelin kaydettiği ya da okuduğu her PNG ve JPG dosyasını tool satırının 
 2. Bir PNG header'ından ölçülür. 4 MiB üstündeki bir PNG ve bir JPG `sips` ile ölçülür.
 3. Bir JPG bir kere `$TMPDIR/shot-inline/<hash>.png` yoluna `sips -s format png` ile kopyalanır, çünkü terminal yalnız PNG çizer. Hash, path'i ve değişiklik zamanını kapsar.
 4. Tool satırı resmi altında çizer: en fazla 80 kolon genişlik ve 24 satır yükseklik, resmin kendi oranında. Dosyayı terminal kendisi okur; hiçbir pixel engine'den geçmez.
-5. kitty graphics protokolü olan bir terminal (kitty, Ghostty; `TERM`, `TERM_PROGRAM` ve `KITTY_WINDOW_ID` üzerinden okunur) pixel'lerin kendisini çizer. Diğer her terminal aynı kutuyu half-block hücreler olarak çizer: `sips` tam olarak kutunun pixel'lerinden bir BMP yazar, mod satırlarını okur ve her hücre iki pixel taşır, üsttekini foreground, alttakini background olarak. BMP ve hücreler resim ve kutu başına bir kere üretilir.
+5. kitty graphics protokolü olan bir terminal (kitty, Ghostty; `TERM`, `TERM_PROGRAM` ve `KITTY_WINDOW_ID` üzerinden okunur) pixel'lerin kendisini çizer. Diğer her terminal aynı kutuyu half-block hücreler olarak çizer: `sips` tam olarak kutunun pixel'lerinden bir BMP yazar, mod satırlarını okur ve her hücre iki pixel taşır, üsttekini foreground, alttakini background olarak. BMP resim ve kutu başına bir kere üretilir. Her resmin hücreleri çizildiği en yeni kutu için tutulur, yani bir resize onları değiştirir, ve en yeni 200 resim onu dışarı ittiğinde resimle birlikte gider.
 
 iTerm2'nin kendi inline image protokolü vardır ve engine onu kullanmaz, bu yüzden iTerm2 de half-block yolunu alır. Protokol engine'in `Image` element'i içinde seçilir, bu yüzden hiçbir mod onu değiştiremez. Bir resmi yalnız terminal surface'i çizer.
 
