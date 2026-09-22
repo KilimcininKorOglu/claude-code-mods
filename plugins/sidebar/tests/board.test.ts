@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { clearLineOf, cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -228,10 +228,28 @@ describe('the log', () => {
     expect(tailText('/l.log', readLog(logLineOf(one)))).toBe('/l.log\n21.09 14:32 edit-loop: the 5th edit')
     expect(tailText('/l.log', [])).toBe('/l.log: no entry yet')
   })
+
+  test('a write reads the file again, so the lines another session wrote stay', async () => {
+    const files = new Map<string, string>()
+    const disk: LogFs = {
+      exists: async path => files.has(path),
+      read: async path => files.get(path) ?? '',
+      write: async (path, text) => { files.set(path, text) },
+    }
+    await appendLog(disk, '/l.log', 'first session')
+    // Another session of the same project writes the file between two writes of this one.
+    files.set('/l.log', `${files.get('/l.log')}second session\n`)
+    await appendLog(disk, '/l.log', 'first session again')
+    expect(files.get('/l.log')).toBe('first session\nsecond session\nfirst session again\n')
+    // A file that is there and cannot be read is not written over.
+    const locked: LogFs = { ...disk, read: async () => { throw new Error('EACCES') } }
+    await expect(appendLog(locked, '/l.log', 'lost')).rejects.toThrow('EACCES')
+    expect(files.get('/l.log')).toBe('first session\nsecond session\nfirst session again\n')
+  })
 })
 
 describe('$.sidebar', () => {
-  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open, dir: '', file: '', log: [] })
+  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open, dir: '', file: '' })
 
   /** The clock the engine hands the noun; a fixed time keeps a stream entry's stamp readable. */
   const NOW = async (): Promise<number> => AT

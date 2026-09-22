@@ -362,6 +362,28 @@ export function readLive(text: string): Logged[] {
 }
 
 /** The log's own lines, newest last, cut to what one file keeps. */
+/** The part of the engine's file system a log write needs. */
+export type LogFs = {
+  exists(path: string): Promise<boolean>
+  read(path: string): Promise<string>
+  write(path: string, text: string): Promise<void>
+}
+
+/**
+ * Adds one line to a log file and keeps its newest `LOG_MAX`. The file is read again right before the
+ * write, because another session of the same project writes the same file, and a copy read earlier would
+ * write its lines away. A file that is there and cannot be read throws, and is not written over.
+ */
+export async function appendLog(fs: LogFs, file: string, line: string): Promise<void> {
+  const text = (await fs.exists(file)) ? String(await fs.read(file)) : ''
+  await fs.write(file, `${logKept(logLines(text), line).join('\n')}\n`)
+}
+
+/** The lines of a log file's text, without the empty ones. */
+export function logLines(text: string): string[] {
+  return text.split('\n').filter(line => line.trim() !== '')
+}
+
 export function logKept(lines: readonly string[], line: string): string[] {
   return [...lines, line].slice(-LOG_MAX)
 }

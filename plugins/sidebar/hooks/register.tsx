@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { clearLineOf, drawn, dropTurn, isLogOf, logKept, logLineOf, logName, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import { clearLineOf, drawn, dropTurn, appendLog, isLogOf, logLineOf, logName, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -18,7 +18,8 @@ const LOG_DIR = '.claude/sidebar'
 /**
  * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
  * each stream entry's id its own, whether the pane is open, the last button's answer, and the log: the
- * project it belongs to, the file of today, and that file's own lines.
+ * directory of every project's logs and this project's file of today. The file's lines are not held
+ * here: every write reads the file again, because another session of the same project writes it too.
  */
 export type State = {
   board: Board
@@ -28,11 +29,10 @@ export type State = {
   message?: string
   dir: string
   file: string
-  log: string[]
 }
 
 function emptyState(): State {
-  return { board: new Map(), stream: [], written: 0, open: false, dir: '', file: '', log: [] }
+  return { board: new Map(), stream: [], written: 0, open: false, dir: '', file: '' }
 }
 
 /** Takes down every section and stream entry, because a closed sidebar keeps nothing. */
@@ -81,13 +81,12 @@ async function setOpen($: EngineInterface, state: State, open: boolean): Promise
   return 'off: the sidebar is closed and each mod shows its own lines again'
 }
 
-/** Where this project's log of today lives, and the lines it already holds. */
+/** Where this project's log of today lives. */
 async function openLog($: EngineInterface, state: State, at: number): Promise<void> {
   const home = (await $.env.get('HOME')) ?? ''
   if (home === '') return
   state.dir = `${home}/${LOG_DIR}`
   state.file = `${state.dir}/${logName(projectOf(await $.session.cwd()), at)}`
-  state.log = readLines(await readOrEmpty($, state.file))
 }
 
 /** A file's text, or an empty string when it is missing or unreadable. */
@@ -98,10 +97,6 @@ async function readOrEmpty($: EngineInterface, path: string): Promise<string> {
     // The file is not written yet, or the person removed it.
     return ''
   }
-}
-
-function readLines(text: string): string[] {
-  return text.split('\n').filter(line => line.trim() !== '')
 }
 
 /** This project's log files, newest day first. */
@@ -227,12 +222,21 @@ export const register: Register = on => {
 
   on('engine.create', async (_, e, next) => {
     const below = await next(e)
-    /** Writes one line to this project's log of today: a stream entry a later session takes back, or a clear. */
+    /**
+     * Writes one line to this project's log of today: a stream entry a later session takes back, or a
+     * clear. The file is read again first, so the lines another session of the project wrote stay; a
+     * file that is there and cannot be read is not written over.
+     */
     const log = async (line: string): Promise<void> => {
       if (state.file === '') return
-      state.log = logKept(state.log, line)
       try {
-        await below.fs.write(state.file, `${state.log.join('\n')}\n`)
+        // Each call is spelled at its own site, because the engine refuses a noun of $ passed as a value.
+        const disk = {
+          exists: (path: string) => below.fs.exists(path),
+          read: async (path: string) => String(await below.fs.read(path)),
+          write: (path: string, text: string) => below.fs.write(path, text),
+        }
+        await appendLog(disk, state.file, line)
       } catch {
         // The log is a convenience; a write that fails must not break the pane.
       }
