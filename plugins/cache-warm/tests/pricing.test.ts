@@ -15,6 +15,12 @@ describe('priceOf', () => {
     expect(priceOf('claude-haiku-4-5-20251001')).toEqual({ read: 0.1, write: 2, output: 5 })
   })
 
+  test('prices Opus 5.5 below Opus 5, not at the Opus 5 row its id also contains', async () => {
+    expect(priceOf('claude-opus-5-5[1m]')).toEqual({ read: 0.2, write: 8, output: 20 })
+    expect(priceOf('Claude Opus 5.5')).toEqual({ read: 0.2, write: 8, output: 20 })
+    expect(breakEvenPings(priceOf('claude-opus-5-5'))).toBe(40)
+  })
+
   test('prices Opus 4 and 4.1 at their own, higher rates', async () => {
     expect(priceOf('claude-opus-4-1-20250805')).toEqual({ read: 1.5, write: 30, output: 75 })
     expect(priceOf('claude-opus-4-20250514')).toEqual({ read: 1.5, write: 30, output: 75 })

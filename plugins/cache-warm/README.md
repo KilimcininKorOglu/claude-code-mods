@@ -71,7 +71,7 @@ The section holds a second, faint line under the window: the last transcript lin
 
 ## Prices
 
-The table in `hooks/pricing.ts` holds the cache-read, 1-hour cache-write and output rates of every model on the Anthropic pricing page, read in September 2026. A model id takes the first family it contains, so `claude-opus-4-1` is priced as Opus 4.1 ($1.50 / $30 / $75) and `claude-opus-4-8` as Opus 4.8 ($0.50 / $10 / $25). A ping is priced in full: the cache read, its cache write, its uncached input at the base rate (half the 1-hour write rate) and its output. An unknown model shows `n/a`.
+The table in `hooks/pricing.ts` holds the cache-read, 1-hour cache-write and output rates of every model on the Anthropic pricing page, read in September 2026. A model id takes the first family it contains, so `claude-opus-4-1` is priced as Opus 4.1 ($1.50 / $30 / $75) and `claude-opus-4-8` as Opus 4.8 ($0.50 / $10 / $25). `claude-opus-5-5` also contains `opus-5`, so its own row comes first: Opus 5.5 is $0.20 / $8 / $20, below Opus 5. A ping is priced in full: the cache read, its cache write, its uncached input at the base rate (half the 1-hour write rate) and its output. An unknown model shows `n/a`.
 
 On a subscription the dollars are a yardstick, not the bill. How a cache read counts against the 5-hour and weekly limits is not documented.
 

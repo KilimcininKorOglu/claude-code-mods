@@ -71,7 +71,7 @@ Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satı
 
 ## Fiyatlar
 
-`hooks/pricing.ts` içindeki tablo, Anthropic fiyat sayfasındaki her modelin cache-read, 1 saatlik cache-write ve output fiyatlarını tutar, Eylül 2026'da okundu. Bir model id'si, içerdiği ilk aileyi alır; yani `claude-opus-4-1` Opus 4.1 olarak fiyatlanır (1,50 / 30 / 75 dolar), `claude-opus-4-8` ise Opus 4.8 olarak (0,50 / 10 / 25 dolar). Bir ping tam fiyatlanır: cache read'i, kendi cache write'ı, base fiyattan cache'siz input'u (1 saatlik write fiyatının yarısı) ve output'u. Bilinmeyen model `n/a` gösterir.
+`hooks/pricing.ts` içindeki tablo, Anthropic fiyat sayfasındaki her modelin cache-read, 1 saatlik cache-write ve output fiyatlarını tutar, Eylül 2026'da okundu. Bir model id'si, içerdiği ilk aileyi alır; yani `claude-opus-4-1` Opus 4.1 olarak fiyatlanır (1,50 / 30 / 75 dolar), `claude-opus-4-8` ise Opus 4.8 olarak (0,50 / 10 / 25 dolar). `claude-opus-5-5` de `opus-5` içerir, bu yüzden kendi satırı önce gelir: Opus 5.5, Opus 5'in altında 0,20 / 8 / 20 dolardır. Bir ping tam fiyatlanır: cache read'i, kendi cache write'ı, base fiyattan cache'siz input'u (1 saatlik write fiyatının yarısı) ve output'u. Bilinmeyen model `n/a` gösterir.
 
 Abonelikte dolarlar fatura değil, bir ölçü birimidir. Bir cache read'in 5 saatlik ve haftalık limitlere nasıl sayıldığı dokümante değildir.
 
