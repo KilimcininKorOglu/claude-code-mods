@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { DEFAULT_MAX_POKES, decide, limitOf, POKE_TEXT, statusText } from '../hooks/poke.ts'
+import { DEFAULT_MAX_POKES, decide, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLog, statusText } from '../hooks/poke.ts'
 
 tier('user')
 
@@ -57,8 +57,9 @@ async function started($: Engine): Promise<void> {
  */
 async function ended($: Engine, w: World, reason: 'answer' | 'aborted' | 'error', turnId = 't1'): Promise<void> {
   await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: reason === 'aborted', turnId, reason })
-  // A plugin prompt is submitted without awaiting it; settling lets it and its answer run.
-  await w.clock.settle()
+  // The continue prompt waits on a timer, and is submitted without awaiting it; moving the clock past
+  // the longest wait lets it and its answer run.
+  await w.clock.advance(MAX_DELAY_MS)
 }
 
 describe('error-poke', () => {
@@ -75,8 +76,27 @@ describe('error-poke', () => {
     await started($)
     await ended($, w, 'error')
     expect(w.sent).toEqual([POKE_TEXT])
-    expect(w.logs).toEqual(['the turn died on an API error, continuing (1/99)'])
+    expect(w.logs).toEqual(['the turn died on an API error, continuing in 5 s (1/99)'])
     expect((await $.command.run(run(''))).text).toBe('on · 1/99 continue prompts since your last prompt · last turn: error')
+  })
+
+  test('each continue prompt waits longer than the last, and a prompt of the person cancels the wait', async ($, on) => {
+    expect([1, 2, 3, 4, 5, 6].map(pokeDelay)).toEqual([5_000, 15_000, 45_000, 135_000, 300_000, 300_000])
+    expect(pokeLog(4, 99)).toBe('the turn died on an API error, continuing in 2 min (4/99)')
+    const w = world(on)
+    await started($)
+    await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't1', reason: 'error' })
+    await w.clock.advance(4_999)
+    expect(w.sent).toEqual([])
+    await w.clock.advance(1)
+    expect(w.sent).toEqual([POKE_TEXT])
+    await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't2', reason: 'error' })
+    await w.clock.advance(5_000)
+    expect(w.sent).toHaveLength(1)
+    // The person speaks during the second wait: the count resets and the waiting prompt never goes out.
+    await $.prompt.submit({ text: 'I will take it from here', wait: false, origin: { kind: 'composer' } })
+    await w.clock.advance(MAX_DELAY_MS)
+    expect(w.sent).toEqual([POKE_TEXT, 'I will take it from here'])
   })
 
   test('an answered or interrupted turn sends nothing', async ($, on) => {
@@ -141,7 +161,7 @@ describe('error-poke', () => {
     seatSidebar(on, bar)
     await started($)
     await ended($, w, 'error')
-    expect(bar.sections).toEqual([{ key: 'poke-1', title: 'turn continued after an API error', lines: ['the turn died on an API error, continuing (1/99)'] }])
+    expect(bar.sections).toEqual([{ key: 'poke-1', title: 'turn continued after an API error', lines: ['the turn died on an API error, continuing in 5 s (1/99)'] }])
     expect(w.logs).toEqual([])
   })
 })

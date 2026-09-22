@@ -1,5 +1,5 @@
-import type { EngineInterface, Register } from 'claude-code'
-import { DEFAULT_MAX_POKES, decide, limitLog, limitOf, limitText, POKE_TEXT, pokeLog, statusText } from './poke.ts'
+import type { EngineInterface, Register, Timer } from 'claude-code'
+import { DEFAULT_MAX_POKES, decide, limitLog, limitOf, limitText, POKE_TEXT, pokeDelay, pokeLog, statusText } from './poke.ts'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
@@ -9,8 +9,11 @@ const USAGE = 'expects nothing (the status), on, off or limit <n>'
 /** The origins of a prompt the person sent themselves, which resets the count. */
 const USER_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
 
-/** The on/off setting, the limit, the prompts sent since the last prompt of the person, and how the last turn ended. */
-type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastReason?: string }
+/**
+ * The on/off setting, the limit, the prompts sent since the last prompt of the person, how the last turn
+ * ended, and the continue prompt waiting on its timer, so a prompt of the person or `off` can cancel it.
+ */
+type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastReason?: string; pending?: Timer }
 
 /**
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
@@ -49,7 +52,11 @@ async function afterTurn($: EngineInterface, state: State, reason: string): Prom
   }
   state.pokes += 1
   await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', pokeLog(state.pokes, state.max))
-  sendPoke($)
+  state.pending?.cancel()
+  state.pending = $.clock.after(pokeDelay(state.pokes), () => {
+    state.pending = undefined
+    sendPoke($)
+  })
 }
 
 /** Writes the limit the person set; it holds across sessions, because it lives in $.store. */
@@ -73,6 +80,9 @@ export const register: Register = on => {
   const resetCount = (): void => {
     state.pokes = 0
     state.limitLogged = false
+    // A continue prompt still waiting is not sent once the person spoke, or turned the mod off.
+    state.pending?.cancel()
+    state.pending = undefined
   }
 
   on('session.start', async ($, e, next) => {

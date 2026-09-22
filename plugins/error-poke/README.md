@@ -11,9 +11,11 @@ A Claude Code Mod that continues a turn an API error killed. When the engine end
        The previous turn was cut off by an API error, not by me. Continue where you stopped; do not start over. If you cannot tell how far you got, say so and stop.
 
    The interrupted turn's own work is still in the transcript, so the prompt asks the model to carry on rather than repeat it.
-4. The same moment writes one line to the transcript, so you see why the session moved by itself:
+4. The prompt waits before it goes out, longer after each failure of the stretch: 5 s, 15 s, 45 s, 135 s, then 5 minutes each. An overloaded API recovers in seconds, and an error that fails the same way on every try (the context limit) does not spend the whole limit back to back. A prompt of yours during the wait, or `/error-poke off`, cancels the waiting prompt.
 
-       error-poke: the turn died on an API error, continuing (1/99)
+   The same moment writes one line to the transcript, so you see why the session will move by itself:
+
+       error-poke: the turn died on an API error, continuing in 5 s (1/99)
 
 5. At most 99 prompts go out for one stretch of failures, or as many as `/error-poke limit <n>` says. At the limit the mod says so once and stops:
 
@@ -49,7 +51,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=error-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.prompt.submit (via sendPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.prompt.submit (via sendPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
 
 Reach L2, drives Claude.
 

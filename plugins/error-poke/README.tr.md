@@ -11,9 +11,11 @@ Bir API hatasının öldürdüğü turn'ü sürdüren bir Claude Code Mod'u. Eng
        The previous turn was cut off by an API error, not by me. Continue where you stopped; do not start over. If you cannot tell how far you got, say so and stop.
 
    Kesilen turn'ün kendi işi hâlâ transcript'tedir, yani prompt modelden tekrarlamasını değil, devam etmesini ister.
-4. Aynı anda transcript'e bir satır yazılır, böylece session'ın neden kendi kendine ilerlediğini görürsünüz:
+4. Prompt gönderilmeden önce bekler, serideki her hatadan sonra daha uzun: 5 s, 15 s, 45 s, 135 s, sonra her biri 5 dakika. Aşırı yüklenmiş bir API saniyeler içinde düzelir, her denemede aynı şekilde düşen bir hata (context limiti) ise limitin tamamını art arda harcamaz. Bekleme sırasında sizin bir prompt'unuz ya da `/error-poke off` bekleyen prompt'u iptal eder.
 
-       error-poke: the turn died on an API error, continuing (1/99)
+   Aynı anda transcript'e bir satır yazılır, böylece session'ın neden kendi kendine ilerleyeceğini görürsünüz:
+
+       error-poke: the turn died on an API error, continuing in 5 s (1/99)
 
 5. Bir hata serisi için en fazla 99 prompt çıkar, ya da `/error-poke limit <n>` kadar. Limitte mod bunu bir kere söyler ve durur:
 
@@ -49,7 +51,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=error-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.prompt.submit (via sendPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.prompt.submit (via sendPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
 
 Reach L2, Claude'u sürer.
 

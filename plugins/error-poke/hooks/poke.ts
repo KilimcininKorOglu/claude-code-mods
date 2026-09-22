@@ -40,9 +40,30 @@ export function limitText(limit: number | undefined): string {
   return `limit ${limit}: at most ${limit} continue prompt(s) go out for one stretch of failures`
 }
 
-/** The line the person reads when a prompt goes out. The engine adds the mod name. */
+/** The wait before the first continue prompt of a stretch of failures, in milliseconds. */
+export const FIRST_DELAY_MS = 5_000
+
+/** The longest wait between two continue prompts, in milliseconds. */
+export const MAX_DELAY_MS = 300_000
+
+/**
+ * The wait before the `pokes`-th continue prompt: 5 s, then three times the last one, up to 5 minutes.
+ * An overloaded API recovers in seconds, while an error that fails the same way on every try (a context
+ * limit) would otherwise spend the whole limit of prompts back to back.
+ */
+export function pokeDelay(pokes: number): number {
+  return Math.min(FIRST_DELAY_MS * 3 ** Math.max(pokes - 1, 0), MAX_DELAY_MS)
+}
+
+/** The wait as the person reads it: seconds under two minutes, whole minutes above. */
+function waitText(ms: number): string {
+  const s = Math.round(ms / 1000)
+  return s < 120 ? `${s} s` : `${Math.round(s / 60)} min`
+}
+
+/** The line the person reads when a prompt is scheduled. The engine adds the mod name. */
 export function pokeLog(pokes: number, max: number): string {
-  return `the turn died on an API error, continuing (${pokes}/${max})`
+  return `the turn died on an API error, continuing in ${waitText(pokeDelay(pokes))} (${pokes}/${max})`
 }
 
 /** The line the person reads once the mod stops trying. */
