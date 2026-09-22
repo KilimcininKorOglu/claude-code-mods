@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { DEFAULT_LIMIT_K, limitOf, limitText, sidebarLines, statusText, tokensOf, totalText, type Run, type Usage } from './ledger.ts'
+import { DEFAULT_LIMIT_K, limitOf, limitText, sidebarLines, statusAfter, statusText, tokensOf, totalText, type Run, type Usage } from './ledger.ts'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
@@ -43,17 +43,30 @@ async function clearShown($: EngineInterface): Promise<void> {
 function runOf(state: State, agentId: string): Run {
   const had = state.runs.get(agentId)
   if (had !== undefined) return had
-  const made: Run = { type: 'agent', description: '', model: '', turns: 0, ms: 0, tokens: 0 }
+  const made: Run = { type: 'agent', description: '', model: '', turns: 0, ms: 0, tokens: 0, status: 'running' }
   state.runs.set(agentId, made)
   return made
 }
 
-/** Counts one turn of one subagent: its own loop's turn, its duration, its tokens and the model it ran on. */
-async function countTurn($: EngineInterface, state: State, agentId: string, durationMs: number, usage: Usage | undefined): Promise<void> {
+/** Draws a subagent's row as running again, once per run: a SendMessage resumes a subagent that had answered. */
+async function markRunning($: EngineInterface, state: State, agentId: string): Promise<void> {
   const run = runOf(state, agentId)
+  if (run.status === 'running') return
+  run.status = 'running'
+  await show($, state)
+}
+
+/** The fields of a subagent's `turn.complete` the ledger counts. */
+type Ended = { agentId: string; durationMs: number; reason: string; usage?: Usage }
+
+/** Counts one turn of one subagent (its turns, duration, tokens and model) and where the turn left it. */
+async function countTurn($: EngineInterface, state: State, e: Ended): Promise<void> {
+  const run = runOf(state, e.agentId)
+  const usage = e.usage
   run.turns += 1
-  run.ms += durationMs
+  run.ms += e.durationMs
   run.tokens += tokensOf(usage)
+  run.status = statusAfter(e.reason)
   // The turn's own model is what answered; the spawn's resolved model stands until a turn names one.
   if (usage?.model !== undefined) run.model = usage.model
   await show($, state)
@@ -110,18 +123,25 @@ export const register: Register = on => {
   // The engine prints the plugin name in front of command text and the status line, so the texts do not repeat it.
   on('command.run', { command: 'subagent-ledger' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
-  // The spawn names what the subagent is; only its own turns say what it spent.
+  // The spawn names what the subagent is and draws it running; only its own turns say what it spent.
   on('agent.spawn', async ($, e, next) => {
     const r = await next(e)
     if (!state.enabled || r.agentId === undefined) return r
-    state.runs.set(r.agentId, { type: e.subagentType, description: e.description, model: r.model, turns: 0, ms: 0, tokens: 0 })
+    state.runs.set(r.agentId, { type: e.subagentType, description: e.description, model: r.model, turns: 0, ms: 0, tokens: 0, status: 'running' })
+    await show($, state)
     return r
+  })
+
+  // A subagent's model request means its loop runs, also after a SendMessage resumed it.
+  on('turn.step', async function* ($, e, next) {
+    if (state.enabled && e.agentId !== undefined) await markRunning($, state, e.agentId)
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     if (!state.enabled || e.agentId === undefined) return r
-    await countTurn($, state, e.agentId, e.durationMs, e.usage)
+    await countTurn($, state, { agentId: e.agentId, durationMs: e.durationMs, reason: e.reason, usage: e.usage })
     return r
   })
 }

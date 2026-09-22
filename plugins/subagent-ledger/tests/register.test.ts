@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput, TurnUsage } from 'claude-code'
 
-import { fmtDuration, fmtTok, limitOf, rowText, shortModel, sidebarLines, tokensOf, totalText } from '../hooks/ledger.ts'
+import { fmtDuration, fmtTok, limitOf, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
 
 tier('user')
 
@@ -40,6 +40,19 @@ const turn = (over: { agentId?: string; usage?: TurnUsage; durationMs?: number }
   answer: 'done', durationMs: 1000, isAborted: false, turnId: `t${++turns}`, reason: 'answer', usage: usage(), ...over,
 })
 
+/** A subagent turn the person interrupted: no answer, `reason: 'aborted'`. */
+const aborted = (agentId: string): TurnCompleteInput => ({
+  answer: '', durationMs: 1000, isAborted: true, turnId: `t${++turns}`, reason: 'aborted', usage: usage(), agentId,
+})
+
+/** One model request of a subagent's loop, read to its end. */
+async function step($: Engine, agentId: string): Promise<void> {
+  const stream = $.turn.step({ turnId: `s${++turns}`, index: 0, model: 'claude-fable-5-1', messageCount: 1, agentId })
+  for await (const chunk of stream) void chunk
+}
+
+const runAt = (tokens: number, status: Run['status']): Run => ({ type: 'Explore', description: '', model: '', turns: 1, ms: 1000, tokens, status })
+
 /** The status lines the mod wrote, newest last. */
 type World = { statuses: (string | undefined)[] }
 
@@ -51,6 +64,10 @@ function world(on: On): World {
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
   on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
   on('agent.spawn', (_, e) => ({ model: 'claude-fable-5-1', agentId: `a-${e.subagentType}` }))
+  // A step with no chunks: the ledger reads only that the request was made.
+  on('turn.step', async function* (_, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
+  })
   return w
 }
 
@@ -83,8 +100,10 @@ describe('subagent-ledger', () => {
     expect(fmtTok(1_500_000)).toBe('1.5M')
     expect(fmtDuration(42_000)).toBe('42s')
     expect(fmtDuration(130_000)).toBe('2m 10s')
-    expect(rowText({ type: 'Explore', description: 'find the parser', model: 'claude-haiku-4-5-20251001', turns: 3, ms: 42_000, tokens: 81_000 }))
+    expect(rowText({ type: 'Explore', description: 'find the parser', model: 'claude-haiku-4-5-20251001', turns: 3, ms: 42_000, tokens: 81_000, status: 'done' }))
       .toBe('Explore: find the parser · haiku-4-5 · 3 turn · 42s · 81k')
+    expect(rowText({ ...runAt(81_000, 'stopped') })).toBe('Explore · 1 turn · 1s · 81k · stopped')
+    expect([statusAfter('answer'), statusAfter('aborted'), statusAfter('error'), statusAfter('refusal')]).toEqual(['done', 'stopped', 'stopped', 'stopped'])
     expect(shortModel('claude-fable-5-1')).toBe('fable-5-1')
     expect(shortModel('gpt-x')).toBe('gpt-x')
     expect(totalText([])).toBe(undefined)
@@ -93,7 +112,7 @@ describe('subagent-ledger', () => {
   })
 
   test('the pane draws five rows and counts the rest, red past the limit', () => {
-    const runs = Array.from({ length: 7 }, (_, i) => ({ type: 'Explore', description: `${i}`, model: '', turns: 1, ms: 1000, tokens: (i + 1) * 50_000 }))
+    const runs = Array.from({ length: 7 }, (_, i): Run => ({ type: 'Explore', description: `${i}`, model: '', turns: 1, ms: 1000, tokens: (i + 1) * 50_000, status: 'done' }))
     const lines = sidebarLines(runs, 200)
     expect(lines).toHaveLength(6)
     expect(lines[0]?.kind).toBe('error')
@@ -101,6 +120,12 @@ describe('subagent-ledger', () => {
     expect(lines[3]?.kind).toBe('error')
     expect(lines[4]?.kind).toBe('ok')
     expect(lines[5]).toEqual({ text: '2 more · 150k', kind: 'dim' })
+  })
+
+  test('a row is yellow while it runs, green when done, faint when stopped, and red past the limit in every status', () => {
+    const kinds = (tokens: number) => (['running', 'done', 'stopped'] as const).map(s => sidebarLines([runAt(tokens, s)], 200)[0]?.kind)
+    expect(kinds(10_000)).toEqual(['warn', 'ok', 'dim'])
+    expect(kinds(200_000)).toEqual(['error', 'error', 'error'])
   })
 
   test('a subagent turn is counted, a main-loop turn is not', async ($, on) => {
@@ -140,5 +165,44 @@ describe('subagent-ledger', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
     await $.command.run(run('off'))
     expect(bar.cleared).toBe(1)
+  })
+
+  withSidebar('a spawned subagent is drawn yellow at once, and green when it answers', async ($, on) => {
+    world(on)
+    const bar: Bar = { open: true, sections: [], cleared: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    await spawn($, 'Explore', 'find the parser')
+    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'Explore: find the parser · fable-5-1 · 0 turn · 0s · 0', kind: 'warn' }])
+    await step($, 'a-Explore')
+    await $.turn.complete(turn({ agentId: 'a-Explore' }))
+    expect(bar.sections.at(-1)?.lines[0]?.kind).toBe('ok')
+  })
+
+  withSidebar('an interrupted subagent is drawn faint and stopped, and a resumed one yellow again', async ($, on) => {
+    world(on)
+    const bar: Bar = { open: true, sections: [], cleared: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    await spawn($, 'Explore', 'x')
+    await $.turn.complete(aborted('a-Explore'))
+    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'Explore: x · fable-5-1 · 1 turn · 1s · 10k · stopped', kind: 'dim' }])
+    const drawn = bar.sections.length
+    await step($, 'a-Explore')
+    expect(bar.sections.at(-1)?.lines[0]?.kind).toBe('warn')
+    // A second step of the same run draws nothing new, because the row already reads running.
+    await step($, 'a-Explore')
+    expect(bar.sections.length).toBe(drawn + 1)
+    await $.turn.complete(turn({ agentId: 'a-Explore' }))
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'Explore: x · fable-5-1 · 2 turn · 2s · 20k', kind: 'ok' })
+  })
+
+  withSidebar('a main-loop step draws nothing', async ($, on) => {
+    world(on)
+    const bar: Bar = { open: true, sections: [], cleared: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    for await (const chunk of $.turn.step({ turnId: 'm', index: 0, model: 'claude-fable-5-1', messageCount: 1 })) void chunk
+    expect(bar.sections).toEqual([])
   })
 })

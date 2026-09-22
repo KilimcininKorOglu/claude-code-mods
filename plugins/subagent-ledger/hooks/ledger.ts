@@ -10,8 +10,16 @@ export const MAX_LIMIT_K = 10_000
 /** The pane draws this many subagents, the costliest first; the rest are counted. */
 export const ROWS = 5
 
-/** One subagent's run: what it is, what it runs on, and what it has spent so far. */
-export type Run = { type: string; description: string; model: string; turns: number; ms: number; tokens: number }
+/** Where a subagent stands: its loop runs, it answered, or its run ended without an answer. */
+export type Status = 'running' | 'done' | 'stopped'
+
+/** One subagent's run: what it is, what it runs on, what it has spent so far, and where it stands. */
+export type Run = { type: string; description: string; model: string; turns: number; ms: number; tokens: number; status: Status }
+
+/** The status a subagent's `turn.complete` leaves: done on an answer, stopped on an interrupt, an error or a refusal. */
+export function statusAfter(reason: string): Status {
+  return reason === 'answer' ? 'done' : 'stopped'
+}
 
 /** The token counts of one turn, and the model that answered it, as `turn.complete` carries them. */
 export type Usage = {
@@ -60,7 +68,8 @@ export function labelOf(run: Run): string {
 /** One row of the pane: what the subagent is, what it runs on, its turns, its time and its tokens. */
 export function rowText(run: Run): string {
   const model = run.model === '' ? '' : `${shortModel(run.model)} · `
-  return `${labelOf(run)} · ${model}${run.turns} turn · ${fmtDuration(run.ms)} · ${fmtTok(run.tokens)}`
+  const stopped = run.status === 'stopped' ? ' · stopped' : ''
+  return `${labelOf(run)} · ${model}${run.turns} turn · ${fmtDuration(run.ms)} · ${fmtTok(run.tokens)}${stopped}`
 }
 
 /** The runs the pane draws, the costliest first. */
@@ -69,15 +78,23 @@ export function ranked(runs: readonly Run[]): Run[] {
 }
 
 /** A sidebar line, as the sidebar mod's contract names it. */
-type Line = { text: string; kind: 'ok' | 'error' | 'dim' }
+type Kind = 'ok' | 'warn' | 'error' | 'dim'
+type Line = { text: string; kind: Kind }
+
+/** A row's colour: red past the limit whatever the status, else faint when stopped, yellow while running, green when done. */
+export function kindOf(run: Run, limitK: number): Kind {
+  if (run.tokens >= limitK * 1000) return 'error'
+  if (run.status === 'stopped') return 'dim'
+  return run.status === 'running' ? 'warn' : 'ok'
+}
 
 /**
- * The pane's lines: one row per subagent, the costliest first, red once a subagent passed the limit. The
- * rows past the fifth are one faint line, so a fan-out of twenty agents still holds six rows.
+ * The pane's lines: one row per subagent, the costliest first, coloured by `kindOf`. The rows past the
+ * fifth are one faint line, so a fan-out of twenty agents still holds six rows.
  */
 export function sidebarLines(runs: readonly Run[], limitK: number): Line[] {
   const order = ranked(runs)
-  const lines: Line[] = order.slice(0, ROWS).map(run => ({ text: rowText(run), kind: run.tokens >= limitK * 1000 ? 'error' : 'ok' }))
+  const lines: Line[] = order.slice(0, ROWS).map(run => ({ text: rowText(run), kind: kindOf(run, limitK) }))
   const rest = order.length - ROWS
   if (rest > 0) lines.push({ text: `${rest} more · ${fmtTok(order.slice(ROWS).reduce((sum, r) => sum + r.tokens, 0))}`, kind: 'dim' })
   return lines
