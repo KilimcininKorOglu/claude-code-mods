@@ -32,7 +32,7 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    | `pubspec.yaml` | `dependencies`, `dev_dependencies`, `dependency_overrides` | diğer key'ler |
    | `mix.exs` | her değişiklik | |
 
-   20 satırlık context dışındaki bir key ya da table sayılır, yani bilinmeyen bir section yine de notu alır.
+   Değişen bir satırın section'ı manifest'in tamamından okunur (`git show HEAD:<manifest>`), diff'in kendi 20 satırlık context'inden değil: bir `package.json` içinde 40 satır derindeki bir değişiklik hunk içinde kök `{` işaretine hiç ulaşmaz ve her kök seviyesindeki key dependency olarak okunurdu. Manifest'in kendisinin yerleştirmediği bir key ya da table sayılır, yani okunamayan bir dosya yine de notu alır.
 5. Model bu notu commit'in sonucundan sonra okur:
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum. Run the package manager's install so the lockfile matches, and commit it.
@@ -93,12 +93,12 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.fs.read (via manifestText), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
 
 Reach L2, process çalıştırır.
 
-    1. Okur:     Bash komut metnini; repository'de lockfile'ların var olup olmadığını; git üzerinden commit'in dosya listesini ve manifest diff'lerini
-    2. Çalıştırır: git rev-parse, git show, git status, git log, git diff ve git diff --cached --name-only komutlarını salt okuma olarak argv ile: commit başına dört, lockfile'ı olmayan manifest başına bir, ve her ölçümde açık çift başına iki, turun sonunda da
+    1. Okur:     Bash komut metnini; repository'de lockfile'ların var olup olmadığını; her açık bulgunun manifest'ini working tree'de; git üzerinden commit'in dosya listesini, manifest diff'lerini ve her manifest'in HEAD'deki hâlini
+    2. Çalıştırır: git rev-parse, git show, git status, git log, git diff ve git diff --cached --name-only komutlarını salt okuma olarak argv ile: commit başına dört, lockfile'ı olmayan manifest başına iki, ve her ölçümde açık çift başına iki, turun sonunda da
     3. Gönderir: commit'in sonucundan sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve modu
     5. Düşman girdi: dizin komut metninden gelir ve git'e yalnız working directory olarak ulaşır, hiçbir zaman bir shell üzerinden geçmez; manifest path'leri git'e `--` sonrası tek bir argv girdisi olarak ulaşır

@@ -38,6 +38,9 @@ const run = (args: string): CommandRunInput => ({
 
 const DEP_DIFF = '@@ -1,5 +1,5 @@\n {\n   "dependencies": {\n-    "left-pad": "^1.0.0"\n+    "left-pad": "^1.3.0"\n   }\n }\n'
 
+/** The manifest as it stands after that diff; the section of a changed line is read from it. */
+const MANIFEST = '{\n  "dependencies": {\n    "left-pad": "^1.3.0"\n  }\n}\n'
+
 /**
  * `head` moves to `next` when a commit runs; `names` is the commit's name-status; `files` are the paths on disk;
  * `showFails` makes git show fail; `notRepo` makes the directory no repository.
@@ -57,6 +60,7 @@ const failed = (stderr: string): Ran => ({ exitCode: 128, stdout: '', stderr })
 /** What the world's git answers for one command; `git show` is the only one `showFails` breaks. */
 function gitShow(w: World, cmd: string): Ran {
   if (w.showFails) return failed('bad')
+  if (cmd.includes('HEAD:')) return ok(MANIFEST)
   return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
 }
 
@@ -80,6 +84,7 @@ function world(on: On): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.cwd', () => ({ value: ROOT }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
+  on('fs.read', () => ({ value: MANIFEST }))
   on('process.run', (_, e) => {
     const cmd = e.argv.join(' ')
     w.argv.push(cmd)
@@ -105,6 +110,7 @@ describe('lockfile-sync', () => {
       'git rev-parse HEAD',
       'git show --format= --name-status --no-renames HEAD',
       'git show --format= --unified=20 --no-color --no-ext-diff HEAD -- package.json',
+      'git show HEAD:package.json',
     ])
     expect(w.logs).toEqual(['this commit changes package.json but not package-lock.json'])
   })

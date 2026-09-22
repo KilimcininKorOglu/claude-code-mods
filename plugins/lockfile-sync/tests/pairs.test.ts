@@ -4,8 +4,15 @@ import { changedFiles, denyText, isGuarded, isManifest, lockCandidates, modeOf, 
 
 tier('user')
 
-/** A one-hunk diff whose lines are given as they appear after `@@`. */
+/** A one-hunk diff whose lines are given as they appear after `@@`, from the file's first line. */
 const diffOf = (...lines: string[]): string => `diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,9 +1,9 @@\n${lines.join('\n')}\n`
+
+/** The file as it stands after that diff: its context and added lines, without the diff's own marker. */
+const fileOf = (...lines: string[]): string => lines.filter(l => !l.startsWith('-')).map(l => l.slice(1)).join('\n')
+
+/** The whole file is the diff's own post-image, which is the case a hunk that starts at line 1 covers. */
+const touches = (manifest: string, ...lines: string[]): boolean =>
+  touchesDependencies(manifest, diffOf(...lines), fileOf(...lines))
 
 describe('pairs', () => {
   test('lists added and modified files, not deleted ones', () => {
@@ -20,23 +27,32 @@ describe('pairs', () => {
   })
 
   test('a package.json dependency counts, a script or the version does not', () => {
-    expect(touchesDependencies('package.json', diffOf(' {', '   "dependencies": {', '-    "left-pad": "^1.0.0"', '+    "left-pad": "^1.3.0"', '   }', ' }'))).toBe(true)
-    expect(touchesDependencies('package.json', diffOf(' {', '   "scripts": {', '+    "lint": "eslint ."', '   },', '-  "version": "1.0.0",', '+  "version": "1.1.0",'))).toBe(false)
-    expect(touchesDependencies('package.json', diffOf('+    "left-pad": "^1.3.0"'))).toBe(true)
+    expect(touches('package.json', ' {', '   "dependencies": {', '-    "left-pad": "^1.0.0"', '+    "left-pad": "^1.3.0"', '   }', ' }')).toBe(true)
+    expect(touches('package.json', ' {', '   "scripts": {', '+    "lint": "eslint ."', '   },', '-  "version": "1.0.0",', '+  "version": "1.1.0",')).toBe(false)
+  })
+
+  test('a root key the hunk cannot reach is read from the file, not from the hunk', () => {
+    // The hunk starts 40 lines in, so nothing in it reaches the root `{`; only the file says where the key sits.
+    const diff = 'diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -40,2 +40,3 @@\n   "engines": { "node": ">=22" },\n+  "allowScripts": { "esbuild": true },\n   "private": true\n'
+    const file = [...Array.from({ length: 38 }, (_, i) => `  "pad${i}": ${i},`)]
+    const text = ['{', ...file, '  "engines": { "node": ">=22" },', '  "allowScripts": { "esbuild": true },', '  "private": true', '}'].join('\n')
+    expect(touchesDependencies('package.json', diff, text)).toBe(false)
+    // A manifest that cannot be read leaves the change counted.
+    expect(touchesDependencies('package.json', diff, '')).toBe(true)
   })
 
   test('reads TOML tables, go.mod blocks, a Gemfile and pubspec.yaml', () => {
-    expect(touchesDependencies('Cargo.toml', diffOf(' [package]', '-version = "0.1.0"', '+version = "0.2.0"'))).toBe(false)
-    expect(touchesDependencies('Cargo.toml', diffOf(' [dependencies]', '+serde = "1"'))).toBe(true)
-    expect(touchesDependencies('Cargo.toml', diffOf(' [target.x86_64-unknown-linux-gnu.dependencies]', '+libc = "0.2"'))).toBe(true)
-    expect(touchesDependencies('pyproject.toml', diffOf(' [tool.ruff]', '+line-length = 100'))).toBe(false)
-    expect(touchesDependencies('pyproject.toml', diffOf(' [tool.poetry.dependencies]', '+httpx = "^0.27"'))).toBe(true)
-    expect(touchesDependencies('go.mod', diffOf(' require (', '+\tgithub.com/x/y v1.2.3', ' )'))).toBe(true)
-    expect(touchesDependencies('go.mod', diffOf(' module example.com/a', '-go 1.21', '+go 1.22'))).toBe(false)
-    expect(touchesDependencies('Gemfile', diffOf("+gem 'rails', '~> 7.1'"))).toBe(true)
-    expect(touchesDependencies('Gemfile', diffOf('+# a comment'))).toBe(false)
-    expect(touchesDependencies('pubspec.yaml', diffOf(' dependencies:', '+  http: ^1.2.0'))).toBe(true)
-    expect(touchesDependencies('pubspec.yaml', diffOf(' flutter:', '+  uses-material-design: true'))).toBe(false)
+    expect(touches('Cargo.toml', ' [package]', '-version = "0.1.0"', '+version = "0.2.0"')).toBe(false)
+    expect(touches('Cargo.toml', ' [dependencies]', '+serde = "1"')).toBe(true)
+    expect(touches('Cargo.toml', ' [target.x86_64-unknown-linux-gnu.dependencies]', '+libc = "0.2"')).toBe(true)
+    expect(touches('pyproject.toml', ' [tool.ruff]', '+line-length = 100')).toBe(false)
+    expect(touches('pyproject.toml', ' [tool.poetry.dependencies]', '+httpx = "^0.27"')).toBe(true)
+    expect(touches('go.mod', ' require (', '+\tgithub.com/x/y v1.2.3', ' )')).toBe(true)
+    expect(touches('go.mod', ' module example.com/a', '-go 1.21', '+go 1.22')).toBe(false)
+    expect(touches('Gemfile', "+gem 'rails', '~> 7.1'")).toBe(true)
+    expect(touches('Gemfile', '+# a comment')).toBe(false)
+    expect(touches('pubspec.yaml', ' dependencies:', '+  http: ^1.2.0')).toBe(true)
+    expect(touches('pubspec.yaml', ' flutter:', '+  uses-material-design: true')).toBe(false)
   })
 
   test('the note names each manifest and its lockfile', () => {

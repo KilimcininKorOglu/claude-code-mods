@@ -50,6 +50,15 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
   }
 }
 
+/** The manifest in the working tree; an empty answer leaves every changed line counted. */
+async function manifestText($: EngineInterface, root: string, manifest: string): Promise<string> {
+  try {
+    return await $.fs.read(`${root}/${manifest}`)
+  } catch {
+    return ''
+  }
+}
+
 /** The nearest lockfile on disk for a manifest, or undefined when the project keeps none. */
 async function lockOnDisk($: EngineInterface, root: string, manifest: string): Promise<string | undefined> {
   for (const lock of lockCandidates(manifest)) if (await $.fs.exists(`${root}/${lock}`)) return lock
@@ -62,7 +71,9 @@ async function staleLock($: EngineInterface, root: string, manifest: string, cha
   if (lock === undefined || changed.has(lock)) return undefined
   const diff = await git($, root, ['show', '--format=', '--unified=20', '--no-color', '--no-ext-diff', 'HEAD', '--', manifest])
   if (!diff.ok) throw new Error(`git show HEAD -- ${manifest} failed`)
-  return touchesDependencies(manifest, diff.out) ? { manifest, lock } : undefined
+  // The section of a changed line is read from the whole manifest, not from the diff's own context.
+  const text = await git($, root, ['show', `HEAD:${manifest}`])
+  return touchesDependencies(manifest, diff.out, text.ok ? text.out : '') ? { manifest, lock } : undefined
 }
 
 /**
@@ -100,7 +111,9 @@ async function settled($: EngineInterface, root: string, stale: readonly Stale[]
     const base = at.ok ? at.out.trim() : ''
     if (base === '') continue
     const diff = await git($, root, ['diff', '--unified=20', '--no-color', '--no-ext-diff', base, '--', s.manifest])
-    if (diff.ok && !touchesDependencies(s.manifest, diff.out)) out.add(s.lock)
+    // `git diff <base>` compares against the working tree, so that is the file the sections are read from.
+    const text = await manifestText($, root, s.manifest)
+    if (diff.ok && !touchesDependencies(s.manifest, diff.out, text)) out.add(s.lock)
   }
   return out
 }

@@ -130,7 +130,9 @@ function goDependency(lines: string[], i: number): boolean {
   return false
 }
 
-// A key or table the hunk does not show counts as a dependency, so a manifest whose section is unknown still gets the note.
+// A key or table the FILE does not show counts as a dependency, so a manifest that cannot be read
+// still gets the note. The lookup reads the whole file, not the diff's own context: a hunk 20 lines
+// deep in package.json never reaches the root `{`, and every root-level key then read as a dependency.
 
 function jsonDependency(lines: string[], i: number): boolean {
   const key = enclosingKey(lines, i, JSON_OPEN)
@@ -166,15 +168,45 @@ function isDependencyLine(manifest: string, lines: string[], i: number): boolean
   return check === undefined || check(lines, i)
 }
 
-/** Whether a `git show --unified=20` diff of one manifest changes a line that can change its lockfile. */
-export function touchesDependencies(manifest: string, diff: string): boolean {
-  for (const hunk of diff.split(/^@@[^\n]*\n/m).slice(1)) {
-    // Each line as it stands after the commit, with removed lines kept in place so their section is known.
-    const lines = hunk.split('\n').map(l => l.slice(1))
-    const changed = hunk.split('\n').map((l, i) => ((l.startsWith('+') || l.startsWith('-')) && l.slice(1).trim() !== '' ? i : -1)).filter(i => i >= 0)
-    if (changed.some(i => isDependencyLine(manifest, lines, i))) return true
+/** A hunk header; the capture is the 1-based first line of its new side. */
+const HUNK = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/
+
+/**
+ * Where each changed line of the diff sits in the file as it stands after the change, as an index into
+ * its lines. A removed line takes the index of the line that now stands in its place, which is the
+ * position its own section is read from.
+ */
+function changedAt(diff: string): number[] {
+  const out: number[] = []
+  // Below zero until the first hunk header, so the `--- a/x` and `+++ b/x` of the file header count as nothing.
+  let at = -1
+  for (const raw of diff.split('\n')) {
+    const header = HUNK.exec(raw)
+    if (header !== null) {
+      at = Number(header[1]) - 1
+      continue
+    }
+    if (at < 0) continue
+    const body = raw.slice(1)
+    if (raw.startsWith('-')) {
+      if (body.trim() !== '') out.push(at)
+      continue
+    }
+    if (!raw.startsWith('+') && !raw.startsWith(' ')) continue
+    if (raw.startsWith('+') && body.trim() !== '') out.push(at)
+    at += 1
   }
-  return false
+  return out
+}
+
+/**
+ * Whether a diff of one manifest changes a line that can change its lockfile. `fileText` is the manifest
+ * as it stands on the diff's new side; an empty one leaves every changed line counted, because a file
+ * that cannot be read proves nothing.
+ */
+export function touchesDependencies(manifest: string, diff: string, fileText: string): boolean {
+  const file = fileText.split('\n')
+  return changedAt(diff).some(i => isDependencyLine(manifest, file, i))
 }
 
 /** A manifest the commit changed and the lockfile it left unchanged. */

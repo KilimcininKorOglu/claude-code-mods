@@ -32,7 +32,7 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
    | `pubspec.yaml` | `dependencies`, `dev_dependencies`, `dependency_overrides` | other keys |
    | `mix.exs` | every change | |
 
-   A key or table outside the 20 lines of context counts, so an unknown section still gets the note.
+   The section of a changed line is read from the whole manifest (`git show HEAD:<manifest>`), not from the diff's own 20 lines of context: a change 40 lines into a `package.json` never reaches the root `{` inside the hunk, and every root-level key would read as a dependency. A key or table the manifest itself does not place counts, so a file that cannot be read still gets the note.
 5. The model reads this note after the commit's result:
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum. Run the package manager's install so the lockfile matches, and commit it.
@@ -93,12 +93,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.fs.read (via manifestText), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
 
 Reach L2, runs processes.
 
-    1. Reads:    the Bash command text; whether lockfiles exist in the repository; through git, the commit's file list and manifest diffs
-    2. Runs:     git rev-parse, git show, git status, git log, git diff and git diff --cached --name-only, read-only, by argv: four per commit, one per manifest without its lockfile, and two per open pair at each measure, also at the turn's end
+    1. Reads:    the Bash command text; whether lockfiles exist in the repository; each open finding's manifest in the working tree; through git, the commit's file list, manifest diffs and each manifest at HEAD
+    2. Runs:     git rev-parse, git show, git status, git log, git diff and git diff --cached --name-only, read-only, by argv: four per commit, two per manifest without its lockfile, and two per open pair at each measure, also at the turn's end
     3. Sends:    a note to the model after the commit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; manifest paths reach git as one argv entry after --
