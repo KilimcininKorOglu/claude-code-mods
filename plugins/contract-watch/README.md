@@ -33,7 +33,7 @@ The note lists every caller, not only the ones ripwire proves incompatible: in a
 
        contract-watch: no caller of parse carries the mismatch mark any more
 
-   The measurement runs before the command, not after it: `--edit-check` compares the working tree against git HEAD, so once a commit has landed there is nothing left to compare and every finding would read as closed.
+   The measurement runs before the command, not after it: `--edit-check` compares the working tree against git HEAD, so once a commit has landed there is nothing left to compare and every finding would read as closed. For the same reason an open symbol is held by ripwire's incompatible mark alone, not by the contract status: after a commit took the change the contract reads as HEAD, and a caller left on the old arity still carries the mark, so the finding stays open at the turn's end until the mark is gone.
 8. A finding the model did not close is measured the same way at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt. ripwire runs on this machine, once per open symbol:
 
        contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.

@@ -149,10 +149,12 @@ export function sidebarLines(c: Check): Line[] {
  * Whether the gate stops a command for this check. The note names every caller of a changed contract,
  * because a caller on the old arity was measured while `incompatible` read 0; the gate takes the narrower
  * measure, the callers ripwire calls incompatible by fixed-arity evidence, because that count falls again
- * once the model fixes them and a gate that never opens is a gate nobody can pass.
+ * once the model fixes them and a gate that never opens is a gate nobody can pass. The status is not read:
+ * after a commit takes the change the contract reads as HEAD (`unchanged`), and ripwire still marks a
+ * caller left on the old arity, so an open symbol stays open until the mark is gone.
  */
 export function isBlocking(c: Check): boolean {
-  return c.status === 'contract-change' && c.incompatible > 0
+  return c.incompatible > 0
 }
 
 /** The finding line of a blocking check: the symbol and how many callers do not match it. */

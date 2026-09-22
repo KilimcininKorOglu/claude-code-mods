@@ -131,6 +131,19 @@ describe('contract-watch', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -am wip' } as never)).deny).toContain('parse changed from 1 to 2 parameter(s)')
   })
 
+  test('a commit that takes the change leaves the finding open while a caller keeps the old arity', async ($, on) => {
+    const w = world(on)
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
+    // After the commit ripwire compares against the new HEAD: the contract reads unchanged, the caller is still marked.
+    w.ripwire = { exitCode: 0, stdout: '<edit-check sym="parse" status="unchanged" incompatible="1"><c n="main" p="cmd/main.go:5" incompatible="1"/></edit-check>', stderr: '' }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(w.logs.some(l => l.includes('matches parse again'))).toBe(false)
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · 1 signature(s) have callers to check; it needs ripwire on PATH')
+  })
+
   test('the turn end asks ripwire again and the next prompt carries the note', async ($, on) => {
     const w = world(on)
     const notes: string[][] = []

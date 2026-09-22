@@ -78,7 +78,8 @@ describe('edit-check', () => {
     const blocking = { sym: 'parse', status: 'contract-change', paramsWas: 1, paramsNow: 2, incompatible: 1, callers: [{ name: 'main', at: 'main.go:5', mismatch: true }] }
     expect(isBlocking(blocking)).toBe(true)
     expect(isBlocking({ ...blocking, incompatible: 0 })).toBe(false)
-    expect(isBlocking({ ...blocking, status: 'unchanged' })).toBe(false)
+    // A commit took the change: the contract reads as HEAD, and the caller still carries the mark.
+    expect(isBlocking({ ...blocking, status: 'unchanged' })).toBe(true)
     expect(blockingLine(blocking)).toBe('parse changed from 1 to 2 parameter(s), 1 caller(s) do not match')
     for (const command of ['git commit -m x', 'git push origin main', 'git merge main']) expect(isGuarded(command), command).toBe(true)
     for (const command of ['git status', 'git push --dry-run', 'git log']) expect(isGuarded(command), command).toBe(false)

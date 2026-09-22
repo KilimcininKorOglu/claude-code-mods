@@ -33,7 +33,7 @@ Not, yalnız ripwire'ın uyumsuz kanıtladıklarını değil, her caller'ı list
 
        contract-watch: no caller of parse carries the mismatch mark any more
 
-   Ölçüm komuttan sonra değil, önce çalışır: `--edit-check` working tree'yi git HEAD ile karşılaştırır, yani commit düştükten sonra karşılaştıracak bir şey kalmaz ve her bulgu kapanmış okunurdu.
+   Ölçüm komuttan sonra değil, önce çalışır: `--edit-check` working tree'yi git HEAD ile karşılaştırır, yani commit düştükten sonra karşılaştıracak bir şey kalmaz ve her bulgu kapanmış okunurdu. Aynı sebeple açık bir symbol contract status'üyle değil, yalnız ripwire'ın incompatible işaretiyle tutulur: bir commit değişikliği aldıktan sonra contract HEAD gibi okunur ve eski arity'de kalan bir caller işareti hâlâ taşır, yani bulgu tur sonunda işaret gidene kadar açık kalır.
 8. Modelin kapatmadığı bir bulgu her main-loop turn sonunda aynı şekilde ölçülür ve geriye kalan, bir sonraki prompt ile modele tek not olarak ulaşır. ripwire bu makinede, açık sembol başına bir kere çalışır:
 
        contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.
