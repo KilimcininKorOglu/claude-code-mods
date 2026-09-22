@@ -21,7 +21,8 @@
       "L2": "Yazar ya da process çalıştırır, Claude'u sürebilir.",
       "L3": "Network'e çıkar."
     },
-    "docsNote": "Mod sayfalarının gövdesi İngilizce README dosyalarından üretilir.",
+    "docsNote": "Her mod sayfası o mod'un kendi README dosyasından üretilir.",
+    "noTurkish": "Bu mod'un Türkçe README dosyası henüz yok, aşağıdaki metin İngilizce.",
     "searchPlaceholder": "Mod ara",
     "allReach": "Hepsi",
     "detail": "Dokümantasyon",
@@ -45,6 +46,7 @@
       "L3": "Reaches the network."
     },
     "docsNote": "Each mod page is rendered from that mod's own README.",
+    "noTurkish": "",
     "searchPlaceholder": "Search mods",
     "allReach": "All",
     "detail": "Documentation",

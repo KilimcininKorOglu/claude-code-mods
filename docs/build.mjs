@@ -29,6 +29,14 @@ function summaryOf(description) {
   return description.replace(/\s*Needs function hooks \(early access\)\.\s*$/, '').trim()
 }
 
+/** The Turkish card sentence: the first paragraph of the mod's Turkish README, as plain text. */
+function leadOf(readme) {
+  if (readme === null) return null
+  const paragraph = readme.split(/\n#[^\n]*\n/)[1]?.split(/\n\s*\n/).find(p => p.trim() !== '')
+  if (paragraph === undefined) return null
+  return paragraph.replace(/\s+/g, ' ').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[`*]/g, '').trim()
+}
+
 /** A README link, rewritten for the site: a sibling mod becomes its page, a file becomes its source on GitHub. */
 function fixLink(href, mod) {
   if (/^(https?:|mailto:|#)/.test(href)) return href
@@ -55,12 +63,16 @@ async function mods() {
     const dir = join(ROOT, 'plugins', entry.name)
     const manifest = await readJson(join(dir, '.claude-plugin', 'plugin.json'))
     const readme = await readText(join(dir, 'README.md'))
+    // The Turkish page comes from the mod's own README.tr.md; a mod without one shows the English body.
+    const readmeTr = await readText(join(dir, 'README.tr.md')).catch(() => null)
     found.push({
+      readmeTr,
       name: entry.name,
       version: manifest.version,
       category: entry.category ?? 'other',
       tags: entry.tags?.filter(t => !['mods', 'function-hooks', 'hooks-module'].includes(t)) ?? [],
       summary: summaryOf(manifest.description ?? entry.description ?? ''),
+      summaryTr: leadOf(readmeTr),
       reach: reachOf(readme),
       readme,
     })
@@ -113,9 +125,12 @@ function foot(depth) {
 
 function card(mod) {
   const tags = mod.tags.slice(0, 4).map(t => `<span>${escape(t)}</span>`).join('')
-  return `<article class="card" data-reach="${mod.reach}" data-search="${escape([mod.name, mod.summary, ...mod.tags].join(' ').toLowerCase())}">
+  const turkish = mod.summaryTr ?? mod.summary
+  const search = escape([mod.name, mod.summary, turkish, ...mod.tags].join(' ').toLowerCase())
+  return `<article class="card" data-reach="${mod.reach}" data-search="${search}">
   <h3><a href="mods/${mod.name}.html">${escape(mod.name)}</a></h3>
-  <p>${escape(mod.summary)}</p>
+  <p data-lang-block="tr">${escape(turkish)}</p>
+  <p data-lang-block="en">${escape(mod.summary)}</p>
   <div class="meta">
     <span class="reach ${mod.reach}">${mod.reach}</span>
     <span class="version">v${escape(mod.version)}</span>
@@ -165,7 +180,9 @@ ${hero(list)}
   ${both('installTitle', t => `<h2>${escape(t)}</h2>`)}
   ${['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${installBlock(lang)}</div>`).join('')}
 </div></section>
-<section id="mods"><div class="wrap">
+<section id="mods"><div class="wrap"><div class="page">
+${sideNav(list, null, 'mods/')}
+<div>
   ${both('modsTitle', t => `<h2>${escape(t)}</h2>`)}
   ${both('modsLead', t => `<p class="sub">${escape(t)}</p>`)}
   <div class="controls">
@@ -174,7 +191,7 @@ ${hero(list)}
   </div>
   <div class="grid" id="grid">${list.map(card).join('\n')}</div>
   <p class="empty" id="empty" hidden>0</p>
-</div></section>
+</div></div></div></section>
 <section id="reach"><div class="wrap">
   ${both('reachTitle', t => `<h2>${escape(t)}</h2>`)}
   ${['tr', 'en'].map(lang => `<div data-lang-block="${lang}">${reachList(lang)}</div>`).join('')}
@@ -185,10 +202,10 @@ ${foot(0)}`
 }
 
 /** Every mod by name, so each page carries the whole list and the one it draws is marked. */
-function sideNav(list, current) {
+function sideNav(list, current, base = '') {
   const rows = list.map(m => {
     const here = m.name === current ? ' aria-current="page"' : ''
-    return `<li><a href="${m.name}.html"${here}>${escape(m.name)}</a></li>`
+    return `<li><a href="${base}${m.name}.html"${here}>${escape(m.name)}</a></li>`
   }).join('')
   return `<aside class="side">
   <h4><span data-lang-block="tr">${escape(copy.tr.modsTitle)}</span><span data-lang-block="en">${escape(copy.en.modsTitle)}</span> (${list.length})</h4>
@@ -197,7 +214,11 @@ function sideNav(list, current) {
 }
 
 function modPage(mod, list) {
-  const body = markdown(mod.readme, mod.name)
+  const english = markdown(mod.readme, mod.name)
+  const turkish = mod.readmeTr === null
+    ? `<p class="sub">${escape(copy.tr.noTurkish)}</p>${english}`
+    : markdown(mod.readmeTr, mod.name)
+  const body = `<div data-lang-block="tr">${turkish}</div><div data-lang-block="en">${english}</div>`
   return `${head(`${mod.name} · ${copy.site.title}`, 1)}
 <main class="wrap"><div class="page">
 ${sideNav(list, mod.name)}
