@@ -21,12 +21,12 @@ Bir edit'in, bir ya da birden fazla locale dosyasında olmayan translation key'l
        i18n-watch: this edit uses translation keys the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale). Add them to each locale file.
 
    En fazla 10 key adlandırılır, kalanı sayılır.
-5. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır yalnız key'leri taşır, talimat cümlesi olmadan:
+5. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır dosyayı ve key'leri taşır, talimat cümlesi olmadan. Dosya adlandırılır, çünkü model edit'i gördü ama siz görmediniz:
 
-       i18n-watch: keys the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale)
+       i18n-watch: keys src/Cart.vue uses that the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale)
 
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken bu key'ler oraya gider, key başına bir satır olarak, stream'inde bir entry halinde, ve transcript temiz kalır. Entry, yenileri pane'den itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
+6. [sidebar](../sidebar) açıkken bu key'ler oraya gider, önce dosya ve sonra key başına bir satır olarak (kapanış entry'si de böyle okunur), stream'inde bir entry halinde, ve transcript temiz kalır. Entry, yenileri pane'den itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
 
 7. Bir bulgu hiçbir zaman hatırlanmış bir cevap değildir. Tuttuğu key'ler bir iddiadır ve her ölçüm kaynak dosyayı diskten yeniden okur ve artık çağırmadığı key'leri düşürür. Yani bir bulgu iki yoldan kapanır ve ikisi de her Edit ve Write'tan sonra, ve bir guarded git komutundan önce ölçülür:
 
@@ -74,7 +74,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Bash}, turn.complete, prompt.submit, tool.call{tool=Edit}, tool.call{tool=Write}
     ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir, usedNow), $.fs.list (via walkLocales), $.fs.read (via loadCatalog, usedNow), $.fs.stat (via isDir), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, gate, toPerson)

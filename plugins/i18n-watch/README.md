@@ -21,12 +21,12 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
        i18n-watch: this edit uses translation keys the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale). Add them to each locale file.
 
    At most 10 keys are named, the rest counted.
-5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the keys alone, without the instruction:
+5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the file and its keys, without the instruction. The file is named because the model saw the edit and you did not:
 
-       i18n-watch: keys the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale)
+       i18n-watch: keys src/Cart.vue uses that the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those keys go there instead, one line per key, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, those keys go there instead, the file first and then one line per key (the closing entry reads the same way), as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 7. A finding is never a remembered answer. The keys it holds are a claim, and every measure reads the source file from disk again and drops the keys it no longer calls. So a finding closes two ways, and both are measured after each Edit and Write and again before a guarded git command:
 
@@ -74,7 +74,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Bash}, turn.complete, prompt.submit, tool.call{tool=Edit}, tool.call{tool=Write}
     ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir, usedNow), $.fs.list (via walkLocales), $.fs.read (via loadCatalog, usedNow), $.fs.stat (via isDir), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, gate, toPerson)

@@ -189,7 +189,7 @@ async function noteFor($: EngineInterface, state: State, shown: string, path: st
   // Only the keys this edit added are reported; a key reported before is held open without saying it again.
   const fresh = v.missing.filter(m => added.includes(m.key))
   if (fresh.length === 0) return r
-  await toPerson($, shown, 'missing translation keys', sidebarLines(fresh, lines), logText(fresh, lines))
+  await toPerson($, shown, 'missing translation keys', sidebarLines(shown, fresh, lines), logText(shown, fresh, lines))
   return { ...r, context: [...(r.context ?? []), noteText(fresh, lines)] }
 }
 

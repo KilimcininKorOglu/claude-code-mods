@@ -161,14 +161,17 @@ export function noteText(missing: Missing[], lines: Lines): string {
   return `i18n-watch: this edit uses translation keys the locale files lack: ${namedKeys(missing, lines)}. Add them to each locale file.`
 }
 
-/** The transcript line: the keys alone, without the instruction the model reads. The engine adds the mod name. */
-export function logText(missing: Missing[], lines: Lines): string {
-  return `keys the locale files lack: ${namedKeys(missing, lines)}`
+/**
+ * The transcript line: the file and its keys, without the instruction the model reads. The engine adds
+ * the mod name. The file is named because the person, unlike the model, did not see the edit.
+ */
+export function logText(file: string, missing: Missing[], lines: Lines): string {
+  return `keys ${file} uses that the locale files lack: ${namedKeys(missing, lines)}`
 }
 
-/** One sidebar line per missing key, so the section reads as a list. */
-export function sidebarLines(missing: Missing[], lines: Lines): { text: string; kind: 'error' }[] {
-  return namedKeys(missing, lines).split(' · ').map(text => ({ text, kind: 'error' }))
+/** The sidebar lines of a finding: the file, then one line per missing key, as the closing lines read. */
+export function sidebarLines(file: string, missing: Missing[], lines: Lines): { text: string; kind: 'error' }[] {
+  return [{ text: file, kind: 'error' }, ...namedKeys(missing, lines).split(' · ').map(text => ({ text, kind: 'error' as const }))]
 }
 
 function namedPlain(keys: string[]): string {

@@ -122,7 +122,7 @@ describe('i18n-watch', () => {
       'i18n-watch: this edit uses translation keys the locale files lack: checkout.total:1 (missing in de) · checkout.vat:1 (missing in de, tr) · checkout.fee:1 (missing in every locale). Add them to each locale file.',
     ])
     expect(w.logs).toEqual([
-      'keys the locale files lack: checkout.total:1 (missing in de) · checkout.vat:1 (missing in de, tr) · checkout.fee:1 (missing in every locale)',
+      'keys src/Cart.vue uses that the locale files lack: checkout.total:1 (missing in de) · checkout.vat:1 (missing in de, tr) · checkout.fee:1 (missing in every locale)',
     ])
   })
 
@@ -212,7 +212,7 @@ describe('i18n-watch', () => {
     seatSidebar(on, bar)
     await started($)
     await edit(w, $, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
-    expect(bar.sections).toEqual([{ key: 'src-Cart.vue', title: 'missing translation keys', lines: ['checkout.fee:1 (missing in every locale)'] }])
+    expect(bar.sections).toEqual([{ key: 'src-Cart.vue', title: 'missing translation keys', lines: ['src/Cart.vue', 'checkout.fee:1 (missing in every locale)'] }])
     expect(w.logs).toEqual([])
   })
 
