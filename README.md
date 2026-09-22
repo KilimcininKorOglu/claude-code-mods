@@ -72,7 +72,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [output-flood](plugins/output-flood) | Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question. | L1 |
 | [ua-fallback](plugins/ua-fallback) | After a `curl` or `wget` an automated-client filter answered 403 or 429, gives the model the browser User-Agent to retry with, and the two cases where it must not. | L1 |
 | [commit-cadence](plugins/commit-cadence) | Measures the working tree at the end of each turn, names the uncommitted files to you, and tells the model at the next prompt to commit each finished piece as it lands. | L2 |
-| [context-restore](plugins/context-restore) | Puts back the full text of every skill and command compaction cut, and hands the model the new text of a used skill, command or rules file that changed on disk. | L1 |
+| [context-restore](plugins/context-restore) | Hands a skill or command call the current text of its file when the file changed on disk after the session loaded it, and hands the model a rules file that changed on disk. | L1 |
 | [mod-doctor](plugins/mod-doctor) | Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the `claude plugin update` command that closes the gap. | L1 |
 | [subagent-ledger](plugins/subagent-ledger) | Shows each subagent of the session with its turns, time, model and tokens, the costliest first, yellow while it runs and green once it answered, and marks one that passed the token limit. | L0 |
 

@@ -1,19 +1,15 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { baseName, bodyOfFile, changedLog, changedNote, rebuild, restoredLog, rulePathsOf, sectionKey, sectionsOf, sidebarLines, skillFileOf, statusText, type Section } from './restore.ts'
+import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rulePathsOf, sectionKey, sidebarLines, skillFileOf, statusText } from './restore.ts'
 
 const ENABLED_KEY = 'enabled'
 const CONSUMER = 'context-restore'
 const USAGE = 'expects nothing (the status), on or off'
 
-/** One skill or command the session used: the text the model read, and the file it came from when one is known. */
-type Used = { text: string; file?: string; mtimeMs?: number }
-
 /**
- * The on/off setting, the directory the session started in, the host's config directory, every skill and
- * command the session used by name, every rules file it read with the time it was read, and the last
- * thing the mod did.
+ * The on/off setting, the directory the session started in, the host's config directory, when the session
+ * started, every rules file it read with the time it was last written, and the last thing the mod did.
  */
-type State = { enabled: boolean; root: string; config: string; used: Map<string, Used>; rules: Map<string, number>; last?: string }
+type State = { enabled: boolean; root: string; config: string; startedAt: number; rules: Map<string, number>; last?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -59,57 +55,22 @@ async function commandFileOf($: EngineInterface, state: State, name: string): Pr
   return undefined
 }
 
-/** The file a skill or command text came from: a skill names its directory, a command is looked up. */
-async function fileOf($: EngineInterface, state: State, name: string, text: string): Promise<string | undefined> {
-  return skillFileOf(text) ?? commandFileOf($, state, name)
-}
-
 /** A file's text as the engine hands it to the model. */
 async function readBody($: EngineInterface, path: string): Promise<string> {
   const text = String(await $.fs.read(path))
   return path.endsWith('/SKILL.md') ? bodyOfFile(text, path.slice(0, -'/SKILL.md'.length)) : bodyOfFile(text)
 }
 
-/** Records a skill or command as the model read it, with its file and that file's last write. */
-async function recordUse($: EngineInterface, state: State, name: string, text: string): Promise<void> {
-  try {
-    const file = await fileOf($, state, name, text)
-    state.used.set(name, { text, file, mtimeMs: file === undefined ? undefined : await mtimeOf($, file) })
-  } catch (err) {
-    state.used.set(name, { text })
-    $.ui.log(`the file of ${name} was not found, so a change to it is not seen: ${errorText(err)}`)
-  }
-}
-
 /**
- * The full text of one section: the text the model read when the session used it, else its file, as a
- * resumed session in a new process has no record of what was used before.
+ * The text one call of a skill or command should carry: the file's current text when the engine handed an
+ * older copy it loaded at the start, else undefined. A skill names its directory, a command is looked up.
  */
-async function fullTextOf($: EngineInterface, state: State, s: Section): Promise<string | undefined> {
-  const known = state.used.get(s.name)
-  if (known !== undefined) return known.text
-  const file = await fileOf($, state, s.name, s.body ?? '')
-  if (file === undefined || !(await $.fs.exists(file))) return undefined
-  const text = await readBody($, file)
-  state.used.set(s.name, { text, file, mtimeMs: await mtimeOf($, file) })
-  return text
-}
-
-/** Puts the full text back into the skills the engine hands back after a compaction. */
-async function restoreSkills($: EngineInterface, state: State, text: string): Promise<string> {
-  const parsed = sectionsOf(text)
-  const full = new Map<string, string>()
-  for (const s of parsed.sections) {
-    try {
-      const body = await fullTextOf($, state, s)
-      if (body !== undefined) full.set(s.name, body)
-    } catch (err) {
-      $.ui.log(`the full text of ${s.name} was not read, so the engine's text stays: ${errorText(err)}`)
-    }
-  }
-  const out = rebuild(parsed, full)
-  if (out.changed.length > 0) await toPerson($, state, restoredLog(out.changed))
-  return out.text
+async function fresherText($: EngineInterface, state: State, name: string, text: string): Promise<string | undefined> {
+  const file = skillFileOf(text) ?? (await commandFileOf($, state, name))
+  if (file === undefined) return undefined
+  const at = await mtimeOf($, file)
+  if (at === undefined) return undefined
+  return currentText(text, await readBody($, file), file, at > state.startedAt)
 }
 
 /** Records the rules files the session read, with the time each was last written. */
@@ -120,22 +81,8 @@ async function recordRules($: EngineInterface, state: State, text: string): Prom
   }
 }
 
-/** One file that changed on disk: its label, its path and its new text. */
+/** One rules file that changed on disk: its label, its path and its new text. */
 type Change = { label: string; path: string; text: string }
-
-/** The skills and commands whose file changed on disk since the session read it; each record takes the new text. */
-async function changedSkills($: EngineInterface, state: State): Promise<Change[]> {
-  const out: Change[] = []
-  for (const [name, used] of state.used) {
-    if (used.file === undefined) continue
-    const at = await mtimeOf($, used.file)
-    if (at === undefined || at === used.mtimeMs) continue
-    const text = await readBody($, used.file)
-    state.used.set(name, { text, file: used.file, mtimeMs: at })
-    out.push({ label: name, path: used.file, text })
-  }
-  return out
-}
 
 /** The rules files that changed on disk since the session read them; each record takes the new time. */
 async function changedRules($: EngineInterface, state: State): Promise<Change[]> {
@@ -149,13 +96,13 @@ async function changedRules($: EngineInterface, state: State): Promise<Change[]>
   return out
 }
 
-/** The notes for every file that changed on disk, and one line to the person naming them. */
+/** The notes for every rules file that changed on disk, and one line to the person naming them. */
 async function changeNotes($: EngineInterface, state: State): Promise<string[]> {
   let changes: Change[]
   try {
-    changes = [...(await changedSkills($, state)), ...(await changedRules($, state))]
+    changes = await changedRules($, state)
   } catch (err) {
-    $.ui.log(`a changed file was not read, so the model keeps its earlier text: ${errorText(err)}`)
+    $.ui.log(`a changed rules file was not read, so the model keeps its earlier text: ${errorText(err)}`)
     return []
   }
   if (changes.length === 0) return []
@@ -166,39 +113,44 @@ async function changeNotes($: EngineInterface, state: State): Promise<string[]> 
 async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
   state.enabled = on
   await $.store.set(ENABLED_KEY, on)
-  return on ? 'on: a skill cut by compaction gets its full text back, and a changed file reaches the model' : 'off: the engine\'s text stays as it is'
+  return on ? 'on: a call of a changed skill or command gets its current text, and a changed rules file reaches the model' : 'off: the engine\'s text stays as it is'
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
-  return word === '' ? statusText(state.enabled, state.used.size, state.rules.size, state.last) : USAGE
+  return word === '' ? statusText(state.enabled, state.rules.size, state.last) : USAGE
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, root: '', config: '', used: new Map(), rules: new Map() }
+  const state: State = { enabled: true, root: '', config: '', startedAt: 0, rules: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
+    state.startedAt = await $.clock.now()
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.root = e.cwd
     state.config = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) ?? ''}/.claude`
-    await $.command.register({ name: 'context-restore', description: 'Full text of skills cut by compaction, and changed skill, command and rules files: status, on, off (context-restore)', argumentHint: '[on | off]', immediate: true })
+    await $.command.register({ name: 'context-restore', description: 'The current text of a changed skill, command or rules file: status, on, off (context-restore)', argumentHint: '[on | off]', immediate: true })
     return r
   })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'context-restore' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
+  // The engine loads each skill and command once and hands that copy at every call, also after its file changed.
   on('skill.prompt', async ($, e, next) => {
     const r = await next(e)
-    if (state.enabled) await recordUse($, state, e.skill, r.text)
-    return r
-  })
-
-  on('prompt.attachment', { type: 'invoked_skills' }, async ($, e, next) => {
-    if (!state.enabled) return next(e)
-    return next({ ...e, text: await restoreSkills($, state, e.text) })
+    if (!state.enabled) return r
+    try {
+      const text = await fresherText($, state, e.skill, r.text)
+      if (text === undefined) return r
+      await toPerson($, state, currentLog(e.skill))
+      return { ...r, text }
+    } catch (err) {
+      $.ui.log(`the file of ${e.skill} was not read, so the call keeps the engine's text: ${errorText(err)}`)
+      return r
+    }
   })
 
   on('prompt.attachment', { type: 'instructions' }, async ($, e, next) => {

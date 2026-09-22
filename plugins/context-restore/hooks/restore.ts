@@ -1,16 +1,12 @@
-/** How the engine writes the skills it hands back after a compaction, and the texts this mod writes. */
+/** How the engine expands a skill or command file for the model, and the texts this mod writes. */
 
 const BASE_DIR = /^Base directory for this skill: ([^\n]+)/
-const SECTION_START = /^### Skill: /gm
-const SECTION = /^(### Skill: ([^\n]*)\nPath: ([^\n]*)\n\n)([\s\S]*?)(\n\n---\n\n|\s*)$/
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n+/
 const RULE_HEADER = /^Contents of (.+?) \(/gm
-
-/** One skill or command of an `invoked_skills` attachment; `body` is undefined when its head was not read. */
-export type Section = { name: string; path: string; head: string; body?: string; tail: string; raw: string }
-
-/** An `invoked_skills` attachment: the engine's lead paragraphs, then one section per skill. */
-export type Parsed = { lead: string; sections: Section[] }
+/** What the engine fills in when it expands a file: its arguments, a `${...}` variable, or a shell command's output. */
+const PLACEHOLDER = /\$ARGUMENTS|\$\d|\$\{|!`/
+/** What the engine adds after a file with no placeholder when the call carries arguments (measured on 2.1.280). */
+const ARGUMENTS_TAIL = '\n\nARGUMENTS: '
 
 /** The SKILL.md a skill's text names in its first line, or undefined for a text that names none. */
 export function skillFileOf(text: string): string | undefined {
@@ -24,33 +20,29 @@ export function bodyOfFile(fileText: string, dir?: string): string {
   return dir === undefined ? body : `Base directory for this skill: ${dir}\n\n${body}`
 }
 
-function sectionOf(raw: string): Section {
-  const m = SECTION.exec(raw)
-  if (m === null) return { name: '', path: '', head: '', tail: '', raw }
-  return { name: m[2] ?? '', path: m[3] ?? '', head: m[1] ?? '', body: m[4] ?? '', tail: m[5] ?? '', raw }
+/** The note that follows the engine's text when the file changed and holds text the engine fills in. */
+export function appendedNote(path: string, body: string): string {
+  return `context-restore: ${path} changed on disk after this session loaded it. Its current text follows, with its placeholders not filled in. It replaces the instructions above; the arguments above still apply.\n\n${body}`
 }
 
-/** Splits the attachment at each `### Skill: ` line. A section whose head reads otherwise is kept whole. */
-export function sectionsOf(text: string): Parsed {
-  const starts = [...text.matchAll(SECTION_START)].map(m => m.index)
-  const first = starts[0] ?? text.length
-  const sections = starts.map((at, i) => sectionOf(text.slice(at, starts[i + 1] ?? text.length)))
-  return { lead: text.slice(0, first), sections }
+/** The engine's text of a file with no placeholder, split before the `ARGUMENTS:` part it adds for a call with arguments. */
+function splitArguments(engineText: string): { head: string; tail: string } {
+  const at = engineText.lastIndexOf(ARGUMENTS_TAIL)
+  return at < 0 ? { head: engineText, tail: '' } : { head: engineText.slice(0, at), tail: engineText.slice(at) }
 }
 
 /**
- * Puts the full text of every section it knows in place of the body the engine carried, and answers the
- * text and the names whose body changed. A section it knows no text of stays as the engine wrote it.
+ * The text the model reads for one call of a skill or command, when the engine's copy is older than the file.
+ * A file with no placeholder is compared as it is, and its text takes the place of a different engine text,
+ * with the call's arguments kept. A file with placeholders cannot be compared, so the engine's text stays
+ * with the new file text after it, once the file was written after the session started. Undefined: the
+ * engine's text is current.
  */
-export function rebuild(parsed: Parsed, full: ReadonlyMap<string, string>): { text: string; changed: string[] } {
-  const changed: string[] = []
-  const parts = parsed.sections.map(s => {
-    const text = full.get(s.name)
-    if (s.body === undefined || text === undefined || text.trimEnd() === s.body.trimEnd()) return s.raw
-    changed.push(s.name)
-    return `${s.head}${text.trimEnd()}${s.tail}`
-  })
-  return { text: parsed.lead + parts.join(''), changed }
+export function currentText(engineText: string, fileBody: string, path: string, writtenSinceStart: boolean): string | undefined {
+  if (PLACEHOLDER.test(fileBody)) return writtenSinceStart ? `${engineText.trimEnd()}\n\n${appendedNote(path, fileBody)}` : undefined
+  const { head, tail } = splitArguments(engineText)
+  if (fileBody.trimEnd() === head.trimEnd()) return undefined
+  return tail === '' ? fileBody : `${fileBody.trimEnd()}\n${tail}`
 }
 
 /** The rules files an `instructions` attachment carries, by the `Contents of <path> (` line each starts with. */
@@ -63,17 +55,17 @@ export function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
 }
 
-/** The line the person reads after a compaction: the skills whose full text was put back. */
-export function restoredLog(names: readonly string[]): string {
-  return `restored after compaction: ${names.join(', ')}`
+/** The line the person reads when a call got the file's current text in place of the engine's older copy. */
+export function currentLog(name: string): string {
+  return `changed on disk, the call got the current text: ${name}`
 }
 
-/** The line the person reads when files changed on disk: what the model was handed again. */
+/** The line the person reads when rules files changed on disk: what the model was handed again. */
 export function changedLog(labels: readonly string[]): string {
   return `changed on disk, the new text went to the model: ${labels.join(', ')}`
 }
 
-/** The note the model reads for one file that changed on disk after the session read it. */
+/** The note the model reads for one rules file that changed on disk after the session read it. */
 export function changedNote(label: string, path: string, text: string): string {
   return `context-restore: ${label} (${path}) changed on disk after this session read it. Its current text follows and replaces the earlier one; follow it from now on.\n\n${text}`
 }
@@ -91,7 +83,7 @@ export function sectionKey(text: string): string {
 }
 
 /** The `/context-restore` answer: the setting, what is watched, and the last thing done. */
-export function statusText(enabled: boolean, skills: number, rules: number, last: string | undefined): string {
+export function statusText(enabled: boolean, rules: number, last: string | undefined): string {
   const done = last === undefined ? '' : ` · last: ${last}`
-  return `${enabled ? 'on' : 'off'} · ${skills} skill(s) and command(s), ${rules} rules file(s) watched${done}`
+  return `${enabled ? 'on' : 'off'} · every skill and command call is checked against its file, ${rules} rules file(s) watched${done}`
 }

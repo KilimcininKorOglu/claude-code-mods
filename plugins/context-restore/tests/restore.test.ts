@@ -1,42 +1,16 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { bodyOfFile, rebuild, rulePathsOf, sectionsOf, skillFileOf } from '../hooks/restore.ts'
+import { appendedNote, bodyOfFile, currentText, rulePathsOf, skillFileOf } from '../hooks/restore.ts'
 
 tier('user')
 
-const LEAD = 'The following skills were invoked EARLIER in this session (before the conversation was compacted), not on the current turn.\n\nIMPORTANT: Do NOT re-execute these skills.\n\n'
 const SKILL = 'Base directory for this skill: /tmp/ctxprobe/skills/probe-skill\n\nPROBE-SKILL-BODY-START\nReply with the single word: skilled.\nPROBE-SKILL-BODY-END\n'
 const COMMAND = 'PROBE-COMMAND-BODY: reply with the single word: commanded.\n'
-const CUT = '\n\n[... skill content truncated for compaction; use Read on the skill path if you need the full text]'
-
-/** The attachment as the engine wrote it on 2.1.280 (measured), with the skill's body cut. */
-const ATTACHMENT = `${LEAD}### Skill: ctxprobe:probe-cmd\nPath: plugin:ctxprobe:probe-cmd\n\n${COMMAND}\n\n---\n\n### Skill: ctxprobe:probe-skill\nPath: plugin:ctxprobe:probe-skill\n\nBase directory for this skill: /tmp/ctxprobe/skills/probe-skill\n\nPROBE-SKILL-BODY-START${CUT}\n`
+const PATH = '/tmp/ctxprobe/skills/probe-skill/SKILL.md'
 
 describe('restore', () => {
-  test('reads each section of the attachment, with its name, source and body', () => {
-    const parsed = sectionsOf(ATTACHMENT)
-    expect(parsed.lead).toBe(LEAD)
-    expect(parsed.sections.map(s => [s.name, s.path])).toEqual([['ctxprobe:probe-cmd', 'plugin:ctxprobe:probe-cmd'], ['ctxprobe:probe-skill', 'plugin:ctxprobe:probe-skill']])
-    expect(parsed.sections[0]?.body).toBe(COMMAND)
-    expect(parsed.sections[1]?.body).toContain('truncated for compaction')
-  })
-
-  test('puts the full text in place of a cut body and leaves every other section as it was', () => {
-    const { text, changed } = rebuild(sectionsOf(ATTACHMENT), new Map([['ctxprobe:probe-skill', SKILL], ['ctxprobe:probe-cmd', COMMAND]]))
-    expect(changed).toEqual(['ctxprobe:probe-skill'])
-    expect(text).not.toContain('truncated for compaction')
-    expect(text).toContain('PROBE-SKILL-BODY-END')
-    expect(text.startsWith(`${LEAD}### Skill: ctxprobe:probe-cmd\nPath: plugin:ctxprobe:probe-cmd\n\n${COMMAND}\n\n---\n\n`)).toBe(true)
-  })
-
-  test('a section it knows no text of stays as the engine wrote it', () => {
-    const { text, changed } = rebuild(sectionsOf(ATTACHMENT), new Map())
-    expect(changed).toEqual([])
-    expect(text).toBe(ATTACHMENT)
-  })
-
   test('a skill names its file in its first line, a command names none', () => {
-    expect(skillFileOf(SKILL)).toBe('/tmp/ctxprobe/skills/probe-skill/SKILL.md')
+    expect(skillFileOf(SKILL)).toBe(PATH)
     expect(skillFileOf(COMMAND)).toBe(undefined)
   })
 
@@ -44,6 +18,29 @@ describe('restore', () => {
     const file = '---\nname: probe-skill\ndescription: x\n---\n\nPROBE-SKILL-BODY-START\nReply with the single word: skilled.\nPROBE-SKILL-BODY-END\n'
     expect(bodyOfFile(file, '/tmp/ctxprobe/skills/probe-skill')).toBe(SKILL)
     expect(bodyOfFile('---\ndescription: x\n---\n\n' + COMMAND)).toBe(COMMAND)
+  })
+
+  test('a file with no placeholder that reads as the engine\'s text leaves the call alone, whatever its time', () => {
+    expect(currentText(SKILL, SKILL, PATH, true)).toBe(undefined)
+  })
+
+  test('a file with no placeholder that differs from the engine\'s text takes its place', () => {
+    const changed = SKILL.replace('skilled', 'CHANGED')
+    expect(currentText(SKILL, changed, PATH, false)).toBe(changed)
+  })
+
+  test('a call with arguments of a file with no placeholder keeps its arguments, changed or not', () => {
+    // The engine adds the arguments after the file's text (measured on 2.1.280 with the no-ai skill).
+    const called = `${SKILL}\n\nARGUMENTS: the README`
+    expect(currentText(called, SKILL, PATH, true)).toBe(undefined)
+    const changed = SKILL.replace('skilled', 'CHANGED')
+    expect(currentText(called, changed, PATH, false)).toBe(`${changed}\n\nARGUMENTS: the README`)
+  })
+
+  test('a file with placeholders keeps the engine\'s filled text and adds its current text after it once written since the start', () => {
+    const file = 'Review $ARGUMENTS and report.\n'
+    expect(currentText('Review src/a.ts and report.\n', file, PATH, false)).toBe(undefined)
+    expect(currentText('Review src/a.ts and report.\n', file, PATH, true)).toBe(`Review src/a.ts and report.\n\n${appendedNote(PATH, file)}`)
   })
 
   test('the rules files of an instructions attachment are read from their Contents lines', () => {

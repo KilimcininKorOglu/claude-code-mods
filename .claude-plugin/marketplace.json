@@ -419,7 +419,7 @@
     {
       "name": "context-restore",
       "source": "./plugins/context-restore",
-      "description": "Puts back the full text of every skill and command the session used when compaction cut it, and hands the model the new text of a skill, command or rules file that changed on disk.",
+      "description": "Hands a skill or command call the current text of its file when the file changed on disk after the session loaded it, and hands the model a rules file that changed on disk.",
       "category": "development",
       "tags": [
         "mods",

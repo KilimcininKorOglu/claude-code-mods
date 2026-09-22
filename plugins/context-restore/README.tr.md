@@ -1,19 +1,29 @@
 # context-restore
 
-Compaction'ın kestiği her skill ve command'ın tam metnini geri koyan ve session sırasında diskte değişen bir skill, command ya da rules dosyasının yeni metnini modele veren bir Claude Code Mod'u.
+Bir skill ya da command çağrısına, dosyası session onu yükledikten sonra diskte değiştiyse dosyanın güncel metnini veren ve diskte değişen bir rules dosyasını modele veren bir Claude Code Mod'u.
 
 ## Ne yapar
 
-1. Bir skill ya da command her açıldığında (`/name` yazılarak, Skill tool ile çağrılarak ya da bir subagent'a önceden yüklenerek) mod, modelin okuduğu metni, metnin geldiği dosyayı ve o dosyanın son yazılma zamanını kaydeder. Bir skill dizinini ilk satırında adlandırır (`Base directory for this skill: <dizin>`), yani dosyası `<dizin>/SKILL.md` olur. Bir command'ın dosyası aranır: `<plugin>:<ad>` için plugin'in `commands/<ad>.md` dosyası, değilse projenin ya da sizin `commands/<ad>.md` dosyanız. Built-in bir command'ın dosyası yoktur.
-2. Bir compaction'dan sonra engine kullanılan skill'leri modele tek bir `invoked_skills` attachment'ı ile geri verir ve 20.000 karakterden uzun bir skill'i `[... skill content truncated for compaction; use Read on the skill path if you need the full text]` satırıyla keser (2.1.280 üzerinde ölçüldü). Mod bu attachment'ı istek gitmeden önce yeniden yazar: her skill ve command, session onu kullandığında modelin okuduğu metni alır. Yeni bir process'te resume edilen bir session'da böyle bir kayıt yoktur, bu durumda metin dosyadan gelir.
-3. Mod, `instructions` attachment'ının taşıdığı her rules dosyasını kaydeder (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yol sayılır). Rules bir compaction'dan bütün olarak çıkar (ölçüldü: aynı metin yeniden gönderilir), bu yüzden bir rules dosyası yalnız değişiklik için izlenir.
-4. Gönderdiğiniz her prompt'ta mod kaydettiği her dosyanın son yazılma zamanına bakar. Session onu okuduktan sonra yazılmış bir dosya, o prompt ile modele yalnız modelin okuduğu bir not olarak gider: dosya ve öncekinin yerine geçen güncel metni. Her değişiklik bir kere gönderilir.
-5. Her olay için [sidebar](../sidebar) stream'inde, sidebar kapalıyken transcript'te tek satır okursunuz:
+Claude Code 2.1.280 üzerinde ölçüldü:
 
-       context-restore: restored after compaction: commit, no-ai
-       context-restore: changed on disk, the new text went to the model: context7.md
+- Engine her skill ve command'ı bir kere yükler ve dosyası diskte değişse de her çağrıda o kopyayı verir. Yazılan bir `/name` eski metni gönderir, bir Skill tool çağrısı `Skill /<name> is already loaded above; instructions unchanged.` cevabını verir.
+- Compaction'ın kestiği bir skill yeniden çağrıldığında, yazılarak ya da Skill tool ile, engine onu kendisi bütün olarak yeniden gönderir. Mod bu durumda bir şey yapmaz.
+- İki prompt arasında değişen bir rules dosyası bir compaction'a kadar modele ulaşmaz.
 
-6. `/context-restore` ayarı, kaç skill, command ve rules dosyasının izlendiğini ve son olayı yazar.
+Bu yüzden mod iki şey yapar:
+
+1. Bir skill ya da command'ın her çağrısında (`/name` yazılarak, Skill tool ile çağrılarak ya da bir subagent'a önceden yüklenerek) metnin geldiği dosyayı okur. Bir skill dizinini ilk satırında adlandırır (`Base directory for this skill: <dizin>`), yani dosyası `<dizin>/SKILL.md` olur. Bir command'ın dosyası aranır: `<plugin>:<ad>` için plugin'in `commands/<ad>.md` dosyası, değilse projenin ya da sizin `commands/<ad>.md` dosyanız. Built-in bir command'ın dosyası yoktur.
+   - Placeholder taşımayan bir dosya engine'in metniyle karşılaştırılır. Farklıysa engine'in kopyasının yerine dosyanın metni konur ve engine'in arkasına eklediği argümanlar (`ARGUMENTS: ...`) kalır. Engine o zaman yeni metni gönderir, bir Skill tool çağrısında da.
+   - Placeholder taşıyan bir dosya (`$ARGUMENTS`, `$1`, `${...}`, `` !`...` ``) karşılaştırılamaz, çünkü engine onları doldurmuştur. Dosya session başladıktan sonra yazıldıysa engine'in doldurulmuş metni kalır ve dosyanın güncel metni onun ardından gelir, yukarıdaki talimatların yerine geçtiğini ve yukarıdaki argümanların hâlâ geçerli olduğunu söyleyen bir not ile.
+   - Yeniden çağrılmayan bir skill ya da command yeniden gönderilmez.
+2. `instructions` attachment'ının taşıdığı her rules dosyasını kaydeder (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yol sayılır). Gönderdiğiniz her prompt'ta, session onu okuduktan sonra yazılmış bir rules dosyası o prompt ile modele yalnız modelin okuduğu bir not olarak gider: dosya ve öncekinin yerine geçen güncel metni. Her değişiklik bir kere gönderilir.
+
+Her olay için [sidebar](../sidebar) stream'inde, sidebar kapalıyken transcript'te tek satır okursunuz:
+
+    context-restore: changed on disk, the call got the current text: commit
+    context-restore: changed on disk, the new text went to the model: context7.md
+
+`/context-restore` ayarı, kaç rules dosyasının izlendiğini ve son olayı yazar.
 
 ## Komut
 
@@ -38,24 +48,24 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=invoked_skills}, prompt.attachment{type=instructions}, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.fs.exists (via commandFileOf, fullTextOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via changeNotes, recordUse, restoreSkills, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=instructions}, prompt.submit
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, dosya okur.
 
-    1. Okur:     session'ın açtığı her skill ve command'ın metnini; kullandığı skill, command ve rules dosyalarını ve son yazılma zamanlarını; bir plugin'in command dosyasını bulmak için host'un installed_plugins.json dosyasını
+    1. Okur:     session'ın çağırdığı her skill ve command'ın dosyasını ve son yazılma zamanını; session'ın okuduğu rules dosyalarını ve son yazılma zamanlarını; bir plugin'in command dosyasını bulmak için host'un installed_plugins.json dosyasını
     2. Çalıştırır: hiçbir şey
-    3. Gönderir: modele, bir compaction'dan sonra kullanılan skill ve command'ların tam metnini, ve diskte değişen kullanılmış bir dosyanın metnini
-    4. Saklar:   $.store içinde on/off ayarını; kaydedilen metinler bellekte yaşar ve session ile biter
-    5. Düşman girdi: gönderilen her metin session'ın kendisinin kullandığı bir dosyadır; düşman metin taşıyan bir skill ya da rules dosyası mod onu yeniden göndermeden önce zaten context'teydi
+    3. Gönderir: modele, dosyası değişmiş çağrılan bir skill ya da command'ın güncel metnini, ve diskte değişen okunmuş bir rules dosyasının metnini
+    4. Saklar:   $.store içinde on/off ayarını; rules kayıtları bellekte yaşar ve session ile biter
+    5. Düşman girdi: gönderilen her metin session'ın kendisinin kullandığı bir dosyadır; düşman metin taşıyan bir skill ya da rules dosyası modele engine üzerinden de ulaşır
 
 ## Sınırlar
 
-- Tam metin kesik olandan büyüktür: 50 KB'lık bir skill her compaction'dan sonra context'te bütün boyutuna mal olur. `/context-restore off` engine'in kesmesini korur.
-- Diskten okunan bir dosya (resume edilen bir session ya da bir değişiklik) yazıldığı gibi gönderilir; frontmatter'ı atılır ve `$ARGUMENTS` doldurulmaz.
-- Değişen bir dosya modele yazıldığı anda değil, sonraki prompt ile gider.
-- Dosyası mod'un baktığı iki yerde de olmayan bir command (`--plugin-dir` ile yüklenen bir plugin, iç içe bir command adı) kaydından geri konur, dosyasındaki bir değişiklik görülmez.
+- Placeholder taşıyan bir dosya, son yazılma zamanı session'ın başlangıcıyla karşılaştırılarak değişmiş sayılır. `/reload-plugins` sonrası mod reload anından sayar, yani ondan önce yapılan bir değişiklik görülmez.
+- Placeholder taşıyan bir dosyanın güncel metni engine'in metninden sonra, placeholder'ları doldurulmadan gelir.
+- Dosyası mod'un baktığı iki yerde de olmayan bir command (`--plugin-dir` ile yüklenen bir plugin, iç içe bir command adı) engine'in metnini korur.
+- Değişen bir rules dosyası modele yazıldığı anda değil, sonraki prompt ile gider. Değişiklik ile sonraki prompt arasına bir compaction girerse dosyayı engine de gönderir.
 - CLAUDE.md izlenmez.
 
 ## Geliştirme

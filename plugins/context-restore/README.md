@@ -1,19 +1,29 @@
 # context-restore
 
-A Claude Code Mod that puts back the full text of every skill and command the session used when compaction cut it, and hands the model the new text of a skill, command or rules file that changed on disk while the session ran.
+A Claude Code Mod that hands a skill or command call the current text of its file when the file changed on disk after the session loaded it, and hands the model a rules file that changed on disk.
 
 ## What it does
 
-1. Each time a skill or a command opens (typed as `/name`, called through the Skill tool, or preloaded into a subagent), the mod records the text the model read, the file it came from, and when that file was last written. A skill names its directory in its first line (`Base directory for this skill: <dir>`), so its file is `<dir>/SKILL.md`. A command's file is looked up: a plugin's `commands/<name>.md` for `<plugin>:<name>`, else the project's or your own `commands/<name>.md`. A built-in command has no file.
-2. After a compaction the engine hands the used skills back to the model in one `invoked_skills` attachment, and cuts a skill longer than 20,000 characters with the line `[... skill content truncated for compaction; use Read on the skill path if you need the full text]` (measured on 2.1.280). The mod rewrites that attachment before the request goes out: each skill and command gets the text the model read when the session used it. A resumed session in a new process has no such record, so the text comes from the file.
-3. The mod records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and only a path with `/rules/` in it counts). The rules survive a compaction whole (measured: the same text is sent again), so a rules file is watched for changes alone.
-4. At each prompt you send, the mod checks the last write of every recorded file. A file written since the session read it reaches the model with that prompt, as a note only the model reads: the file, and its current text, which replaces the earlier one. Each change is sent once.
-5. You read one line per event in the [sidebar](../sidebar) stream, or in the transcript while the sidebar is closed:
+Measured on Claude Code 2.1.280:
 
-       context-restore: restored after compaction: commit, no-ai
-       context-restore: changed on disk, the new text went to the model: context7.md
+- The engine loads each skill and command once, and hands that copy at every call, also after its file changed on disk. A typed `/name` sends the old text, and a Skill tool call answers `Skill /<name> is already loaded above; instructions unchanged.`
+- A skill that compaction cut is sent whole again by the engine itself when it is called again, typed or through the Skill tool. The mod does nothing for that case.
+- A rules file that changes between two prompts does not reach the model until a compaction.
 
-6. `/context-restore` prints the setting, how many skills, commands and rules files are watched, and the last event.
+So the mod does two things:
+
+1. At each call of a skill or command (typed as `/name`, called through the Skill tool, or preloaded into a subagent), it reads the file the text came from. A skill names its directory in its first line (`Base directory for this skill: <dir>`), so its file is `<dir>/SKILL.md`. A command's file is looked up: a plugin's `commands/<name>.md` for `<plugin>:<name>`, else the project's or your own `commands/<name>.md`. A built-in command has no file.
+   - A file with no placeholder is compared with the engine's text. When they differ, the file's text takes the place of the engine's copy, and the arguments the engine added after it (`ARGUMENTS: ...`) stay. The engine then sends the new text, also on a Skill tool call.
+   - A file with placeholders (`$ARGUMENTS`, `$1`, `${...}`, `` !`...` ``) cannot be compared, because the engine filled them in. When the file was written after the session started, the engine's filled text stays and the file's current text follows it, with a note that it replaces the instructions above and that the arguments above still apply.
+   - A skill or command that is not called again is not sent again.
+2. It records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and only a path with `/rules/` in it counts). At each prompt you send, a rules file written since the session read it reaches the model with that prompt, as a note only the model reads: the file, and its current text, which replaces the earlier one. Each change is sent once.
+
+You read one line per event in the [sidebar](../sidebar) stream, or in the transcript while the sidebar is closed:
+
+    context-restore: changed on disk, the call got the current text: commit
+    context-restore: changed on disk, the new text went to the model: context7.md
+
+`/context-restore` prints the setting, how many rules files are watched, and the last event.
 
 ## Command
 
@@ -38,24 +48,24 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=invoked_skills}, prompt.attachment{type=instructions}, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.fs.exists (via commandFileOf, fullTextOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via changeNotes, recordUse, restoreSkills, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=instructions}, prompt.submit
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, it reads files.
 
-    1. Reads:    the text of each skill and command the session opens; the skill, command and rules files it used, and their last write time; the host's installed_plugins.json, to find a plugin's command file
+    1. Reads:    the file of each skill and command the session calls, and its last write time; the rules files the session read, and their last write time; the host's installed_plugins.json, to find a plugin's command file
     2. Runs:     nothing
-    3. Sends:    to the model, the full text of the used skills and commands after a compaction, and the text of a used file that changed on disk
-    4. Persists: in $.store, the on/off setting; the recorded texts live in memory and end with the session
-    5. Hostile input: every text sent is a file the session itself used; a skill or rules file that holds hostile text was already in the context before the mod sent it again
+    3. Sends:    to the model, the current text of a called skill or command whose file changed, and the text of a read rules file that changed on disk
+    4. Persists: in $.store, the on/off setting; the rules records live in memory and end with the session
+    5. Hostile input: every text sent is a file the session itself uses; a skill or rules file that holds hostile text reaches the model through the engine as well
 
 ## Limits
 
-- The full text is larger than the cut one: a 50 KB skill costs its whole size in the context after each compaction. `/context-restore off` keeps the engine's cut.
-- A file read from disk (a resumed session, or a change) is sent as written, with its frontmatter removed and `$ARGUMENTS` not filled in.
-- A changed file reaches the model with the next prompt, not at the moment it is written.
-- A command whose file is in neither place the mod looks (a `--plugin-dir` plugin, a nested command name) is restored from its record, and a change to its file is not seen.
+- A file with placeholders counts as changed by its last write time against the session's start. After `/reload-plugins` the mod counts from the reload, so a change made before it is not seen.
+- A file with placeholders gets its current text after the engine's text, with the placeholders not filled in.
+- A command whose file is in neither place the mod looks (a `--plugin-dir` plugin, a nested command name) keeps the engine's text.
+- A changed rules file reaches the model with the next prompt, not at the moment it is written. When a compaction comes between the change and the next prompt, the engine sends the file too.
 - CLAUDE.md is not watched.
 
 ## Development

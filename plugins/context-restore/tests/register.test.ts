@@ -14,31 +14,34 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
+const T0 = 1_000_000
 const SKILL_DIR = '/Users/u/.claude/skills/rules-skill'
 const SKILL_FILE = `${SKILL_DIR}/SKILL.md`
-const SKILL = `Base directory for this skill: ${SKILL_DIR}\n\n# Rules\n\nRule one.\nRule two.\nRule three.\n`
+/** The skill as the engine loaded it at the start and hands it at every call. */
+const SKILL = `Base directory for this skill: ${SKILL_DIR}\n\n# Rules\n\nRule one.\n`
+const COMMAND_FILE = '/Users/u/.claude/commands/review.md'
 const RULES_FILE = '/Users/u/.claude/rules/db.md'
-const LEAD = 'The following skills were invoked EARLIER in this session (before the conversation was compacted), not on the current turn.\n\n'
-const CUT = `Base directory for this skill: ${SKILL_DIR}\n\n# Rules\n\n[... skill content truncated for compaction; use Read on the skill path if you need the full text]\n`
-
-/** The attachment after a compaction: the skill cut, and a built-in command with no file. */
-const INVOKED = `${LEAD}### Skill: rules-skill\nPath: userSettings:rules-skill\n\n${CUT}\n\n---\n\n### Skill: init\nPath: builtin:init\n\nPlease analyze this codebase.\n`
 
 const run = (args: string): CommandRunInput => ({ command: 'context-restore', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
 
 /** Files on disk with their last write, what the model was last handed, and what the person read. */
-type World = { files: Map<string, { text: string; mtimeMs: number }>; attachments: string[]; notes: string[][]; logs: string[]; bar: { open: boolean; lines: string[] } }
+type World = { files: Map<string, { text: string; mtimeMs: number }>; calls: string[]; notes: string[][]; logs: string[]; bar: { open: boolean; lines: string[] } }
 
 function world(on: On): World {
   const w: World = {
-    files: new Map([[SKILL_FILE, { text: '---\nname: rules-skill\ndescription: x\n---\n\n# Rules\n\nRule one.\nRule two.\nRule three.\n', mtimeMs: 1 }], [RULES_FILE, { text: 'Use parameters.', mtimeMs: 1 }]]),
-    attachments: [],
+    files: new Map([
+      [SKILL_FILE, { text: '---\nname: rules-skill\ndescription: x\n---\n\n# Rules\n\nRule one.\n', mtimeMs: T0 - 5 }],
+      [COMMAND_FILE, { text: '---\ndescription: x\n---\n\nReview $ARGUMENTS and report.\n', mtimeMs: T0 - 5 }],
+      [RULES_FILE, { text: 'Use parameters.', mtimeMs: T0 - 5 }],
+    ]),
+    calls: [],
     notes: [],
     logs: [],
     bar: { open: false, lines: [] },
   }
   mock.store(on, {})
   mock.env(on, { HOME: '/Users/u' })
+  mock.clock(on, { now: T0 })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -50,7 +53,7 @@ function world(on: On): World {
     return { value: f.text }
   })
   on('skill.prompt', (_, e) => ({ text: e.text }))
-  on('prompt.attachment', (_, e) => { w.attachments.push(e.text); return { text: e.text } })
+  on('prompt.attachment', (_, e) => ({ text: e.text }))
   on('prompt.submit', (_, e) => { w.notes.push([...(e.context ?? [])]); return { text: e.text } })
   return w
 }
@@ -65,60 +68,62 @@ function seatSidebar(on: On, w: World): void {
 }
 
 const started = ($: Engine) => $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-const invoked = ($: Engine) => $.prompt.attachment({ type: 'invoked_skills', text: INVOKED, origin: { kind: 'engine' } })
+const call = async ($: Engine, skill: string, text: string) => (await $.skill.prompt({ skill, text })).text
 const prompt = ($: Engine, text = 'go') => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
 
 describe('context-restore', () => {
-  test('a skill the session used gets its full text back after a compaction cut it', async ($, on) => {
+  test('a call whose file reads as the engine\'s copy keeps the engine\'s text', async ($, on) => {
     const w = world(on)
     await started($)
-    await $.skill.prompt({ skill: 'rules-skill', text: SKILL })
-    await invoked($)
-    expect(w.attachments.at(-1)).toContain('Rule three.')
-    expect(w.attachments.at(-1)).not.toContain('truncated for compaction')
-    // A built-in command has no file and no record: its body stays as the engine wrote it.
-    expect(w.attachments.at(-1)).toContain('### Skill: init\nPath: builtin:init\n\nPlease analyze this codebase.\n')
-    expect(w.logs).toEqual(['restored after compaction: rules-skill'])
+    expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
+    expect(w.logs).toEqual([])
   })
 
-  test('a resumed session with no record of the skill reads its file', async ($, on) => {
+  test('a call of a skill whose file changed on disk gets the current text in place of the engine\'s copy', async ($, on) => {
     const w = world(on)
     await started($)
-    await invoked($)
-    expect(w.attachments.at(-1)).toContain(`${LEAD}### Skill: rules-skill\nPath: userSettings:rules-skill\n\n${SKILL.trimEnd()}\n\n---\n\n`)
-  })
-
-  test('a skill file changed on disk reaches the model once, with its new text', async ($, on) => {
-    const w = world(on)
-    await started($)
-    await $.skill.prompt({ skill: 'rules-skill', text: SKILL })
-    await prompt($)
-    expect(w.notes.at(-1)).toEqual([])
-    w.files.set(SKILL_FILE, { text: '---\nname: rules-skill\n---\n\n# Rules\n\nRule four.\n', mtimeMs: 2 })
-    await prompt($)
-    expect(w.notes.at(-1)).toEqual([`context-restore: rules-skill (${SKILL_FILE}) changed on disk after this session read it. Its current text follows and replaces the earlier one; follow it from now on.\n\nBase directory for this skill: ${SKILL_DIR}\n\n# Rules\n\nRule four.\n`])
-    expect(w.logs).toEqual(['changed on disk, the new text went to the model: rules-skill'])
+    w.files.set(SKILL_FILE, { text: '---\nname: rules-skill\n---\n\n# Rules\n\nRule two.\n', mtimeMs: T0 + 10 })
+    expect(await call($, 'rules-skill', SKILL)).toBe(`Base directory for this skill: ${SKILL_DIR}\n\n# Rules\n\nRule two.\n`)
+    expect(w.logs).toEqual(['changed on disk, the call got the current text: rules-skill'])
+    // Nothing reaches the model between calls: a changed skill waits for its next call.
     await prompt($)
     expect(w.notes.at(-1)).toEqual([])
   })
 
-  test('a rules file the session read and that changed on disk reaches the model', async ($, on) => {
+  test('a command with placeholders keeps its filled text and gets the current file text after it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    expect(await call($, 'review', 'Review src/a.ts and report.\n')).toBe('Review src/a.ts and report.\n')
+    w.files.set(COMMAND_FILE, { text: '---\ndescription: x\n---\n\nReview $ARGUMENTS and list every risk.\n', mtimeMs: T0 + 10 })
+    const text = await call($, 'review', 'Review src/a.ts and report.\n')
+    expect(text.startsWith('Review src/a.ts and report.\n\ncontext-restore: /Users/u/.claude/commands/review.md changed on disk after this session loaded it.')).toBe(true)
+    expect(text.endsWith('Review $ARGUMENTS and list every risk.\n')).toBe(true)
+  })
+
+  test('a built-in command with no file keeps the engine\'s text', async ($, on) => {
+    world(on)
+    await started($)
+    expect(await call($, 'init', 'Please analyze this codebase.\n')).toBe('Please analyze this codebase.\n')
+  })
+
+  test('a rules file the session read and that changed on disk reaches the model once', async ($, on) => {
     const w = world(on)
     await started($)
     await $.prompt.attachment({ type: 'instructions', text: `Contents of ${RULES_FILE} (user's private global instructions for all projects):\n\nUse parameters.`, origin: { kind: 'engine' } })
-    w.files.set(RULES_FILE, { text: 'Use parameters, never string concatenation.', mtimeMs: 5 })
+    w.files.set(RULES_FILE, { text: 'Use parameters, never string concatenation.', mtimeMs: T0 + 10 })
     await prompt($)
     expect(w.notes.at(-1)?.[0]).toBe(`context-restore: db.md (${RULES_FILE}) changed on disk after this session read it. Its current text follows and replaces the earlier one; follow it from now on.\n\nUse parameters, never string concatenation.`)
-    expect((await $.command.run(run(''))).text).toBe('on · 0 skill(s) and command(s), 1 rules file(s) watched · last: changed on disk, the new text went to the model: db.md')
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe('on · every skill and command call is checked against its file, 1 rules file(s) watched · last: changed on disk, the new text went to the model: db.md')
   })
 
   test('off leaves the engine\'s text as it is', async ($, on) => {
     const w = world(on)
     await started($)
     expect((await $.command.run(run('off'))).text).toBe('off: the engine\'s text stays as it is')
-    await $.skill.prompt({ skill: 'rules-skill', text: SKILL })
-    await invoked($)
-    expect(w.attachments.at(-1)).toBe(INVOKED)
+    w.files.set(SKILL_FILE, { text: '# Rules\n\nRule two.\n', mtimeMs: T0 + 10 })
+    expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
   })
 
@@ -127,9 +132,9 @@ describe('context-restore', () => {
     seatSidebar(on, w)
     w.bar.open = true
     await started($)
-    await $.skill.prompt({ skill: 'rules-skill', text: SKILL })
-    await invoked($)
-    expect(w.bar.lines).toEqual(['restored after compaction: rules-skill'])
+    w.files.set(SKILL_FILE, { text: '# Rules\n\nRule two.\n', mtimeMs: T0 + 10 })
+    await call($, 'rules-skill', SKILL)
+    expect(w.bar.lines).toEqual(['changed on disk, the call got the current text: rules-skill'])
     expect(w.logs).toEqual([])
   })
 })
