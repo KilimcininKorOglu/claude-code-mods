@@ -28,7 +28,7 @@ A Claude Code Mod that checks each package the model installs before the install
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
 
-8. An unchecked finding is never a remembered answer: the check it is owed is run again, so it closes two ways. A later install of the package checks it, and a guarded git command runs the check itself, in both modes. The entry is cleared and a new one takes its place:
+8. An unchecked finding is never a remembered answer: the check it is owed is run again, so it closes two ways. A later install of the package in the same ecosystem checks it (an npm `lodash` does not close a PyPI `lodash`), and a guarded git command runs the check itself, in both modes. The entry is cleared and a new one takes its place:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
        dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash

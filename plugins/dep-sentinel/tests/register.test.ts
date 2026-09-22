@@ -40,7 +40,7 @@ const LODASH = { 'dist-tags': { latest: '4.17.21' }, versions: { '4.17.15': {}, 
 const OSV_BAD = { vulns: [{ id: 'GHSA-29mw-wpgm-hmr9', affected: [{ ranges: [{ events: [{ introduced: '0' }, { fixed: '4.17.21' }] }] }] }] }
 
 /** Registry answers by URL, the URLs asked, and what reached the shell. */
-type World = { answers: Map<string, { status: number; body: unknown }>; osv: unknown; asked: string[]; ran: string[]; logs: string[]; down: boolean }
+type World = { answers: Map<string, { status: number; body: unknown }>; osv: unknown; asked: string[]; ran: string[]; logs: string[]; down: boolean; downFor?: string }
 
 function world(on: On): World {
   const w: World = {
@@ -58,7 +58,7 @@ function world(on: On): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('http.fetch', (_, e) => {
     w.asked.push(e.url)
-    if (w.down) throw new Error('network unreachable')
+    if (w.down || (w.downFor !== undefined && e.url.includes(w.downFor))) throw new Error('network unreachable')
     const hit = e.url === 'https://api.osv.dev/v1/query' ? { status: 200, body: w.osv } : w.answers.get(e.url) ?? { status: 404, body: {} }
     return { value: { status: hit.status, ok: hit.status < 300, headers: {}, text: JSON.stringify(hit.body) } }
   })
@@ -114,6 +114,15 @@ describe('dep-sentinel', () => {
     w.down = false
     await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
     expect(w.logs[1]).toBe('a later install checked the packages that stayed unchecked: lodash')
+  })
+
+  test('a checked npm package does not close the unchecked PyPI package of the same name', async ($, on) => {
+    const w = world(on)
+    w.downFor = 'pypi.org'
+    await $.tool.call({ tool: 'Bash', command: 'pip install lodash' })
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    expect((await $.command.run(run(''))).text).toContain('1 package(s) still unchecked')
+    expect(w.logs).toHaveLength(1)
   })
 
   test('finds a Go module from a package path under it', async ($, on) => {

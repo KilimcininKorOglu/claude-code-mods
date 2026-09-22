@@ -20,9 +20,20 @@ type Outcome = { reasons: string[]; failure?: string }
 /**
  * The packages an earlier install could not check, each with the install it came from, so the check can
  * be run again: by a later install of the same package, by the gate itself and at each turn's end.
- * `owed` says the model is owed a note for the packages that were still open at the turn's end.
+ * `owed` says the model is owed a note for the packages that were still open at the turn's end. A package
+ * is keyed by its ecosystem and name (`openKey`), because npm and PyPI can each hold a package of one name.
  */
 type State = { mode: Mode; open: Map<string, Install>; owed: boolean }
+
+/** The key of an open package: two ecosystems' packages of one name are two findings. */
+function openKey(p: Install): string {
+  return `${p.ecosystem}:${p.name}`
+}
+
+/** The names of the packages still open, as the texts name them. */
+function openNames(state: State): string[] {
+  return [...state.open.values()].map(p => p.name)
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -109,19 +120,16 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
   }
 }
 
-/** The names of the installs whose check finished, and of those it did not. */
-function splitNames(installs: readonly Install[], outcomes: readonly Outcome[]): { checked: string[]; unchecked: string[] } {
-  const checked: string[] = []
-  const unchecked: string[] = []
-  installs.forEach((p, i) => (outcomes[i]?.failure === undefined ? checked : unchecked).push(p.name))
-  return { checked, unchecked }
+/** The installs whose check finished. */
+function checkedOf(installs: readonly Install[], outcomes: readonly Outcome[]): Install[] {
+  return installs.filter((_, i) => outcomes[i]?.failure === undefined)
 }
 
 /** Closes the unchecked finding once every package it named was checked, and reports it. */
-async function closeChecked($: EngineInterface, state: State, checked: readonly string[]): Promise<void> {
+async function closeChecked($: EngineInterface, state: State, checked: readonly Install[]): Promise<void> {
   if (state.open.size === 0) return
-  const named = [...state.open.keys()]
-  for (const name of checked) state.open.delete(name)
+  const named = openNames(state)
+  for (const p of checked) state.open.delete(openKey(p))
   if (state.open.size > 0) return
   await dropEntry($, 'unchecked')
   await toPerson($, 'unchecked', 'packages checked after all', doneLines(named), checkedLog(named))
@@ -139,12 +147,12 @@ function withNote(r: ToolCallResult, note: string): ToolCallResult {
  */
 async function recheckOpen($: EngineInterface, state: State, now: number): Promise<void> {
   if (state.open.size === 0) return
-  const named = [...state.open.keys()]
+  const named = openNames(state)
   const reasons: string[] = []
-  for (const [name, install] of [...state.open]) {
+  for (const [key, install] of [...state.open]) {
     const outcome = await checkOne($, install, now)
     if (outcome.failure !== undefined) continue
-    state.open.delete(name)
+    state.open.delete(key)
     reasons.push(...outcome.reasons)
   }
   if (state.open.size > 0) return
@@ -162,7 +170,7 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
   if (state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
   await recheckOpen($, state, await $.clock.now())
   if (state.mode !== 'deny' || state.open.size === 0) return undefined
-  return gateText([...state.open.keys()])
+  return gateText(openNames(state))
 }
 
 async function setMode($: EngineInterface, state: State, word: string): Promise<string> {
@@ -218,7 +226,7 @@ export const register: Register = on => {
   on('prompt.submit', async (_, e, next) => {
     if (!state.owed || state.open.size === 0) return next(e)
     state.owed = false
-    return next({ ...e, context: [...(e.context ?? []), openNote([...state.open.keys()])] })
+    return next({ ...e, context: [...(e.context ?? []), openNote(openNames(state))] })
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
@@ -233,14 +241,13 @@ export const register: Register = on => {
     }
     const now = await $.clock.now()
     const outcomes = await Promise.all(plan.installs.map(p => checkOne($, p, now)))
-    const names = splitNames(plan.installs, outcomes)
-    await closeChecked($, state, names.checked)
+    await closeChecked($, state, checkedOf(plan.installs, outcomes))
     const reasons = outcomes.flatMap(o => o.reasons)
     if (reasons.length > 0) return { deny: denyText(reasons) }
     const failures = outcomes.map(o => o.failure).filter((f): f is string => f !== undefined)
     const r = await next(e)
     if (failures.length === 0) return r
-    plan.installs.forEach((p, i) => { if (outcomes[i]?.failure !== undefined) state.open.set(p.name, p) })
+    plan.installs.forEach((p, i) => { if (outcomes[i]?.failure !== undefined) state.open.set(openKey(p), p) })
     // The note goes to the model, the finding to the person: neither reads the other's channel.
     await toPerson($, 'unchecked', 'packages the install did not check', sidebarLines(failures), uncheckedLog(failures))
     return withNote(r, uncheckedNote(failures))

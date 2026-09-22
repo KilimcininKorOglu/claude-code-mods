@@ -28,7 +28,7 @@ Modelin kurduğu her paketi, kurulum çalışmadan önce kontrol eden bir Claude
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
 7. [sidebar](../sidebar) açıkken kontrolsüz kalan ve atlanan paketler oraya gider, paket başına bir satır, stream'in içinde kayıtlar olarak; transcript temiz kalır. Bir kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırları yazılır.
 
-8. Kontrolsüz kalmış bir bulgu asla hatırlanan bir cevap değildir: borçlu olduğu kontrol tekrar çalıştırılır, yani iki yoldan kapanır. Paketin sonraki bir kurulumu onu kontrol eder ve guarded bir git komutu kontrolü kendisi çalıştırır, iki modda da. Kayıt temizlenir ve yerine yenisi gelir:
+8. Kontrolsüz kalmış bir bulgu asla hatırlanan bir cevap değildir: borçlu olduğu kontrol tekrar çalıştırılır, yani iki yoldan kapanır. Paketin aynı ekosistemdeki sonraki bir kurulumu onu kontrol eder (bir npm `lodash` bir PyPI `lodash` bulgusunu kapatmaz) ve guarded bir git komutu kontrolü kendisi çalıştırır, iki modda da. Kayıt temizlenir ve yerine yenisi gelir:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
        dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash
