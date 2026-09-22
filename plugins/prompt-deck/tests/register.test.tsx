@@ -12,7 +12,7 @@ const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): Promp
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['AbovePrompt']
 
 /** What reached the engine beneath the plugin, and what the plugin kept in the store. */
-type World = { entered: { text: string; origin?: PromptOrigin }[]; store: Record<string, unknown> }
+type World = { entered: { text: string; origin?: PromptOrigin }[]; store: Record<string, unknown>; gitFails?: true }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
   const w: World = { entered: [], store }
@@ -22,7 +22,11 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
   // git answers with the repository root, so the project is its last path part.
   on('session.cwd', () => ({ value: '/Users/u/app' }))
-  on('process.run', () => ({ value: { exitCode: 0, stdout: '/Users/u/app\n', stderr: '' } }))
+  on('process.run', () => {
+    // A throwing world hook reaches the mod as a rejected call, as a missing git does.
+    if (w.gitFails === true) throw new Error('git: command not found')
+    return { value: { exitCode: 0, stdout: '/Users/u/app\n', stderr: '' } }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   // The engine draws nothing of its own in the band.
@@ -102,6 +106,15 @@ describe('prompt-deck', () => {
     expect(w.entered.at(-1)?.text).toBe(long)
     expect((await $.command.run(run('remove 1'))).text).toBe('removed; 1 prompt(s) left')
     expect(w.store['pins:app']).toEqual([])
+  })
+
+  test('a git that does not run names the project after the session directory', async ($, on) => {
+    const w = world(on)
+    w.gitFails = true
+    await started($)
+    for (let i = 0; i < 3; i++) await $.prompt.submit(typed('devam et'))
+    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. devam et (3)')
+    expect(w.store['counts:app']).not.toBe(undefined)
   })
 
   test('the counts of the one shared deck move into this project once, and other projects start empty', async ($, on) => {

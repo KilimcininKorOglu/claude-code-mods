@@ -20,8 +20,13 @@ function isPersons(origin: PromptOrigin): boolean {
 /** The project the session works in: the name of its git top level, else of its directory. */
 async function resolveProject($: EngineInterface): Promise<string> {
   const cwd = await $.session.cwd()
-  const r = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 10_000 })
-  return projectName(r.exitCode === 0 ? r.stdout.trim() : cwd)
+  try {
+    const r = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 10_000 })
+    return projectName(r.exitCode === 0 ? r.stdout.trim() : cwd)
+  } catch {
+    // git is missing, or the command did not run: the session's directory names the project.
+    return projectName(cwd)
+  }
 }
 
 async function loadDeck($: EngineInterface, state: State): Promise<void> {
