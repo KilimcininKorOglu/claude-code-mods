@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, isCommit, isGuarded, isNarrowable, isSource, lineOf, logText, modeOf, noteText, openNote, openPlaces, sectionKey, shownPath, sidebarLines, sqlLines, type Mode } from './sql.ts'
+import { denyText, doneLines, doneLog, isCommit, isGuarded, isNarrowable, isSource, logText, modeOf, noteText, openNote, placesOf, sectionKey, shownPath, sidebarLines, sqlLines, stillBuilt, type Mode } from './sql.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -77,15 +77,21 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
 }
 
 /**
- * Reads each open file again and closes the findings whose lines are gone; an unreadable file stays open.
- * `skip` is the file this edit just measured, so the mod does not read it a second time.
+ * Reads each open file again. A finding whose lines are all gone closes; one that keeps some of them is
+ * replaced by what the file holds now, never joined with what it held before. An unreadable file stays
+ * as it stands. `skip` is the file this edit just measured, so the mod does not read it a second time.
  */
 async function closeResolved($: EngineInterface, state: State, skip?: string): Promise<void> {
   for (const [shown, found] of [...state.open]) {
     if (shown === skip) continue
     // A file that is gone holds no line any more; one that is there and unreadable proves nothing.
     const text = (await isGone($, found.path)) ? '' : await fileText($, state, found.path)
-    if (text === undefined || found.lines.some(l => text.includes(l))) continue
+    if (text === undefined) continue
+    const left = stillBuilt(text, found.lines)
+    if (left.length > 0) {
+      state.open.set(shown, { path: found.path, lines: left, places: placesOf(shown, text, left) })
+      continue
+    }
     state.open.delete(shown)
     await dropEntry($, shown)
     await toPerson($, shown, 'SQL parameters used', doneLines(shown, found.places), doneLog(shown, found.places))
@@ -98,12 +104,12 @@ async function noteFor($: EngineInterface, state: State, path: string, before: s
   if (lines.length === 0) return undefined
   const shown = shownPath(path, state.root ?? (await $.session.cwd()))
   const text = before === '' ? after : await fileText($, state, path)
-  const places = lines.map(l => {
-    const n = text === undefined ? undefined : lineOf(text, l)
-    return n === undefined ? shown : `${shown}:${n}`
-  })
-  const held = state.open.get(shown)
-  state.open.set(shown, { path, lines: openPlaces(held?.lines, lines), places: openPlaces(held?.places, places) })
+  const held = state.open.get(shown)?.lines ?? []
+  // The lines reported before are measured in the file as it is now, then this edit's lines join them.
+  const kept = text === undefined ? held : stillBuilt(text, held)
+  const all = [...new Set([...kept, ...lines])]
+  state.open.set(shown, { path, lines: all, places: placesOf(shown, text, all) })
+  const places = placesOf(shown, text, lines)
   // The note goes to the model, the line to the person: neither reads the other's channel.
   await toPerson($, shown, 'SQL built from strings', sidebarLines(places), logText(places))
   return { note: noteText(places), shown }

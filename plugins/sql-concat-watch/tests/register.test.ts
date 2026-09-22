@@ -126,6 +126,25 @@ describe('sql-concat-watch', () => {
     expect(bar.sections.at(-1)).toEqual({ key: 'src-users.ts', lines: ['src/users.ts', 'src/users.ts:1'] })
   })
 
+  test('a partial fix keeps the finding open with the places the file holds now, and a comment closes it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const other = 'const r = "DELETE FROM users WHERE id = " + id'
+    w.file = `${QUERY}\n${other}\n`
+    await edit($, 'src/users.ts', 'x', `${QUERY}\n${other}`)
+    await $.command.run(run('mode deny'))
+    // The first line took a parameter and the second moved down a line: one place stands, at its new line.
+    w.file = 'const q = "SELECT * FROM users WHERE id = ?"\n\n' + `${other}\n`
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toBe(
+      'stopped: 1 place(s) build SQL from strings: src/users.ts:3. Pass the values as query parameters (?, $1, :name), then run the command again; there is no way around this gate.',
+    )
+    expect(w.logs.some(l => l.startsWith('the SQL built from strings is gone'))).toBe(false)
+    // A commented-out line builds nothing: the finding closes.
+    w.file = 'const q = "SELECT * FROM users WHERE id = ?"\n\n' + `// ${other}\n`
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('the SQL built from strings is gone from src/users.ts: src/users.ts:3')
+  })
+
   test('a file the code deleted closes its finding, and one that cannot be read keeps it', async ($, on) => {
     const w = world(on)
     await started($)

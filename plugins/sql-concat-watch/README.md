@@ -29,7 +29,7 @@ A Claude Code Mod that tells the model when an edit builds SQL by joining string
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those places go there instead, one line each, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding stays open until the file no longer holds those lines. After a later Edit or Write the mod reads each open file again, and a file whose lines are all gone closes. A file that is no longer there closes too, because it holds no line any more; a file that is there and cannot be read keeps its finding, because an unread file proves nothing:
+7. A finding stays open until the file no longer holds those lines. After a later Edit or Write the mod reads each open file again, and a file whose lines are all gone closes. A line counts as gone when it no longer builds SQL from strings: taken out, rewritten with parameters, or commented out. A file that keeps some of its lines stays open with only those, at the line numbers they stand on now; the record is replaced by what the file holds, never joined with what it held before. A file that is no longer there closes too, because it holds no line any more; a file that is there and cannot be read keeps its finding, because an unread file proves nothing:
 
        sql-concat-watch: the SQL built from strings is gone from src/db.ts: src/db.ts:14 · src/db.ts:22
 

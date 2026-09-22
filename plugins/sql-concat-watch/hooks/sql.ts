@@ -52,7 +52,9 @@ function templateLines(text: string): string[] {
     const body = m[2] ?? ''
     if (isSafeTag(m[1] ?? '') ||!body.includes('${') || !hasSql(body)) continue
     const first = body.split('\n').find(l => l.includes('${')) ?? ''
-    out.push(text.split('\n').find(l => l.includes(first.trim())) ?? first)
+    const line = text.split('\n').find(l => l.includes(first.trim())) ?? first
+    // A template inside a commented-out line builds nothing.
+    if (!COMMENT.test(line)) out.push(line)
   }
   return out
 }
@@ -62,6 +64,23 @@ export function sqlLines(before: string, after: string): string[] {
   const old = new Set(before.split('\n').map(l => l.trim()))
   const found = [...after.split('\n').filter(joinsSql), ...templateLines(after)].map(l => l.trim())
   return [...new Set(found)].filter(l => l !== '' && !old.has(l))
+}
+
+/**
+ * The reported lines a file's text still builds SQL from strings with, measured by the same reading as a
+ * new edit, so a line taken out, rewritten with parameters or commented out no longer counts.
+ */
+export function stillBuilt(text: string, lines: string[]): string[] {
+  const built = sqlLines('', text)
+  return lines.filter(l => built.some(b => b.includes(l)))
+}
+
+/** The place of each line in the file's text now, or the bare file when the text was not read. */
+export function placesOf(shown: string, text: string | undefined, lines: string[]): string[] {
+  return lines.map(l => {
+    const n = text === undefined ? undefined : lineOf(text, l)
+    return n === undefined ? shown : `${shown}:${n}`
+  })
 }
 
 /** The 1-based number of the first line of `text` that holds `line`; an Edit's text can be part of a line. */
@@ -115,11 +134,6 @@ export function doneLog(file: string, places: string[]): string {
 /** The sidebar lines of a closed finding: the file, then the places the strings left. */
 export function doneLines(file: string, places: string[]): { text: string; kind: 'ok' }[] {
   return [{ text: file, kind: 'ok' }, ...namedPlaces(places).split(' · ').map(text => ({ text, kind: 'ok' as const }))]
-}
-
-/** The places a file's finding holds open after a new report: the earlier ones and the new ones, each once. */
-export function openPlaces(before: string[] | undefined, found: string[]): string[] {
-  return [...new Set([...(before ?? []), ...found])]
 }
 
 /** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */

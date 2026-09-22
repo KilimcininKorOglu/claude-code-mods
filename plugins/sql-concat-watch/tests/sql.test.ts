@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, isGuarded, lineOf, modeOf, noteText, sqlLines } from '../hooks/sql.ts'
+import { denyText, isGuarded, lineOf, modeOf, noteText, placesOf, sqlLines, stillBuilt } from '../hooks/sql.ts'
 
 tier('user')
 
@@ -45,6 +45,16 @@ describe('sql', () => {
     expect(sqlLines('const r = "DELETE FROM t WHERE id = " + id', after)).toEqual(['WHERE id = ${id}'])
     expect(lineOf(after, 'WHERE id = ${id}')).toBe(4)
     expect(lineOf(after, 'nope')).toBe(undefined)
+  })
+
+  test('measures the reported lines in the file as it is now', () => {
+    const joined = 'db.query("SELECT * FROM t WHERE id = " + id)'
+    const template = 'db.query(`SELECT * FROM t WHERE id = ${id}`)'
+    expect(stillBuilt(`${joined}\n${template}\n`, [joined, template])).toEqual([joined, template])
+    expect(stillBuilt(`// ${joined}\n  // ${template}\n`, [joined, template])).toEqual([])
+    expect(stillBuilt('db.query("SELECT * FROM t WHERE id = ?", [id])\n', [joined])).toEqual([])
+    expect(placesOf('a.ts', `x\n${joined}\n`, [joined])).toEqual(['a.ts:2'])
+    expect(placesOf('a.ts', undefined, [joined])).toEqual(['a.ts'])
   })
 
   test('the note names at most eight places', () => {

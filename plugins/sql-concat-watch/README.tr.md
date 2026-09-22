@@ -29,7 +29,7 @@ Bir edit'in query parameter'ı geçmek yerine string'leri birleştirerek SQL kur
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
 6. [sidebar](../sidebar) açıkken bu yerler oraya gider, her biri bir satır olarak, stream'inde bir entry halinde, ve transcript temiz kalır. Entry, yenileri pane'den itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
 
-7. Bir bulgu, dosya o satırları artık taşımayana kadar açık kalır. Sonraki bir Edit ya da Write'tan sonra mod her açık dosyayı yeniden okur ve satırlarının hepsi gitmiş bir dosya kapanır. Artık var olmayan bir dosya da kapanır, çünkü artık hiçbir satır taşımaz; var olan ama okunamayan bir dosya bulgusunu açık tutar, çünkü okunamayan bir dosya hiçbir şeyi kanıtlamaz:
+7. Bir bulgu, dosya o satırları artık taşımayana kadar açık kalır. Sonraki bir Edit ya da Write'tan sonra mod her açık dosyayı yeniden okur ve satırlarının hepsi gitmiş bir dosya kapanır. Bir satır artık SQL'i string'lerden kurmuyorsa gitmiş sayılır: çıkarılmış, parametreyle yeniden yazılmış ya da comment'e alınmış. Satırlarının bir kısmını tutan bir dosya yalnız onlarla, şu an durdukları satır numaralarıyla açık kalır; kayıt dosyanın taşıdığıyla değiştirilir, eskiden taşıdığıyla hiç birleştirilmez. Artık var olmayan bir dosya da kapanır, çünkü artık hiçbir satır taşımaz; var olan ama okunamayan bir dosya bulgusunu açık tutar, çünkü okunamayan bir dosya hiçbir şeyi kanıtlamaz:
 
        sql-concat-watch: the SQL built from strings is gone from src/db.ts: src/db.ts:14 · src/db.ts:22
 
