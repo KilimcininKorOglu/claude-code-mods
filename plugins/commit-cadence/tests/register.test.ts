@@ -16,13 +16,17 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { lines: { text: string; kind?: string }[] }[] }
+type Bar = { open: boolean; sections: { lines: { text: string; kind?: string }[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
     const s = e as unknown as { lines: { text: string; kind?: string }[] }
     if (bar.open) bar.sections.push({ lines: s.lines })
     return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    bar.cleared.push((e as unknown as { key: string }).key)
+    return { value: undefined }
   })
 }
 
@@ -119,14 +123,19 @@ describe('commit-cadence', () => {
 
   withSidebar('an open sidebar takes the finding and the transcript stays clean', async ($, on) => {
     const w = world(on)
-    const bar: Bar = { open: true, sections: [] }
+    const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await started($)
     w.status = DIRTY
     await $.turn.complete(turn())
     expect(bar.sections.at(-1)?.lines).toEqual([{ text: '2 uncommitted file(s): src/app.ts, src/new.ts', kind: 'error' }])
+    w.status = ' M src/app.ts\0'
+    await $.turn.complete(turn())
+    expect(bar.cleared).toEqual([])
     w.status = ''
     await $.turn.complete(turn())
+    // The clean tree drops every red entry it wrote, so a pane restore does not bring them back.
+    expect(bar.cleared.sort()).toEqual(['dirty-1', 'dirty-2'])
     expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'the working tree is clean again', kind: 'ok' }])
     expect(w.logs).toEqual([])
   })

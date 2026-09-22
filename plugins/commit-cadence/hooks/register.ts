@@ -9,10 +9,10 @@ const USAGE = 'expects nothing (the status), on or off'
 const CONSUMER = 'commit-cadence'
 
 /**
- * The on/off setting, the directory the session started in, the paths last reported, and whether the
- * model still owes a note for them.
+ * The on/off setting, the directory the session started in, the paths last reported, whether the model
+ * still owes a note for them, and the sidebar keys of the red entries written since the tree was last clean.
  */
-type State = { enabled: boolean; root: string; open: string[]; owed: boolean }
+type State = { enabled: boolean; root: string; open: string[]; owed: boolean; keys: Set<string> }
 
 /** The finding the person reads: the sidebar while it is open, else one transcript line. */
 async function toPerson($: EngineInterface, key: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
@@ -22,6 +22,18 @@ async function toPerson($: EngineInterface, key: string, lines: { text: string; 
     // The sidebar mod is not installed.
   }
   $.ui.log(line)
+}
+
+/** Drops the red entries of a tree that went clean, so a pane restore does not bring them back. */
+async function dropEntries($: EngineInterface, state: State): Promise<void> {
+  for (const key of state.keys) {
+    try {
+      await $.sidebar.clear({ consumer: CONSUMER, key })
+    } catch {
+      // The sidebar mod is not installed.
+    }
+  }
+  state.keys.clear()
 }
 
 /** The uncommitted paths of the session's repository, or undefined when it is not one. */
@@ -51,13 +63,16 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
     if (state.open.length === 0) return
     state.open = []
     state.owed = false
+    await dropEntries($, state)
     await toPerson($, sectionKey('clean'), doneLines(), doneText())
     return
   }
   if (isSame(state.open, paths)) return
   state.open = paths
   state.owed = true
-  await toPerson($, sectionKey(`dirty-${paths.length}`), sidebarLines(paths), logText(paths))
+  const key = sectionKey(`dirty-${paths.length}`)
+  state.keys.add(key)
+  await toPerson($, key, sidebarLines(paths), logText(paths))
 }
 
 async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
@@ -78,7 +93,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, root: '', open: [], owed: false }
+  const state: State = { enabled: true, root: '', open: [], owed: false, keys: new Set() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

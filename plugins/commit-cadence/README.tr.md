@@ -11,7 +11,7 @@ Her turn sonunda working tree'yi ölçen ve hâlâ commit edilmemiş olanı adla
        commit-cadence: 2 uncommitted file(s): src/app.ts, src/new.ts
 
 4. Bir sonraki prompt yalnız modelin okuduğu bir not taşır: neyin commit edilmediğini ve biten, doğrulanmış her parçanın şimdi kendi commit'ine ait olduğunu. Not rapor başına bir kere borçlanılır, yani bir prompt onu taşır, sonraki taşımaz.
-5. Temizlenen bir tree bulguyu yeşil bir satırla kapatır: `the working tree is clean again`.
+5. Temizlenen bir tree bulguyu yeşil bir satırla kapatır: `the working tree is clean again`. Tree'nin son temiz olduğu andan beri yazılan kırmızı entry'ler önce temizlenir, yani bir pane restore onları geri getirmez.
 6. `/commit-cadence` o anda ölçer ve ayarı ile tree'nin ne tuttuğunu yazar.
 
 Hiçbir şeyi durdurmaz. Neyin commit'e değer olduğuna kişi karar verir; model notu bir gate olarak değil, bir hatırlatma olarak okur.
@@ -40,7 +40,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via toPerson)
 
 Reach L2, bir process çalıştırır.
 

@@ -11,7 +11,7 @@ A Claude Code Mod that measures the working tree at the end of each turn and nam
        commit-cadence: 2 uncommitted file(s): src/app.ts, src/new.ts
 
 4. The next prompt carries a note only the model reads: what is uncommitted, and that each finished and verified piece belongs in its own commit now. The note is owed once per report, so one prompt carries it and the next does not.
-5. A tree that went clean closes the finding with a green line: `the working tree is clean again`.
+5. A tree that went clean closes the finding with a green line: `the working tree is clean again`. The red entries written since the tree was last clean are cleared first, so a pane restore does not bring them back.
 6. `/commit-cadence` measures on the spot and prints the setting and what the tree holds.
 
 It stops nothing. The person decides what is worth a commit, and the model reads the note as a reminder, not as a gate.
@@ -40,7 +40,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via toPerson)
 
 Reach L2, it runs a process.
 
