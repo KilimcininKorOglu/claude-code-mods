@@ -37,6 +37,22 @@ describe('parse', () => {
     expect(pythonError('Traceback:\n  File "x"\nyaml.scanner.ScannerError: mapping values are not allowed here')).toBe('yaml.scanner.ScannerError: mapping values are not allowed here')
     expect(pythonError('TOMLDecodeError: Invalid value (at line 3)')).toBe('Invalid value (at line 3)')
     expect(pythonError('')).toBe('the file was not parsed')
+    // PyYAML prints the mark after the error: the error stays, the position joins it, the file name does not.
+    const scanner = [
+      '    raise ScannerError(None, None,',
+      '            "mapping values are not allowed here",',
+      'yaml.scanner.ScannerError: mapping values are not allowed here',
+      '  in "/work/a.yml", line 1, column 5',
+    ].join('\n')
+    expect(pythonError(scanner)).toBe('yaml.scanner.ScannerError: mapping values are not allowed here (line 1, column 5)')
+    const parser = [
+      'yaml.parser.ParserError: while parsing a block mapping',
+      '  in "/work/a.yml", line 1, column 1',
+      "expected <block end>, but found '<block mapping start>'",
+      '  in "/work/a.yml", line 3, column 2',
+    ].join('\n')
+    expect(pythonError(parser)).toBe("yaml.parser.ParserError: while parsing a block mapping (line 1, column 1); expected <block end>, but found '<block mapping start>' (line 3, column 2)")
+    expect(pythonError('    raise TOMLDecodeError("Invalid value", src, pos)\ntomllib.TOMLDecodeError: Invalid value (at line 1, column 5)')).toBe('tomllib.TOMLDecodeError: Invalid value (at line 1, column 5)')
   })
 
   test('writes one text for the model and one for the person, and one sidebar line', async () => {

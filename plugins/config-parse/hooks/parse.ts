@@ -56,11 +56,30 @@ export function isMissingTool(stderr: string): boolean {
   return /ModuleNotFoundError|No module named|command not found|ImportError/.test(stderr)
 }
 
-/** The parse error python printed: its last line, without the file name python repeats. */
+/** The line a python exception starts at, `yaml.scanner.ScannerError: ...`, not a `raise` line of the traceback. */
+const EXCEPTION_LINE = /^[\w.]*(Error|Exception):\s/
+
+/** A PyYAML mark line, `in "<file>", line 1, column 5`, whose position is kept and whose file name is not. */
+const MARK_LINE = /^in ".*", (line \d+, column \d+)$/
+
+/**
+ * The parse error python printed: the exception and every line after it, each mark folded into the line
+ * before it without the file name python repeats. PyYAML prints the mark last, so the last line alone
+ * would be the position without the error.
+ */
 export function pythonError(stderr: string): string {
   const lines = stderr.split('\n').map(l => l.trim()).filter(l => l !== '')
-  const last = lines.at(-1) ?? 'the file was not parsed'
-  return last.replace(/^\w*(Error|Exception):\s*/, '').slice(0, 300)
+  const start = lines.findLastIndex(l => EXCEPTION_LINE.test(l))
+  // Without an exception line (a message from python itself), the last line is the message.
+  const from = start >= 0 ? start : Math.max(lines.length - 1, 0)
+  const parts: string[] = []
+  for (const line of lines.slice(from)) {
+    const mark = MARK_LINE.exec(line)
+    if (mark !== null && parts.length > 0) parts[parts.length - 1] += ` (${mark[1]})`
+    else parts.push(line)
+  }
+  const text = parts.join('; ') || 'the file was not parsed'
+  return text.replace(/^\w*(Error|Exception):\s*/, '').slice(0, 300)
 }
 
 /** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
