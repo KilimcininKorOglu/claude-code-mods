@@ -6,7 +6,7 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
 
 1. The mod hooks the Edit and Write tools. After a successful call on a source file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `.astro`, `.php`, `.py`, `.rb`, `.erb`, `.haml`, `.slim`), it reads the translation calls the edit added: those in `new_string` that `old_string` does not have, or every call of a Write.
 2. The calls read are `t`, `$t`, `i18n.t`, `__`, `trans`, `trans_choice`, `@lang`, `_`, `gettext` and `ngettext` with a quoted first argument, also after `this.`, `vm.`, `i18n.`, `$i18n.`, `I18n.` and `i18n.global.`. A variable argument, a template literal and a Rails lazy key (`t('.title')`) are skipped.
-3. It reads the locale files under these directories of the session directory, at most 4 levels deep and 200 files: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. The session directory is the one the session started in, read once at its start, because a Bash `cd` moves the session's own directory. The edited file is named against that directory too, so a path inside the project is written from the project root.
+3. It reads the locale files under these directories of the session directory, at most 4 levels deep and 200 files: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. The session directory is the one the session started in, read once at its start, because a Bash `cd` moves the session's own directory. The edited file is named against the git repository the session started in, so a session opened in `apps/web` names a file of `apps/api` as `apps/api/x.ts`. Outside a git repository the file is named against the session directory. That root is read once at the session's start too.
 
    | Format | Example path | Keys |
    |---|---|---|
@@ -77,12 +77,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Bash}, turn.complete, prompt.submit, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir, usedNow), $.fs.list (via walkLocales), $.fs.read (via loadCatalog, usedNow), $.fs.stat (via isDir), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, gate, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir, usedNow), $.fs.list (via walkLocales), $.fs.read (via loadCatalog, usedNow), $.fs.stat (via isDir), $.process.run (via shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, gate, toPerson)
 
 Reach L2, it runs git to read the index.
 
     1. Reads:    the text of each Edit and Write call; the Bash command text; each reported source file again; the locale directories under the session directory and their files
-    2. Runs:     git rev-parse --show-toplevel and git diff --cached --name-only, at a guarded command in deny mode, to read which files the commit holds
+    2. Runs:     git rev-parse --show-toplevel once at the session's start, to name files against the repository root; git rev-parse --show-toplevel and git diff --cached --name-only, at a guarded command in deny mode, to read which files the commit holds
     3. Sends:    a note to the model after an edit that uses missing keys, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode; the locale keys live in memory for one turn
     5. Hostile input: locale files are only parsed as data (JSON.parse and line regexes), never run; PHP files are not executed

@@ -6,7 +6,7 @@ Bir edit'in, bir ya da birden fazla locale dosyasında olmayan translation key'l
 
 1. Mod Edit ve Write tool'larını hook'lar. Bir kaynak dosyada (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `.astro`, `.php`, `.py`, `.rb`, `.erb`, `.haml`, `.slim`) başarılı bir çağrıdan sonra edit'in eklediği translation çağrılarını okur: `new_string` içinde olup `old_string` içinde olmayanları, ya da bir Write'ın her çağrısını.
 2. Okunan çağrılar, tırnaklı ilk argümanı olan `t`, `$t`, `i18n.t`, `__`, `trans`, `trans_choice`, `@lang`, `_`, `gettext` ve `ngettext`; ayrıca `this.`, `vm.`, `i18n.`, `$i18n.`, `I18n.` ve `i18n.global.` sonrası biçimleri. Değişken argüman, template literal ve Rails lazy key (`t('.title')`) atlanır.
-3. Locale dosyalarını session dizininin şu dizinleri altında, en fazla 4 seviye derinlikte ve 200 dosya olarak okur: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. Session dizini, session'ın başladığı dizindir ve başlangıçta bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır. Edit edilen dosya da o dizine göre adlandırılır, yani proje içindeki bir path proje kökünden yazılır.
+3. Locale dosyalarını session dizininin şu dizinleri altında, en fazla 4 seviye derinlikte ve 200 dosya olarak okur: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. Session dizini, session'ın başladığı dizindir ve başlangıçta bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır. Edit edilen dosya, session'ın başladığı git repository'sine göre adlandırılır. Yani `apps/web` içinde açılan bir session, `apps/api` içindeki bir dosyayı `apps/api/x.ts` olarak adlandırır. Git repository'si dışında dosya session dizinine göre adlandırılır. Bu kök de session başlangıcında bir kere okunur.
 
    | Format | Örnek path | Key'ler |
    |---|---|---|
@@ -77,12 +77,12 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=i18n-watch}, turn.start, tool.call{tool=Bash}, turn.complete, prompt.submit, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir, usedNow), $.fs.list (via walkLocales), $.fs.read (via loadCatalog, usedNow), $.fs.stat (via isDir), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, gate, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isDir, usedNow), $.fs.list (via walkLocales), $.fs.read (via loadCatalog, usedNow), $.fs.stat (via isDir), $.process.run (via shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via catalogOf, gate, toPerson)
 
 Reach L2, index'i okumak için git çalıştırır.
 
     1. Okur:     her Edit ve Write çağrısının metnini; Bash komut metnini; raporlanan her kaynak dosyayı yeniden; session dizini altındaki locale dizinlerini ve dosyalarını
-    2. Çalıştırır: deny modunda guarded bir komutta git rev-parse --show-toplevel ve git diff --cached --name-only, commit'in hangi dosyaları tuttuğunu okumak için
+    2. Çalıştırır: session başlangıcında bir kere git rev-parse --show-toplevel, dosyaları repository köküne göre adlandırmak için; deny modunda guarded bir komutta git rev-parse --show-toplevel ve git diff --cached --name-only, commit'in hangi dosyaları tuttuğunu okumak için
     3. Gönderir: eksik key kullanan bir edit'ten sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve modu; locale key'leri bir tur boyunca bellekte yaşar
     5. Düşman girdi: locale dosyaları yalnız veri olarak parse edilir (JSON.parse ve satır regex'leri), hiçbir zaman çalıştırılmaz; PHP dosyaları execute edilmez

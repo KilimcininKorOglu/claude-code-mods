@@ -27,10 +27,26 @@ type Open = { path: string; keys: string[]; lines: Lines }
  * The catalog of the session directory's locale files, read at the first edit that uses a new key and
  * dropped at each turn and each edit of a locale file; `reported` makes a read error logged once.
  * `open` holds each reported file's claim, so an edit that adds the keys, and an edit that stops using
- * them, both close the finding. `root` is the directory the session started in. Locale files are looked
- * for under it and a path is shown against it, because a Bash `cd` moves `$.session.cwd()` away.
+ * them, both close the finding. `root` is the directory the session started in, and locale files are
+ * looked for under it. `shownRoot` is the git repository it lies in (`shownRootOf`), and a path is shown
+ * against it. Both are read once, because a Bash `cd` moves `$.session.cwd()` away.
  */
-type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, Open>; root?: string; owed: boolean }
+type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, Open>; root?: string; shownRoot?: string; owed: boolean }
+
+/**
+ * The git repository the session started in, so a file in a sibling directory of a session opened in a
+ * subdirectory still reads short; the session's own directory where git does not answer.
+ */
+async function shownRootOf($: EngineInterface, cwd: string): Promise<string> {
+  try {
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const root = top.stdout.trim()
+    return top.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    // No git here, or the command did not run: paths are shown against the session's directory.
+    return cwd
+  }
+}
 
 /** A locale file and the locale directory it was found under. */
 type Found = { root: string; path: string }
@@ -164,7 +180,7 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
     return r
   }
   if (!state.enabled || !isSource(path)) return r
-  const shown = shownPath(path, await rootOf($, state))
+  const shown = shownPath(path, state.shownRoot ?? (await rootOf($, state)))
   // Every other file's finding is measured too, because this edit may have moved a key into one of them.
   await recheckOpen($, state, shown)
   const added = newKeys(before, after)
@@ -274,7 +290,9 @@ export const register: Register = on => {
     await $.command.register({ name: 'i18n-watch', description: 'Translation keys an edit uses that locale files lack: status, on, off, mode (i18n-watch)', argumentHint: '[on | off | mode note | deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
-    state.root = await $.session.cwd()
+    const cwd = await $.session.cwd()
+    state.root = cwd
+    state.shownRoot = await shownRootOf($, cwd)
     return r
   })
 

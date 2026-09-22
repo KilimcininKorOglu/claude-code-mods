@@ -39,15 +39,18 @@ const run = (args: string): CommandRunInput => ({
   command: 'i18n-watch', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** Files by absolute path; `staged` is the index git answers with, `logs` the logged lines. */
-type World = { files: Map<string, string>; staged: string[]; reads: number; logs: string[] }
+/**
+ * Files by absolute path; `staged` is the index git answers with, `logs` the logged lines, `top` the
+ * repository root git answers.
+ */
+type World = { files: Map<string, string>; staged: string[]; reads: number; logs: string[]; top: string }
 
 function isDirPath(w: World, path: string): boolean {
   return [...w.files.keys()].some(f => f.startsWith(`${path}/`))
 }
 
 function world(on: On, files: Record<string, string>): World {
-  const w: World = { files: new Map(Object.entries(files).map(([p, t]) => [`${ROOT}/${p}`, t])), staged: [], reads: 0, logs: [] }
+  const w: World = { files: new Map(Object.entries(files).map(([p, t]) => [`${ROOT}/${p}`, t])), staged: [], reads: 0, logs: [], top: ROOT }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
@@ -69,7 +72,7 @@ function world(on: On, files: Record<string, string>): World {
   })
   on('process.run', (_, e) => {
     const argv = (e as unknown as { argv: string[] }).argv
-    const stdout = argv.includes('--show-toplevel') ? `${ROOT}\n` : w.staged.map(p => `${p}\0`).join('')
+    const stdout = argv.includes('--show-toplevel') ? `${w.top}\n` : w.staged.map(p => `${p}\0`).join('')
     return { value: { exitCode: 0, stdout, stderr: '' } }
   })
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }))
@@ -124,6 +127,14 @@ describe('i18n-watch', () => {
     expect(w.logs).toEqual([
       'keys src/Cart.vue uses that the locale files lack: checkout.total:1 (missing in de) · checkout.vat:1 (missing in de, tr) · checkout.fee:1 (missing in every locale)',
     ])
+  })
+
+  test('a path is shown against the git repository, and the locale files are still read under the session directory', async ($, on) => {
+    const w = world(on, LOCALES)
+    w.top = '/Users/u'
+    await started($)
+    await edit(w, $, 'src/Cart.vue', "{{ $t('checkout.title') }}", "{{ $t('checkout.vat') }}")
+    expect(w.logs).toEqual(['keys app/src/Cart.vue uses that the locale files lack: checkout.vat:1 (missing in de, tr)'])
   })
 
   withSidebar('a key the next edit deletes closes the finding, and the commit runs', async ($, on) => {
