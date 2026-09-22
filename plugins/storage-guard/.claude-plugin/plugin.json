@@ -1,0 +1,11 @@
+{
+  "name": "storage-guard",
+  "version": "0.1.0",
+  "description": "Tells the model when an edit stores browser data with localStorage or sessionStorage instead of a cookie. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

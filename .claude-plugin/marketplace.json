@@ -404,6 +404,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "storage-guard",
+      "source": "./plugins/storage-guard",
+      "description": "Tells the model when an edit stores browser data with localStorage or sessionStorage instead of a cookie.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
