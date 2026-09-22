@@ -2,3 +2,6 @@
 .claude/types/
 node_modules/
 .DS_Store
+# built by docs/build.mjs and published by the pages workflow; never committed
+site/
+.playwright-mcp/

@@ -1,0 +1,12 @@
+{
+  "name": "claude-code-mods-site",
+  "private": true,
+  "type": "module",
+  "description": "Builds the public site of the marketplace from the repository itself.",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "marked": "^15.0.7"
+  }
+}

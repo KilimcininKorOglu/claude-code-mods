@@ -1,0 +1,55 @@
+{
+  "site": {
+    "title": "Claude Code Mods",
+    "domain": "cc-mods.keremgok.tr",
+    "repo": "https://github.com/KilimcininKorOglu/claude-code-mods",
+    "marketplace": "kilimcininkoroglu-mods",
+    "author": { "name": "Kerem Gok", "url": "https://x.com/koroglan" }
+  },
+  "tr": {
+    "tagline": "Claude Code için function hook mod'ları",
+    "lead": "Her mod tek bir işi yapar ve ne okuduğunu, ne çalıştırdığını, neyi sakladığını kendi README dosyasında yazar. Hepsi tek bir marketplace'ten kurulur.",
+    "installTitle": "Kurulum",
+    "installLead": "Function hook'lar early access. Flag olmadan hiçbir mod yüklenmez.",
+    "flagNote": "Flag'i kalıcı yapmak için <code>~/.claude/settings.json</code> dosyasına ekleyin:",
+    "modsTitle": "Mod'lar",
+    "modsLead": "Arama kutusu ad, açıklama ve tag üzerinde çalışır. Reach seviyesi bir mod'un en fazla nereye uzandığını söyler.",
+    "reachTitle": "Reach seviyeleri",
+    "reach": {
+      "L0": "Çizer ve hatırlar. Dosya okumaz, process çalıştırmaz.",
+      "L1": "Okur: dosya, ayar, environment ya da transcript.",
+      "L2": "Yazar ya da process çalıştırır, Claude'u sürebilir.",
+      "L3": "Network'e çıkar."
+    },
+    "docsNote": "Mod sayfalarının gövdesi İngilizce README dosyalarından üretilir.",
+    "searchPlaceholder": "Mod ara",
+    "allReach": "Hepsi",
+    "detail": "Dokümantasyon",
+    "backToIndex": "Tüm mod'lar",
+    "threatTitle": "Ne yapabilir",
+    "generated": "Bu sayfa her push'ta depodan üretilir."
+  },
+  "en": {
+    "tagline": "Function-hook mods for Claude Code",
+    "lead": "Each mod does one job and states in its own README what it reads, what it runs and what it keeps. They install from one marketplace.",
+    "installTitle": "Install",
+    "installLead": "Function hooks are early access. No mod loads without the flag.",
+    "flagNote": "To keep the flag on, add this to <code>~/.claude/settings.json</code>:",
+    "modsTitle": "Mods",
+    "modsLead": "The search box reads the name, the description and the tags. The reach level says how far a mod goes at most.",
+    "reachTitle": "Reach levels",
+    "reach": {
+      "L0": "Draws and remembers. Reads no file and runs no process.",
+      "L1": "Reads files, settings, environment or the transcript.",
+      "L2": "Writes files, runs processes or drives Claude.",
+      "L3": "Reaches the network."
+    },
+    "docsNote": "Each mod page is rendered from that mod's own README.",
+    "searchPlaceholder": "Search mods",
+    "allReach": "All",
+    "detail": "Documentation",
+    "backToIndex": "All mods",
+    "threatTitle": "What it can reach",
+    "generated": "This page is generated from the repository at every push."
+  }
+}
