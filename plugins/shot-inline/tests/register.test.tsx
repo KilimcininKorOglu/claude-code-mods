@@ -64,7 +64,8 @@ function world(on: On, graphics = true): World {
   })
   on('tool.call', { tool: 'Read' }, () => ({ result: 'image' }) as never)
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
-  on('tool.call', { tool: 'mcp__plugin_playwright_playwright__browser_take_screenshot' }, () => ({ result: 'r', text: '### Result\n- [Screenshot of viewport](.playwright-mcp/shot.png)' }) as never)
+  // A RegExp, because a literal MCP tool name typechecks only while that server is connected to the session /plugin-types ran in.
+  on('tool.call', { tool: /^mcp__plugin_playwright_playwright__browser_take_screenshot$/ }, () => ({ result: 'r', text: '### Result\n- [Screenshot of viewport](.playwright-mcp/shot.png)' }) as never)
   on('ui.render', { component: 'ToolUse' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>{e.props.tool}</Text>
