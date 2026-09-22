@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { clearLineOf, drawn, dropTurn, appendLog, isLogOf, logLineOf, logName, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import { clearLineOf, drawn, dropTurn, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -18,8 +18,9 @@ const LOG_DIR = '.claude/sidebar'
 /**
  * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
  * each stream entry's id its own, whether the pane is open, the last button's answer, and the log: the
- * directory of every project's logs and this project's file of today. The file's lines are not held
- * here: every write reads the file again, because another session of the same project writes it too.
+ * directory of every project's logs and this project's name, read once at the session's start. The file
+ * is picked by the day of each write, so a session that runs past midnight writes the new day's file, and
+ * its lines are not held here: every write reads the file again, because another session writes it too.
  */
 export type State = {
   board: Board
@@ -28,11 +29,11 @@ export type State = {
   open: boolean
   message?: string
   dir: string
-  file: string
+  project: string
 }
 
 function emptyState(): State {
-  return { board: new Map(), stream: [], written: 0, open: false, dir: '', file: '' }
+  return { board: new Map(), stream: [], written: 0, open: false, dir: '', project: '' }
 }
 
 /** Takes down every section and stream entry, because a closed sidebar keeps nothing. */
@@ -81,12 +82,12 @@ async function setOpen($: EngineInterface, state: State, open: boolean): Promise
   return 'off: the sidebar is closed and each mod shows its own lines again'
 }
 
-/** Where this project's log of today lives. */
-async function openLog($: EngineInterface, state: State, at: number): Promise<void> {
+/** Where this project's logs live, and the project's name, read before a Bash `cd` can move the directory. */
+async function openLog($: EngineInterface, state: State): Promise<void> {
   const home = (await $.env.get('HOME')) ?? ''
   if (home === '') return
   state.dir = `${home}/${LOG_DIR}`
-  state.file = `${state.dir}/${logName(projectOf(await $.session.cwd()), at)}`
+  state.project = projectOf(await $.session.cwd())
 }
 
 /** A file's text, or an empty string when it is missing or unreadable. */
@@ -118,7 +119,7 @@ async function logFiles($: EngineInterface, state: State, project: string): Prom
  */
 async function restoreLog($: EngineInterface, state: State): Promise<void> {
   if (state.dir === '') return
-  const project = projectOf(await $.session.cwd())
+  const project = state.project
   let text = ''
   let found: Logged[] = []
   for (const name of await logFiles($, state, project)) {
@@ -134,10 +135,16 @@ async function restoreLog($: EngineInterface, state: State): Promise<void> {
   if (found.length > 0) $.ui.invalidate('ui.render')
 }
 
+/** The newest entries of this project's log of today, or why there is no log. */
+async function logText($: EngineInterface, state: State): Promise<string> {
+  const file = logFileAt(state.dir, state.project, await $.clock.now())
+  return file === '' ? 'no log file: HOME was not read' : tailText(file, readLog(await readOrEmpty($, file)))
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') return setOpen($, state, word === 'on')
-  if (word === 'log') return state.file === '' ? 'no log file: HOME was not read' : tailText(state.file, readLog(await readOrEmpty($, state.file)))
+  if (word === 'log') return logText($, state)
   if (word === 'status') return state.open ? `on, ${state.board.size} section(s), ${state.stream.length} in the stream` : 'off'
   return word === '' ? setOpen($, state, !state.open) : USAGE
 }
@@ -228,7 +235,8 @@ export const register: Register = on => {
      * file that is there and cannot be read is not written over.
      */
     const log = async (line: string): Promise<void> => {
-      if (state.file === '') return
+      const file = logFileAt(state.dir, state.project, await below.clock.now())
+      if (file === '') return
       try {
         // Each call is spelled at its own site, because the engine refuses a noun of $ passed as a value.
         const disk = {
@@ -236,7 +244,7 @@ export const register: Register = on => {
           read: async (path: string) => String(await below.fs.read(path)),
           write: (path: string, text: string) => below.fs.write(path, text),
         }
-        await appendLog(disk, state.file, line)
+        await appendLog(disk, file, line)
       } catch {
         // The log is a convenience; a write that fails must not break the pane.
       }
@@ -247,7 +255,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status, log (sidebar)', argumentHint: '[on | off | status | log]' })
-    await openLog($, state, await $.clock.now())
+    await openLog($, state)
     if ((await $.store.get(OPEN_KEY)) === true) await openPane($, state)
     return r
   })

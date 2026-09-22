@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { appendLog, type LogFs, clearLineOf, cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -198,6 +198,10 @@ describe('the log', () => {
     expect(projectOf('/Users/u/my project!')).toBe('my-project-')
     expect(dayOf(AT)).toBe('2026-09-21')
     expect(logName('mods', AT)).toBe('mods-2026-09-21.log')
+    // The file follows the day of the write, so a write after midnight lands in the new day's file.
+    expect(logFileAt('/l', 'mods', AT)).toBe('/l/mods-2026-09-21.log')
+    expect(logFileAt('/l', 'mods', AT + 24 * 3_600_000)).toBe('/l/mods-2026-09-22.log')
+    expect(logFileAt('', 'mods', AT)).toBe('')
     expect(isLogOf('mods', 'mods-2026-09-21.log')).toBe(true)
     expect(isLogOf('mods', 'other-2026-09-21.log')).toBe(false)
     expect(isLogOf('mods', 'mods-2026-09-21.txt')).toBe(false)
@@ -249,7 +253,7 @@ describe('the log', () => {
 })
 
 describe('$.sidebar', () => {
-  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open, dir: '', file: '' })
+  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open, dir: '', project: '' })
 
   /** The clock the engine hands the noun; a fixed time keeps a stream entry's stamp readable. */
   const NOW = async (): Promise<number> => AT

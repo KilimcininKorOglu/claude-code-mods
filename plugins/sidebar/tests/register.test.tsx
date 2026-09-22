@@ -27,11 +27,11 @@ const LINE = (consumer: string, title: string, at: number) =>
   JSON.stringify({ at, consumer, key: 'note', title, lines: [{ text: 'a finding', kind: 'error' }] })
 
 /** The store as a record the test can read back, the panes the plugin opened, and the log files. */
-type World = { store: Record<string, unknown>; panes: UiPane[]; files: Map<string, string> }
+type World = { store: Record<string, unknown>; panes: UiPane[]; files: Map<string, string>; now: number }
 
 function world(on: On, store: Record<string, unknown> = {}, files: Map<string, string> = new Map()): World {
-  const w: World = { store, panes: [], files }
-  mock.clock(on, { now: Date.parse('2026-09-20T10:00:00Z') })
+  const w: World = { store, panes: [], files, now: Date.parse('2026-09-20T10:00:00Z') }
+  on('clock.now', () => ({ value: w.now }))
   mock.env(on, { HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
@@ -78,6 +78,14 @@ describe('sidebar', () => {
     await started($)
     expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
     expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 0 in the stream')
+  })
+
+  test('a session that runs past midnight reads the new day\'s log', async ($, on) => {
+    const w = world(on, {}, new Map([[`${LOG_DIR}/app-2026-09-21.log`, `${LINE('env-sync', 'after midnight', NOW)}\n`]]))
+    await started($)
+    expect((await $.command.run(run('log'))).text).toBe(`${LOG_DIR}/app-2026-09-20.log: no entry yet`)
+    w.now = new Date(2026, 8, 21, 0, 30).getTime()
+    expect((await $.command.run(run('log'))).text).toContain(`${LOG_DIR}/app-2026-09-21.log`)
   })
 
   test("an open pane takes this project's newest log entries back into the stream", async ($, on) => {

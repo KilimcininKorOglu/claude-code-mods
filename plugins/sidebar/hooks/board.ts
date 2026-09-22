@@ -316,6 +316,11 @@ export function logName(project: string, at: number): string {
 }
 
 /** Whether a file name is the log of that project, so another project's log is left alone. */
+/** The log file of a project for the day of `at`, or empty when there is no log directory. */
+export function logFileAt(dir: string, project: string, at: number): string {
+  return dir === '' ? '' : `${dir}/${logName(project, at)}`
+}
+
 export function isLogOf(project: string, name: string): boolean {
   return name.startsWith(`${project}-`) && name.endsWith('.log')
 }
