@@ -60,12 +60,13 @@ export function signatureOf(tasks: Tasks | null): string {
 }
 
 /**
- * True when a tool ran in the turn that just ended: the messages after the newest user message,
- * which is the prompt that started it. A turn that only wrote words did no work, and a poke that
- * buys another such turn buys the same answer again.
+ * True when a tool ran in the turn that just ended: the messages after the newest prompt, the user
+ * message that started it. A tool result is a user message too, so a user message that carries tool
+ * results is not a prompt. A turn that only wrote words did no work, and a poke that buys another
+ * such turn buys the same answer again.
  */
 export function workedThisTurn(messages: readonly SessionMessage[]): boolean {
-  const prompt = messages.findLastIndex(m => m.role === 'user')
+  const prompt = messages.findLastIndex(m => m.role === 'user' && (m.toolResults ?? []).length === 0)
   if (prompt === -1) return false
   return messages.slice(prompt + 1).some(m => m.toolUses.length > 0)
 }

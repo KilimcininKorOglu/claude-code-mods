@@ -392,6 +392,22 @@ describe('task-poke', () => {
     expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(MAX_STALLS + 1)
   })
 
+  test('a turn whose tool results follow its tool calls counts as work', async ($, on) => {
+    const w = world(on)
+    // The shape $.session.messages() answers (measured): each tool result is a user row of its own,
+    // and the turn ends with an assistant row of text alone.
+    const result: SessionMessage = { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'Read-1', text: 'x', isError: false, result: undefined }] }
+    const answered: SessionMessage = { role: 'assistant', text: 'done', toolUses: [] }
+    w.setMessages([todoWrite('pending'), prompted(), assistant(use('Read', { file_path: '/x' })), result, answered])
+    await $.session.start(session)
+    for (let i = 0; i < 6; i += 1) {
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(w.logs.filter(l => l.includes('moved nothing'))).toHaveLength(0)
+    expect(w.submitted).toHaveLength(6)
+  })
+
   test('a task that changed status counts as progress, with no tool in the turn', async ($, on) => {
     const w = world(on)
     w.setMessages([todoWrite('pending', 'pending'), prompted()])
