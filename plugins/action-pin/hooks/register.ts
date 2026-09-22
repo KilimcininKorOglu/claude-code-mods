@@ -12,9 +12,24 @@ const HEADERS = { Accept: 'application/vnd.github.sha', 'User-Agent': 'action-pi
 /**
  * The on/off setting read at session start, the SHAs already resolved in this session, so one workflow
  * does not ask GitHub twice, the refs the model is owed a note for, and the last error, so the same one
- * is logged once, and the directory the session started in, which every workflow is shown against.
+ * is logged once, and the root every workflow is shown against, read once at the session's start (`shownRootOf`).
  */
 type State = { enabled: boolean; mode: Mode; shas: Map<string, string>; open: Map<string, string[]>; owed: string[]; lastError?: string; root?: string }
+
+/**
+ * The git repository the session started in, so a file in a sibling directory of a session opened in a
+ * subdirectory still reads short; the session's own directory where git does not answer.
+ */
+async function shownRootOf($: EngineInterface, cwd: string): Promise<string> {
+  try {
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const root = top.stdout.trim()
+    return top.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    // No git here, or the command did not run: paths are shown against the session's directory.
+    return cwd
+  }
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -219,7 +234,7 @@ export const register: Register = on => {
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
     // Read from the event, not from `$.session.cwd()`, which follows a Bash `cd`.
-    state.root = e.cwd
+    state.root = await shownRootOf($, e.cwd)
     return r
   })
 

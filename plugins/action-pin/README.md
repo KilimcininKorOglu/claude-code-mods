@@ -16,7 +16,7 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
 
        action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-   The note and the line are separate channels: the model never reads the line, and you never read the note. A workflow is written against the directory the session started in, and that path also keys its sidebar entry, so each workflow keeps an entry of its own.
+   The note and the line are separate channels: the model never reads the line, and you never read the note. A workflow is written against the git repository the session started in, or against the session's directory outside a repository, and that path also keys its sidebar entry, so each workflow keeps an entry of its own. The root is read once at the session's start, because a Bash `cd` moves the session's own directory.
 6. While the [sidebar](../sidebar) is open, those actions go there instead, the workflow first and then one line per action (the closing entry reads the same way), as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 7. A finding stays open until the workflow pins those actions. After a later Edit or Write the mod reads each open workflow again, and one whose refs are all pinned closes. A workflow that is no longer there closes too, because it uses no action any more; one that is there and cannot be read keeps its finding, because an unread file proves nothing:
@@ -59,12 +59,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via shownRootOf, stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)
 
 Reach L3, reaches the network.
 
     1. Reads:    the path and the new text of each Edit and Write; the Bash command text; each open workflow again while a finding stands, also at the turn's end
-    2. Runs:     git rev-parse --show-toplevel and git diff --cached --name-only, at a commit in deny mode, to read which files the commit holds
+    2. Runs:     git rev-parse --show-toplevel once at the session's start, to show workflows against the repository root; git rev-parse --show-toplevel and git diff --cached --name-only, at a commit in deny mode, to read which files the commit holds
     3. Sends:    the public action name and its ref (for example actions/checkout and v4) to api.github.com, at most 10 per edit, once each per session; no token, no repository content, no file path
     4. Persists: in $.store, the on/off setting and the mode; the resolved SHAs live in memory for one session
     5. Hostile input: the answer is used only when it is 40 hex characters, and it is written into the note alone; the mod never edits a file

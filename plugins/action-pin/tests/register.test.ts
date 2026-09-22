@@ -105,6 +105,14 @@ describe('action-pin', () => {
     expect(bar.sections.map(s => s.key)).toEqual(['.github-workflows-ci.yml', '.github-workflows-release.yml'])
   })
 
+  test('a workflow outside the session directory is shown against the git repository the session started in', async ($, on) => {
+    const w = world(on)
+    on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
+    await started($)
+    await $.tool.call({ tool: 'Edit', file_path: '/Users/u/infra/.github/workflows/ci.yml', old_string: '', new_string: '  - uses: actions/checkout@v4' } as never)
+    expect(w.logs).toEqual([`infra/.github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → ${SHA}`])
+  })
+
   test('no note for a pinned, local or container use, another file, or when off', async ($, on) => {
     const w = world(on)
     await started($)

@@ -94,7 +94,7 @@ export function sidebarLines(file: string, uses: readonly Unpinned[]): { text: s
 }
 
 /**
- * `path` shown relative to the directory the session started in when it is inside it. It also keys the
+ * `path` shown relative to `root` (the git repository the session started in, else its directory) when it is inside it. It also keys the
  * sidebar entry: an absolute path is cut at 64 characters there, so every workflow of a repository under
  * a long directory would share one key and a closing would take the other workflows' entries down.
  */

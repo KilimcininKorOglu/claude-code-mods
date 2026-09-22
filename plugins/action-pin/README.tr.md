@@ -16,7 +16,7 @@ Bir edit, hareketli bir tag'e sabitlenmiş GitHub Actions step'i eklediğinde mo
 
        action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-   Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız. Bir workflow session'ın başladığı dizine göre yazılır ve o path sidebar entry'sinin key'i de olur, yani her workflow kendi entry'sini tutar.
+   Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız. Bir workflow session'ın başladığı git repository'sine göre yazılır, repository dışında session'ın dizinine göre. O path sidebar entry'sinin key'i de olur, yani her workflow kendi entry'sini tutar. Bu kök session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır.
 6. [sidebar](../sidebar) açıkken bu action'lar oraya gider, önce workflow ve sonra action başına bir satır olarak (kapanış kaydı da böyle okunur), stream'in içinde bir kayıt olarak; transcript temiz kalır. Kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
 
 7. Bulgu, workflow o action'ları sabitleyene kadar açık kalır. Sonraki bir Edit ya da Write'tan sonra mod her açık workflow'u tekrar okur; ref'lerinin hepsi sabitlenmiş olan kapanır. Artık var olmayan bir workflow da kapanır, çünkü hiçbir action kullanmıyordur; duran ama okunamayan bir workflow bulgusunu korur, çünkü okunamayan bir dosya hiçbir şeyi kanıtlamaz:
@@ -59,12 +59,12 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via shownRootOf, stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)
 
 Reach L3, network'e çıkar.
 
     1. Okur:     her Edit ve Write'ın path'ini ve yeni metnini; Bash komut metnini; bulgu açıkken her açık workflow'u tekrar, turn sonunda da
-    2. Çalıştırır: git rev-parse --show-toplevel ve git diff --cached --name-only, deny modunda bir commit anında, commit'in hangi dosyaları tuttuğunu okumak için
+    2. Çalıştırır: session başlangıcında bir kere git rev-parse --show-toplevel, workflow'ları repository köküne göre göstermek için; git rev-parse --show-toplevel ve git diff --cached --name-only, deny modunda bir commit anında, commit'in hangi dosyaları tuttuğunu okumak için
     3. Gönderir: açık action adını ve ref'ini (örneğin actions/checkout ve v4) api.github.com adresine, edit başına en fazla 10 tane, her biri session başına bir kere; token yok, repository içeriği yok, dosya path'i yok
     4. Saklar:   $.store içinde on/off ayarını ve modu; çözülen SHA'lar bir session boyunca bellekte kalır
     5. Düşman girdi: cevap yalnız 40 hex karakter olduğunda kullanılır ve sadece notun içine yazılır; mod hiçbir dosyayı düzenlemez
