@@ -53,6 +53,23 @@ export function readTurn(messages: readonly SessionMessage[], seed: Tasks | null
   }
 }
 
+/** The list as one string, so two readings can be compared: any status change makes another. */
+export function signatureOf(tasks: Tasks | null): string {
+  if (tasks === null) return ''
+  return [...tasks].map(([id, status]) => `${id}:${status}`).sort().join(',')
+}
+
+/**
+ * True when a tool ran in the turn that just ended: the messages after the newest user message,
+ * which is the prompt that started it. A turn that only wrote words did no work, and a poke that
+ * buys another such turn buys the same answer again.
+ */
+export function workedThisTurn(messages: readonly SessionMessage[]): boolean {
+  const prompt = messages.findLastIndex(m => m.role === 'user')
+  if (prompt === -1) return false
+  return messages.slice(prompt + 1).some(m => m.toolUses.length > 0)
+}
+
 /** True when the last assistant message asked the user a question through AskUserQuestion. */
 export function asksUser(messages: readonly SessionMessage[]): boolean {
   const last = messages.findLast(m => m.role === 'assistant')

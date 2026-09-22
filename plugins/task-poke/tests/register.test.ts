@@ -10,7 +10,7 @@ import type {
   TurnCompleteReason,
 } from 'claude-code'
 
-import { DEFAULT_MAX_POKES, limitOf } from '../hooks/register.ts'
+import { DEFAULT_MAX_POKES, MAX_STALLS, limitOf } from '../hooks/register.ts'
 
 tier('user')
 
@@ -40,6 +40,10 @@ const use = (tool: string, input: Record<string, unknown>, result?: unknown): To
   result,
 })
 const assistant = (...toolUses: ToolUseSummary[]): SessionMessage => ({ role: 'assistant', text: '', toolUses })
+const prompted = (text = 'go on'): SessionMessage => ({ role: 'user', text, toolUses: [] })
+
+/** A turn that did work: a prompt, then a tool. Without one the mod counts the poke as moving nothing. */
+const working = (...before: SessionMessage[]): SessionMessage[] => [...before, prompted(), assistant(use('Read', { file_path: '/x' }))]
 
 const todoWrite = (...statuses: string[]): SessionMessage =>
   assistant(use('TodoWrite', { todos: statuses.map((status, i) => ({ content: `t${i}`, status, activeForm: `t${i}` })) }))
@@ -247,7 +251,7 @@ describe('task-poke', () => {
 
   test('stops after the last poke and a user prompt resets the count', async ($, on) => {
     const w = world(on)
-    w.setMessages([todoWrite('pending')])
+    w.setMessages(working(todoWrite('pending')))
     await $.session.start(session)
     for (let i = 0; i < DEFAULT_MAX_POKES + 2; i += 1) {
       await $.turn.complete(turn())
@@ -264,7 +268,7 @@ describe('task-poke', () => {
 
   test('the limit the person sets holds, and an argument it cannot read changes nothing', async ($, on) => {
     const w = world(on)
-    w.setMessages([todoWrite('pending')])
+    w.setMessages(working(todoWrite('pending')))
     await $.session.start(session)
     for (const bad of ['0', '1000', 'many', '']) expect(limitOf(bad), bad).toBe(undefined)
     expect(limitOf('2')).toBe(2)
@@ -336,7 +340,7 @@ describe('task-poke', () => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
-    w.setMessages([todoWrite('pending')])
+    w.setMessages(working(todoWrite('pending')))
     await $.session.start(session)
     for (let i = 0; i < DEFAULT_MAX_POKES + 2; i += 1) {
       await $.turn.complete(turn())
@@ -365,6 +369,43 @@ describe('task-poke', () => {
     await $.turn.complete(turn())
     await flush()
     expect(bar.cleared).toEqual(['pokes'])
+  })
+
+  test('stops after three pokes that moved nothing, and a prompt starts it again', async ($, on) => {
+    const w = world(on)
+    // The same list, and no tool after the prompt: every poke buys the same answer again.
+    w.setMessages([todoWrite('pending'), prompted()])
+    await $.session.start(session)
+    for (let i = 0; i < 6; i += 1) {
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(w.submitted).toHaveLength(MAX_STALLS)
+    const stopped = w.logs.filter(l => l.includes('moved nothing'))
+    expect(stopped).toHaveLength(1)
+    expect(stopped[0]).toContain('no task changed status and no tool ran')
+
+    await $.prompt.submit(typed())
+    w.setMessages(working(todoWrite('pending')))
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(MAX_STALLS + 1)
+  })
+
+  test('a task that changed status counts as progress, with no tool in the turn', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending', 'pending'), prompted()])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    for (let i = 0; i < 4; i += 1) {
+      // One task finishes at each turn's end, so no poke moved nothing.
+      w.setMessages([todoWrite(i % 2 === 0 ? 'completed' : 'pending', 'pending'), prompted()])
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(w.logs.filter(l => l.includes('moved nothing'))).toHaveLength(0)
+    expect(w.submitted).toHaveLength(5)
   })
 
   test('an unknown status fails loudly instead of counting as done', async ($, on) => {

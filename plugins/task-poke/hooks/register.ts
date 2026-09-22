@@ -1,8 +1,11 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { readTurn, tasksOfList, type Tasks } from './tasks.ts'
+import { readTurn, signatureOf, tasksOfList, workedThisTurn, type Tasks } from './tasks.ts'
 
 /** Pokes sent for one stretch of unfinished tasks, until the person sets another limit. */
 export const DEFAULT_MAX_POKES = 99
+
+/** Pokes in a row that moved nothing before the mod stops: no status changed and no tool ran. */
+export const MAX_STALLS = 3
 
 /** The band `/task-poke limit <n>` takes; a value outside it is refused, never clamped. */
 const MIN_LIMIT = 1
@@ -27,7 +30,18 @@ type Decision = { kind: 'idle' } | { kind: 'poke'; open: number } | { kind: 'lim
  * the newest messages of a long transcript alone: a task created before that window and never
  * updated inside it is in no later reading of the transcript.
  */
-type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolean; lastError?: string; tasks: Tasks | null }
+type State = {
+  enabled: boolean
+  max: number
+  pokes: number
+  limitLogged: boolean
+  lastError?: string
+  tasks: Tasks | null
+  /** Pokes in a row that moved nothing, and the list as it stood at the last reading. */
+  stalls: number
+  stallLogged: boolean
+  signature: string
+}
 
 /** Decides what to do after a main-loop turn. `pokes` counts the pokes sent since the last user prompt. */
 export function decide(open: number, askedUser: boolean, pokes: number, max: number): Decision {
@@ -113,6 +127,24 @@ async function atLimit($: EngineInterface, state: State, open: number): Promise<
   await toStream($, 'limit', 'pokes stopped', `stopped after ${state.max} pokes with unfinished tasks. Send a prompt to reset the count.`)
 }
 
+/**
+ * Counts the pokes that moved nothing. A turn after a poke moved something when a task changed
+ * status or a tool ran; a turn that only wrote words moved nothing, and poking again would buy the
+ * same answer a second time. The count goes back to zero at the first turn that moved something.
+ */
+function trackStall(state: State, signature: string, worked: boolean): void {
+  if (state.pokes > 0) state.stalls = signature !== state.signature || worked ? 0 : state.stalls + 1
+  state.signature = signature
+}
+
+/** No progress: the pokes stop here, and one entry says why. The limit is not reached. */
+async function atStall($: EngineInterface, state: State, open: number): Promise<void> {
+  await toCount($, open, state.pokes, state.max, false)
+  if (state.stallLogged) return
+  state.stallLogged = true
+  await toStream($, 'stall', 'pokes stopped', `stopped after ${MAX_STALLS} pokes that moved nothing: no task changed status and no tool ran. Send a prompt to start again.`)
+}
+
 /** Writes the limit the person set; it holds across sessions, because it lives in $.store. */
 async function setLimit($: EngineInterface, state: State, arg: string): Promise<string> {
   const limit = limitOf(arg)
@@ -151,7 +183,8 @@ async function seedTasks($: EngineInterface, state: State): Promise<void> {
  * error is reported once, and no poke is sent while the list is unreadable.
  */
 async function afterTurn($: EngineInterface, state: State): Promise<void> {
-  const reading = readTurn(await $.session.messages(), state.tasks)
+  const messages = await $.session.messages()
+  const reading = readTurn(messages, state.tasks)
   if (!reading.ok) {
     if (reading.error !== state.lastError) await toStream($, 'unreadable', 'task list', `cannot read the task list, no poke is sent: ${reading.error}`)
     state.lastError = reading.error
@@ -159,6 +192,8 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
   }
   state.lastError = undefined
   state.tasks = reading.tasks
+  trackStall(state, signatureOf(reading.tasks), workedThisTurn(messages))
+  if (state.stalls >= MAX_STALLS && reading.open > 0) return atStall($, state, reading.open)
   const decision = decide(reading.open, reading.askedUser, state.pokes, state.max)
   if (decision.kind === 'limit') return atLimit($, state, reading.open)
   if (decision.kind === 'idle') return reading.open === 0 ? clearCount($) : toCount($, reading.open, state.pokes, state.max, false)
@@ -168,11 +203,16 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false, tasks: null }
+  const state: State = {
+    enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false, tasks: null,
+    stalls: 0, stallLogged: false, signature: '',
+  }
 
   const resetCount = (): void => {
     state.pokes = 0
     state.limitLogged = false
+    state.stalls = 0
+    state.stallLogged = false
   }
 
   on('session.start', async ($, e, next) => {

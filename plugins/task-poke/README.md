@@ -1,6 +1,6 @@
 # task-poke
 
-A Claude Code Mod. When a main-loop turn ends and the task list still has pending or in-progress tasks, it submits a continue prompt. It stops after 99 consecutive pokes, or after the limit you set with `/task-poke limit <n>`. A prompt you type resets the count.
+A Claude Code Mod. When a main-loop turn ends and the task list still has pending or in-progress tasks, it submits a continue prompt. It reads the engine's own task list at the session's start, so a list opened weeks ago in a session you resume today is counted from the first turn, whether or not the mod was installed when those tasks were made. It stops after 99 consecutive pokes, after the limit you set with `/task-poke limit <n>`, or after three pokes in a row that moved nothing. A prompt you type resets the count.
 
 It reads both task formats:
 
@@ -34,9 +34,17 @@ While the [sidebar](../sidebar) is open, the count stands there as a `task list`
     task-poke: task list
     3 unfinished tasks, poke 2/99
 
-The line is green below the last poke, yellow at it, and red once the pokes stopped. The section goes down when nothing is unfinished. Three findings go into the stream instead, in red, so the next count does not take them off the pane: the stop at the limit of pokes, a poke the engine dropped, and a task list the parser cannot read.
+The line is green below the last poke, yellow at it, and red once the pokes stopped. The section goes down when nothing is unfinished. Findings go into the stream instead, in red, so the next count does not take them off the pane: the stop at the limit of pokes, the stop after three pokes that moved nothing, a poke the engine dropped, and a task list the mod cannot read.
 
 With the sidebar closed, or without that mod installed, only a turn that sent a poke writes its line to the transcript, and the three findings are transcript lines, as before.
+
+## When a poke moves nothing
+
+A poke buys a turn. When that turn changed no task's status and ran no tool, the poke moved nothing: the model answered with words and the next poke buys the same answer again. After three such pokes in a row the mod stops and one red entry says so:
+
+    task-poke: stopped after 3 pokes that moved nothing: no task changed status and no tool ran. Send a prompt to start again.
+
+The count goes back to zero at the first turn that moved something, so a model working through a long task is never stopped by this. Your next prompt starts the pokes again.
 
 ## When it does not poke
 
@@ -44,6 +52,7 @@ With the sidebar closed, or without that mod installed, only a turn that sent a 
 - The turn ran in a subagent.
 - The last assistant message called `AskUserQuestion`.
 - The limit of pokes was sent since your last prompt. One red entry reports the stop.
+- Three pokes in a row moved nothing, as above.
 - `/task-poke off` is set.
 
 ## Commands
@@ -86,7 +95,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 
     1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the engine's task list through one $.tool.call at the session's start; the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
-    2. Runs:     one read-only TaskList call at the session's start and at /task-poke on; one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
+    2. Runs:     one read-only TaskList call at the session's start and at /task-poke on; one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set, and at most 3 in a row that move nothing; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) and the poke limit in $.store; the environment variable lasts for the process only
     5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status, a TaskCreate result without task.id or a TaskList row without an id stops the pokes, and one line names the error until the error changes
