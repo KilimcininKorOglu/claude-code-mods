@@ -1,6 +1,6 @@
 {
   "name": "commit-cadence",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Names the uncommitted files at the end of each turn, so finished work is committed as it lands. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

@@ -11,14 +11,15 @@ const SKIP = /^!!|^\?\? \.claude\//
  * rename carries its old path as a second record, which is read and dropped.
  */
 export function pathsOf(out: string): string[] {
-  const records = out.split('\0').filter(r => r.length > 3)
+  const records = out.split('\0')
   const paths: string[] = []
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i] ?? ''
-    if (SKIP.test(record)) continue
+    // A rename or a copy spends the next record on the path it came from, however short that path is,
+    // so the skip comes before any record is dropped.
+    if (/^[RC]|^.[RC]/.test(record)) i += 1
+    if (record.length <= 3 || SKIP.test(record)) continue
     paths.push(record.slice(3))
-    // A rename or a copy spends the next record on the path it came from.
-    if (/^R|^C/.test(record)) i += 1
   }
   return [...new Set(paths)].sort()
 }

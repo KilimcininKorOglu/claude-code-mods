@@ -64,6 +64,8 @@ describe('commit-cadence', () => {
     expect(pathsOf('R  new.ts\0old.ts\0 M a.ts\0')).toEqual(['a.ts', 'new.ts'])
     expect(pathsOf('!! target/\0?? .claude/types/x.d.ts\0')).toEqual([])
     expect(pathsOf('')).toEqual([])
+    // An old path of three characters or less is still spent, so the entry after it is not skipped.
+    expect(pathsOf('R  src/new.c\0a.c\0 M src/app.ts\0')).toEqual(['src/app.ts', 'src/new.c'])
     expect(logText(['a.ts', 'b.ts'])).toBe('2 uncommitted file(s): a.ts, b.ts')
     expect(logText(['1', '2', '3', '4', '5', '6', '7'])).toBe('7 uncommitted file(s): 1, 2, 3, 4, 5, 6 and 1 more')
     expect(noteText(['a.ts'])).toContain('one commit per change')
