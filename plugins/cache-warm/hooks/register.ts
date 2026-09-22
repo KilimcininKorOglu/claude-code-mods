@@ -1,8 +1,7 @@
 import type { EngineInterface, Register, TurnUsage } from 'claude-code'
-import { priceOf, responseUsd, writeUsd } from './pricing.ts'
+import { priceOf, responseUsd, writeUsd, type Usage } from './pricing.ts'
 import {
   AUTO_WARM_MS,
-  DEFAULT_WINDOW_MS,
   MIN_PING_MS,
   PING_AFTER_MS,
   card,
@@ -13,8 +12,10 @@ import {
   fmtTok,
   fmtUsd,
   freshState,
+  hasWindow,
   idleText,
   isColdWrite,
+  isOver,
   isWarmPing,
   parseWarmArgs,
   resetForClear,
@@ -117,6 +118,7 @@ async function restore($: EngineInterface, s: State, now: number): Promise<void>
 
 async function stop($: EngineInterface, s: State, why: string | null, forgetAlways = false): Promise<void> {
   s.deadline = 0
+  s.endless = false
   s.every = PING_AFTER_MS
   s.stopped = why
   disarm(s)
@@ -133,16 +135,16 @@ async function stop($: EngineInterface, s: State, why: string | null, forgetAlwa
 async function arm($: EngineInterface, s: State): Promise<void> {
   disarm(s)
   const now = await $.clock.now()
-  if (s.deadline && now >= s.deadline) {
+  if (isOver(s, now)) {
     // A window that ran out of time is armed again by the next message, as long as this one was. A
     // window the ping stopped is not: the cache is gone there, and the cold write of the next message
-    // arms its own window.
+    // arms its own window. The endless loop never reaches this.
     const again = { window: s.window, every: s.every }
     await stop($, s, null)
     s.renew = again
     return showStatusAt($, s, now)
   }
-  if (s.deadline && s.lastRequestAt && !s.compacted) {
+  if (hasWindow(s) && s.lastRequestAt && !s.compacted) {
     const delay = Math.max(1000, s.lastRequestAt + s.every - now)
     s.pending = $.clock.after(delay, () => { void runPing($, s) })
   }
@@ -150,12 +152,31 @@ async function arm($: EngineInterface, s: State): Promise<void> {
   await showStatusAt($, s, now)
 }
 
+/**
+ * Records the ping's answer and schedules the next one. A ping that found the cache gone stops a window
+ * with an end, because the write it paid for is the last thing that window wanted. The endless loop of
+ * `always` carries on instead: that write is the new cache, and the next ping keeps it.
+ */
+async function settlePing($: EngineInterface, s: State, usage: Usage, now: number): Promise<void> {
+  const price = priceOf(s.model)
+  const usd = price ? responseUsd(usage, price) : null
+  s.lastPing = { read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd }
+  if (!isWarmPing(usage)) {
+    if (!s.endless) return stop($, s, coldPingText(usage, usd))
+    const write = usage.cache_creation_input_tokens
+    s.coldWrites.push({ tokens: write, usd })
+    logEvent($, s, `the ping found the cache gone and re-wrote ${fmtTok(write)} tokens (${fmtUsd(usd)}); always keeps the loop running. /cache-warm off stops it.`, coldWriteShort(write, usd))
+  }
+  s.lastRequestAt = now
+  await arm($, s)
+}
+
 async function ping($: EngineInterface, s: State): Promise<void> {
   s.pending = null
-  if (!s.deadline) return
+  if (!hasWindow(s)) return
   const now = await $.clock.now()
   // The window ended, or a request since the timer was set moved the ping later.
-  if (now >= s.deadline || now - s.lastRequestAt < s.every - 1000) return arm($, s)
+  if (isOver(s, now) || now - s.lastRequestAt < s.every - 1000) return arm($, s)
   let reply
   try {
     reply = await $.model.fork({ prompt: PING_PROMPT })
@@ -163,12 +184,7 @@ async function ping($: EngineInterface, s: State): Promise<void> {
     return stop($, s, `the ping failed, ${errorText(err)}`)
   }
   if (reply === null) return stop($, s, 'the engine did not send the ping; the snapshot was cold or the API call failed')
-  const price = priceOf(s.model)
-  const usd = price ? responseUsd(reply.usage, price) : null
-  s.lastPing = { read: reply.usage.cache_read_input_tokens, write: reply.usage.cache_creation_input_tokens, usd }
-  if (!isWarmPing(reply.usage)) return stop($, s, coldPingText(reply.usage, usd))
-  s.lastRequestAt = now
-  await arm($, s)
+  await settlePing($, s, reply.usage, now)
 }
 
 async function runPing($: EngineInterface, s: State): Promise<void> {
@@ -188,6 +204,23 @@ async function startWindow($: EngineInterface, s: State, windowMs: number, every
   await $.store.set(deadlineKey(s), s.deadline)
   if (every === PING_AFTER_MS) await $.store.delete(everyKey(s))
   else await $.store.set(everyKey(s), every)
+  await arm($, s)
+}
+
+/**
+ * Starts the endless loop of `always`: a ping every period until `/cache-warm off`, with no end time.
+ * It writes no per-session deadline, so the switch stays one global key that every session of every
+ * project reads at its start.
+ */
+async function startEndless($: EngineInterface, s: State): Promise<void> {
+  s.every = PING_AFTER_MS
+  s.window = 0
+  s.renew = null
+  s.deadline = 0
+  s.endless = true
+  s.stopped = null
+  await $.store.delete(deadlineKey(s))
+  await $.store.delete(everyKey(s))
   await arm($, s)
 }
 
@@ -216,13 +249,13 @@ async function warmCommand($: EngineInterface, s: State, args: string): Promise<
       const wasAlways = s.always
       s.renew = null
       await stop($, s, null, true)
-      return wasAlways ? 'off, and no longer arms itself at session start' : 'off'
+      return wasAlways ? 'off, and no longer starts itself in any session' : 'off'
     }
     case 'always':
       s.always = true
       await $.store.set(KEY_ALWAYS, true)
-      await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
-      return `always on: every session starts with a ${fmtDuration(DEFAULT_WINDOW_MS)} window; /cache-warm off turns it off for good`
+      await startEndless($, s)
+      return `always on: a ping every ${fmtDuration(PING_AFTER_MS)} with no end, in this session and in every later session of every project; /cache-warm off turns it off for good`
     case 'arm':
       await startWindow($, s, command.window, command.every)
       return `on for ${fmtDuration(command.window)}, a ping ${fmtDuration(command.every)} after each idle stretch keeps the cache read, not re-written`
@@ -233,7 +266,7 @@ async function clearSession($: EngineInterface, s: State): Promise<void> {
   await stop($, s, null)
   resetForClear(s)
   s.sid = await $.session.id()
-  if (s.always) await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
+  if (s.always) await startEndless($, s)
 }
 
 /** The origins of a message the person sent themselves, which is what arms a window again. */
@@ -265,7 +298,8 @@ async function measure($: EngineInterface, s: State, u: TurnUsage, now: number):
   if (!isColdWrite(previous, write)) return
   const usd = writeUsd(write, priceOf(s.model))
   s.coldWrites.push({ tokens: write, usd })
-  if (s.deadline >= now + AUTO_WARM_MS) return
+  // The endless loop already keeps this cache; a window with an end would only shorten it.
+  if (s.endless || s.deadline >= now + AUTO_WARM_MS) return
   // The line is written before the window starts, so the sidebar's redraw already carries it.
   logEvent($, s, `cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)}; /cache-warm off stops it.`, coldWriteShort(write, usd))
   await startWindow($, s, AUTO_WARM_MS, s.every)
@@ -295,8 +329,9 @@ export const register: Register = on => {
     const now = await $.clock.now()
     await prune($, s, now)
     await restore($, s, now)
-    // Always means a fresh default window every session, whatever the last one left behind.
-    if (s.always) await startWindow($, s, DEFAULT_WINDOW_MS, PING_AFTER_MS)
+    // The always switch is one global key, so every session of every project starts the endless loop,
+    // whatever the last window of this session left behind.
+    if (s.always) await startEndless($, s)
     const live = (await $.session.usage()).context.tokens
     if (live) s.ctx = live
     await registerCommands($)

@@ -52,7 +52,7 @@
     {
       "name": "cache-warm",
       "source": "./plugins/cache-warm",
-      "description": "Keeps the 1-hour prompt cache warm for a window you set with one tool-less $.model.fork per idle stretch, stops the moment a ping finds the cache gone, arms a six-hour window after a paid cold write, and shows the cache state, the cold price and this session's cold writes with /cache-status.",
+      "description": "Keeps the 1-hour prompt cache warm for a window you set, or with no end in every session under always, with one tool-less $.model.fork per idle stretch, stops a window the moment a ping finds the cache gone, arms a six-hour window after a paid cold write, and shows the cache state, the cold price and this session's cold writes with /cache-status.",
       "category": "productivity",
       "tags": [
         "mods",

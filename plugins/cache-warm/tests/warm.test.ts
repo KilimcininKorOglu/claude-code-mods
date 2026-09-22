@@ -144,7 +144,7 @@ describe('text', () => {
   test('the card names the always switch while off', async () => {
     const s = freshState()
     s.always = true
-    expect(card(s, NOW)).toMatch(/keep warm   off until the next session start or \/clear, which arm 6h \(always\)/)
+    expect(card(s, NOW)).toMatch(/keep warm   off until the next session start or \/clear, which start the endless loop again \(always\)/)
   })
 
   test('the card of a cold session', async () => {

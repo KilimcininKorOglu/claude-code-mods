@@ -33,8 +33,10 @@ export interface ColdWrite {
 
 export interface State {
   sid: string
-  /** When the keep-warm window ends; 0 means off. */
+  /** When the keep-warm window ends; 0 means off. `endless` runs with no deadline at all. */
   deadline: number
+  /** The `always` loop: a ping every period until /cache-warm off, with no end time. */
+  endless: boolean
   /** How long the running window was armed for, so one that runs out can start again as long. */
   window: number
   /** The window the next message of the person starts again; null when none ran out. */
@@ -55,7 +57,7 @@ export interface State {
 
 export function freshState(): State {
   return {
-    sid: '', deadline: 0, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, ctx: 0,
+    sid: '', deadline: 0, endless: false, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, ctx: 0,
     compacted: false, coldWrites: [], pending: null, lastPing: null, stopped: null,
   }
 }
@@ -116,6 +118,16 @@ export function parseWarmArgs(args: string): WarmCommand {
   return { kind: 'arm', window, every }
 }
 
+/** True while the mod keeps the cache warm: a window with an end, or the endless `always` loop. */
+export function hasWindow(s: State): boolean {
+  return s.endless || s.deadline > 0
+}
+
+/** True when a window with an end has reached it. The endless loop never does. */
+export function isOver(s: State, now: number): boolean {
+  return !s.endless && s.deadline > 0 && now >= s.deadline
+}
+
 export function isCold(s: State, now: number): boolean {
   return s.lastRequestAt > 0 && !s.compacted && now - s.lastRequestAt >= TTL_MS
 }
@@ -136,10 +148,11 @@ export function coldPingText(u: Usage, usd: number | null): string {
 /** The status line; undefined clears it. The engine puts the mod name in front. */
 export function statusText(s: State, now: number): string | undefined {
   if (s.stopped) return `stopped: ${s.stopped}`
-  if (!s.deadline) return undefined
+  if (!hasWindow(s)) return undefined
   const next = s.lastRequestAt && !s.compacted ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
   const ping = s.lastPing ? ` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)}` : ''
-  return `${fmtDuration(s.deadline - now)} left${next}${ping}`
+  const left = s.endless ? 'always, no end' : `${fmtDuration(s.deadline - now)} left`
+  return `${left}${next}${ping}`
 }
 
 /**
@@ -164,6 +177,7 @@ export function idleText(s: State): string {
 export function statusTone(s: State, now: number): 'ok' | 'warn' | 'error' | 'dim' {
   if (s.stopped) return 'error'
   if (!s.lastRequestAt || s.compacted) return 'dim'
+  if (s.endless) return 'ok'
   return s.deadline - now <= s.every ? 'warn' : 'ok'
 }
 
@@ -224,10 +238,10 @@ function stateLine(s: State, now: number): string {
 
 function warmLine(s: State, now: number): string {
   const always = s.always ? ' (always)' : ''
-  if (s.deadline) return `on, ${statusText(s, now) ?? ''}${always}`
+  if (hasWindow(s)) return `on, ${statusText(s, now) ?? ''}${always}`
   if (s.stopped) return `stopped, ${s.stopped}${always}`
   if (s.renew) return `off, ${fmtDuration(s.renew.window)} again at your next message${always}`
-  if (s.always) return `off until the next session start or /clear, which arm ${fmtDuration(DEFAULT_WINDOW_MS)} (always)`
+  if (s.always) return `off until the next session start or /clear, which start the endless loop again (always)`
   return `off (/cache-warm arms it for ${fmtDuration(DEFAULT_WINDOW_MS)})`
 }
 

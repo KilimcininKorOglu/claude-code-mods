@@ -300,19 +300,20 @@ describe('keep warm', () => {
 })
 
 describe('always', () => {
-  test('/cache-warm always sets the switch and arms now', async ($, on) => {
+  test('/cache-warm always sets the switch and starts the endless loop, with no window in the store', async ($, on) => {
     const w = world(on, [])
     await $.session.start(session)
     const r = await $.command.run(run('cache-warm', 'always'))
-    expect(r.text).toMatch(/^always on: every session starts with a 6h window/)
+    expect(r.text).toMatch(/^always on: a ping every 50m with no end/)
+    // The switch is the only key: it is global, and the endless loop needs no per-session deadline.
     expect(w.store.get('always')).toBe(true)
-    expect(w.store.get('deadline:S1')).toBe(START + 6 * HOUR)
+    expect(w.store.has('deadline:S1')).toBe(false)
   })
 
-  test('a session start arms a fresh default window over a stale one, and off ends it for good', async ($, on) => {
+  test('a session start takes the endless loop over a stale window, and off ends it for good', async ($, on) => {
     const w = world(on, [warm], { store: [['always', true], ['deadline:S1', START + 10 * MIN], ['every:S1', MIN]] })
     await $.session.start(session)
-    expect(w.store.get('deadline:S1')).toBe(START + 6 * HOUR)
+    expect(w.store.has('deadline:S1')).toBe(false)
     expect(w.store.has('every:S1')).toBe(false)
     await $.turn.complete(turn())
     await w.clock.advance(MIN)
@@ -320,10 +321,35 @@ describe('always', () => {
     await w.clock.advance(49 * MIN)
     expect(w.forks).toBe(1)
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, 5h 10m left · ping in 50m · last ping read 200k \$0\.05 \(always\)/)
+    expect(status.text).toMatch(/keep warm   on, always, no end · ping in 50m · last ping read 200k \$0\.05 \(always\)/)
     const off = await $.command.run(run('cache-warm', 'off'))
-    expect(off.text).toBe('off, and no longer arms itself at session start')
+    expect(off.text).toBe('off, and no longer starts itself in any session')
     expect(w.store.has('always')).toBe(false)
+  })
+
+  test('the endless loop keeps pinging past six hours', async ($, on) => {
+    const w = world(on, Array.from({ length: 8 }, () => warm), { store: [['always', true]] })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    // Eight ping periods is over six hours: a window with an end would have run out by now.
+    for (let i = 0; i < 8; i += 1) await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(8)
+    const status = await $.command.run(run('cache-status'))
+    expect(status.text).toMatch(/keep warm   on, always, no end/)
+  })
+
+  test('a ping that found the cache gone re-writes it and the endless loop carries on', async ($, on) => {
+    const cold: ForkAnswer = { read: 0, write: 200_000 }
+    const w = world(on, [cold, warm], { store: [['always', true]] })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.logs.at(-1)).toBe('the ping found the cache gone and re-wrote 200k tokens ($4.00); always keeps the loop running. /cache-warm off stops it.')
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(2)
+    const status = await $.command.run(run('cache-status'))
+    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    expect(status.text).toMatch(/session     1 cold write paid, \$4\.00/)
   })
 })
 

@@ -8,7 +8,9 @@ The behavior follows the cache-tax mod by Karan Bansal (karanb192/claude-code-mo
 
 **Keeps the cache warm.** `/cache-warm` arms a six-hour window. Inside the window, 50 minutes after the last model request of the main loop, the mod sends one tool-less `$.model.fork` over the session's own transcript. The server answers it from the cache, which refreshes the hour. Every new request moves the ping later, so an active session sends no ping at all.
 
-**Stops when the cache is gone.** A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the engine sends no ping or the fork fails.
+**Runs with no end under `always`.** `/cache-warm always` is not a window: the ping goes out every 50 minutes for as long as the session lives, and `/cache-warm off` is the only thing that ends it. The switch is one global key in the mod's own `$.store`, so every later session of every project starts the same loop at its start and after `/clear`. A ping that finds the cache gone does not end this loop: the write that ping paid for is the new cache, the mod says so in one transcript line, counts the write in the session's tally and keeps going. A warm ping reads the context at the read rate, about $0.05 for 200k tokens, so an idle day of pings costs about $1.40.
+
+**Stops when the cache is gone.** This holds for a window with an end, not for `always`. A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the engine sends no ping or the fork fails.
 
 **Arms itself after a paid cold write.** When a turn re-writes at least half of a context larger than 20k tokens, the mod counts that cold write and arms a six-hour window, unless a longer window is already armed.
 
@@ -20,7 +22,7 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
     /cache-warm               keep warm for six hours
     /cache-warm 90m           keep warm for a window of your own (also 2h30m)
-    /cache-warm always        arm a six-hour window at every session start and /clear, remembered across sessions
+    /cache-warm always        keep the cache warm with no end, in every session of every project
     /cache-warm 6h every 2m   ping every two minutes; a test setting, floor 1m, forgotten after this window
     /cache-warm status        the status line text
     /cache-warm off           stop, forget the window, and turn always off
@@ -95,21 +97,21 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 1. Restart Claude Code.
 2. Disable every other keep-warm mod, for example `claude plugin disable cache-tax@claude-code-mods`. Two keep-warm mods in one session send two pings per idle stretch.
 3. Check once that a ping reads your cache, as "Prove it on your own session" below says.
-4. To arm a window at every session start and `/clear`, run `/cache-warm always` once. It is remembered across sessions. Without it, a window is armed only by `/cache-warm` or after a paid cold write.
+4. To keep the cache warm with no end, run `/cache-warm always` once. The switch is global: every later session of every project starts the loop by itself, and `/cache-warm off` ends it for good. Without it, a window is armed only by `/cache-warm` or after a paid cold write.
 
 ## What it can reach
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
 
 Reach L2, drives Claude.
 
     1. Reads:    the time of each main-loop model request; the token counts and model id of each turn and of each ping; the live context size; the origin of each message, to arm a window again; the resume fields Claude Code computes for settings hooks; the session id and model; its own $.store. It never reads a prompt's text, a file or a tool result.
-    2. Runs:     one $.model.fork per idle stretch inside an armed window, 50 minutes after the last request unless the test setting is used (floor 1 minute); never outside a window, never after a ping that found the cache gone
+    2. Runs:     one $.model.fork per idle stretch while a window or the always loop runs, 50 minutes after the last request unless the test setting is used (floor 1 minute); never while off; a ping that found the cache gone ends a window with an end, and under always the loop carries on
     3. Sends:    only the fork, an API request over the session's own transcript with a fixed one-line prompt
-    4. Persists: in $.store, the window end and the ping period under this session's id, and the global always switch; this session's ended window is deleted at stop and at its next start, another session's window one week after it ended; the cold-write tally lives in memory and ends with the session
+    4. Persists: in $.store, the window end and the ping period under this session's id, and the global always switch, which the endless loop needs no window key beside; this session's ended window is deleted at stop and at its next start, another session's window one week after it ended; the cold-write tally lives in memory and ends with the session
     5. Hostile input: the only text it parses is the argument of /cache-warm, matched against a duration pattern and three words; the fork's prompt is a constant, so nothing crafted can reach it
 
 ## Prove it on your own session
