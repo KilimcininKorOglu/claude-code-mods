@@ -11,6 +11,31 @@ export function isCommit(command: string): boolean {
   return COMMIT.test(command) && !NOT_A_COMMIT.test(command)
 }
 
+/** A `git commit`, `git push` or `git merge` the model runs, the three the gate stops. */
+const GUARDED = new RegExp(String.raw`(^|[\s;&|(])git(?:${GIT_FLAG})*\s+(commit|push|merge)\b`)
+
+/** Whether the gate stops this command while a finding is open. */
+export function isGuarded(command: string): boolean {
+  return GUARDED.test(command) && !NOT_A_COMMIT.test(command)
+}
+
+/**
+ * Whether the index alone says what this commit holds. A `-a` or `-am` commit stages the tracked files
+ * as it runs, and a pathspec after `--` commits paths the index does not hold, so neither is narrowed.
+ */
+export function isNarrowable(command: string): boolean {
+  const words = command.split(/\s+/)
+  return !words.includes('--') && !words.some(w => w === '--all' || /^-[A-Za-z]*a/.test(w))
+}
+
+/** The mode of the mod: a note only, or a note and a gate on git commit, push and merge. */
+export type Mode = 'note' | 'deny'
+
+/** The mode a `/doc-drift-watch mode <word>` argument names, or undefined when it is not one. */
+export function modeOf(arg: string): Mode | undefined {
+  return arg === 'note' || arg === 'deny' ? arg : undefined
+}
+
 const unquote = (word: string): string => word.replace(/^(["'])(.*)\1$/, '$2')
 
 const joinDir = (base: string, dir: string): string => (dir.startsWith('/') ? dir : `${base.replace(/\/+$/, '')}/${dir}`)
@@ -56,8 +81,15 @@ export function parseDrift(output: string): Stale[] {
 }
 
 /** The same claim across two runs; the line is left out, because an edit above it moves it. */
-function identity(s: Stale): string {
+export function identity(s: Stale): string {
   return `${s.doc}\0${s.kind}\0${s.why}\0${s.ref}`
+}
+
+/** The stale anchors of a run, grouped under the doc that holds them. */
+export function byDoc(stale: readonly Stale[]): Map<string, Stale[]> {
+  const docs = new Map<string, Stale[]>()
+  for (const s of stale) docs.set(s.doc, [...(docs.get(s.doc) ?? []), s])
+  return docs
 }
 
 /** The stale anchors after a commit that were not stale before it. */
@@ -103,7 +135,47 @@ export function sidebarLines(added: readonly Stale[]): { text: string; kind: 'er
   return lines
 }
 
-/** A sidebar section key: the docs of this commit, cut to what the sidebar takes. */
-export function sectionKey(added: readonly Stale[]): string {
-  return [...new Set(added.map(s => s.doc))].join('-').replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+/** A sidebar section key: the doc the finding belongs to, cut to what the sidebar takes. */
+export function sectionKey(doc: string): string {
+  return doc.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'note'
+}
+
+/** Which side closed a finding: the doc was updated, or the doc itself is gone. */
+export type Closing = 'holds' | 'gone'
+
+function closingText(doc: string, count: number, side: Closing): string {
+  return side === 'gone'
+    ? `${doc} is gone, and its ${count} stale line(s) with it`
+    : `${doc}: ${count} doc line(s) hold again`
+}
+
+/** The transcript line of a closed finding. The engine adds the mod name. */
+export function doneLog(doc: string, count: number, side: Closing): string {
+  return closingText(doc, count, side)
+}
+
+/** The green sidebar line of a closed finding. */
+export function doneLines(doc: string, count: number, side: Closing): { text: string; kind: 'ok' }[] {
+  return [{ text: closingText(doc, count, side), kind: 'ok' }]
+}
+
+/** One `<doc>: <n>` pair per open finding, at most `MAX_NAMED` of them named and the rest counted. */
+function namedDocs(open: ReadonlyMap<string, number>): string {
+  const pairs = [...open].map(([doc, count]) => `${doc} (${count})`)
+  const named = pairs.slice(0, MAX_NAMED)
+  if (pairs.length > MAX_NAMED) named.push(`${pairs.length - MAX_NAMED} more`)
+  return named.join(' · ')
+}
+
+/** What the deny says: why the command stopped. There is no bypass. */
+export function denyText(open: ReadonlyMap<string, number>): string {
+  return `stopped: ${open.size} doc(s) still hold stale lines: ${namedDocs(open)}. Update them and run the command again; there is no way around this gate.`
+}
+
+/**
+ * The note the model reads at the next prompt while a finding stands, so a finding it did not close
+ * reaches it again instead of standing in the pane alone. The person reads the pane and needs no line.
+ */
+export function openNote(open: ReadonlyMap<string, number>): string {
+  return `doc-drift-watch: ${open.size} doc(s) still hold stale lines: ${namedDocs(open)}. Update them.`
 }
