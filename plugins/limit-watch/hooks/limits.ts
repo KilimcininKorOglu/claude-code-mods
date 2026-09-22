@@ -132,6 +132,26 @@ export function newThresholds(track: Track, percent: number): number[] {
   return THRESHOLDS.filter(t => percent >= t && !track.warned.includes(t)).sort((a, b) => b - a)
 }
 
+/** Two tracks of one limit belong to one cycle when their reset times differ by no more than the jitter. */
+function isSameCycle(a: Track, b: Track): boolean {
+  if (a.resetsAt === undefined || b.resetsAt === undefined) return a.resetsAt === b.resetsAt
+  return Math.abs(Date.parse(a.resetsAt) - Date.parse(b.resetsAt)) <= RESET_JITTER
+}
+
+/**
+ * Adds the warnings another session stored to the tracks of this one, per limit and only within one
+ * cycle, so a threshold that session already warned about is not warned about here again.
+ */
+export function mergeWarned(tracks: Tracks, stored: Tracks): Tracks {
+  const next: Tracks = { ...tracks }
+  for (const [kind, track] of Object.entries(tracks)) {
+    const other = stored[kind]
+    if (other === undefined || !isSameCycle(track, other)) continue
+    next[kind] = { ...track, warned: [...new Set([...track.warned, ...other.warned])] }
+  }
+  return next
+}
+
 export function markWarned(tracks: Tracks, kind: string, levels: readonly number[]): Tracks {
   const track = tracks[kind]
   if (track === undefined || levels.length === 0) return tracks

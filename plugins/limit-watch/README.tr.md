@@ -32,7 +32,7 @@ Bar pane'in genişliğini doldurur. %80 altında yeşil, %80'den itibaren sarı 
 
     limit-watch: 5-hour limit passed 80% (now 82%), resets 22:40 (in 1h 5m)
 
-Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir session onu tekrarlamaz. Limit reset olduktan sonra uyarılar yeniden gelir.
+Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir session onu tekrarlamaz, aynı anda açık ikinci bir session da tekrarlamaz: her sample uyarmadan önce uyarılmış seviyeleri store'dan yeniden okur. Aynı anda sample alan iki session yine ikisi de uyarabilir. Limit reset olduktan sonra uyarılar yeniden gelir.
 
 ## Sayılar nasıl oluşur
 

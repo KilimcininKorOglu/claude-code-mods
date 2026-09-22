@@ -5,6 +5,7 @@ import {
   durationText,
   forecast,
   markWarned,
+  mergeWarned,
   newThresholds,
   pace,
   record,
@@ -113,6 +114,15 @@ describe('thresholds', () => {
     expect(first).toEqual([95, 80])
     tracks = markWarned(tracks, 'five_hour', first)
     expect(newThresholds(tracks.five_hour ?? { samples: [], warned: [] }, 98)).toEqual([])
+  })
+
+  test("another session's warnings join only within one cycle", async () => {
+    const mine: Tracks = { five_hour: { resetsAt: '2026-09-18T15:00:00Z', samples: [], warned: [80] } }
+    const sameCycle: Tracks = { five_hour: { resetsAt: '2026-09-18T15:02:00Z', samples: [], warned: [80, 95] } }
+    const oldCycle: Tracks = { five_hour: { resetsAt: '2026-09-18T10:00:00Z', samples: [], warned: [95] } }
+    expect(mergeWarned(mine, sameCycle).five_hour?.warned).toEqual([80, 95])
+    expect(mergeWarned(mine, oldCycle).five_hour?.warned).toEqual([80])
+    expect(mergeWarned(mine, {})).toEqual(mine)
   })
 })
 

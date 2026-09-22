@@ -29,15 +29,21 @@ type World = {
   /** How many of the next usage reads fail. */
   failUsage: number
   clock: MockClock
+  /** What the store holds; another session writes here too. */
+  store: Record<string, unknown>
 }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { logs: [], statuses: [], panes: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }) }
+  const w: World = { logs: [], statuses: [], panes: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }), store: { ...store } }
   let limits: SessionRateLimit[] = []
   w.setLimits = l => {
     limits = l
   }
-  mock.store(on, store)
+  on('store.get', (_, e) => ({ value: w.store[e.key] }))
+  on('store.set', (_, e) => {
+    w.store[e.key] = e.value
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -131,6 +137,20 @@ describe('limit-watch', () => {
     w.setLimits([fiveHour(83)])
     await $.session.start(session)
     expect(w.logs.filter(l => l.includes('passed'))).toEqual([])
+  })
+
+  test('does not warn again about a threshold another session already warned about', async ($, on) => {
+    const w = world(on)
+    w.setLimits([fiveHour(70)])
+    await $.session.start(session)
+    // Another session of the same account passed 80% and stored its warning.
+    w.store.tracks = { five_hour: { resetsAt: RESET, samples: [{ at: T0, percent: 81 }], warned: [80] } }
+    w.setLimits([fiveHour(82)])
+    await $.turn.complete(turn())
+    expect(w.logs.filter(l => l.includes('passed'))).toEqual([])
+    w.setLimits([fiveHour(96)])
+    await $.turn.complete(turn())
+    expect(w.logs.filter(l => l.includes('passed'))).toHaveLength(1)
   })
 
   test('reports a stored value of an unknown shape and starts over', async ($, on) => {

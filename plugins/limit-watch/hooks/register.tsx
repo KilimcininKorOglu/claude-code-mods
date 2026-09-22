@@ -5,6 +5,7 @@ import {
   clockText,
   durationText,
   markWarned,
+  mergeWarned,
   newThresholds,
   pace,
   paceText,
@@ -58,12 +59,16 @@ async function toSidebar($: EngineInterface, state: State, now: number): Promise
   }
 }
 
-/** Reads the limits, records a sample, raises new warnings, stores the tracks and redraws. */
+/**
+ * Reads the limits, records a sample, raises new warnings, stores the tracks and redraws. The stored
+ * tracks are read again first, so a warning another session of the account wrote is not repeated.
+ */
 async function sample($: EngineInterface, state: State): Promise<void> {
   const usage = await $.session.usage()
   const now = await $.clock.now()
   state.limits = usage.rateLimits
   state.tracks = record(state.tracks, state.limits, now)
+  state.tracks = mergeWarned(state.tracks, parseTracks(await $.store.get(TRACKS_KEY)) ?? {})
   warn($, state, now)
   await $.store.set(TRACKS_KEY, state.tracks)
   // The sidebar takes the reading while it is open; otherwise the status line shows it, as before.

@@ -32,7 +32,7 @@ The bar fills the width of the pane. It is green below 80%, yellow from 80% and 
 
     limit-watch: 5-hour limit passed 80% (now 82%), resets 22:40 (in 1h 5m)
 
-Each warning comes once per limit cycle. A new session in the same cycle does not repeat it. After the limit resets, the warnings come again.
+Each warning comes once per limit cycle. A new session in the same cycle does not repeat it, and neither does a second session open at the same time: each sample reads the warned levels from the store again before it warns. Two sessions that sample in the same instant can still both warn. After the limit resets, the warnings come again.
 
 ## How the numbers are made
 
