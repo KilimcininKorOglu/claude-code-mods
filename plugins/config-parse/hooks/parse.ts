@@ -187,6 +187,13 @@ export const sidebarLines = (error: string): { text: string; kind: 'error' }[] =
 
 export const doneLines = (shown: string): { text: string; kind: 'ok' }[] => [{ text: `${shown} parses again`, kind: 'ok' }]
 
+/** The closing of a file that was deleted: nothing reads it any more, so nothing fails on it. */
+export function goneLog(shown: string): string {
+  return `${shown} is gone, and its parse error with it`
+}
+
+export const goneLines = (shown: string): { text: string; kind: 'ok' }[] => [{ text: goneLog(shown), kind: 'ok' }]
+
 function label(kind: Kind): string {
   return kind === 'env' ? 'a .env file' : kind.toUpperCase()
 }

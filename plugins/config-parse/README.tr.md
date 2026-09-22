@@ -8,7 +8,7 @@ Bir Edit ya da Write'ın dokunduğu her JSON, YAML, TOML ve `.env` dosyasını p
 2. JSON'ı mod kendisi parse eder, `.env` dosyası satır satır okunur: boş olmayan, comment olmayan ve `KEY=value` olmayan bir satır bulgudur, numarasıyla birlikte.
 3. YAML ve TOML `python3` ile parse edilir (güvenli bir loader ile `yaml.load_all` ve `tomllib.load`), dosya path'i tek bir argv değeri olarak. Bir `---` stream'inin her dokümanı okunur ve `!Ref` ya da `!vault` gibi bir uygulama tag'i kabul edilir, çünkü ikisi de geçerli YAML'dir. python ya da modül yoksa o tür session boyunca atlanır ve bir satır bunu söyler.
 4. Parse edilmeyen bir dosya iki kanala yazılır: model dosyayı ve hatayı adlandıran bir `context` notu alır, kişi ortak sidebar'ın stream'inde kırmızı bir kayıt alır, sidebar kapalıyken bir transcript satırı. Dosya, session'ın başladığı git repository'sine göre adlandırılır; repository dışında session'ın dizinine göre. Bu kök session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır.
-5. Sonraki bir edit aynı dosyayı tekrar parse edilir hale getirdiğinde duran kayıt temizlenir ve bir yeşil satır bunu söyler. O satır yalnız kişiye gider, çünkü düzeltmeyi model kendisi yapmıştır.
+5. Sonraki bir edit aynı dosyayı tekrar parse edilir hale getirdiğinde duran kayıt temizlenir ve bir yeşil satır bunu söyler. O satır yalnız kişiye gider, çünkü düzeltmeyi model kendisi yapmıştır. Bulgusu dururken silinen bir dosya sonraki ölçümde aynı şekilde `<file> is gone, and its parse error with it` ile kapanır. Var olan ama okunamayan bir dosya bulgusunu korur.
 6. Mod hiçbir edit'i reddetmez. Dosya önce yazılır, sonra okunur.
 7. Modelin kapatmadığı bir bulgu her main-loop turn sonunda tekrar ölçülür ve geriye kalan, bir sonraki prompt ile modele tek not olarak ulaşır:
 
@@ -45,7 +45,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck, shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via pythonCheck, shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
 
 Reach L2, dosya okur ve process çalıştırır.
 

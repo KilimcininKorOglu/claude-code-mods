@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, envError, isCommit, isGuarded, isJsonc, isMissingTool, isNarrowable, jsoncText, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
+import { denyText, doneLines, doneLog, envError, goneLines, goneLog, isCommit, isGuarded, isJsonc, isMissingTool, isNarrowable, jsoncText, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -57,11 +57,24 @@ async function pythonCheck($: EngineInterface, state: State, kind: 'yaml' | 'tom
   return undefined
 }
 
-/** The parse error of one file, or undefined when it parses. */
+/** Whether the file is no longer on disk; a path that could not be measured is not gone. */
+async function isGone($: EngineInterface, path: string): Promise<boolean> {
+  try {
+    return !(await $.fs.exists(path))
+  } catch {
+    // The path was not measured: the finding is left as it stands.
+    return false
+  }
+}
+
+/** A file that could not be read: it proves nothing, so an open finding on it stays open. */
+const UNREAD = 'unread'
+
+/** The parse error of one file, undefined when it parses, or `UNREAD` when its text could not be read. */
 async function checkFile($: EngineInterface, state: State, kind: Kind, path: string): Promise<string | undefined> {
   if (kind === 'yaml' || kind === 'toml') return pythonCheck($, state, kind, path)
   const text = await fileText($, state, path)
-  if (text === undefined) return undefined
+  if (text === undefined) return UNREAD
   if (kind === 'env') return envError(text)
   return jsonError(isJsonc(path) ? jsoncText(text) : text)
 }
@@ -80,15 +93,16 @@ async function toPerson($: EngineInterface, shown: string, title: string, lines:
   $.ui.log(line)
 }
 
-/** Says the file parses again, once, and drops the standing finding. */
-async function closeOne($: EngineInterface, state: State, kind: Kind, shown: string): Promise<void> {
+/** Says, once, why the finding closed (the file parses, or it is gone), and drops it. */
+async function closeOne($: EngineInterface, state: State, kind: Kind, shown: string, gone = false): Promise<void> {
   state.open.delete(shown)
   try {
     await $.sidebar.clear({ consumer: CONSUMER, key: sectionKey(shown) })
   } catch {
     // The sidebar mod is not installed.
   }
-  await toPerson($, shown, 'config parses again', doneLines(shown), doneLog(kind, shown))
+  if (gone) await toPerson($, shown, 'config is gone', goneLines(shown), goneLog(shown))
+  else await toPerson($, shown, 'config parses again', doneLines(shown), doneLog(kind, shown))
 }
 
 /** Checks the file an edit touched, and adds the note when it no longer parses. */
@@ -98,6 +112,7 @@ async function afterEdit($: EngineInterface, state: State, path: string, r: Tool
   if (kind === undefined) return r
   const shown = shownPath(path, state.root ?? (await $.session.cwd()))
   const error = await checkFile($, state, kind, path)
+  if (error === UNREAD) return r
   if (error === undefined) {
     if (state.open.has(shown)) await closeOne($, state, kind, shown)
     return r
@@ -108,9 +123,16 @@ async function afterEdit($: EngineInterface, state: State, path: string, r: Tool
   return { ...r, context: [...(r.context ?? []), noteText(kind, shown, error)] }
 }
 
-/** Parses every open file again and closes the ones an edit fixed, so the gate never holds a stale finding. */
+/**
+ * Parses every open file again and closes the ones an edit fixed or a delete removed, so the gate never
+ * holds a stale finding. A file that is there and cannot be read keeps its finding.
+ */
 async function recheckOpen($: EngineInterface, state: State): Promise<void> {
   for (const [shown, { path, kind }] of [...state.open]) {
+    if (await isGone($, path)) {
+      await closeOne($, state, kind, shown, true)
+      continue
+    }
     const error = await checkFile($, state, kind, path)
     if (error === undefined) await closeOne($, state, kind, shown)
   }

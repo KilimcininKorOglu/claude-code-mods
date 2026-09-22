@@ -8,7 +8,7 @@ A Claude Code Mod that parses each JSON, YAML, TOML or `.env` file an Edit or Wr
 2. JSON is parsed by the mod itself, and a `.env` file is read line by line: a line that is not empty, a comment or `KEY=value` is the finding, with its number.
 3. YAML and TOML are parsed by `python3` (`yaml.load_all` with a safe loader, and `tomllib.load`), the file path as one argv item. Every document of a `---` stream is read, and an application tag such as `!Ref` or `!vault` is accepted, because both are valid YAML. When python or the module is missing, that kind is skipped for the session and one line says so.
 4. A file that does not parse is written to two channels: the model gets a `context` note naming the file and the error, and the person gets a red entry in the shared sidebar's stream, or a transcript line where the sidebar is closed. The file is named against the git repository the session started in, or against the session's directory outside a repository; that root is read once at the session's start, because a Bash `cd` moves the session's own directory.
-5. When a later edit makes the same file parse again, the standing entry is cleared and one green line says so. That line goes to the person only, because the model fixed it itself.
+5. When a later edit makes the same file parse again, the standing entry is cleared and one green line says so. That line goes to the person only, because the model fixed it itself. A file deleted while its finding stands closes the same way at the next measure, with `<file> is gone, and its parse error with it`. A file that is there and cannot be read keeps its finding.
 6. The mod never denies an edit. The file is written, then read.
 7. A finding the model did not close is measured again at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt:
 
@@ -45,7 +45,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=config-parse}, tool.call{tool=Edit}, tool.call{tool=Write}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.read (via fileText), $.process.run (via pythonCheck, shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via pythonCheck, shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via closeOne), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log
 
 Reach L2, reads files and runs a process.
 

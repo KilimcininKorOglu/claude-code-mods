@@ -38,7 +38,7 @@ const run = (args: string): CommandRunInput => ({
  * The text every read answers with, what python answers, what the index holds, the lines logged, and the
  * repository root git answers.
  */
-type World = { file: string; python: { exitCode: number; stderr: string }; staged: string[]; argv: (readonly string[])[]; logs: string[]; top: string }
+type World = { file: string; gone?: true; unreadable?: true; python: { exitCode: number; stderr: string }; staged: string[]; argv: (readonly string[])[]; logs: string[]; top: string }
 
 function world(on: On): World {
   const w: World = { file: '', python: { exitCode: 0, stderr: '' }, staged: ['package.json', '.env'], argv: [], logs: [], top: ROOT }
@@ -47,7 +47,11 @@ function world(on: On): World {
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
-  on('fs.read', () => ({ value: w.file }) as never)
+  on('fs.read', () => {
+    if (w.unreadable === true) throw new Error('EACCES')
+    return { value: w.file } as never
+  })
+  on('fs.exists', () => ({ value: w.gone !== true }) as never)
   on('process.run', (_, e) => {
     w.argv.push(e.argv)
     if (e.argv[0] === 'git') {
@@ -225,6 +229,28 @@ describe('config-parse', () => {
     expect(w.logs.at(-1)).toBe('package.json parses as JSON again')
     await prompt('fourth')
     expect(notes[3]).toEqual([])
+  })
+
+  test('a deleted file closes as gone, and a file that cannot be read stays open', async ($, on) => {
+    const w = world(on)
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    const end = (turnId: string) => $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId, reason: 'answer' })
+    await started($)
+    w.file = '{"a": 1,}'
+    await edit($, 'package.json')
+    w.unreadable = true
+    await end('t1')
+    expect(w.logs).toHaveLength(2)
+    expect(w.logs[1]).toMatch(/^the edited file was not read: /)
+    expect((await $.command.run(run(''))).text).toContain('package.json does not parse')
+    // A YAML file python cannot open any more is gone, not broken: it closes, and says why.
+    w.unreadable = undefined
+    w.python = { exitCode: 1, stderr: "FileNotFoundError: [Errno 2] No such file or directory: 'ci.yml'" }
+    await edit($, 'ci.yml')
+    w.gone = true
+    await end('t2')
+    expect(w.logs.slice(-2).sort()).toEqual(['ci.yml is gone, and its parse error with it', 'package.json is gone, and its parse error with it'])
+    expect((await $.command.run(run(''))).text).toContain('no file is open')
   })
 
   test('a Write of a broken file is checked too', async ($, on) => {
