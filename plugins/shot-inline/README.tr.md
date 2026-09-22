@@ -5,7 +5,7 @@ Modelin kaydettiği ya da okuduğu her PNG ve JPG dosyasını tool satırının 
 ## Ne yapar
 
 1. Mod üç tür tool çağrısını izler ve her birinden görsel path'ini alır:
-   - bir Playwright `browser_take_screenshot`: sonucunun link verdiği dosya;
+   - bir Playwright `browser_take_screenshot`: sonucunun link verdiği dosya; göreli bir link, Playwright server'ının onu yazdığı yer olan session'ın başladığı dizine göre okunur, bir Bash `cd`'sinden sonra da;
    - bir `.png`, `.jpg` ya da `.jpeg` dosyasının `Read` çağrısı;
    - böyle bir dosyayı adlandıran bir Bash komutu, dosya komuttan sonra varsa (en son adlandırılan önce).
 2. Bir PNG header'ından ölçülür. 4 MiB üstündeki bir PNG ve bir JPG `sips` ile ölçülür.
@@ -42,7 +42,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=shot-inline}, tool.call{tool=Read}, tool.call{tool=Bash}, tool.call{tool=/^mcp__(plugin_playwright_)?playwright__browser_take_screenshot$/}, ui.render{component=ToolUse}
-    ❯ ./register.tsx calls: $.command.register, $.env.get, $.fs.exists (via bmpCopy, pngCopy, prepare), $.fs.read (via gridFor, measure), $.fs.stat (via prepare), $.process.run (via sips, tempDir), $.session.cwd (via remember), $.store.get, $.store.set (via runCommand), $.ui.invalidate (via remember, runCommand), $.ui.log (via report), $.ui.resolve
+    ❯ ./register.tsx calls: $.command.register, $.env.get, $.fs.exists (via bmpCopy, pngCopy, prepare), $.fs.read (via gridFor, measure), $.fs.stat (via prepare), $.process.run (via sips, tempDir), $.session.cwd, $.store.get, $.store.set (via runCommand), $.ui.invalidate (via remember, runCommand), $.ui.log (via report), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: KITTY_WINDOW_ID, TERM, TERM_PROGRAM, TMPDIR
 

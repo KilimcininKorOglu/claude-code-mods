@@ -5,7 +5,7 @@ A Claude Code Mod that draws each PNG or JPG the model saves or reads under its 
 ## What it does
 
 1. The mod watches three kinds of tool call and takes the image path from each:
-   - a Playwright `browser_take_screenshot`: the file its result links to;
+   - a Playwright `browser_take_screenshot`: the file its result links to, a relative link read against the directory the session started in, where the Playwright server writes it, also after a Bash `cd`;
    - a `Read` of a `.png`, `.jpg` or `.jpeg` file;
    - a Bash command that names such a file, when the file exists after the command (the last one named first).
 2. A PNG is measured from its header. A PNG over 4 MiB, and a JPG, are measured with `sips`.
@@ -42,7 +42,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=shot-inline}, tool.call{tool=Read}, tool.call{tool=Bash}, tool.call{tool=/^mcp__(plugin_playwright_)?playwright__browser_take_screenshot$/}, ui.render{component=ToolUse}
-    ❯ ./register.tsx calls: $.command.register, $.env.get, $.fs.exists (via bmpCopy, pngCopy, prepare), $.fs.read (via gridFor, measure), $.fs.stat (via prepare), $.process.run (via sips, tempDir), $.session.cwd (via remember), $.store.get, $.store.set (via runCommand), $.ui.invalidate (via remember, runCommand), $.ui.log (via report), $.ui.resolve
+    ❯ ./register.tsx calls: $.command.register, $.env.get, $.fs.exists (via bmpCopy, pngCopy, prepare), $.fs.read (via gridFor, measure), $.fs.stat (via prepare), $.process.run (via sips, tempDir), $.session.cwd, $.store.get, $.store.set (via runCommand), $.ui.invalidate (via remember, runCommand), $.ui.log (via report), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: KITTY_WINDOW_ID, TERM, TERM_PROGRAM, TMPDIR
 

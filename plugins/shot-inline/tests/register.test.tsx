@@ -157,4 +157,12 @@ describe('shot-inline', () => {
     await row($, 't9', 'terminal', 84)
     expect(bmpReads()).toBe(3)
   })
+
+  test('a screenshot path is read against the directory the session started in, not where a cd moved it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.cwd = `${ROOT}/sub`
+    await $.tool.call({ tool: 'mcp__plugin_playwright_playwright__browser_take_screenshot', tool_use_id: 't10' } as never)
+    expect((await (await row($, 't10')).find({ type: 'Image' }))?.props.source).toEqual({ file: `${ROOT}/.playwright-mcp/shot.png`, format: 'png' })
+  })
 })

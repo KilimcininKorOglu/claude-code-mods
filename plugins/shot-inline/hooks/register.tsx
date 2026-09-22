@@ -28,6 +28,8 @@ type State = {
    * grid per picture, dropped with its picture, so a resize replaces a grid instead of adding one.
    */
   grids: Map<string, { box: string; grid: string }>
+  /** The directory the session started in, read before a Bash `cd` can move it. */
+  root: string
   /** The terminal takes the kitty graphics protocol, so the picture itself is drawn. */
   graphics: boolean
   lastError?: string
@@ -109,12 +111,14 @@ async function gridFor($: EngineInterface, state: State, id: string, shot: Shot,
   }
 }
 
-/** Keeps the picture for a tool row and redraws the rows. */
-async function remember($: EngineInterface, state: State, id: string, paths: readonly string[]): Promise<void> {
+/**
+ * Keeps the picture for a tool row and redraws the rows. A relative path is read against `base`: the
+ * directory the tool itself ran in.
+ */
+async function remember($: EngineInterface, state: State, id: string, paths: readonly string[], base: string): Promise<void> {
   try {
-    const cwd = await $.session.cwd()
     for (const path of paths) {
-      const shot = await prepare($, absolute(path, cwd))
+      const shot = await prepare($, absolute(path, base))
       if (shot === undefined) continue
       state.shots.set(id, shot)
       if (state.shots.size > MAX_SHOTS) {
@@ -145,12 +149,13 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { shots: new Map(), enabled: true, grids: new Map(), graphics: false }
+  const state: State = { shots: new Map(), enabled: true, grids: new Map(), root: '', graphics: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'shot-inline', description: 'Pictures under their tool row: status, on, off (shot-inline)', argumentHint: '[on | off]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    state.root = await $.session.cwd()
     state.graphics = hasGraphics((await $.env.get('TERM')) ?? '', (await $.env.get('TERM_PROGRAM')) ?? '', (await $.env.get('KITTY_WINDOW_ID')) ?? '')
     return r
   })
@@ -160,21 +165,24 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const r = await next(e)
-    if (state.enabled && answered(r) && isImagePath(e.file_path)) await remember($, state, e.tool_use_id, [e.file_path])
+    if (state.enabled && answered(r) && isImagePath(e.file_path)) await remember($, state, e.tool_use_id, [e.file_path], await $.session.cwd())
     return r
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
     const paths = state.enabled && answered(r) ? commandImagePaths(e.command) : []
-    if (paths.length > 0) await remember($, state, e.tool_use_id, paths)
+    // A Bash command runs where its shell stands, which a `cd` moves, so its paths read against that.
+    if (paths.length > 0) await remember($, state, e.tool_use_id, paths, await $.session.cwd())
     return r
   })
 
   on('tool.call', { tool: SCREENSHOT_TOOL }, async ($, e, next) => {
     const r = await next(e)
     const path = state.enabled && answered(r) ? screenshotPath(r.text ?? '') : undefined
-    if (path !== undefined) await remember($, state, e.tool_use_id, [path])
+    // The Playwright server writes a relative path under the directory it started in, the session's own,
+    // which a Bash `cd` does not move.
+    if (path !== undefined) await remember($, state, e.tool_use_id, [path], state.root)
     return r
   })
 
