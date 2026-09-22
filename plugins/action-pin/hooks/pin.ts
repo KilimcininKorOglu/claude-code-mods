@@ -80,14 +80,28 @@ export function noteText(uses: readonly Unpinned[]): string {
   return `action-pin: this edit uses actions by a moving ref: ${named(uses)}. A tag or a branch can be moved to other code after a review, so a workflow with write access runs whatever it points at then. ${how}`
 }
 
-/** The transcript line: the actions alone, without the instruction the model reads. The engine adds the mod name. */
-export function logText(uses: readonly Unpinned[]): string {
-  return `actions by a moving ref: ${named(uses)}`
+/**
+ * The transcript line: the workflow and its actions, without the instruction the model reads. The engine
+ * adds the mod name. The workflow is named because the person, unlike the model, did not see the edit.
+ */
+export function logText(file: string, uses: readonly Unpinned[]): string {
+  return `${file} uses actions by a moving ref: ${named(uses)}`
 }
 
-/** One sidebar line per action, so the section reads as a list. */
-export function sidebarLines(uses: readonly Unpinned[]): { text: string; kind: 'error' }[] {
-  return named(uses).split(' · ').map(text => ({ text, kind: 'error' }))
+/** The sidebar lines of a finding: the workflow, then one line per action, as the closing lines read. */
+export function sidebarLines(file: string, uses: readonly Unpinned[]): { text: string; kind: 'error' }[] {
+  return [{ text: file, kind: 'error' }, ...named(uses).split(' · ').map(text => ({ text, kind: 'error' as const }))]
+}
+
+/**
+ * `path` shown relative to the directory the session started in when it is inside it. It also keys the
+ * sidebar entry: an absolute path is cut at 64 characters there, so every workflow of a repository under
+ * a long directory would share one key and a closing would take the other workflows' entries down.
+ */
+export function shownPath(path: string, root: string | undefined): string {
+  if (root === undefined) return path
+  const base = `${root.replace(/\/+$/, '')}/`
+  return path.startsWith(base) ? path.slice(base.length) : path
 }
 
 /** The transcript line of a finding a later edit closed, by what closed it. */

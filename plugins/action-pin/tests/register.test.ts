@@ -76,7 +76,7 @@ describe('action-pin', () => {
     expect(r.context?.[0]).toContain(`actions/checkout@v4 → ${SHA}`)
     expect(r.context?.[0]).toContain(`for example: uses: actions/checkout@${SHA} # v4`)
     expect(w.urls).toEqual(['https://api.github.com/repos/actions/checkout/commits/v4'])
-    expect(w.logs).toEqual([`actions by a moving ref: actions/checkout@v4 → ${SHA}`])
+    expect(w.logs).toEqual([`${WORKFLOW} uses actions by a moving ref: actions/checkout@v4 → ${SHA}`])
     // The same action is not asked again in this session.
     await edit($, '.github/workflows/release.yml', '', '  - uses: actions/checkout@v4')
     expect(w.urls).toHaveLength(1)
@@ -88,8 +88,21 @@ describe('action-pin', () => {
     seatSidebar(on, bar)
     await started($)
     await edit($, WORKFLOW, '', '  - uses: actions/checkout@v4')
-    expect(bar.sections).toEqual([{ key: '-Users-u-app-.github-workflows-ci.yml', lines: [`actions/checkout@v4 → ${SHA}`] }])
+    expect(bar.sections).toEqual([{ key: '.github-workflows-ci.yml', lines: [WORKFLOW, `actions/checkout@v4 → ${SHA}`] }])
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('two workflows under a long directory keep one sidebar key each', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    // An absolute path this long is cut at 64 characters, so it would give both workflows one key.
+    const long = '/Users/kerem/Desktop/GIT-KilimcininKorOglu/app.hermesmonitoring.cloud'
+    for (const name of ['ci', 'release']) w.files.set(`${long}/.github/workflows/${name}.yml`, '  - uses: actions/checkout@v4\n')
+    await $.session.start({ surface: null, isInteractive: true, cwd: long })
+    await $.tool.call({ tool: 'Edit', file_path: `${long}/.github/workflows/ci.yml`, old_string: '', new_string: '  - uses: actions/checkout@v4' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: `${long}/.github/workflows/release.yml`, old_string: '', new_string: '  - uses: actions/checkout@v4' } as never)
+    expect(bar.sections.map(s => s.key)).toEqual(['.github-workflows-ci.yml', '.github-workflows-release.yml'])
   })
 
   test('no note for a pinned, local or container use, another file, or when off', async ($, on) => {
@@ -118,7 +131,7 @@ describe('action-pin', () => {
     // The workflow names the commit now: the gate reads the file again and opens.
     w.files.set(`${ROOT}/${WORKFLOW}`, `  - uses: actions/checkout@${SHA} # v4\n`)
     expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
-    expect(w.logs.at(-1)).toBe(`every action of ${ROOT}/${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
+    expect(w.logs.at(-1)).toBe(`every action of ${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
@@ -134,7 +147,7 @@ describe('action-pin', () => {
     w.files.delete(`${ROOT}/${WORKFLOW}`)
     w.readFails = false
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
-    expect(w.logs.at(-1)).toBe(`${ROOT}/${WORKFLOW} is no longer there: actions/checkout@v4`)
+    expect(w.logs.at(-1)).toBe(`${WORKFLOW} is no longer there: actions/checkout@v4`)
   })
 
   test('a commit that holds none of the open workflows runs, and a push still stops', async ($, on) => {
@@ -186,7 +199,7 @@ describe('action-pin', () => {
     // The workflow names the commit now: the turn's end closes the finding and owes no note.
     w.files.set(`${ROOT}/${WORKFLOW}`, `  - uses: actions/checkout@${SHA} # v4\n`)
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
-    expect(w.logs.at(-1)).toBe(`every action of ${ROOT}/${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
+    expect(w.logs.at(-1)).toBe(`every action of ${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
     await prompt('fourth')
     expect(notes[3]).toEqual([])
   })

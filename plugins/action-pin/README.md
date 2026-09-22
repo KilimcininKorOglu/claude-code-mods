@@ -12,12 +12,12 @@ A Claude Code Mod that tells the model when an edit adds a GitHub Actions step p
        action-pin: this edit uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8. A tag or a branch can be moved to other code after a review, so a workflow with write access runs whatever it points at then. Write each as the SHA with the tag as a comment, for example: uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
 
    At most 10 actions are named and looked up, the rest counted. When GitHub does not answer, the action is named without a SHA, the note asks for the pin anyway, and the error is logged once.
-5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the actions alone, without the instruction:
+5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the workflow and its actions, without the instruction. The workflow is named because the model saw the edit and you did not:
 
-       action-pin: actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
+       action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-   The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those actions go there instead, one line per action as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+   The note and the line are separate channels: the model never reads the line, and you never read the note. A workflow is written against the directory the session started in, and that path also keys its sidebar entry, so each workflow keeps an entry of its own.
+6. While the [sidebar](../sidebar) is open, those actions go there instead, the workflow first and then one line per action (the closing entry reads the same way), as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 7. A finding stays open until the workflow pins those actions. After a later Edit or Write the mod reads each open workflow again, and one whose refs are all pinned closes. A workflow that is no longer there closes too, because it uses no action any more; one that is there and cannot be read keeps its finding, because an unread file proves nothing:
 
@@ -56,7 +56,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
     ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)

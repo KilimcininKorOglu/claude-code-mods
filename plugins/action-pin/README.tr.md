@@ -12,12 +12,12 @@ Bir edit, hareketli bir tag'e sabitlenmiş GitHub Actions step'i eklediğinde mo
        action-pin: this edit uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8. A tag or a branch can be moved to other code after a review, so a workflow with write access runs whatever it points at then. Write each as the SHA with the tag as a comment, for example: uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
 
    En fazla 10 action adlandırılır ve sorulur, gerisi sayılır. GitHub cevap vermediğinde action SHA'sız adlandırılır, not yine de sabitlemeyi ister ve hata bir kere log'lanır.
-5. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır talimat cümlesi olmadan yalnız action'ları taşır:
+5. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır talimat cümlesi olmadan workflow'u ve action'larını taşır. Workflow adlandırılır, çünkü model edit'i gördü ama siz görmediniz:
 
-       action-pin: actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
+       action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-   Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken bu action'lar oraya gider, action başına bir satır, stream'in içinde bir kayıt olarak; transcript temiz kalır. Kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
+   Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız. Bir workflow session'ın başladığı dizine göre yazılır ve o path sidebar entry'sinin key'i de olur, yani her workflow kendi entry'sini tutar.
+6. [sidebar](../sidebar) açıkken bu action'lar oraya gider, önce workflow ve sonra action başına bir satır olarak (kapanış kaydı da böyle okunur), stream'in içinde bir kayıt olarak; transcript temiz kalır. Kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
 
 7. Bulgu, workflow o action'ları sabitleyene kadar açık kalır. Sonraki bir Edit ya da Write'tan sonra mod her açık workflow'u tekrar okur; ref'lerinin hepsi sabitlenmiş olan kapanır. Artık var olmayan bir workflow da kapanır, çünkü hiçbir action kullanmıyordur; duran ama okunamayan bir workflow bulgusunu korur, çünkü okunamayan bir dosya hiçbir şeyi kanıtlamaz:
 
@@ -56,7 +56,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=action-pin}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
     ❯ ./register.ts calls: $.command.register, $.fs.exists (via isThere), $.fs.read (via stillMoving), $.http.fetch (via resolveSha), $.process.run (via stagedPaths), $.session.cwd (via stagedPaths), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via gate, report, toPerson)

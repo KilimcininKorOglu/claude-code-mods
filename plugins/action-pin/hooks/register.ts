@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
+import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, shownPath, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -12,9 +12,9 @@ const HEADERS = { Accept: 'application/vnd.github.sha', 'User-Agent': 'action-pi
 /**
  * The on/off setting read at session start, the SHAs already resolved in this session, so one workflow
  * does not ask GitHub twice, the refs the model is owed a note for, and the last error, so the same one
- * is logged once.
+ * is logged once, and the directory the session started in, which every workflow is shown against.
  */
-type State = { enabled: boolean; mode: Mode; shas: Map<string, string>; open: Map<string, string[]>; owed: string[]; lastError?: string }
+type State = { enabled: boolean; mode: Mode; shas: Map<string, string>; open: Map<string, string[]>; owed: string[]; lastError?: string; root?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -115,9 +115,10 @@ async function closeResolved($: EngineInterface, state: State, skip?: string): P
       continue
     }
     state.open.delete(path)
-    await dropEntry($, path)
+    const shown = shownPath(path, state.root)
+    await dropEntry($, shown)
     const gone = path !== skip && !(await isThere($, path))
-    await toPerson($, path, doneTitle(gone), doneLines(path, refs), doneLog(path, refs, gone))
+    await toPerson($, shown, doneTitle(gone), doneLines(shown, refs), doneLog(shown, refs, gone))
   }
   return left
 }
@@ -133,7 +134,8 @@ async function afterEdit($: EngineInterface, state: State, path: string, before:
   const uses = await withShas($, state, found)
   state.open.set(path, openRefs(state.open.get(path), uses))
   // The note goes to the model, the finding to the person: neither reads the other's channel.
-  await toPerson($, path, 'actions by a moving ref', sidebarLines(uses), logText(uses))
+  const shown = shownPath(path, state.root)
+  await toPerson($, shown, 'actions by a moving ref', sidebarLines(shown, uses), logText(shown, uses))
   await closeResolved($, state, path)
   return { ...r, context: [...(r.context ?? []), noteText(uses)] }
 }
@@ -216,6 +218,8 @@ export const register: Register = on => {
     await $.command.register({ name: 'action-pin', description: 'GitHub Actions steps an edit pins to a moving tag: status, on, off, mode (action-pin)', argumentHint: '[on | off | mode note | deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+    // Read from the event, not from `$.session.cwd()`, which follows a Bash `cd`.
+    state.root = e.cwd
     return r
   })
 

@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitUrl, denyText, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
+import { commitUrl, denyText, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, shownPath, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
 
 tier('user')
 
@@ -44,7 +44,10 @@ describe('pin', () => {
     const withSha = [{ action: 'actions/checkout', ref: 'v4', sha: SHA }]
     expect(noteText(withSha)).toContain(`actions/checkout@v4 → ${SHA}`)
     expect(noteText(withSha)).toContain(`for example: uses: actions/checkout@${SHA} # v4`)
-    expect(logText(withSha)).toBe(`actions by a moving ref: actions/checkout@v4 → ${SHA}`)
+    expect(logText('.github/workflows/ci.yml', withSha)).toBe(`.github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → ${SHA}`)
+    expect(shownPath('/Users/u/app/.github/workflows/ci.yml', '/Users/u/app/')).toBe('.github/workflows/ci.yml')
+    expect(shownPath('/tmp/ci.yml', '/Users/u/app')).toBe('/tmp/ci.yml')
+    expect(shownPath('/tmp/ci.yml', undefined)).toBe('/tmp/ci.yml')
     expect(noteText([{ action: 'actions/checkout', ref: 'v4' }])).toContain('Pin each to the commit SHA of that tag')
   })
 
