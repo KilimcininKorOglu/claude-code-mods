@@ -85,6 +85,15 @@ describe('sql-concat-watch', () => {
     expect(w.logs).toEqual([])
   })
 
+  test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
+    const w = world(on)
+    on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
+    await started($)
+    w.file = `${QUERY}\n`
+    await $.tool.call({ tool: 'Edit', file_path: '/Users/u/lib/q.ts', old_string: 'const q = ""', new_string: QUERY } as never)
+    expect(w.logs).toEqual(['SQL built from strings: lib/q.ts:1'])
+  })
+
   test('a Write is numbered from its own content, without a read', async ($, on) => {
     const w = world(on)
     await started($)
