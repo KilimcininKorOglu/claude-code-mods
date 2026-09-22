@@ -38,11 +38,33 @@ const PRICES: ReadonlyArray<readonly [family: string, price: Price]> = [
   ['haiku', { read: 0.08, write: 1.6, output: 4 }],
 ]
 
+/**
+ * Fast mode rates, from the same page: the fast base input and output, with the cache multipliers
+ * applied on top of the fast base input (2x for the 1-hour write, 0.05x read on Opus 5.5, 0.1x on
+ * the others). Only these models take fast mode; any other model bills its standard rates.
+ */
+const FAST_PRICES: ReadonlyArray<readonly [family: string, price: Price]> = [
+  ['opus-5-5', { read: 0.4, write: 16, output: 40 }],
+  ['opus-5', { read: 1, write: 20, output: 50 }],
+  ['opus-4-8', { read: 1, write: 20, output: 50 }],
+]
+
 const MTOK = 1e6
 
-export function priceOf(model: string | null): Price | null {
-  const id = (model ?? '').toLowerCase().replace(/[\s.]+/g, '-')
-  return PRICES.find(([family]) => id.includes(family))?.[1] ?? null
+function rowOf(rows: ReadonlyArray<readonly [string, Price]>, id: string): Price | undefined {
+  return rows.find(([family]) => id.includes(family))?.[1]
+}
+
+const idOf = (model: string | null): string => (model ?? '').toLowerCase().replace(/[\s.]+/g, '-')
+
+/** Whether fast mode bills this model at its own rates. */
+export function hasFastRate(model: string | null): boolean {
+  return rowOf(FAST_PRICES, idOf(model)) !== undefined
+}
+
+export function priceOf(model: string | null, fast = false): Price | null {
+  const id = idOf(model)
+  return (fast ? rowOf(FAST_PRICES, id) : undefined) ?? rowOf(PRICES, id) ?? null
 }
 
 /** What writing this many tokens to the 1-hour cache costs. */

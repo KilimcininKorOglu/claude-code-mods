@@ -1,4 +1,4 @@
-import { breakEvenPings, priceOf, readUsd, writeUsd, type Usage } from './pricing.ts'
+import { breakEvenPings, hasFastRate, priceOf, readUsd, writeUsd, type Price, type Usage } from './pricing.ts'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
@@ -45,6 +45,8 @@ export interface State {
   always: boolean
   lastRequestAt: number
   model: string | null
+  /** The `fastMode` setting is on and not reset per session, so a model with fast rates bills them. */
+  fast: boolean
   ctx: number
   compacted: boolean
   coldWrites: ColdWrite[]
@@ -55,9 +57,14 @@ export interface State {
   event?: string
 }
 
+/** The rates the session bills now: its model, at fast mode rates while the setting says so. */
+export function priceNow(s: State): Price | null {
+  return priceOf(s.model, s.fast)
+}
+
 export function freshState(): State {
   return {
-    sid: '', deadline: 0, endless: false, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, ctx: 0,
+    sid: '', deadline: 0, endless: false, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, fast: false, ctx: 0,
     compacted: false, coldWrites: [], pending: null, lastPing: null, stopped: null,
   }
 }
@@ -220,7 +227,7 @@ export function seedFromResume(s: State, e: ResumeFields, now: number): string |
   if (typeof e.model === 'string') s.model = e.model
   s.compacted = false
   if (e.prompt_cache_likely_expired !== true || s.ctx < BIG_TOKENS) return null
-  const usd = typeof e.estimated_cache_write_usd === 'number' ? e.estimated_cache_write_usd : writeUsd(s.ctx, priceOf(s.model))
+  const usd = typeof e.estimated_cache_write_usd === 'number' ? e.estimated_cache_write_usd : writeUsd(s.ctx, priceNow(s))
   return `resuming cold. The first message re-writes ${fmtCount(s.ctx)} tokens, about ${fmtUsd(usd)}.`
 }
 
@@ -255,19 +262,20 @@ function warmLine(s: State, now: number): string {
 }
 
 function breakEvenLine(s: State): string | null {
-  const pings = breakEvenPings(priceOf(s.model))
+  const pings = breakEvenPings(priceNow(s))
   if (pings == null || s.ctx <= 0) return null
   return `up to ${pings} pings at the read rate cost one cold write, about ${fmtDuration(pings * s.every)} of idle at one ping per ${fmtDuration(s.every)}`
 }
 
 /** The /cache-status card. */
 export function card(s: State, now: number): string {
-  const price = priceOf(s.model)
+  const price = priceNow(s)
   const paid = s.coldWrites.reduce((sum, w) => sum + (w.usd ?? 0), 0)
   const count = s.coldWrites.length
   const breakEven = breakEvenLine(s)
+  const fast = s.fast && hasFastRate(s.model) ? ' · fast mode rates (the fastMode setting)' : ''
   return [
-    s.model ?? 'model not seen yet',
+    `${s.model ?? 'model not seen yet'}${fast}`,
     `state       ${stateLine(s, now)}`,
     `context     ${fmtCount(s.ctx)} tokens`,
     `cold cost   ${fmtUsd(writeUsd(s.ctx, price))} to re-write it (warm turn ${fmtUsd(readUsd(s.ctx, price))})`,

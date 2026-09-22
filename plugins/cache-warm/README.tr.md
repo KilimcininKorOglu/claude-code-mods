@@ -73,6 +73,10 @@ Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satı
 
 `hooks/pricing.ts` içindeki tablo, Anthropic fiyat sayfasındaki her modelin cache-read, 1 saatlik cache-write ve output fiyatlarını tutar, Eylül 2026'da okundu. Bir model id'si, içerdiği ilk aileyi alır; yani `claude-opus-4-1` Opus 4.1 olarak fiyatlanır (1,50 / 30 / 75 dolar), `claude-opus-4-8` ise Opus 4.8 olarak (0,50 / 10 / 25 dolar). `claude-opus-5-5` de `opus-5` içerir, bu yüzden kendi satırı önce gelir: Opus 5.5, Opus 5'in altında 0,20 / 8 / 20 dolardır. Bir ping tam fiyatlanır: cache read'i, kendi cache write'ı, base fiyattan cache'siz input'u (1 saatlik write fiyatının yarısı) ve output'u. Bilinmeyen model `n/a` gösterir.
 
+Fast mode, Opus 5.5, Opus 5 ve Opus 4.8'i kendi base fiyatlarından faturalar (8 ve 10 dolar input), cache çarpanları da bunların üstüne uygulanır. `/fast` komutunun yazdığı `fastMode` setting'i açıkken mod Opus 5.5'i 0,40 / 16 / 40 dolardan, Opus 5 ve 4.8'i 1 / 20 / 50 dolardan fiyatlar. Setting'leri session başında ve her main-loop turn'ün sonunda okur, yani bir `/fast` sonraki turn'den itibaren sayılır. `true` değerli bir `fastModePerSessionOptIn` her session'ı fast mode kapalı başlatır, o durumda standart fiyatlar kalır. Diğer her model standart fiyatını korur ve kart fast mode'u yalnız fiyatlar değiştiğinde adlandırır:
+
+    claude-opus-5-5 · fast mode rates (the fastMode setting)
+
 Abonelikte dolarlar fatura değil, bir ölçü birimidir. Bir cache read'in 5 saatlik ve haftalık limitlere nasıl sayıldığı dokümante değildir.
 
 ## Kurulum
@@ -104,11 +108,11 @@ Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
 
 Reach L2, Claude'u sürer.
 
-    1. Okur:     her main-loop model isteğinin zamanını; her turn'ün ve her ping'in token sayılarını ve model id'sini; canlı context boyutunu; pencereyi tekrar kurmak için her mesajın origin'ini; Claude Code'un settings hook'ları için hesapladığı resume alanlarını; session id'sini ve modelini; kendi $.store dosyasını. Bir prompt'un metnini, bir dosyayı ya da bir tool sonucunu hiç okumaz.
+    1. Okur:     her main-loop model isteğinin zamanını; her turn'ün ve her ping'in token sayılarını ve model id'sini; canlı context boyutunu; pencereyi tekrar kurmak için her mesajın origin'ini; Claude Code'un settings hook'ları için hesapladığı resume alanlarını; session id'sini ve modelini; fastMode ve fastModePerSessionOptIn setting'lerini, session başında ve her turn sonunda; kendi $.store dosyasını. Bir prompt'un metnini, bir dosyayı ya da bir tool sonucunu hiç okumaz.
     2. Çalıştırır: bir pencere ya da always döngüsü çalışırken boş geçen her aralıkta bir $.model.fork, son istekten 50 dakika sonra (test ayarı kullanılmadıkça; taban 1 dakika); kapalıyken asla; cache'i gitmiş bulan bir ping sonu olan pencereyi bitirir, always altında döngü devam eder
     3. Gönderir: yalnız fork'u, yani session'ın kendi transcript'i üzerinden sabit tek satırlık prompt taşıyan bir API isteği
     4. Saklar:   $.store içinde pencere sonunu ve ping periyodunu bu session'ın id'si altında, ve global always anahtarını (sonsuz döngünün yanında pencere key'ine ihtiyacı yoktur); bu session'ın biten penceresi duruşta ve bir sonraki başlangıçta silinir, başka bir session'ın penceresi bittikten bir hafta sonra; soğuk write sayacı bellekte yaşar ve session ile biter
@@ -130,6 +134,8 @@ Bir dakika sonra status line `last ping read <context'inize yakın bir değer> $
 - Bir ping'in output'u sınırlanamaz; yüksek effort'taki bir model cevaptan önce düşünebilir. Status line, ping'in gerçekten faturaladığını fiyatlar.
 - `claude plugin test` test engine'i `classic.SessionStart` olayını üretemez. Resume ve `/clear` mantığı saf fonksiyonların unit testleriyle ve canlı bir session kontrolüyle karşılanır.
 - Soğuk write sayacı session başınadır ve bellektedir. `/clear` onu sıfırlar.
+- Fast mode, istekten değil, kaydedilmiş tercih olan `fastMode` setting'inden okunur. Mod, Claude Code'un bir session içinde standart hıza düşmesini görmez: fast mode rate limit cooldown'u, biten usage credits ya da fast mode'u kapatan bir organizasyon. O turn'ler standart fiyattan faturalanır, mod ise onları fast fiyatlar.
+- Session fast çalışırken bir ping'in, yani bir `$.model.fork`'un, fast hızda çalışıp çalışmadığı ölçülmedi; mod onu session'ın fiyatlarıyla fiyatlar.
 
 ## Geliştirme
 

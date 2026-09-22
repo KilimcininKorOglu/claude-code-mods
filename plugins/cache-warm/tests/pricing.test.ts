@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { breakEvenPings, priceOf, readUsd, responseUsd, writeUsd } from '../hooks/pricing.ts'
+import { breakEvenPings, hasFastRate, priceOf, readUsd, responseUsd, writeUsd } from '../hooks/pricing.ts'
 
 tier('user')
 
@@ -19,6 +19,19 @@ describe('priceOf', () => {
     expect(priceOf('claude-opus-5-5[1m]')).toEqual({ read: 0.2, write: 8, output: 20 })
     expect(priceOf('Claude Opus 5.5')).toEqual({ read: 0.2, write: 8, output: 20 })
     expect(breakEvenPings(priceOf('claude-opus-5-5'))).toBe(40)
+  })
+
+  test('fast mode bills Opus 5.5, Opus 5 and Opus 4.8 at the fast base rates with the cache multipliers on top', async () => {
+    expect(priceOf('claude-opus-5-5[1m]', true)).toEqual({ read: 0.4, write: 16, output: 40 })
+    expect(priceOf('claude-opus-5', true)).toEqual({ read: 1, write: 20, output: 50 })
+    expect(priceOf('claude-opus-4-8', true)).toEqual({ read: 1, write: 20, output: 50 })
+    expect([hasFastRate('claude-opus-5-5'), hasFastRate('claude-opus-4-8'), hasFastRate('claude-opus-4-7')]).toEqual([true, true, false])
+  })
+
+  test('fast mode leaves a model without fast rates at its standard rates', async () => {
+    expect(priceOf('claude-opus-4-6', true)).toEqual({ read: 0.5, write: 10, output: 25 })
+    expect(priceOf('claude-sonnet-5', true)).toEqual({ read: 0.2, write: 4, output: 10 })
+    expect(priceOf('gpt-9', true)).toBe(null)
   })
 
   test('prices Opus 4 and 4.1 at their own, higher rates', async () => {

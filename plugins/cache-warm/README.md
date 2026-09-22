@@ -73,6 +73,10 @@ The section holds a second, faint line under the window: the last transcript lin
 
 The table in `hooks/pricing.ts` holds the cache-read, 1-hour cache-write and output rates of every model on the Anthropic pricing page, read in September 2026. A model id takes the first family it contains, so `claude-opus-4-1` is priced as Opus 4.1 ($1.50 / $30 / $75) and `claude-opus-4-8` as Opus 4.8 ($0.50 / $10 / $25). `claude-opus-5-5` also contains `opus-5`, so its own row comes first: Opus 5.5 is $0.20 / $8 / $20, below Opus 5. A ping is priced in full: the cache read, its cache write, its uncached input at the base rate (half the 1-hour write rate) and its output. An unknown model shows `n/a`.
 
+Fast mode bills Opus 5.5, Opus 5 and Opus 4.8 at their own base rates ($8 and $10 input), and the cache multipliers apply on top of them. The mod prices Opus 5.5 at $0.40 / $16 / $40 and Opus 5 and 4.8 at $1 / $20 / $50 while the `fastMode` setting is on, which `/fast` writes. It reads the settings at the session's start and at the end of each main-loop turn, so a `/fast` counts from the next turn. A `fastModePerSessionOptIn` of `true` starts every session with fast mode off, so the standard rates stay then. Any other model keeps its standard rates, and the card names fast mode only when the rates changed:
+
+    claude-opus-5-5 · fast mode rates (the fastMode setting)
+
 On a subscription the dollars are a yardstick, not the bill. How a cache read counts against the 5-hour and weekly limits is not documented.
 
 ## Install
@@ -104,11 +108,11 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)
 
 Reach L2, drives Claude.
 
-    1. Reads:    the time of each main-loop model request; the token counts and model id of each turn and of each ping; the live context size; the origin of each message, to arm a window again; the resume fields Claude Code computes for settings hooks; the session id and model; its own $.store. It never reads a prompt's text, a file or a tool result.
+    1. Reads:    the time of each main-loop model request; the token counts and model id of each turn and of each ping; the live context size; the origin of each message, to arm a window again; the resume fields Claude Code computes for settings hooks; the session id and model; the fastMode and fastModePerSessionOptIn settings, at the session's start and at each turn's end; its own $.store. It never reads a prompt's text, a file or a tool result.
     2. Runs:     one $.model.fork per idle stretch while a window or the always loop runs, 50 minutes after the last request unless the test setting is used (floor 1 minute); never while off; a ping that found the cache gone ends a window with an end, and under always the loop carries on
     3. Sends:    only the fork, an API request over the session's own transcript with a fixed one-line prompt
     4. Persists: in $.store, the window end and the ping period under this session's id, and the global always switch, which the endless loop needs no window key beside; this session's ended window is deleted at stop and at its next start, another session's window one week after it ended; the cold-write tally lives in memory and ends with the session
@@ -130,6 +134,8 @@ After a minute the status line should read `last ping read <close to your contex
 - A ping's output cannot be capped; a model at high effort may think before it answers. The status line prices what the ping really billed.
 - The test engine of `claude plugin test` cannot raise `classic.SessionStart`. The resume and `/clear` logic is covered by unit tests of the pure functions and by a live session check.
 - The cold-write tally is per session and in memory. `/clear` empties it.
+- Fast mode is read from the `fastMode` setting, the saved preference, not from the request. The mod does not see Claude Code fall back to standard speed within a session: a fast mode rate-limit cooldown, usage credits that ran out, or an organization that turned fast mode off. Those turns bill standard rates while the mod prices them fast.
+- Whether a ping, a `$.model.fork`, runs at fast speed while the session does is not measured; the mod prices it at the session's rates.
 
 ## Development
 

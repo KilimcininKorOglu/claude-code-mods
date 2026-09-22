@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, TurnUsage } from 'claude-code'
-import { priceOf, responseUsd, writeUsd, type Usage } from './pricing.ts'
+import { responseUsd, writeUsd, type Usage } from './pricing.ts'
 import {
   AUTO_WARM_MS,
   MIN_PING_MS,
@@ -18,6 +18,7 @@ import {
   isOver,
   isWarmPing,
   parseWarmArgs,
+  priceNow,
   resetForClear,
   seedFromResume,
   statusText,
@@ -159,7 +160,7 @@ async function arm($: EngineInterface, s: State): Promise<void> {
  * `always` carries on instead: that write is the new cache, and the next ping keeps it.
  */
 async function settlePing($: EngineInterface, s: State, usage: Usage, now: number): Promise<void> {
-  const price = priceOf(s.model)
+  const price = priceNow(s)
   const usd = price ? responseUsd(usage, price) : null
   s.lastPing = { read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd }
   if (!isWarmPing(usage)) {
@@ -298,7 +299,7 @@ async function measure($: EngineInterface, s: State, u: TurnUsage, now: number):
   const live = (await $.session.usage()).context.tokens
   s.ctx = live && live > 0 ? live : u.input_tokens + u.cache_read_input_tokens + write
   if (!isColdWrite(previous, write)) return
-  const usd = writeUsd(write, priceOf(s.model))
+  const usd = writeUsd(write, priceNow(s))
   s.coldWrites.push({ tokens: write, usd })
   // The endless loop already keeps this cache; a window with an end would only shorten it.
   if (s.endless || s.deadline >= now + AUTO_WARM_MS) return
@@ -307,8 +308,19 @@ async function measure($: EngineInterface, s: State, u: TurnUsage, now: number):
   await startWindow($, s, AUTO_WARM_MS, s.every)
 }
 
+/**
+ * Whether the session bills fast mode rates, as far as the settings say: `/fast` writes `fastMode`, and
+ * `fastModePerSessionOptIn` starts every session with fast mode off whatever `fastMode` holds. Read at
+ * each turn, because `/fast` can change it mid-session.
+ */
+async function readFast($: EngineInterface, s: State): Promise<void> {
+  const settings = await $.settings.read() as { fastMode?: unknown; fastModePerSessionOptIn?: unknown }
+  s.fast = settings.fastMode === true && settings.fastModePerSessionOptIn !== true
+}
+
 async function afterTurn($: EngineInterface, s: State, durationMs: number, usage: TurnUsage | undefined): Promise<void> {
   const now = await $.clock.now()
+  await readFast($, s)
   // turn.step stamps each request; when no step of this turn did, the turn's end is the floor.
   if (now - s.lastRequestAt > durationMs) s.lastRequestAt = now
   s.compacted = false
@@ -336,6 +348,7 @@ export const register: Register = on => {
     const now = await $.clock.now()
     await prune($, s, now)
     await restore($, s, now)
+    await readFast($, s)
     // The always switch is one global key, so every session of every project starts the endless loop,
     // whatever the last window of this session left behind.
     if (s.always) await startEndless($, s)

@@ -61,6 +61,8 @@ type World = {
   statuses: (string | undefined)[]
   logs: string[]
   live: { tokens?: number }
+  /** The merged settings `$.settings.read()` answers; `/fast` writes `fastMode` there. */
+  settings: Record<string, unknown>
 }
 
 // The engine beneath the mod: the store, the session, and a fork that answers
@@ -73,7 +75,9 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
     statuses: [],
     logs: [],
     live: {},
+    settings: {},
   }
+  on('settings.read', () => ({ value: w.settings }))
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
@@ -456,6 +460,52 @@ describe('cold writes', () => {
     expect(status).toMatch(/^claude-fable-5-1\nstate       warm, 1h left/)
     expect(status).toMatch(/cold cost   \$4\.01 to re-write it \(warm turn \$0\.05\)/)
     expect(status).toMatch(/break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m/)
+  })
+})
+
+describe('fast mode', () => {
+  const opus55 = () => turn({ usage: usage({ model: 'claude-opus-5-5' }) })
+
+  test('the fastMode setting prices Opus 5.5 at its fast rates, and the card says where the rates come from', async ($, on) => {
+    const w = world(on, [])
+    w.settings = { fastMode: true }
+    await $.session.start(session)
+    await $.turn.complete(opus55())
+    const status = (await $.command.run(run('cache-status'))).text
+    expect(status).toMatch(/^claude-opus-5-5 · fast mode rates \(the fastMode setting\)\n/)
+    // 200,502 tokens at $16 a 1-hour write and $0.40 a read.
+    expect(status).toMatch(/cold cost   \$3\.21 to re-write it \(warm turn \$0\.08\)/)
+    expect(status).toMatch(/break-even  up to 40 pings/)
+  })
+
+  test('per-session opt-in starts the session at standard rates, whatever fastMode holds', async ($, on) => {
+    const w = world(on, [])
+    w.settings = { fastMode: true, fastModePerSessionOptIn: true }
+    await $.session.start(session)
+    await $.turn.complete(opus55())
+    const status = (await $.command.run(run('cache-status'))).text
+    expect(status).toMatch(/^claude-opus-5-5\n/)
+    expect(status).toMatch(/cold cost   \$1\.60 to re-write it \(warm turn \$0\.04\)/)
+  })
+
+  test('a model fast mode does not bill keeps its standard rates and the card names no fast mode', async ($, on) => {
+    const w = world(on, [])
+    w.settings = { fastMode: true }
+    await $.session.start(session)
+    await $.turn.complete(turn({ usage: usage({ model: 'claude-sonnet-5' }) }))
+    const status = (await $.command.run(run('cache-status'))).text
+    expect(status).toMatch(/^claude-sonnet-5\n/)
+    expect(status).toMatch(/cold cost   \$0\.80 to re-write it/)
+  })
+
+  test('a /fast during the session takes effect at the next turn', async ($, on) => {
+    const w = world(on, [])
+    await $.session.start(session)
+    await $.turn.complete(opus55())
+    expect((await $.command.run(run('cache-status'))).text).toMatch(/cold cost   \$1\.60/)
+    w.settings = { fastMode: true }
+    await $.turn.complete(opus55())
+    expect((await $.command.run(run('cache-status'))).text).toMatch(/cold cost   \$3\.21/)
   })
 })
 
