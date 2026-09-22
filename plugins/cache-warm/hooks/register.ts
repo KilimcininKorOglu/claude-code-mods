@@ -22,6 +22,7 @@ import {
   seedFromResume,
   statusText,
   statusTone,
+  unsentText,
   type State,
 } from './warm.ts'
 
@@ -183,7 +184,8 @@ async function ping($: EngineInterface, s: State): Promise<void> {
   } catch (err) {
     return stop($, s, `the ping failed, ${errorText(err)}`)
   }
-  if (reply === null) return stop($, s, 'the engine did not send the ping; the snapshot was cold or the API call failed')
+  // A reply without text still read the cache, so it is scored as a ping; every other unanswered fork stops.
+  if (!reply.isAnswered && reply.reason !== 'empty-reply') return stop($, s, unsentText(reply))
   await settlePing($, s, reply.usage, now)
 }
 

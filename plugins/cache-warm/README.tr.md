@@ -10,7 +10,7 @@ Davranış, Karan Bansal'ın cache-tax mod'unu (karanb192/claude-code-mods) izle
 
 **`always` ile sonsuz çalışır.** `/cache-warm always` bir pencere değildir: ping, session yaşadığı sürece 50 dakikada bir çıkar ve bunu bitiren tek şey `/cache-warm off` komutudur. Anahtar, mod'un kendi `$.store` dosyasındaki tek bir global key'dir, yani her projenin her sonraki session'ı aynı döngüyü başlangıçta ve `/clear` sonrasında başlatır. Cache'i gitmiş bulan bir ping bu döngüyü bitirmez: o ping'in ödediği write yeni cache'tir, mod bunu bir transcript satırıyla söyler, write'ı session'ın sayacına ekler ve devam eder. Sıcak bir ping context'i read fiyatından okur, 200k token için yaklaşık 0,05 dolar, yani boş geçen bir günün ping'leri yaklaşık 1,40 dolar tutar.
 
-**Cache gittiğinde durur.** Bu, sonu olan bir pencere için geçerlidir, `always` için değil. Sıcak bir ping context'i okur ve yalnız kendi birkaç token'ını yazar. Bir ping hiçbir şey okumadığında ya da okuduğunun onda biri kadar veya daha fazlasını yazdığında, cache zaten gitmiştir ve write'ı ping'in kendisi ödemiştir. Mod o zaman durur ve sebebini gösterir. Engine ping göndermediğinde ya da fork başarısız olduğunda da durur. `always` altında böyle bir hata döngüyü yalnız o turn için durdurur: sonraki turn onu yeniden başlatır, yani session switch'i tutarken hiçbir şey çalıştırmaz duruma düşmez.
+**Cache gittiğinde durur.** Bu, sonu olan bir pencere için geçerlidir, `always` için değil. Sıcak bir ping context'i okur ve yalnız kendi birkaç token'ını yazar. Bir ping hiçbir şey okumadığında ya da okuduğunun onda biri kadar veya daha fazlasını yazdığında, cache zaten gitmiştir ve write'ı ping'in kendisi ödemiştir. Mod o zaman durur ve sebebini gösterir. Engine'in henüz fork edeceği bir şey olmadığında, API fork'a bir hatayla cevap verdiğinde (satır onun status'unu ve türünü adlandırır) ve fork cevabından önce kesildiğinde de durur. Metin taşımayan bir cevap yine de cache'i okumuştur, bu yüzden bir ping sayılır. `always` altında böyle bir hata döngüyü yalnız o turn için durdurur: sonraki turn onu yeniden başlatır, yani session switch'i tutarken hiçbir şey çalıştırmaz duruma düşmez.
 
 **Ödenmiş soğuk bir write'tan sonra kendini kurar.** Bir turn, 20k token'dan büyük bir context'in en az yarısını yeniden yazdığında mod o soğuk write'ı sayar ve altı saatlik bir pencere kurar, daha uzun bir pencere zaten kurulu değilse. `always` altında hiç altı saatlik pencere kurulmaz, çünkü sonsuz döngü o cache'i zaten tutar.
 
@@ -101,7 +101,7 @@ Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)

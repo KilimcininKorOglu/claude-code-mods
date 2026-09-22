@@ -145,6 +145,15 @@ export function coldPingText(u: Usage, usd: number | null): string {
   return `the ping read ${fmtTok(u.cache_read_input_tokens)} and wrote ${fmtTok(u.cache_creation_input_tokens)} tokens (${fmtUsd(usd)}), the cache was already gone`
 }
 
+/** A fork result with no reply to score: nothing to fork yet, an API error, or a call cut before its reply. */
+export type Unsent = { reason: 'nothing-to-fork' } | { reason: 'api-error'; status: number | null; error: string } | { reason: 'aborted' }
+
+export function unsentText(r: Unsent): string {
+  if (r.reason === 'nothing-to-fork') return 'the engine did not send the ping; the conversation has no reply to fork yet'
+  if (r.reason === 'aborted') return 'the ping was cut before a reply came'
+  return `the ping failed, the API answered ${r.status ?? 'nothing'} (${r.error})`
+}
+
 /** The status line; undefined clears it. The engine puts the mod name in front. */
 export function statusText(s: State, now: number): string | undefined {
   if (s.stopped) return `stopped: ${s.stopped}`

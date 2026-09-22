@@ -10,7 +10,7 @@ The behavior follows the cache-tax mod by Karan Bansal (karanb192/claude-code-mo
 
 **Runs with no end under `always`.** `/cache-warm always` is not a window: the ping goes out every 50 minutes for as long as the session lives, and `/cache-warm off` is the only thing that ends it. The switch is one global key in the mod's own `$.store`, so every later session of every project starts the same loop at its start and after `/clear`. A ping that finds the cache gone does not end this loop: the write that ping paid for is the new cache, the mod says so in one transcript line, counts the write in the session's tally and keeps going. A warm ping reads the context at the read rate, about $0.05 for 200k tokens, so an idle day of pings costs about $1.40.
 
-**Stops when the cache is gone.** This holds for a window with an end, not for `always`. A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the engine sends no ping or the fork fails. Under `always` such a failure stops the loop for that turn alone: the next turn starts it again, so the session never holds the switch while running nothing.
+**Stops when the cache is gone.** This holds for a window with an end, not for `always`. A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the engine has nothing to fork yet, when the API answers the fork with an error (the line names its status and kind), and when the fork is cut before its reply. A reply that carries no text still read the cache, so it counts as a ping. Under `always` such a failure stops the loop for that turn alone: the next turn starts it again, so the session never holds the switch while running nothing.
 
 **Arms itself after a paid cold write.** When a turn re-writes at least half of a context larger than 20k tokens, the mod counts that cold write and arms a six-hour window, unless a longer window is already armed. Under `always` no six-hour window is armed at all, because the endless loop already keeps that cache.
 
@@ -101,7 +101,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent), $.ui.status (via showStatusAt)

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
+import type { CommandRunInput, ModelForkResult, On, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
 
 tier('user')
 
@@ -48,8 +48,11 @@ const run = (command: 'cache-warm' | 'cache-status', args = ''): CommandRunInput
   command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** What a fork reports: the cache read and write, or null for no reply, or an Error to throw. */
-type ForkAnswer = null | Error | { read: number; write: number; out?: number }
+/** What a fork reports: the cache read and write of a reply, an engine result as it is, or an Error to throw. */
+type ForkAnswer = Error | ModelForkResult | { read: number; write: number; out?: number }
+
+const NOTHING_TO_FORK: ModelForkResult ={ isAnswered: false, reason: 'nothing-to-fork' }
+const NO_USAGE = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 
 type World = {
   clock: MockClock
@@ -78,7 +81,7 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.id', () => ({ value: opts.sid ?? 'S1' }))
   on('session.model', () => ({ value: 'claude-fable-5-1' }))
-  on('session.usage', () => ({ value: { context: { window: 1_000_000, tokens: w.live.tokens }, rateLimits: [] } }))
+  on('session.usage', () => ({ value: { startedAt: START, context: { window: 1_000_000, tokens: w.live.tokens }, rateLimits: [] } }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('prompt.submit', (_, e) => ({ text: e.text }))
@@ -89,9 +92,10 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
     w.forks++
     const a = answers.shift()
     if (a instanceof Error) throw a
-    if (a === null || a === undefined) return { value: null }
+    if (a === undefined) return { value: NOTHING_TO_FORK }
+    if ('isAnswered' in a) return { value: a }
     const u = { input_tokens: 2, output_tokens: a.out ?? 1, cache_read_input_tokens: a.read, cache_creation_input_tokens: a.write }
-    return { value: { text: 'warm', usage: u } }
+    return { value: { isAnswered: true as const, text: 'warm', usage: u } }
   })
   return w
 }
@@ -201,13 +205,41 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
-  test('stops when the engine sends no ping', async ($, on) => {
-    const w = world(on, [null])
+  test('stops when the engine has nothing to fork', async ($, on) => {
+    const w = world(on, [NOTHING_TO_FORK])
     await $.session.start(session)
     await $.command.run(run('cache-warm', '1h'))
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
-    expect(w.statuses.at(-1)).toBe('stopped: the engine did not send the ping; the snapshot was cold or the API call failed')
+    expect(w.statuses.at(-1)).toBe('stopped: the engine did not send the ping; the conversation has no reply to fork yet')
+  })
+
+  test('stops with the status and kind of an API error, and scores no cold ping', async ($, on) => {
+    const w = world(on, [{ isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: NO_USAGE }])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', '1h'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.statuses.at(-1)).toBe('stopped: the ping failed, the API answered 529 (overloaded)')
+    expect(w.logs.some(l => l.includes('cache was already gone'))).toBe(false)
+  })
+
+  test('stops when the ping was cut before its reply', async ($, on) => {
+    const w = world(on, [{ isAnswered: false, reason: 'aborted', usage: NO_USAGE }])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', '1h'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.statuses.at(-1)).toBe('stopped: the ping was cut before a reply came')
+  })
+
+  test('a reply without text still read the cache, so it counts as a warm ping', async ($, on) => {
+    const w = world(on, [{ isAnswered: false, reason: 'empty-reply', usage: { ...NO_USAGE, cache_read_input_tokens: 200_000 } }])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', '1h'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.statuses.at(-1)).toBe('10m left · ping in 50m · last ping read 200k $0.05')
   })
 
   test('stops with the error when the fork throws', async ($, on) => {
@@ -353,7 +385,7 @@ describe('always', () => {
   })
 
   test('a ping that failed stops the loop for that turn alone; the next turn starts it again', async ($, on) => {
-    const w = world(on, [null, warm], { store: [['always', true]] })
+    const w = world(on, [NOTHING_TO_FORK, warm], { store: [['always', true]] })
     await $.session.start(session)
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
@@ -368,7 +400,7 @@ describe('always', () => {
   })
 
   test('a cold write under always keeps the endless loop instead of arming a six-hour window', async ($, on) => {
-    const w = world(on, [null], { store: [['always', true]] })
+    const w = world(on, [NOTHING_TO_FORK], { store: [['always', true]] })
     await $.session.start(session)
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
