@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { DEFAULT_MAX_POKES, decide, limitOf, POKE_TEXT, statusText } from '../hooks/poke.ts'
@@ -30,11 +30,11 @@ const run = (args: string): CommandRunInput => ({
   command: 'error-poke', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The prompts the mod submitted, the logged lines, and `drop` to make the engine refuse one. */
-type World = { sent: string[]; logs: string[]; drop?: string }
+/** The prompts the mod submitted, the logged lines, `drop` to make the engine refuse one, and the clock. */
+type World = { sent: string[]; logs: string[]; drop?: string; clock: MockClock }
 
 function world(on: On): World {
-  const w: World = { sent: [], logs: [] }
+  const w: World = { sent: [], logs: [], clock: mock.clock(on) }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -51,18 +51,14 @@ async function started($: Engine): Promise<void> {
   await $.session.start({ surface: null, isInteractive: true, cwd: '/Users/u/app' })
 }
 
-/** A plugin prompt is submitted without awaiting it, so a test lets the microtasks run. */
-const flush = async (): Promise<void> => {
-  for (let i = 0; i < 20; i += 1) await Promise.resolve()
-}
-
 /**
  * One main-loop turn that ended with `reason`. A refused turn needs a refusal payload and no test drives
  * one; `decide` covers that case.
  */
-async function ended($: Engine, reason: 'answer' | 'aborted' | 'error', turnId = 't1'): Promise<void> {
+async function ended($: Engine, w: World, reason: 'answer' | 'aborted' | 'error', turnId = 't1'): Promise<void> {
   await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: reason === 'aborted', turnId, reason })
-  await flush()
+  // A plugin prompt is submitted without awaiting it; settling lets it and its answer run.
+  await w.clock.settle()
 }
 
 describe('error-poke', () => {
@@ -77,7 +73,7 @@ describe('error-poke', () => {
   test('a turn killed by an API error gets one continue prompt, and the person reads one line', async ($, on) => {
     const w = world(on)
     await started($)
-    await ended($, 'error')
+    await ended($, w, 'error')
     expect(w.sent).toEqual([POKE_TEXT])
     expect(w.logs).toEqual(['the turn died on an API error, continuing (1/99)'])
     expect((await $.command.run(run(''))).text).toBe('on · 1/99 continue prompts since your last prompt · last turn: error')
@@ -86,8 +82,8 @@ describe('error-poke', () => {
   test('an answered or interrupted turn sends nothing', async ($, on) => {
     const w = world(on)
     await started($)
-    await ended($, 'answer')
-    await ended($, 'aborted', 't2')
+    await ended($, w, 'answer')
+    await ended($, w, 'aborted', 't2')
     expect(w.sent).toEqual([])
     expect(w.logs).toEqual([])
     expect((await $.command.run(run(''))).text).toContain('last turn: aborted')
@@ -96,14 +92,14 @@ describe('error-poke', () => {
   test('the prompts stop at the limit, say so once, and a prompt of the person resets the count', async ($, on) => {
     const w = world(on)
     await started($)
-    for (let i = 0; i < DEFAULT_MAX_POKES + 2; i++) await ended($, 'error', `t${i}`)
+    for (let i = 0; i < DEFAULT_MAX_POKES + 2; i++) await ended($, w, 'error', `t${i}`)
     expect(w.sent).toHaveLength(DEFAULT_MAX_POKES)
     expect(w.logs.filter(l => l.startsWith('stopped after'))).toEqual([
       'stopped after 99 continue prompts; the API keeps failing. Send a prompt to reset the count.',
     ])
     await $.prompt.submit({ text: 'go on then', wait: false, origin: { kind: 'composer' } })
     expect((await $.command.run(run(''))).text).toContain('0/99 continue prompts')
-    await ended($, 'error', 'again')
+    await ended($, w, 'error', 'again')
     expect(w.sent).toHaveLength(DEFAULT_MAX_POKES + 2)
   })
 
@@ -111,10 +107,10 @@ describe('error-poke', () => {
     const w = world(on)
     await started($)
     expect((await $.command.run(run('off'))).text).toContain('off · 0/99')
-    await ended($, 'error')
+    await ended($, w, 'error')
     expect(w.sent).toEqual([])
     await $.command.run(run('on'))
-    await ended($, 'error', 't2')
+    await ended($, w, 'error', 't2')
     expect(w.sent).toEqual([POKE_TEXT])
   })
 
@@ -125,7 +121,7 @@ describe('error-poke', () => {
     expect(limitOf('2')).toBe(2)
     expect((await $.command.run(run('limit x'))).text).toBe('limit expects a whole number from 1 to 999')
     expect((await $.command.run(run('limit 2'))).text).toBe('limit 2: at most 2 continue prompt(s) go out for one stretch of failures')
-    for (let i = 0; i < 4; i++) await ended($, 'error', `t${i}`)
+    for (let i = 0; i < 4; i++) await ended($, w, 'error', `t${i}`)
     expect(w.sent).toHaveLength(2)
     expect(w.logs.at(-1)).toBe('stopped after 2 continue prompts; the API keeps failing. Send a prompt to reset the count.')
     expect((await $.command.run(run(''))).text).toContain('2/2 continue prompts')
@@ -135,7 +131,7 @@ describe('error-poke', () => {
     const w = world(on)
     w.drop = 'the session is busy'
     await started($)
-    await ended($, 'error')
+    await ended($, w, 'error')
     expect(w.logs.at(-1)).toBe('the continue prompt was dropped: the session is busy')
   })
 
@@ -144,7 +140,7 @@ describe('error-poke', () => {
     const bar: Bar = { open: true, sections: [] }
     seatSidebar(on, bar)
     await started($)
-    await ended($, 'error')
+    await ended($, w, 'error')
     expect(bar.sections).toEqual([{ key: 'poke-1', title: 'turn continued after an API error', lines: ['the turn died on an API error, continuing (1/99)'] }])
     expect(w.logs).toEqual([])
   })
