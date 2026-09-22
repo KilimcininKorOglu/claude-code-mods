@@ -86,19 +86,23 @@ const both = (key, wrap = t => t) =>
 const pair = (key, wrap = t => t) =>
   ['tr', 'en'].map(lang => `<span data-lang-block="${lang}">${wrap(copy[lang][key], lang)}</span>`).join('')
 
-/** The fixed left sidebar: the brand, the filter and every mod by name. The mods live here alone. */
-function sidebar(list, current, base) {
+/**
+ * The fixed left sidebar: the brand, the filter and every mod by name. The mods live here alone.
+ * `root` is the path back to the site root from the page being written: '' on the index,
+ * '../' on a mod page. Every href is built from it, so a mod page always sits under mods/.
+ */
+function sidebar(list, current, root) {
   const rows = list.map(m => {
     const here = m.name === current ? ' aria-current="page"' : ''
     const title = escape(m.summaryTr ?? m.summary)
-    return `<li data-search="${escape([m.name, m.summary, m.summaryTr ?? '', ...m.tags].join(' ').toLowerCase())}" data-reach="${m.reach}"><a href="${base}${m.name}.html" title="${title}"${here}><span class="dot ${m.reach}"></span>${escape(m.name)}</a></li>`
+    return `<li data-search="${escape([m.name, m.summary, m.summaryTr ?? '', ...m.tags].join(' ').toLowerCase())}" data-reach="${m.reach}"><a href="${root}mods/${m.name}.html" title="${title}"${here}><span class="dot ${m.reach}"></span>${escape(m.name)}</a></li>`
   }).join('')
   const filters = ['all', 'L0', 'L1', 'L2', 'L3'].map(level => {
     const label = level === 'all' ? pair('allReach', escape) : level
     return `<button data-reach="${level}" aria-pressed="${level === 'all'}">${label}</button>`
   }).join('')
   return `<aside class="side">
-  <a class="brand" href="${base === '' ? 'index.html' : '../index.html'}">${escape(copy.site.title)}<span>${escape(copy.site.marketplace)}</span></a>
+  <a class="brand" href="${root}index.html">${escape(copy.site.title)}<span>${escape(copy.site.marketplace)}</span></a>
   <input type="search" id="side-q" placeholder="${escape(copy.tr.searchPlaceholder)}" data-ph-tr="${escape(copy.tr.searchPlaceholder)}" data-ph-en="${escape(copy.en.searchPlaceholder)}" autocomplete="off">
   <div class="filters">${filters}</div>
   <h4>${pair('modsTitle')} <span id="side-count">(${list.length})</span></h4>
@@ -107,7 +111,7 @@ function sidebar(list, current, base) {
 </aside>`
 }
 
-function page(title, list, current, base, body) {
+function page(title, list, current, root, body) {
   return `<!doctype html>
 <html lang="tr" data-lang="tr">
 <head>
@@ -115,8 +119,8 @@ function page(title, list, current, base, body) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escape(title)}</title>
 <meta name="description" content="${escape(copy.en.tagline)}">
-<link rel="icon" href="${base === '' ? '' : '../'}favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="${base === '' ? '' : '../'}style.css">
+<link rel="icon" href="${root}favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="${root}style.css">
 <script>
   // The language choice is kept in a cookie, never in localStorage.
   var m = document.cookie.match(/(?:^|; )lang=(tr|en)/)
@@ -125,11 +129,11 @@ function page(title, list, current, base, body) {
 </head>
 <body>
 <div class="shell">
-${sidebar(list, current, base)}
+${sidebar(list, current, root)}
 <div class="main">
   <header class="top"><div class="inner">
-    <a href="${base === '' ? 'index.html' : '../index.html'}#install">${pair('installTitle')}</a>
-    <a href="${base === '' ? 'index.html' : '../index.html'}#reach">${pair('reachTitle')}</a>
+    <a href="${root}index.html#install">${pair('installTitle')}</a>
+    <a href="${root}index.html#reach">${pair('reachTitle')}</a>
     <div class="langs"><button data-set="tr">TR</button><button data-set="en">EN</button></div>
   </div></header>
 ${body}
@@ -139,7 +143,7 @@ ${body}
   </div></footer>
 </div>
 </div>
-<script src="${base === '' ? '' : '../'}site.js"></script>
+<script src="${root}site.js"></script>
 </body></html>
 `
 }
@@ -206,7 +210,7 @@ function modPage(mod, list) {
   <div data-lang-block="tr">${turkish}</div>
   <div data-lang-block="en">${english}</div>
 </article></main>`
-  return page(`${mod.name} · ${copy.site.title}`, list, mod.name, 'mods/', body)
+  return page(`${mod.name} · ${copy.site.title}`, list, mod.name, '../', body)
 }
 
 const SCRIPT = `// The sidebar's filter and the language switch. No framework, no storage but one cookie.
