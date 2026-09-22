@@ -376,6 +376,20 @@ function decode(text: string): Record<string, unknown> | string {
   return last
 }
 
+/** A fork result with no text to read, by the reason the engine gives. */
+export type Unanswered =
+  | { reason: 'nothing-to-fork' }
+  | { reason: 'api-error'; status: number | null; error: string }
+  | { reason: 'empty-reply' }
+  | { reason: 'aborted' }
+
+export function unansweredText(r: Unanswered): string {
+  if (r.reason === 'nothing-to-fork') return 'the fork had nothing to fork yet'
+  if (r.reason === 'empty-reply') return 'the fork replied with no text'
+  if (r.reason === 'aborted') return 'the fork was cut before its reply'
+  return `the fork got an API error, ${r.status ?? 'no response'} (${r.error})`
+}
+
 /**
  * Reads the fork's answer. A reply that is not one JSON object is an error, never a guess. An op or a
  * topic of another shape is named in `refused` and the rest of the reply is kept, because one bad entry

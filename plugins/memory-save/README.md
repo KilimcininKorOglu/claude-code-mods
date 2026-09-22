@@ -74,7 +74,7 @@ A save whose result is not in the template is never written.
 - No new bullet is longer than 600 characters. An `add` or `replace` whose bullet is longer is refused alone: the other ops are written, the status line counts it (`+1 1 refused`), the transcript line names it, and the next save tells the fork to split such a bullet or move its detail to a topic file.
 - `MEMORY.md` did not change while the fork ran.
 
-Two cases are left that write nothing and show an error on the status line: the fork gave no reply at all (a cold snapshot or an API error), and `MEMORY.md` changed while the fork ran.
+Two cases are left that write nothing and show an error on the status line: the fork gave no text to read (nothing to fork yet, an API error with its status and kind, a reply with no text, or a cut call), and `MEMORY.md` changed while the fork ran.
 
 The reply's JSON object is read from the last `}` back to the first `{` that opens an object of named fields and parses. A reply that writes a sentence before the JSON is still read, also one whose sentence holds braces of its own, for example a `{ tool: 'Edit' }` matcher.
 
@@ -111,7 +111,7 @@ The mod has no command. To stop the saves, disable it: `claude plugin disable me
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, logEvent), $.ui.status (via clearReport, report)
@@ -133,7 +133,7 @@ Reach L2, writes files, runs git and drives Claude.
 - The test engine of `claude plugin test` cannot raise `classic.SessionStart`. The load is covered by unit tests of its text and by a live session check.
 - Every main-loop turn costs one fork: the transcript as cache reads, the current file and the rules as input, and the answer as output.
 - A save that fails is not retried. The next turn saves again.
-- A fork can come back empty on a cold cache snapshot or an API error. The status line then shows the error.
+- A fork can come back without text: before the conversation's first reply, on an API error, or cut by an abort. The status line then names the reason.
 
 ## Development
 

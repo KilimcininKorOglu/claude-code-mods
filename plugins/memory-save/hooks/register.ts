@@ -16,6 +16,7 @@ import {
   repairSections,
   skippedText,
   topicFiles,
+  unansweredText,
   type Reply,
   type TopicAppend,
 } from './memory.ts'
@@ -166,7 +167,7 @@ const FAILED_REPLY = 'memory-save.failed-reply.txt'
  */
 async function ask($: EngineInterface, state: State, project: string, dir: string, current: string | undefined): Promise<Reply | undefined> {
   const reply = await $.model.fork({ prompt: buildPrompt(project, dir, current, state.skipped, state.refused) })
-  if (reply === null) throw new Error('the fork got no reply (cold snapshot or API error)')
+  if (!reply.isAnswered) throw new Error(unansweredText(reply))
   const u = reply.usage
   $.ui.log(`fork usage: in ${u.input_tokens}, cache read ${u.cache_read_input_tokens}, out ${u.output_tokens}`, { to: 'debug' })
   const parsed = parseReply(reply.text)

@@ -74,7 +74,7 @@ Sonucu template'te olmayan bir kayıt hiçbir zaman yazılmaz.
 - Hiçbir yeni madde 600 karakterden uzun değildir. Maddesi daha uzun olan bir `add` ya da `replace` tek başına reddedilir: diğer op'lar yazılır, status line onu sayar (`+1 1 refused`), transcript satırı adlandırır ve sonraki kayıt fork'a böyle bir maddeyi bölmesini ya da detayını bir topic dosyasına taşımasını söyler.
 - Fork çalışırken `MEMORY.md` değişmedi.
 
-Hiçbir şey yazmayan ve status line'da bir hata gösteren iki durum kalır: fork hiç cevap vermedi (soğuk bir snapshot ya da bir API hatası) ve fork çalışırken `MEMORY.md` değişti.
+Hiçbir şey yazmayan ve status line'da bir hata gösteren iki durum kalır: fork okunacak bir metin vermedi (henüz fork edilecek bir şey yok, status'u ve türüyle bir API hatası, metinsiz bir cevap ya da kesilen bir çağrı) ve fork çalışırken `MEMORY.md` değişti.
 
 Cevabın JSON object'i son `}` işaretinden geriye, adlandırılmış alanlardan oluşan ve parse edilen ilk `{` işaretine kadar okunur. JSON'dan önce bir cümle yazan bir cevap yine okunur, kendi parantezlerini taşıyan bir cümleli olanı da, mesela bir `{ tool: 'Edit' }` matcher'ı.
 
@@ -111,7 +111,7 @@ Mod'un komutu yoktur. Kayıtları durdurmak için onu devre dışı bırakın: `
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, logEvent), $.ui.status (via clearReport, report)
@@ -133,7 +133,7 @@ Reach L2, dosya yazar, git çalıştırır ve Claude'u sürer.
 - `claude plugin test` test engine'i `classic.SessionStart` olayını raise edemez. Yükleme, metninin unit test'leri ve canlı bir session kontrolü ile kapsanır.
 - Her ana döngü turu bir fork'a mal olur: cache okuması olarak transcript, input olarak mevcut dosya ve kurallar, output olarak cevap.
 - Başarısız bir kayıt tekrar denenmez. Sonraki tur yeniden kaydeder.
-- Bir fork soğuk bir cache snapshot'ında ya da bir API hatasında boş dönebilir. Status line o zaman hatayı gösterir.
+- Bir fork metinsiz dönebilir: konuşmanın ilk cevabından önce, bir API hatasında ya da bir abort ile kesildiğinde. Status line o zaman sebebi adlandırır.
 
 ## Geliştirme
 

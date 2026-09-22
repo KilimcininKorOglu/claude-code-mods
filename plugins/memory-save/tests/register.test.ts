@@ -1,5 +1,5 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { On, SessionStartInput, TurnCompleteInput } from 'claude-code'
+import type { ModelForkResult, On, SessionStartInput, TurnCompleteInput } from 'claude-code'
 
 /** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
 const SIDEBAR: Plugin = {
@@ -53,7 +53,8 @@ const usage = { input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 3, c
 
 type World = {
   files: Map<string, string>
-  replies: (string | null)[]
+  /** A string is a reply the fork answered with; a fork result is answered as it is. */
+  replies: (string | ModelForkResult)[]
   prompts: string[]
   logs: string[]
   statuses: (string | undefined)[]
@@ -83,8 +84,8 @@ function world(on: On, files: Record<string, string> = {}): World {
   on('model.fork', async (_, e) => {
     w.prompts.push(e.prompt)
     await clock.sleep(1000)
-    const text = w.replies.shift()
-    return { value: text === undefined || text === null ? null : { text, usage } }
+    const reply = w.replies.shift() ?? { isAnswered: false, reason: 'nothing-to-fork' }
+    return { value: typeof reply === 'string' ? { isAnswered: true, text: reply, usage } : reply }
   })
   on('ui.log', (_, e) => {
     if (e.to !== 'debug') w.logs.push(e.text)
@@ -225,13 +226,33 @@ describe('memory-save', () => {
     expect(w.logs.at(-1)).toBe('MEMORY.md: no change; 1 skipped, not in the file: - **Gone.**')
   })
 
-  test('shows the error when the fork gets no reply', async ($, on) => {
+  test('shows the error when the fork has nothing to fork yet', async ($, on) => {
     const w = world(on, { [FILE]: OLD })
-    w.replies.push(null)
+    w.replies.push({ isAnswered: false, reason: 'nothing-to-fork' })
     await $.session.start(session)
     await $.turn.complete(turn())
     await settled(w, 1)
-    expect(w.statuses.at(-1)).toMatch(/^error: the fork got no reply/)
+    expect(w.statuses.at(-1)).toMatch(/^error: the fork had nothing to fork yet/)
+  })
+
+  test('names the status and kind of an API error, and keeps no failed reply', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    w.replies.push({ isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await settled(w, 1)
+    expect(w.statuses.at(-1)).toMatch(/^error: the fork got an API error, 529 \(overloaded\)/)
+    expect(w.files.has(`${DIR}/memory-save.failed-reply.txt`)).toBe(false)
+    expect(w.files.get(FILE)).toBe(OLD)
+  })
+
+  test('shows the error when the fork replies with no text', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    w.replies.push({ isAnswered: false, reason: 'empty-reply', usage })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await settled(w, 1)
+    expect(w.statuses.at(-1)).toMatch(/^error: the fork replied with no text/)
   })
 
   test('refuses a bullet over the character cap and keeps the file', async ($, on) => {
