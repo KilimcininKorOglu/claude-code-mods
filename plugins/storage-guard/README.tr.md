@@ -19,7 +19,7 @@ Bir edit'in tarayıcı verisini cookie yerine `localStorage` ya da `sessionStora
 
        storage-guard: this edit stores data in the browser with localStorage or sessionStorage: src/auth.ts:12. Store it in a cookie instead (document.cookie, or the server's Set-Cookie).
 
-   Satır numarası edit sonrası dosyadan gelir; bir Write kendi içeriğinden numaralandırılır. En fazla 8 yer adlandırılır, kalanı sayılır. Dosya okunamadığında path satırsız durur ve hata bir kere log'lanır. Dosya session'ın başladığı dizinin içindeyse path o dizine göre yazılır. O dizin session'ın başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır.
+   Satır numarası edit sonrası dosyadan gelir; bir Write kendi içeriğinden numaralandırılır. En fazla 8 yer adlandırılır, kalanı sayılır. Dosya okunamadığında path satırsız durur ve hata bir kere log'lanır. Dosya session'ın başladığı git repository'sinin içindeyse path o köke göre yazılır. Yani `api/` içinde açılan bir session, `web/` içindeki bir dosyayı `web/auth.ts` olarak adlandırır. Git repository'si dışında path session'ın başladığı dizine göre yazılır. Bu kök session'ın başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır.
 4. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır yalnız yerleri taşır, talimat cümlesi olmadan:
 
        storage-guard: browser storage instead of a cookie: src/auth.ts:12
@@ -68,12 +68,12 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=storage-guard}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, gate, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, gate, toPerson)
 
 Reach L2, index'i okumak için git çalıştırır.
 
     1. Okur:     her Edit ve Write çağrısının metnini; Bash komut metnini; storage ekleyen bir Edit sonrası edit edilen dosyayı, satır numaraları için, ve bulgu dururken her açık dosyayı yeniden
-    2. Çalıştırır: deny modunda bir commit'te git rev-parse --show-toplevel ve git diff --cached --name-only, commit'in hangi dosyaları tuttuğunu okumak için
+    2. Çalıştırır: session başlangıcında bir kere git rev-parse --show-toplevel, path'leri repository köküne göre göstermek için; deny modunda bir commit'te git rev-parse --show-toplevel ve git diff --cached --name-only, commit'in hangi dosyaları tuttuğunu okumak için
     3. Gönderir: storage ekleyen bir edit'ten sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve modu
     5. Düşman girdi: edit edilen metin yalnız regular expression ile eşleştirilir ve file:line olarak yazılır, hiçbir zaman çalıştırılmaz

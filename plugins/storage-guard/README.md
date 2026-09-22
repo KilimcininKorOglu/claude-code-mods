@@ -19,7 +19,7 @@ A Claude Code Mod that tells the model when an edit stores browser data with `lo
 
        storage-guard: this edit stores data in the browser with localStorage or sessionStorage: src/auth.ts:12. Store it in a cookie instead (document.cookie, or the server's Set-Cookie).
 
-   The line number comes from the file after the edit; a Write is numbered from its own content. At most 8 places are named, the rest counted. When the file cannot be read, the path stands without a line and the error is logged once. The path is written against the directory the session started in when the file is inside it. That directory is read once at the session's start, because a Bash `cd` moves the session's own directory.
+   The line number comes from the file after the edit; a Write is numbered from its own content. At most 8 places are named, the rest counted. When the file cannot be read, the path stands without a line and the error is logged once. The path is written against the git repository the session started in when the file is inside it, so a session opened in `api/` names a file of `web/` as `web/auth.ts`. Outside a git repository it is written against the directory the session started in. That root is read once at the session's start, because a Bash `cd` moves the session's own directory.
 4. The same moment writes one line to the transcript, so you see what the model was told. The line holds the places alone, without the instruction:
 
        storage-guard: browser storage instead of a cookie: src/auth.ts:12
@@ -68,12 +68,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=storage-guard}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}, tool.call{tool=Write}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, gate, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.fs.exists (via isGone), $.fs.read (via fileText), $.process.run (via shownRootOf, stagedPaths), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via fileText, gate, toPerson)
 
 Reach L2, it runs git to read the index.
 
     1. Reads:    the text of each Edit and Write call; the Bash command text; the edited file after an Edit that adds the storage, for the line numbers, and each open file again while a finding stands
-    2. Runs:     git rev-parse --show-toplevel and git diff --cached --name-only, at a commit in deny mode, to read which files the commit holds
+    2. Runs:     git rev-parse --show-toplevel once at the session's start, to show paths against the repository root; git rev-parse --show-toplevel and git diff --cached --name-only, at a commit in deny mode, to read which files the commit holds
     3. Sends:    a note to the model after an edit that adds the storage, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: the edited text is only matched by regular expressions and printed as file:line, never run

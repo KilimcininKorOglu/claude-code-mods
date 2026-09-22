@@ -11,11 +11,26 @@ type Finding = { path: string; lines: string[]; places: string[] }
 
 /**
  * The on/off setting read at session start, the mode, whether a read error was logged, the open findings
- * by shown path, whether the model is owed a note for them, and the directory the session started in. A path is shown against that directory, not
- * against `$.session.cwd()`, because a Bash `cd` moves the session's directory and would then leave every
- * path outside it written in full.
+ * by shown path, whether the model is owed a note for them, and the root read once at the session's start
+ * (`shownRootOf`). A path is shown against that root, not against `$.session.cwd()`, because a Bash `cd`
+ * moves the session's directory and would then leave every path outside it written in full.
  */
 type State = { enabled: boolean; mode: Mode; reported: boolean; open: Map<string, Finding>; owed: boolean; root?: string }
+
+/**
+ * The git repository the session started in, so a file in a sibling directory of a session opened in a
+ * subdirectory still reads short; the session's own directory where git does not answer.
+ */
+async function shownRootOf($: EngineInterface, cwd: string): Promise<string> {
+  try {
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+    const root = top.stdout.trim()
+    return top.exitCode === 0 && root !== '' ? root : cwd
+  } catch {
+    // No git here, or the command did not run: paths are shown against the session's directory.
+    return cwd
+  }
+}
 
 /** Whether the file is no longer there, so a finding of it closes instead of standing for good. */
 async function isGone($: EngineInterface, path: string): Promise<boolean> {
@@ -187,7 +202,7 @@ export const register: Register = on => {
     await $.command.register({ name: 'storage-guard', description: 'localStorage and sessionStorage an edit adds: status, on, off, mode (storage-guard)', argumentHint: '[on | off | mode note | deny]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
-    state.root = await $.session.cwd()
+    state.root = await shownRootOf($, await $.session.cwd())
     return r
   })
 

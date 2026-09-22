@@ -77,6 +77,15 @@ describe('storage-guard', () => {
     expect(w.logs).toEqual(['browser storage instead of a cookie: src/auth.ts:3'])
   })
 
+  test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
+    const w = world(on)
+    on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
+    await started($)
+    w.file = `${SAVE}\n`
+    await $.tool.call({ tool: 'Edit', file_path: '/Users/u/web/auth.ts', old_string: 'save(token)', new_string: SAVE } as never)
+    expect(w.logs).toEqual(['browser storage instead of a cookie: web/auth.ts:1'])
+  })
+
   withSidebar('an open sidebar takes the places and the transcript stays clean', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [] }
