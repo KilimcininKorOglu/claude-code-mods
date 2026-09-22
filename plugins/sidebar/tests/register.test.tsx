@@ -16,7 +16,7 @@ const run = (args: string): CommandRunInput => ({
 const PANE = { title: 'Sidebar', isFocused: false, bodyColumns: 60, placement: 'dock', scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['Pane']
 
 /** Where the logs live for the home this world answers with. */
-const LOG_DIR = '/Users/u/.claude/stream'
+const LOG_DIR = '/Users/u/.claude/sidebar'
 
 /** Two local times, one per day, so a restored entry's own stamp is readable. */
 const OLD = new Date(2026, 8, 19, 13, 0).getTime()

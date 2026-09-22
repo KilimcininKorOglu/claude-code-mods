@@ -12,8 +12,8 @@ const OPEN_KEY = 'open'
 
 const USAGE = 'expects nothing (open or close), on, off, status or log'
 
-/** Where the logs of every project live, under the person's own Claude directory. */
-const LOG_DIR = '.claude/stream'
+/** Where the logs of every project live, under the person's own Claude directory, named after the mod. */
+const LOG_DIR = '.claude/sidebar'
 
 /**
  * The standing sections other mods wrote, the stream under them (newest first), the number that keeps

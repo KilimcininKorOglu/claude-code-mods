@@ -10,7 +10,7 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. An entry never replaces another, so the same mod and key twice reads as two entries. A stream entry's heading also carries the day and time it was written, in the machine's own time zone (`edit-loop: edit loop (21.09 14:32)`), so the person reads the log after the fact; a standing section carries none, because it is rewritten at every measure. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
 5. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane. The mod that offers the button serves that command itself. The label turns red under the pointer, so what a press would run is plain before the press.
 6. The three lifetimes: `session` stands at the top until the mod replaces or clears it, `stream` joins the log under it, `turn` goes when the turn ends.
-7. Every stream entry is also written to this project's own log file, `~/.claude/stream/<project>-<YYYY-MM-DD>.log`, one JSON object per line. When the pane opens, the newest 10 entries of that project's logs come back into the stream, each with the day and time it was first written, so a session started tomorrow still shows what yesterday found. A restored entry is not written to the log again. `/sidebar log` prints the file's path and its newest 10 entries.
+7. Every stream entry is also written to this project's own log file, `~/.claude/sidebar/<project>-<YYYY-MM-DD>.log`, one JSON object per line. When the pane opens, the newest 10 entries of that project's logs come back into the stream, each with the day and time it was first written, so a session started tomorrow still shows what yesterday found. A restored entry is not written to the log again. `/sidebar log` prints the file's path and its newest 10 entries.
 
 ## The API other mods use
 
@@ -89,13 +89,15 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
 
 Reach L2, it writes a file.
 
-    1. Reads:    the sections other mods hand over, the clock for a stream entry's own time, HOME, the session's directory, and this project's own log files under ~/.claude/stream
+    1. Reads:    the sections other mods hand over, the clock for a stream entry's own time, HOME, the session's directory, and this project's own log files under ~/.claude/sidebar
     2. Runs:     the slash command a button names, through $.command.run, on the person's press only
     3. Sends:    nothing
-    4. Persists: in $.store, whether the sidebar is open; in ~/.claude/stream, one log file per project and day, holding the stream entries other mods wrote
+    4. Persists: in $.store, whether the sidebar is open; in ~/.claude/sidebar, one log file per project and day, holding the stream entries other mods wrote
     5. Hostile input: a section comes from another plugin and is read as data: the consumer, key and title are checked, every line and button of another shape is dropped, the text is folded to one line and wrapped to the width, and the counts are capped. A log line is read the same way, so a hand-edited or truncated file loses that line and nothing else.
 
 ## Limits
+
+- The log directory was `~/.claude/stream` up to 0.7.0 and is `~/.claude/sidebar` from 0.8.0, so every mod's own directory carries the mod's name. Nothing is migrated: the old files stay on disk unread. Move them yourself to keep the restore of older days: `mv ~/.claude/stream/* ~/.claude/sidebar/`.
 
 - The pane is placed beside the transcript only under the fullscreen layout; otherwise it opens above the prompt.
 - A session that opens the sidebar from the stored choice opens it as the plugin, not as the person: the engine leaves such a pane undrawn below 144 terminal columns, 110 once the person opened that pane themselves. `/sidebar` in that session places it at any width.
