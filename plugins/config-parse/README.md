@@ -63,7 +63,7 @@ Reach L2, reads files and runs a process.
 - A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
 - The index is read before the command runs. A commit whose files change between the read and the run is measured against what the index held at the read.
 - A `.env` line is checked for its shape only. A wrong value, a missing quote or a duplicate key is not a finding.
-- A JSON file with comments (`.jsonc` in a `.json` name) is reported as broken, because `JSON.parse` is the parser.
+- A JSON file with comments under a name the mod does not know as JSON with comments (a `.json` name outside the list in step 1) is reported as broken, because that name is read strictly.
 - YAML and TOML need `python3`; on a machine without it those files are never checked.
 - An edit made outside Edit and Write, for example by a Bash `sed`, is not seen.
 

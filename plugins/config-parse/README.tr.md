@@ -63,7 +63,7 @@ Reach L2, dosya okur ve process çalıştırır.
 - `git commit -a`, `-am` ve `--` sonrası pathspec taşıyan bir commit index'e göre daraltılmaz, çünkü bunlar index'in henüz tutmadığı dosyaları commit eder. Onlar için her açık bulgu durur.
 - Index komut çalışmadan önce okunur. Dosyaları okuma ile çalışma arasında değişen bir commit, okuma anındaki index'e göre ölçülür.
 - Bir `.env` satırı yalnız şekli için kontrol edilir. Yanlış bir değer, eksik bir tırnak ya da tekrarlanan bir key bulgu değildir.
-- Comment taşıyan bir JSON dosyası (`.json` adı altındaki `.jsonc`) bozuk raporlanır, çünkü parser `JSON.parse`'tır.
+- Modun JSON with comments olarak tanımadığı bir ad altında (1. adımdaki listenin dışındaki bir `.json` adı) comment taşıyan bir JSON dosyası bozuk raporlanır, çünkü o ad strict okunur.
 - YAML ve TOML `python3` ister; o olmayan bir makinede bu dosyalar hiç kontrol edilmez.
 - Edit ve Write dışında yapılan bir düzenleme, örneğin Bash `sed`, görülmez.
 
