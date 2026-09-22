@@ -44,7 +44,9 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
    The note and the line are separate channels: the model never reads the line, and you never read the note.
 6. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, asks git again, so it closes two ways:
+7. Each commit that leaves a lockfile out opens its own finding, with its own sidebar entry keyed by its manifests. A later commit adds its finding beside the open ones and never writes over one; a pair an open finding already names is not opened twice. Every finding closes on its own measure.
+
+   A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, asks git again, so it closes two ways:
 
    - the lockfile was written: a later commit changed it, or `git status --porcelain` shows it changed in the working tree;
    - the manifest asks for no lockfile change any more: `git log -1 -- <lockfile>` names the commit that last wrote the lockfile, and the manifest's diff against that commit touches no dependency. A change that was reverted reads this way.

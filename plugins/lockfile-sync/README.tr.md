@@ -44,7 +44,9 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
 6. [sidebar](../sidebar) açıkken bu çiftler oraya gider, çift başına bir satır olarak, stream'inde bir entry halinde, ve transcript temiz kalır. Entry, yenileri pane'den itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
 
-7. Bir bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra ve guarded bir git komutundan önce git'e yeniden sorar, yani iki yoldan kapanır:
+7. Bir lockfile'ı dışarıda bırakan her commit, manifest'lerine göre key'lenmiş kendi sidebar entry'siyle kendi bulgusunu açar. Sonraki bir commit bulgusunu açık olanların yanına ekler ve hiçbirinin üstüne yazmaz; açık bir bulgunun zaten adlandırdığı bir çift ikinci kez açılmaz. Her bulgu kendi ölçümüyle kapanır.
+
+   Bir bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra ve guarded bir git komutundan önce git'e yeniden sorar, yani iki yoldan kapanır:
 
    - lockfile yazıldı: sonraki bir commit onu değiştirdi ya da `git status --porcelain` working tree'de değiştiğini gösteriyor;
    - manifest artık bir lockfile değişikliği istemiyor: `git log -1 -- <lockfile>` lockfile'ı en son yazan commit'i adlandırır ve manifest'in o commit'e karşı diff'i hiçbir dependency'ye dokunmaz. Geri alınmış bir değişiklik böyle okunur.

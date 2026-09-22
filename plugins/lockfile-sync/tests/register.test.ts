@@ -57,9 +57,14 @@ type Ran = { exitCode: number; stdout: string; stderr: string }
 const ok = (stdout: string): Ran => ({ exitCode: 0, stdout, stderr: '' })
 const failed = (stderr: string): Ran => ({ exitCode: 128, stdout: '', stderr })
 
+const CARGO_DIFF = '@@ -1,3 +1,3 @@\n [dependencies]\n-serde = "1.0.100"\n+serde = "1.0.200"\n'
+
+const CARGO = '[dependencies]\nserde = "1.0.200"\n'
+
 /** What the world's git answers for one command; `git show` is the only one `showFails` breaks. */
 function gitShow(w: World, cmd: string): Ran {
   if (w.showFails) return failed('bad')
+  if (cmd.endsWith('Cargo.toml')) return ok(cmd.includes('HEAD:') ? CARGO : CARGO_DIFF)
   if (cmd.includes('HEAD:')) return ok(MANIFEST)
   return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
 }
@@ -134,6 +139,32 @@ describe('lockfile-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m lock' })).context).toBe(undefined)
     expect(bar.cleared).toEqual(['package.json'])
     expect(bar.sections).toEqual([{ key: 'package.json', title: 'lockfiles updated', lines: ['package-lock.json now matches package.json'] }])
+  })
+
+  withSidebar('a second commit adds its own finding, and the first keeps its entry, its note and its closing', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    w.files.add(`${ROOT}/Cargo.lock`)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    // The second commit leaves Cargo.lock out and package-lock.json alone.
+    w.names = 'M\tCargo.toml\n'
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m serde' })).context?.[0]).toContain('Cargo.toml but not Cargo.lock')
+    expect(bar.sections.map(s => s.key)).toEqual(['package.json', 'Cargo.toml'])
+    expect(bar.cleared).toEqual([])
+    await $.command.run(run('mode deny'))
+    const deny = (await $.tool.call({ tool: 'Bash', command: 'git push' })).deny ?? ''
+    expect(deny).toContain('package-lock.json behind package.json')
+    expect(deny).toContain('Cargo.lock behind Cargo.toml')
+    // The third commit brings package-lock.json: the first finding closes alone, the second stands.
+    w.names = 'M\tpackage-lock.json\n'
+    w.next = 'ddd'
+    w.staged = ['package-lock.json']
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m lock' })
+    expect(bar.cleared).toEqual(['package.json'])
+    expect(bar.sections.at(-1)).toEqual({ key: 'package.json', title: 'lockfiles updated', lines: ['package-lock.json now matches package.json'] })
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · Cargo.lock still behind')
   })
 
   test('the transcript reads the closed finding when the sidebar is not there', async ($, on) => {

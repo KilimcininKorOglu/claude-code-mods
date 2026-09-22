@@ -11,11 +11,15 @@ type Open = { key: string; stale: Stale[] }
 
 /**
  * The on/off setting read at session start, the mode, and the last error logged, so the same one is
- * logged once. `open` holds the last finding, so a later commit that brings its lockfiles along closes
- * it, and in `deny` mode it also holds the gate shut. `owed` says the model is owed a note for the
- * finding that stood at the turn's end.
+ * logged once. `open` holds every finding still standing, one per commit that left a lockfile out, so a
+ * later commit that brings its lockfiles along closes it, and in `deny` mode it also holds the gate shut.
+ * A later commit adds its own finding beside them and never writes over one. `owed` says the model is
+ * owed a note for the findings that stood at the turn's end.
  */
-type State = { enabled: boolean; mode: Mode; lastError?: string; open?: Open; owed: boolean }
+type State = { enabled: boolean; mode: Mode; lastError?: string; open: Open[]; owed: boolean }
+
+/** Every pair the open findings name. */
+const pairsOf = (state: State): Stale[] => state.open.flatMap(o => o.stale)
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -119,20 +123,25 @@ async function settled($: EngineInterface, root: string, stale: readonly Stale[]
 }
 
 /**
- * Closes the open finding when nothing it named stands: the lockfile was written, or the manifest no
+ * Closes each open finding when nothing it named stands: the lockfile was written, or the manifest no
  * longer asks for one. Both are measured from git, never remembered, so a change that was reverted
- * closes the finding as well as a lockfile that caught up.
+ * closes the finding as well as a lockfile that caught up. A finding that keeps some of its pairs stays
+ * open with those alone.
  */
 async function closeResolved($: EngineInterface, state: State, changed: ReadonlySet<string>, back: ReadonlySet<string>): Promise<void> {
-  const open = state.open
-  if (open === undefined) return
-  const left = open.stale.filter(s => !changed.has(s.lock) && !back.has(s.lock))
-  state.open = left.length === 0 ? undefined : { key: open.key, stale: left }
-  if (left.length > 0) return
-  const updated = open.stale.filter(s => changed.has(s.lock))
-  const settledPairs = open.stale.filter(s => !changed.has(s.lock))
-  await dropEntry($, open.key)
-  await toPerson($, open.key, doneTitle(updated, settledPairs), doneLines(updated, settledPairs), doneLog(updated, settledPairs))
+  const kept: Open[] = []
+  for (const open of state.open) {
+    const left = open.stale.filter(s => !changed.has(s.lock) && !back.has(s.lock))
+    if (left.length > 0) {
+      kept.push({ key: open.key, stale: left })
+      continue
+    }
+    const updated = open.stale.filter(s => changed.has(s.lock))
+    const settledPairs = open.stale.filter(s => !changed.has(s.lock))
+    await dropEntry($, open.key)
+    await toPerson($, open.key, doneTitle(updated, settledPairs), doneLines(updated, settledPairs), doneLog(updated, settledPairs))
+  }
+  state.open = kept
 }
 
 /** The note for the commit that moved HEAD, or undefined when every changed manifest has its lockfile along. */
@@ -143,16 +152,22 @@ async function commitNote($: EngineInterface, state: State, before: Before): Pro
   if (!names.ok) throw new Error('git show --name-status HEAD failed')
   const files = changedFiles(names.out)
   const changed = new Set(files)
-  await closeResolved($, state, changed, await settled($, before.root, state.open?.stale ?? []))
+  await closeResolved($, state, changed, await settled($, before.root, pairsOf(state)))
   const stale: Stale[] = []
   for (const manifest of files.filter(isManifest)) {
     const s = await staleLock($, before.root, manifest, changed)
     if (s !== undefined) stale.push(s)
   }
   if (stale.length === 0) return undefined
-  state.open = { key: sectionKey(stale), stale }
-  // The note goes to the model, the finding to the person: neither reads the other's channel.
-  await toPerson($, sectionKey(stale), 'lockfiles the commit left out', sidebarLines(stale), logText(stale))
+  // A pair an earlier finding still holds stays there, so the person reads it once; the model reads this commit whole.
+  const pairKey = (s: Stale): string => `${s.manifest}\0${s.lock}`
+  const held = new Set(pairsOf(state).map(pairKey))
+  const fresh = stale.filter(s => !held.has(pairKey(s)))
+  if (fresh.length > 0) {
+    state.open.push({ key: sectionKey(fresh), stale: fresh })
+    // The note goes to the model, the finding to the person: neither reads the other's channel.
+    await toPerson($, sectionKey(fresh), 'lockfiles the commit left out', sidebarLines(fresh), logText(fresh))
+  }
   return noteText(stale)
 }
 
@@ -183,16 +198,16 @@ async function caughtUp($: EngineInterface, root: string, stale: readonly Stale[
  * still stands. A directory no repository holds, and a git error, leave the finding as it was.
  */
 async function recheckNow($: EngineInterface, state: State): Promise<boolean> {
-  const open = state.open
-  if (open === undefined) return false
+  const stale = pairsOf(state)
+  if (stale.length === 0) return false
   try {
     const before = await beforeCommit($, state, '')
-    if (before === undefined) return state.open !== undefined
-    await closeResolved($, state, await caughtUp($, before.root, open.stale), await settled($, before.root, open.stale))
+    if (before === undefined) return true
+    await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, before.root, stale))
   } catch (err) {
     report($, state, err)
   }
-  return state.open !== undefined
+  return state.open.length > 0
 }
 
 /**
@@ -226,13 +241,13 @@ async function denyFor($: EngineInterface, stale: readonly Stale[], root: string
  * The working tree is read again first, so a lockfile the model updated opens the gate itself.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<{ deny: string } | undefined> {
-  const open = state.open
-  if (!state.enabled || state.mode !== 'deny' || open === undefined || !isGuarded(command)) return undefined
+  const stale = pairsOf(state)
+  if (!state.enabled || state.mode !== 'deny' || stale.length === 0 || !isGuarded(command)) return undefined
   try {
     const before = await beforeCommit($, state, command)
     if (before === undefined) return undefined
-    await closeResolved($, state, await caughtUp($, before.root, open.stale), await settled($, before.root, open.stale))
-    return state.open === undefined ? undefined : denyFor($, state.open.stale, before.root, command)
+    await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, before.root, stale))
+    return state.open.length === 0 ? undefined : denyFor($, pairsOf(state), before.root, command)
   } catch (err) {
     report($, state, err)
     return undefined
@@ -259,12 +274,13 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each commit is checked for manifests whose lockfile it left out' : 'off: commits are not checked'
   }
   if (word !== '') return USAGE
-  const open = state.open === undefined ? 'no lockfile is open' : `${state.open.stale.map(s => s.lock).join(' · ')} still behind`
+  const stale = pairsOf(state)
+  const open = stale.length === 0 ? 'no lockfile is open' : `${stale.map(s => s.lock).join(' · ')} still behind`
   return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, mode: 'note', owed: false }
+  const state: State = { enabled: true, mode: 'note', open: [], owed: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -290,10 +306,10 @@ export const register: Register = on => {
 
   // The note goes to the model alone; the person reads the pane, which carries the same finding.
   on('prompt.submit', async (_, e, next) => {
-    const open = state.open
-    if (!state.owed || open === undefined) return next(e)
+    const stale = pairsOf(state)
+    if (!state.owed || stale.length === 0) return next(e)
     state.owed = false
-    return next({ ...e, context: [...(e.context ?? []), openNote(open.stale)] })
+    return next({ ...e, context: [...(e.context ?? []), openNote(stale)] })
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
