@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, envError, isCommit, isGuarded, isMissingTool, isNarrowable, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
+import { denyText, doneLines, doneLog, envError, isCommit, isGuarded, isJsonc, isMissingTool, isNarrowable, jsoncText, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Mode } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -62,7 +62,8 @@ async function checkFile($: EngineInterface, state: State, kind: Kind, path: str
   if (kind === 'yaml' || kind === 'toml') return pythonCheck($, state, kind, path)
   const text = await fileText($, state, path)
   if (text === undefined) return undefined
-  return kind === 'json' ? jsonError(text) : envError(text)
+  if (kind === 'env') return envError(text)
+  return jsonError(isJsonc(path) ? jsoncText(text) : text)
 }
 
 /**

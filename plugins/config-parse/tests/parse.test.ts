@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, doneLog, envError, isGuarded, isMissingTool, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines } from '../hooks/parse.ts'
+import { denyText, doneLog, envError, isGuarded, isJsonc, isMissingTool, jsoncText, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines } from '../hooks/parse.ts'
 
 tier('user')
 
@@ -18,6 +18,21 @@ describe('parse', () => {
     expect(jsonError('{"a": 1}')).toBe(undefined)
     expect(jsonError('{"a": 1,}')).not.toBe(undefined)
     expect(jsonError('')).not.toBe(undefined)
+  })
+
+  test('reads a JSON-with-comments file as its tool does, and keeps a strict one strict', async () => {
+    for (const path of ['/a/tsconfig.json', '/a/tsconfig.build.json', '/a/jsconfig.json', '/a/.vscode/settings.json', '/a/.devcontainer/devcontainer.json', '/a/x.jsonc']) {
+      expect(isJsonc(path), path).toBe(true)
+    }
+    for (const path of ['/a/package.json', '/a/composer.json', '/a/vscode/settings.json']) expect(isJsonc(path), path).toBe(false)
+    expect(kindOf('/a/x.jsonc')).toBe('json')
+    const tsconfig = '{\n  // the build\n  "compilerOptions": { "strict": true, /* on */ "outDir": "dist", },\n  "include": ["src/**/*", "http://x//y"],\n}\n'
+    expect(jsonError(tsconfig)).not.toBe(undefined)
+    expect(jsonError(jsoncText(tsconfig))).toBe(undefined)
+    expect(JSON.parse(jsoncText(tsconfig)).include).toEqual(['src/**/*', 'http://x//y'])
+    // A real error still reads, and the blanked text keeps every line where it stood.
+    expect(jsonError(jsoncText('{\n  // a\n  "a": 1\n  "b": 2\n}'))).not.toBe(undefined)
+    expect(jsoncText('{\n/* a\nb */ "a": 1,\n}')).toBe('{\n    \n     "a": 1 \n}')
   })
 
   test('finds the first line of a .env file that is not a setting', async () => {

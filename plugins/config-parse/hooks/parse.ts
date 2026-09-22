@@ -5,7 +5,7 @@ export type Kind = 'json' | 'yaml' | 'toml' | 'env'
 /** The kind of a path, or undefined when the file is not configuration this mod reads. */
 export function kindOf(path: string): Kind | undefined {
   const name = path.split('/').at(-1) ?? ''
-  if (/\.json$/i.test(name)) return 'json'
+  if (/\.jsonc?$/i.test(name)) return 'json'
   if (/\.ya?ml$/i.test(name)) return 'yaml'
   if (/\.toml$/i.test(name)) return 'toml'
   return /^\.env(\.[\w.-]+)?$/.test(name) ? 'env' : undefined
@@ -19,6 +19,34 @@ export function jsonError(text: string): string | undefined {
   } catch (err) {
     return err instanceof Error ? err.message : String(err)
   }
+}
+
+/**
+ * Whether a JSON file is read by its tool as JSON with comments: a `.jsonc` file, a TypeScript or
+ * JavaScript project file, a VS Code setting and a dev container file, where `//`, `/* *\/` and a trailing
+ * comma are valid.
+ */
+export function isJsonc(path: string): boolean {
+  const name = path.split('/').at(-1) ?? ''
+  return /\.jsonc$/i.test(name)
+    || /^[tj]sconfig(\..+)?\.json$/i.test(name)
+    || /^\.?devcontainer\.json$/i.test(name)
+    || /(^|\/)\.vscode\/[^/]+\.json$/i.test(path)
+}
+
+/** A JSON string, kept as it is, or a comment, blanked; one pass, so `//` inside a string stays text. */
+const STRING_OR_COMMENT = /("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\//g
+
+/** A JSON string, kept as it is, or a comma before a closing bracket, blanked. */
+const STRING_OR_TRAILING_COMMA = /("(?:\\.|[^"\\])*")|,(?=\s*[}\]])/g
+
+/** Every character but a line break as a space, so a parse error still names the right line and column. */
+const blank = (text: string): string => text.replace(/[^\n]/g, ' ')
+
+/** A JSON-with-comments text as plain JSON: comments and trailing commas blanked, every position kept. */
+export function jsoncText(text: string): string {
+  const keepString = (m: string, str: string | undefined): string => str ?? blank(m)
+  return text.replace(STRING_OR_COMMENT, keepString).replace(STRING_OR_TRAILING_COMMA, keepString)
 }
 
 /** A line of a .env file that is not a comment, an empty line or `KEY=value`. */

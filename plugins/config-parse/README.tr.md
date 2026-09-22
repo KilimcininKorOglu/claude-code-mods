@@ -4,7 +4,7 @@ Bir Edit ya da Write'ın dokunduğu her JSON, YAML, TOML ve `.env` dosyasını p
 
 ## Ne yapar
 
-1. Engine'in çalıştırdığı her Edit ve Write'tan sonra mod path'i okur. `.json`, `.yml`, `.yaml`, `.toml`, `.env` ya da `.env.<name>` dosyası parse edilir; diğer her dosyaya dokunulmaz.
+1. Engine'in çalıştırdığı her Edit ve Write'tan sonra mod path'i okur. `.json`, `.jsonc`, `.yml`, `.yaml`, `.toml`, `.env` ya da `.env.<name>` dosyası parse edilir; diğer her dosyaya dokunulmaz. Kendi tool'unun JSON with comments olarak okuduğu bir dosya (`.jsonc`, `tsconfig*.json`, `jsconfig*.json`, `.vscode/*.json`, `devcontainer.json`) `//` ve `/* */` yorumları ve sondaki virgülleri içerebilir; diğer her JSON dosyası strict okunur.
 2. JSON'ı mod kendisi parse eder, `.env` dosyası satır satır okunur: boş olmayan, comment olmayan ve `KEY=value` olmayan bir satır bulgudur, numarasıyla birlikte.
 3. YAML ve TOML `python3` ile parse edilir (güvenli bir loader ile `yaml.load_all` ve `tomllib.load`), dosya path'i tek bir argv değeri olarak. Bir `---` stream'inin her dokümanı okunur ve `!Ref` ya da `!vault` gibi bir uygulama tag'i kabul edilir, çünkü ikisi de geçerli YAML'dir. python ya da modül yoksa o tür session boyunca atlanır ve bir satır bunu söyler.
 4. Parse edilmeyen bir dosya iki kanala yazılır: model dosyayı ve hatayı adlandıran bir `context` notu alır, kişi ortak sidebar'ın stream'inde kırmızı bir kayıt alır, sidebar kapalıyken bir transcript satırı. Dosya, session'ın başladığı git repository'sine göre adlandırılır; repository dışında session'ın dizinine göre. Bu kök session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini taşır.

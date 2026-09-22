@@ -87,6 +87,16 @@ describe('config-parse', () => {
     expect((await edit($, 'other.json')).context).toBe(undefined)
   })
 
+  test('a tsconfig with comments and a trailing comma parses, and package.json with the same comma does not', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = '{\n  // the build\n  "compilerOptions": { "strict": true, },\n}\n'
+    expect((await edit($, 'tsconfig.json')).context).toBe(undefined)
+    expect((await edit($, '.vscode/settings.json')).context).toBe(undefined)
+    expect(w.logs).toEqual([])
+    expect((await edit($, 'package.json')).context?.[0]).toMatch(/^config-parse: package\.json does not parse as JSON/)
+  })
+
   test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
     const w = world(on)
     w.top = '/Users/u'
