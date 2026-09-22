@@ -316,6 +316,11 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
     s.stopped = null
     s.event = undefined
   }
+  // `always` runs until /cache-warm off, so a ping that failed stopped the loop for this turn alone:
+  // the next turn starts it again. Without this the session keeps `always` stored while running no
+  // loop, and the next cold write arms a 6h window in its place. A window the person armed by hand
+  // holds, because it is a window of its own.
+  if (s.always && !hasWindow(s)) await startEndless($, s)
   if (usage) await measure($, s, usage, now)
   await arm($, s)
 }

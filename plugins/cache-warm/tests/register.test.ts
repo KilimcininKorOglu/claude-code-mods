@@ -351,6 +351,32 @@ describe('always', () => {
     expect(status.text).toMatch(/keep warm   on, always, no end/)
     expect(status.text).toMatch(/session     1 cold write paid, \$4\.00/)
   })
+
+  test('a ping that failed stops the loop for that turn alone; the next turn starts it again', async ($, on) => {
+    const w = world(on, [null, warm], { store: [['always', true]] })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.statuses.at(-1)).toMatch(/^stopped: the engine did not send the ping/)
+    await $.turn.complete(turn())
+    const status = await $.command.run(run('cache-status'))
+    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    // The endless loop is back, so no per-session window took its place.
+    expect(w.store.has('deadline:S1')).toBe(false)
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(2)
+  })
+
+  test('a cold write under always keeps the endless loop instead of arming a six-hour window', async ($, on) => {
+    const w = world(on, [null], { store: [['always', true]] })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
+    const status = await $.command.run(run('cache-status'))
+    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    expect(w.store.has('deadline:S1')).toBe(false)
+  })
 })
 
 describe('cold writes', () => {
