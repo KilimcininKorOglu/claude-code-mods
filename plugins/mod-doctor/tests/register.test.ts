@@ -58,10 +58,10 @@ const CLONE: Record<string, string> = {
 /** The logged lines of the person's channel, the paths read, and the record file of this world. */
 type World = { logs: string[]; reads: string[]; record: string }
 
-function world(on: On, record: string): World {
+function world(on: On, record: string, env: Record<string, string> = { HOME: '/Users/u' }): World {
   const w: World = { logs: [], reads: [], record }
   mock.store(on, {})
-  mock.env(on, { HOME: '/Users/u' })
+  mock.env(on, env)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -157,6 +157,14 @@ describe('mod-doctor', () => {
     expect((await $.command.run(run(''))).text).toBe('no installed plugin of nobody-mods was read; the marketplace name may be another one')
     expect((await $.command.run(run('off'))).text).toBe('off: nothing is measured')
     expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or marketplace <name | all>')
+    expect(w.logs).toHaveLength(1)
+  })
+
+  test('CLAUDE_CONFIG_DIR moves the record and the clones, as it moves them for the host', async ($, on) => {
+    const w = world(on, RECORD, { HOME: '/Users/u', CLAUDE_CONFIG_DIR: '/cfg' })
+    await started($)
+    expect(w.reads.length).toBeGreaterThan(0)
+    expect(w.reads.filter(p => !p.startsWith('/cfg/plugins/'))).toEqual([])
     expect(w.logs).toHaveLength(1)
   })
 

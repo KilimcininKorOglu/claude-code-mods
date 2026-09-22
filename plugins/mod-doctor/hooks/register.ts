@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { ALL, installedOf, isNewer, logText, marketplaceOf, marketplaceText, missingText, sidebarLines, sourcesOf, statusText, versionOf, type Installed, type Mod } from './doctor.ts'
+import { ALL, configDirOf, installedOf, isNewer, logText, marketplaceOf, marketplaceText, missingText, sidebarLines, sourcesOf, statusText, versionOf, type Installed, type Mod } from './doctor.ts'
 
 const ENABLED_KEY = 'enabled'
 const MARKETPLACE_KEY = 'marketplace'
@@ -10,19 +10,19 @@ const USAGE = 'expects nothing (the status), on, off or marketplace <name | all>
 const SECTION = { consumer: 'mod-doctor', key: 'behind' }
 
 /**
- * The on/off setting, the scope read, how many plugins are installed in it, which are behind, the home
- * directory, what was last said to the person, and whether the second measure of this session ran.
+ * The on/off setting, the scope read, how many plugins are installed in it, which are behind, the host's
+ * config directory, what was last said to the person, and whether the second measure of this session ran.
  */
-type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; home: string; said: string; again: boolean }
+type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; said: string; again: boolean }
 
 /** Where the host keeps the record of every installed plugin. */
-function recordPath(home: string): string {
-  return `${home}/.claude/plugins/installed_plugins.json`
+function recordPath(config: string): string {
+  return `${config}/plugins/installed_plugins.json`
 }
 
 /** Where the host keeps the clone of each marketplace. */
-function clonePath(home: string, marketplace: string): string {
-  return `${home}/.claude/plugins/marketplaces/${marketplace}`
+function clonePath(config: string, marketplace: string): string {
+  return `${config}/plugins/marketplaces/${marketplace}`
 }
 
 /** A file's text, or undefined when it is missing or unreadable. */
@@ -37,7 +37,7 @@ async function readText($: EngineInterface, path: string): Promise<string | unde
 
 /** The plugins installed inside the scope, or undefined when the host keeps no record of them. */
 async function readInstalled($: EngineInterface, state: State): Promise<Installed[] | undefined> {
-  const text = await readText($, recordPath(state.home))
+  const text = await readText($, recordPath(state.config))
   if (text === undefined) return undefined
   try {
     const mods = installedOf(text, state.scope)
@@ -53,7 +53,7 @@ async function readInstalled($: EngineInterface, state: State): Promise<Installe
  * because one marketplace holds its plugins under `plugins/` and another is one plugin at its root.
  */
 async function readSources($: EngineInterface, state: State, marketplace: string): Promise<Map<string, string>> {
-  const text = await readText($, `${clonePath(state.home, marketplace)}/.claude-plugin/marketplace.json`)
+  const text = await readText($, `${clonePath(state.config, marketplace)}/.claude-plugin/marketplace.json`)
   if (text === undefined) return new Map()
   try {
     return sourcesOf(text)
@@ -66,7 +66,7 @@ async function readSources($: EngineInterface, state: State, marketplace: string
 /** The version the clone offers for one plugin, or undefined when the clone does not hold it. */
 async function readOffered($: EngineInterface, state: State, mod: Installed, source: string | undefined): Promise<string | undefined> {
   if (source === undefined) return undefined
-  const text = await readText($, `${clonePath(state.home, mod.marketplace)}/${source}/.claude-plugin/plugin.json`)
+  const text = await readText($, `${clonePath(state.config, mod.marketplace)}/${source}/.claude-plugin/plugin.json`)
   if (text === undefined) return undefined
   try {
     return versionOf(text)
@@ -174,13 +174,13 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], home: '', said: '', again: false }
+  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', said: '', again: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     state.scope = await readScope($)
-    state.home = (await $.env.get('HOME')) ?? ''
+    state.config = configDirOf(await $.env.get('CLAUDE_CONFIG_DIR'), await $.env.get('HOME'))
     await $.command.register({
       name: 'mod-doctor',
       description: 'Which installed plugins are behind their marketplace clone: status, on, off, marketplace <name | all> (mod-doctor)',
@@ -188,7 +188,7 @@ export const register: Register = on => {
       immediate: true,
     })
     // The first of the session's two measures; the second runs at the end of its first turn.
-    if (state.enabled && state.home !== '') await check($, state)
+    if (state.enabled && state.config !== '') await check($, state)
     return r
   })
 
@@ -202,7 +202,7 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (state.enabled && !state.again && e.agentId === undefined && state.home !== '') {
+    if (state.enabled && !state.again && e.agentId === undefined && state.config !== '') {
       state.again = true
       await check($, state)
     }

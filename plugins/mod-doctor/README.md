@@ -4,7 +4,7 @@ A Claude Code Mod that names each installed plugin, of every marketplace, whose 
 
 ## What it does
 
-1. At each session start, and once more at the end of the session's first turn, the mod reads what the host keeps on disk: `~/.claude/plugins/installed_plugins.json`, which names the version installed of each `<plugin>@<marketplace>`; each marketplace's own `.claude-plugin/marketplace.json` in its clone, which says where that plugin sits inside it (one marketplace keeps its plugins under `plugins/`, another is one plugin at its root); and that plugin's `.claude-plugin/plugin.json`, the version the clone offers.
+1. At each session start, and once more at the end of the session's first turn, the mod reads what the host keeps on disk: `~/.claude/plugins/installed_plugins.json` (`$CLAUDE_CONFIG_DIR/plugins/` instead when `CLAUDE_CONFIG_DIR` is set, as the host reads it), which names the version installed of each `<plugin>@<marketplace>`; each marketplace's own `.claude-plugin/marketplace.json` in its clone, which says where that plugin sits inside it (one marketplace keeps its plugins under `plugins/`, another is one plugin at its root); and that plugin's `.claude-plugin/plugin.json`, the version the clone offers.
 2. It compares installed against offered by the numbers of each part, so `0.10.0` counts as newer than `0.9.0`. Two versions it cannot compare as numbers count as equal, so a version of another shape never asks for an update.
 3. While the [sidebar](../sidebar) is open, the plugins that are behind are one `update available` section that stays for the session:
 
@@ -48,11 +48,11 @@ Validated with `claude plugin validate` on Claude Code 2.1.278:
     ❯ ./register.ts hooks: session.start, command.run{command=mod-doctor}, turn.complete
     ❯ ./register.ts calls: $.command.register, $.env.get, $.fs.read (via readText), $.sidebar.clear (via clearShown), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled, setScope), $.ui.log (via toPerson)
     ❯ ./register.ts env writes: nothing
-    ❯ ./register.ts env reads: HOME
+    ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, it reads files.
 
-    1. Reads:    HOME, the host's install record, each marketplace clone's manifest, and one plugin.json per installed plugin. No project file, no prompt, no transcript.
+    1. Reads:    CLAUDE_CONFIG_DIR, HOME, the host's install record, each marketplace clone's manifest, and one plugin.json per installed plugin. No project file, no prompt, no transcript.
     2. Runs:     nothing; the update command is text for the person to run
     3. Sends:    nothing to the model and nothing to the network; the rows are for the person only
     4. Persists: in $.store, the on/off setting and the scope

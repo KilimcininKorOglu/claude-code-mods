@@ -1,6 +1,6 @@
 {
   "name": "mod-doctor",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Names each installed plugin whose marketplace clone offers a newer version. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

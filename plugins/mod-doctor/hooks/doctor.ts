@@ -9,6 +9,15 @@ const NAME = /^[A-Za-z0-9._-]+$/
 /** The rows the pane draws; the rest are counted. */
 export const ROWS = 8
 
+/**
+ * The directory the host keeps its plugins under: `CLAUDE_CONFIG_DIR` when it is set, as the host reads it,
+ * else `~/.claude`. Empty when neither is known, and then nothing is measured.
+ */
+export function configDirOf(configDir: string | undefined, home: string | undefined): string {
+  if (configDir !== undefined && configDir !== '') return configDir
+  return home !== undefined && home !== '' ? `${home}/.claude` : ''
+}
+
 /** One plugin: where it comes from, the version installed, and the version its clone offers. */
 export type Mod = { name: string; marketplace: string; installed: string; offered: string }
 

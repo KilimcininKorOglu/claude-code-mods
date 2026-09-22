@@ -4,7 +4,7 @@ Yerel clone'u zaten daha yeni bir sürüm sunan her kurulu plugin'i, her marketp
 
 ## Ne yapar
 
-1. Her session başlangıcında ve session'ın ilk turunun sonunda bir kere daha mod, host'un diskte tuttuğunu okur: her `<plugin>@<marketplace>` için kurulu sürümü adlandıran `~/.claude/plugins/installed_plugins.json`; her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json` dosyası, o plugin'in içeride nerede olduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir); ve o plugin'in `.claude-plugin/plugin.json` dosyası, clone'un sunduğu sürüm.
+1. Her session başlangıcında ve session'ın ilk turunun sonunda bir kere daha mod, host'un diskte tuttuğunu okur: her `<plugin>@<marketplace>` için kurulu sürümü adlandıran `~/.claude/plugins/installed_plugins.json` (`CLAUDE_CONFIG_DIR` ayarlıysa host gibi `$CLAUDE_CONFIG_DIR/plugins/` altından); her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json` dosyası, o plugin'in içeride nerede olduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir); ve o plugin'in `.claude-plugin/plugin.json` dosyası, clone'un sunduğu sürüm.
 2. Kurulu sürümü sunulan sürümle her parçanın sayısına göre karşılaştırır, yani `0.10.0`, `0.9.0` sürümünden yeni sayılır. Sayı olarak karşılaştıramadığı iki sürüm eşit sayılır, yani başka biçimde bir sürüm hiçbir zaman update istemez.
 3. [sidebar](../sidebar) açıkken geride kalan plugin'ler session boyunca duran tek bir `update available` section'ıdır:
 
@@ -48,11 +48,11 @@ Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, command.run{command=mod-doctor}, turn.complete
     ❯ ./register.ts calls: $.command.register, $.env.get, $.fs.read (via readText), $.sidebar.clear (via clearShown), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled, setScope), $.ui.log (via toPerson)
     ❯ ./register.ts env writes: nothing
-    ❯ ./register.ts env reads: HOME
+    ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, dosya okur.
 
-    1. Okur:     HOME, host'un install kaydını, her marketplace clone'unun manifest'ini ve kurulu plugin başına bir plugin.json. Proje dosyası yok, prompt yok, transcript yok.
+    1. Okur:     CLAUDE_CONFIG_DIR, HOME, host'un install kaydını, her marketplace clone'unun manifest'ini ve kurulu plugin başına bir plugin.json. Proje dosyası yok, prompt yok, transcript yok.
     2. Çalıştırır: hiçbir şey; update komutu kişinin çalıştıracağı bir metindir
     3. Gönderir: modele hiçbir şey, network'e hiçbir şey; satırlar yalnız kişi içindir
     4. Saklar:   $.store içinde on/off ayarını ve kapsamı
