@@ -57,6 +57,24 @@ export function doneLines(): Line[] {
   return [{ text: doneText(), kind: 'ok' }]
 }
 
+/** The paths last reported for one repository, and the sidebar keys of the red entries written for them. */
+export type Open = { paths: string[]; keys: string[] }
+
+/** The `$.store` key of a repository's open finding; the store is one file for every project. */
+export function openKey(root: string): string {
+  return `open:${root}`
+}
+
+function isStrings(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every(x => typeof x === 'string')
+}
+
+/** A stored open finding, or undefined for a value of any other shape. */
+export function openOf(value: unknown): Open | undefined {
+  const v = value as Partial<Open> | undefined
+  return v !== undefined && v !== null && isStrings(v.paths) && isStrings(v.keys) ? { paths: v.paths, keys: v.keys } : undefined
+}
+
 /** A sidebar section key: the subject cut to what the sidebar takes. */
 export function sectionKey(text: string): string {
   return text.replace(/[^A-Za-z0-9._:-]+/g, '-').slice(0, 64) || 'tree'

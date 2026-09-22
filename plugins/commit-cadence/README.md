@@ -12,7 +12,8 @@ A Claude Code Mod that measures the working tree at the end of each turn and nam
 
 4. The next prompt carries a note only the model reads: what is uncommitted, and that each finished and verified piece belongs in its own commit now. The note is owed once per report, so one prompt carries it and the next does not.
 5. A tree that went clean closes the finding with a green line: `the working tree is clean again`. The red entries written since the tree was last clean are cleared first, so a pane restore does not bring them back.
-6. `/commit-cadence` measures on the spot and prints the setting and what the tree holds.
+6. The open finding (its paths and the keys of its red entries) is kept in `$.store` per repository while it stands. A module loaded again (`/reload-plugins`, an update, a restart) takes it back at session start, so it still closes the red entries written before it, without reporting the same paths or sending the note again.
+7. `/commit-cadence` measures on the spot and prints the setting and what the tree holds.
 
 It stops nothing. The person decides what is worth a commit, and the model reads the note as a reminder, not as a gate.
 
@@ -37,17 +38,17 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get, $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
 
 Reach L2, it runs a process.
 
     1. Reads:    the paths git status names in the session's own directory. It reads no file content, no prompt and no answer.
     2. Runs:     git status --porcelain=v1 -z, once per turn that ends and once per /commit-cadence
     3. Sends:    to the model, the count and the first six paths of the uncommitted files, with one sentence about committing them
-    4. Persists: in $.store, the on/off setting; the reported paths live in memory and end with the session
+    4. Persists: in $.store, the on/off setting, and per repository the open finding (the uncommitted paths and the keys of their red entries) until the tree is clean
     5. Hostile input: the only text drawn and sent is the paths git itself printed, cut to six names and a count
 
 ## Limits

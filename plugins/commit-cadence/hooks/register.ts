@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { doneLines, doneText, logText, noteText, pathsOf, sectionKey, sidebarLines, statusText } from './cadence.ts'
+import { doneLines, doneText, logText, noteText, openKey, openOf, pathsOf, sectionKey, sidebarLines, statusText } from './cadence.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -36,6 +36,23 @@ async function dropEntries($: EngineInterface, state: State): Promise<void> {
   state.keys.clear()
 }
 
+/**
+ * Keeps the open finding in `$.store`, so a module loaded again (`/reload-plugins`, an update, a restart)
+ * still closes the red entries the one before it wrote.
+ */
+async function saveOpen($: EngineInterface, state: State): Promise<void> {
+  if (state.open.length === 0) await $.store.delete(openKey(state.root))
+  else await $.store.set(openKey(state.root), { paths: state.open, keys: [...state.keys] })
+}
+
+/** Takes back the open finding an earlier module or session of this repository left. The note was already owed once. */
+async function loadOpen($: EngineInterface, state: State): Promise<void> {
+  const open = openOf(await $.store.get(openKey(state.root)))
+  if (open === undefined) return
+  state.open = open.paths
+  for (const key of open.keys) state.keys.add(key)
+}
+
 /** The uncommitted paths of the session's repository, or undefined when it is not one. */
 async function readTree($: EngineInterface, state: State): Promise<string[] | undefined> {
   try {
@@ -64,6 +81,7 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
     state.open = []
     state.owed = false
     await dropEntries($, state)
+    await saveOpen($, state)
     await toPerson($, sectionKey('clean'), doneLines(), doneText())
     return
   }
@@ -72,6 +90,7 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
   state.owed = true
   const key = sectionKey(`dirty-${paths.length}`)
   state.keys.add(key)
+  await saveOpen($, state)
   await toPerson($, key, sidebarLines(paths), logText(paths))
 }
 
@@ -81,6 +100,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
   if (!on) {
     state.open = []
     state.owed = false
+    await saveOpen($, state)
   }
   return on ? 'on: the tree is measured at the end of each turn' : 'off: the tree is not measured'
 }
@@ -100,6 +120,7 @@ export const register: Register = on => {
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     // The session's own directory, because a Bash cd moves what $.session.cwd() answers.
     state.root = await $.session.cwd()
+    await loadOpen($, state)
     await $.command.register({
       name: 'commit-cadence',
       description: 'What the working tree holds uncommitted: status, on, off (commit-cadence)',

@@ -1,7 +1,7 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, PromptSubmitInput, TurnCompleteInput } from 'claude-code'
 
-import { logText, noteText, pathsOf, statusText } from '../hooks/cadence.ts'
+import { logText, noteText, openOf, pathsOf, statusText } from '../hooks/cadence.ts'
 
 tier('user')
 
@@ -44,9 +44,12 @@ const prompt = (): PromptSubmitInput => ({ text: 'devam', origin: { kind: 'compo
 /** The logged lines, and what `git status` answers in this world. */
 type World = { logs: string[]; status: string; exitCode: number; contexts: (readonly string[] | undefined)[] }
 
-function world(on: On): World {
+/** `store` is what an earlier module of the same repository left in `$.store`. */
+function world(on: On, store: Record<string, unknown> = {}): World {
   const w: World = { logs: [], status: '', exitCode: 0, contexts: [] }
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => { store[e.key] = JSON.parse(JSON.stringify(e.value)); return { value: undefined } })
+  on('store.delete', (_, e) => { delete store[e.key]; return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/work' }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -138,5 +141,37 @@ describe('commit-cadence', () => {
     expect(bar.cleared.sort()).toEqual(['dirty-1', 'dirty-2'])
     expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'the working tree is clean again', kind: 'ok' }])
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('a module loaded again closes the finding the one before it reported, once the tree is clean', async ($, on) => {
+    // /reload-plugins after a report: the new module starts with the stored finding (measured on a live session).
+    const w = world(on, { 'open:/work': { paths: ['src/app.ts', 'src/new.ts'], keys: ['dirty-2'] } })
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    await started($)
+    w.status = DIRTY
+    await $.turn.complete(turn())
+    // The same paths are not reported again, and the model is not told again.
+    expect(bar.sections).toEqual([])
+    await $.prompt.submit(prompt())
+    expect(w.contexts.at(-1)).toBe(undefined)
+    w.status = ''
+    await $.turn.complete(turn())
+    expect(bar.cleared).toEqual(['dirty-2'])
+    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'the working tree is clean again', kind: 'ok' }])
+  })
+
+  test('the finding is stored while it stands and removed once the tree is clean', async ($, on) => {
+    const store: Record<string, unknown> = {}
+    const w = world(on, store)
+    await started($)
+    w.status = DIRTY
+    await $.turn.complete(turn())
+    expect(store['open:/work']).toEqual({ paths: ['src/app.ts', 'src/new.ts'], keys: ['dirty-2'] })
+    w.status = ''
+    await $.turn.complete(turn())
+    expect(store['open:/work']).toBe(undefined)
+    // A stored value of another shape is not trusted.
+    expect(openOf({ paths: 'a', keys: [] })).toBe(undefined)
   })
 })

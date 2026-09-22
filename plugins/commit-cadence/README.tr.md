@@ -12,7 +12,8 @@ Her turn sonunda working tree'yi ölçen ve hâlâ commit edilmemiş olanı adla
 
 4. Bir sonraki prompt yalnız modelin okuduğu bir not taşır: neyin commit edilmediğini ve biten, doğrulanmış her parçanın şimdi kendi commit'ine ait olduğunu. Not rapor başına bir kere borçlanılır, yani bir prompt onu taşır, sonraki taşımaz.
 5. Temizlenen bir tree bulguyu yeşil bir satırla kapatır: `the working tree is clean again`. Tree'nin son temiz olduğu andan beri yazılan kırmızı entry'ler önce temizlenir, yani bir pane restore onları geri getirmez.
-6. `/commit-cadence` o anda ölçer ve ayarı ile tree'nin ne tuttuğunu yazar.
+6. Açık bulgu (path'leri ve kırmızı entry'lerinin key'leri) durduğu sürece repository başına `$.store` içinde tutulur. Yeniden yüklenen bir module (`/reload-plugins`, bir update, bir restart) onu session başında geri alır, yani kendinden önce yazılan kırmızı entry'leri yine kapatır, aynı path'leri yeniden raporlamadan ve notu yeniden göndermeden.
+7. `/commit-cadence` o anda ölçer ve ayarı ile tree'nin ne tuttuğunu yazar.
 
 Hiçbir şeyi durdurmaz. Neyin commit'e değer olduğuna kişi karar verir; model notu bir gate olarak değil, bir hatırlatma olarak okur.
 
@@ -37,17 +38,17 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get, $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
 
 Reach L2, bir process çalıştırır.
 
     1. Okur:     session'ın kendi dizininde git status'ün adlandırdığı path'leri. Hiçbir dosya içeriğini, prompt'u ya da cevabı okumaz.
     2. Çalıştırır: git status --porcelain=v1 -z, biten her turn'de bir kere ve her /commit-cadence komutunda bir kere
     3. Gönderir: modele, commit edilmemiş dosyaların sayısını ve ilk altı path'ini, onları commit etmekle ilgili tek cümleyle
-    4. Saklar:   $.store içinde on/off ayarını; raporlanan path'ler bellekte yaşar ve session ile biter
+    4. Saklar:   $.store içinde on/off ayarını, ve repository başına açık bulguyu (commit edilmemiş path'ler ve kırmızı entry'lerinin key'leri) tree temizlenene kadar
     5. Düşman girdi: çizilen ve gönderilen tek metin git'in kendi yazdığı path'lerdir, altı adla ve bir sayıyla sınırlanmış
 
 ## Sınırlar
