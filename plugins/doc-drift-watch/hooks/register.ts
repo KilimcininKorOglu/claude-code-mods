@@ -74,21 +74,30 @@ async function toPerson($: EngineInterface, doc: string, title: string, lines: {
   $.ui.log(line)
 }
 
-/** Holds this commit's stale lines open, one finding per doc, and writes each to the person. */
-async function openFindings($: EngineInterface, state: State, root: string, added: readonly Stale[]): Promise<void> {
+/**
+ * Holds this commit's stale lines open, one finding per doc, and writes each to the person. A doc that
+ * already has a finding keeps the lines of it that `now`, the drift after the commit, still reports, and
+ * this commit's lines join them; a line no longer reported leaves the record.
+ */
+async function openFindings($: EngineInterface, state: State, root: string, added: readonly Stale[], now: readonly Stale[]): Promise<void> {
+  const reported = new Set(now.map(identity))
   for (const [doc, stale] of byDoc(added)) {
-    state.open.set(`${root}/${doc}`, { root, doc, stale })
+    const key = `${root}/${doc}`
+    const kept = (state.open.get(key)?.stale ?? []).filter(s => reported.has(identity(s)))
+    const fresh = new Set(stale.map(identity))
+    state.open.set(key, { root, doc, stale: [...kept.filter(s => !fresh.has(identity(s))), ...stale] })
     await toPerson($, doc, 'doc lines the commit made stale', sidebarLines(stale), logText(stale))
   }
 }
 
 async function afterCommit($: EngineInterface, state: State, before: { root: string; stale: Stale[] }, r: ToolCallResult): Promise<ToolCallResult> {
   try {
-    const added = addedBy(before.stale, await driftNow($, before.root))
+    const now = await driftNow($, before.root)
+    const added = addedBy(before.stale, now)
     state.lastError = undefined
     if (added.length === 0) return r
     // The note goes to the model, the finding to the person: neither reads the other's channel.
-    await openFindings($, state, before.root, added)
+    await openFindings($, state, before.root, added, now)
     return withNote(r, noteText(added))
   } catch (err) {
     report($, state, err)

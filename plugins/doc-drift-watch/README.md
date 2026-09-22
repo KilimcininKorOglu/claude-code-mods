@@ -22,7 +22,7 @@ A Claude Code Mod that tells the model which doc lines its commit made stale. Af
 
        doc-drift-watch: README.md: 1 doc line(s) hold again
 
-   A doc that is gone closes the finding from the other side, and the line says so: `README.md is gone, and its 1 stale line(s) with it`. A doc that holds some of its stale lines still stays open, because a part fixed is not fixed.
+   A doc that is gone closes the finding from the other side, and the line says so: `README.md is gone, and its 1 stale line(s) with it`. A doc that holds some of its stale lines still stays open, because a part fixed is not fixed. A later commit that makes more lines of an open doc stale adds them to that doc's finding; the lines it already held stay while the drift after the commit still reports them.
 8. What is left reaches the model as one note with the next prompt, one note per turn:
 
        doc-drift-watch: 1 doc(s) still hold stale lines: README.md (1). Update them.

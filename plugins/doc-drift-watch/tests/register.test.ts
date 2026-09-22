@@ -98,6 +98,21 @@ describe('doc-drift-watch', () => {
     expect((await $.command.run(run(''))).text).toBe('on · mode note · README.md (1) still stale; it needs ripwire on PATH')
   })
 
+  test('a second commit that makes more lines of the same doc stale keeps the first ones open', async ($, on) => {
+    const w = world(on)
+    const more = NEW.replace('</doc>', '<a k="file-line" l="9" why="past-eof" ref="lib.go:5"/></doc>')
+    w.outputs = [OLD, NEW, NEW, more]
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
+    const r = await $.tool.call({ tool: 'Bash', command: 'git commit -m y' })
+    expect(r.context?.[0]).toContain('this commit made 1 doc line(s) stale: README.md:9 points at lib.go:5')
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · README.md (2) still stale; it needs ripwire on PATH')
+    // The second line is fixed and the first still stands: the doc stays open with the first alone.
+    w.rechecks = [STILL]
+    await endTurn($)
+    expect(w.logs.some(l => l.includes('hold again'))).toBe(false)
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · README.md (1) still stale; it needs ripwire on PATH')
+  })
+
   withSidebar('an open sidebar takes the stale lines and the transcript stays clean', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], cleared: [] }

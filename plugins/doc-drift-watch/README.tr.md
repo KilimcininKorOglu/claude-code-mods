@@ -22,7 +22,7 @@ Modelin attığı commit'in hangi doc satırlarını bayattığını modele söy
 
        doc-drift-watch: README.md: 1 doc line(s) hold again
 
-   Silinmiş bir doc bulguyu diğer taraftan kapatır ve satır bunu söyler: `README.md is gone, and its 1 stale line(s) with it`. Bayat satırlarının bir kısmı duran doc açık kalır, çünkü kısmen düzelmiş düzelmemiş sayılır.
+   Silinmiş bir doc bulguyu diğer taraftan kapatır ve satır bunu söyler: `README.md is gone, and its 1 stale line(s) with it`. Bayat satırlarının bir kısmı duran doc açık kalır, çünkü kısmen düzelmiş düzelmemiş sayılır. Açık bir doc'un daha fazla satırını bayatlatan sonraki bir commit onları o doc'un bulgusuna ekler; bulgunun zaten tuttuğu satırlar, commit sonrası drift onları hâlâ raporladığı sürece kalır.
 8. Geriye kalan, bir sonraki prompt ile modele tek not olarak ulaşır, turn başına bir not:
 
        doc-drift-watch: 1 doc(s) still hold stale lines: README.md (1). Update them.
