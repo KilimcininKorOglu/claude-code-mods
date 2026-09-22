@@ -37,7 +37,7 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
 }
 ```
 
-`set` answers `true` when the section was kept and drawn, and `false` when the sidebar is closed, so one `if (taken) return` covers both the closed and the missing case. `clear({ consumer, key })` removes your standing section of that key and every stream entry of it, and keeps a later session from taking those entries back from the log; ` `isOpen()` answers whether the pane is up.
+`set` answers `true` when the section was kept and drawn, and `false` when the sidebar is closed, so one `if (taken) return` covers both the closed and the missing case. `clear({ consumer, key })` removes your standing section of that key and every stream entry of it, and keeps a later session from taking those entries back from the log; `isOpen()` answers whether the pane is up.
 
 `types/index.d.ts` is the contract: `SidebarSection`, `SidebarLine`, `SidebarButton`, `SidebarUntil` and `Sidebar`. `/plugin-types` copies it into `.claude/types/claude-code-plugins/` for every enabled plugin, so `$.sidebar` is typed in your mod with nothing copied by hand. Develop against it with `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>`.
 
