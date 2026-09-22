@@ -326,6 +326,41 @@ export function logLineOf(entry: Kept): string {
   return JSON.stringify({ at: entry.at ?? 0, consumer, key, title, lines })
 }
 
+/**
+ * The log line of a `clear` that took stream entries down. The entries stay in the log as history, and
+ * this line keeps a later session from taking them back, so a closed finding does not return beside its
+ * own closing line.
+ */
+export function clearLineOf(consumer: string, key: string, at: number): string {
+  return JSON.stringify({ at, cleared: { consumer, key } })
+}
+
+/** The section id a clear line took down, or undefined for a line of another shape. */
+function clearedOf(line: string): string | undefined {
+  try {
+    const read = JSON.parse(line) as { cleared?: { consumer?: unknown; key?: unknown } }
+    const { consumer, key } = read.cleared ?? {}
+    return isName(consumer) && isName(key) ? sectionId(consumer, key) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The entries a log text still holds up, oldest first: an entry a later clear line took down is left out. */
+export function readLive(text: string): Logged[] {
+  let out: Logged[] = []
+  for (const line of text.split('\n')) {
+    const gone = clearedOf(line)
+    if (gone !== undefined) {
+      out = out.filter(one => sectionId(one.section.consumer, one.section.key) !== gone)
+      continue
+    }
+    const one = line.trim() === '' ? undefined : loggedOf(line)
+    if (one !== undefined) out.push(one)
+  }
+  return out
+}
+
 /** The log's own lines, newest last, cut to what one file keeps. */
 export function logKept(lines: readonly string[], line: string): string[] {
   return [...lines, line].slice(-LOG_MAX)

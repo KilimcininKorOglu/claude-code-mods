@@ -10,7 +10,7 @@ Transcript'in yanında tek bir paylaşılan pane açan ve diğer her mod'un oray
 4. Stream, `until: 'stream'` ile yazılanlardır: bulguların bir log'u, en yenisi önce, duran section'ların hemen altında. Bir entry başka birinin yerini almaz, yani aynı mod ve key iki kere iki entry olarak okunur. Bir stream entry'sinin başlığı ayrıca yazıldığı gün ve saati taşır, makinenin kendi time zone'unda (`edit-loop: edit loop (21.09 14:32)`), böylece kişi log'u sonradan okur; duran bir section saat taşımaz, çünkü her ölçümde yeniden yazılır. Turun sonunda hiçbir şey bir entry'yi düşürmez: bir entry yalnız yenileri onu pane'in son satırının ötesine ittiğinde gider. Daha uzun bir terminal stream'in daha fazlasını tutar, daha kısası daha azını. Stream'in satırları paylaşılır: birden fazla mod oraya yazarken her biri en fazla kendi payı kadar satır çizer, yani konuşkan bir mod başka bir mod'un bulgusunu pane'den itemez. Bir payın artırdığı satırlar onun geri tuttuğu entry'lere gider ve tek başına yazan bir mod bütün alanı alır.
 5. Bir button bir slash komutu çalıştırır: `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` için `[ stop ]` basışı `/bg-tasks stop b1` komutunu kişi gibi çalıştırır ve komutun ilk cevap satırı pane'in altında görünür. Button'u sunan mod o komutu kendisi karşılar. Etiket işaretçi altında kırmızıya döner, yani bir basışın ne çalıştıracağı basıştan önce açıktır.
 6. Üç ömür: `session` mod onu değiştirene ya da temizleyene kadar üstte durur, `stream` altındaki log'a katılır, `turn` tur bitince gider.
-7. Her stream entry'si ayrıca bu projenin kendi log dosyasına yazılır, `~/.claude/sidebar/<project>-<YYYY-MM-DD>.log`, satır başına bir JSON object. Pane açıldığında o projenin log'larının en yeni 10 entry'si stream'e geri gelir, her biri ilk yazıldığı gün ve saatle, yani yarın başlayan bir session dün bulunanı yine gösterir. Geri gelen bir entry log'a yeniden yazılmaz. `/sidebar log` dosyanın path'ini ve en yeni 10 entry'sini yazar.
+7. Her stream entry'si ayrıca bu projenin kendi log dosyasına yazılır, `~/.claude/sidebar/<project>-<YYYY-MM-DD>.log`, satır başına bir JSON object. Pane açıldığında o projenin log'larının en yeni 10 entry'si stream'e geri gelir, her biri ilk yazıldığı gün ve saatle, yani yarın başlayan bir session dün bulunanı yine gösterir. Geri gelen bir entry log'a yeniden yazılmaz. Stream entry'lerini kaldıran bir `clear`, log'a kendi satırını yazar (`{"at", "cleared": {consumer, key}}`): entry'ler geçmiş olarak dosyada kalır, ve restore o key'in bu satırdan önce yazılmış her entry'sini dışarıda bırakır, satır daha yeni bir günün dosyasında olsa da. Böylece kapanmış bir bulgu kendi kapanış satırının yanında geri gelmez. `/sidebar log` dosyanın path'ini ve en yeni 10 entry'sini yazar, temizlenmiş olanlar da dahil.
 
 ## Diğer mod'ların kullandığı API
 
@@ -37,7 +37,7 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
 }
 ```
 
-`set`, section tutulup çizildiğinde `true`, sidebar kapalıyken `false` cevaplar, yani tek bir `if (taken) return` hem kapalı hem eksik durumu kapsar. `clear({ consumer, key })` o key'in duran section'ını ve her stream entry'sini kaldırır, `isOpen()` pane'in açık olup olmadığını cevaplar.
+`set`, section tutulup çizildiğinde `true`, sidebar kapalıyken `false` cevaplar, yani tek bir `if (taken) return` hem kapalı hem eksik durumu kapsar. `clear({ consumer, key })` o key'in duran section'ını ve her stream entry'sini kaldırır ve sonraki bir session'ın o entry'leri log'dan geri almasını önler; `isOpen()` pane'in açık olup olmadığını cevaplar.
 
 `types/index.d.ts` contract'tır: `SidebarSection`, `SidebarLine`, `SidebarButton`, `SidebarUntil` ve `Sidebar`. `/plugin-types` onu etkin her plugin için `.claude/types/claude-code-plugins/` altına kopyalar, yani `$.sidebar` mod'unuzda elle hiçbir şey kopyalamadan type'lanır. Ona karşı geliştirmek için `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>` kullanın.
 
@@ -79,7 +79,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
     ❯ ./register.tsx hooks: engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
@@ -92,7 +92,7 @@ Reach L2, bir dosya yazar.
     1. Okur:     diğer mod'ların verdiği section'ları, bir stream entry'sinin kendi saati için saati, HOME, session'ın dizinini ve ~/.claude/sidebar altındaki bu projenin kendi log dosyalarını
     2. Çalıştırır: bir button'ın adlandırdığı slash komutunu, $.command.run üzerinden, yalnız kişinin basışıyla
     3. Gönderir: hiçbir şey
-    4. Saklar:   $.store içinde sidebar'ın açık olup olmadığını; ~/.claude/sidebar içinde proje ve gün başına bir log dosyası, diğer mod'ların yazdığı stream entry'lerini tutar
+    4. Saklar:   $.store içinde sidebar'ın açık olup olmadığını; ~/.claude/sidebar içinde proje ve gün başına bir log dosyası, diğer mod'ların yazdığı stream entry'lerini ve entry kaldıran her clear için bir satırı tutar
     5. Düşman girdi: bir section başka bir plugin'den gelir ve veri olarak okunur: consumer, key ve title kontrol edilir, başka biçimde her satır ve button düşürülür, metin tek satıra katlanır ve genişliğe wrap edilir, sayılar sınırlanır. Bir log satırı da aynı okunur, yani elle düzenlenmiş ya da kesilmiş bir dosya yalnız o satırı kaybeder, başka bir şeyi değil.
 
 ## Sınırlar

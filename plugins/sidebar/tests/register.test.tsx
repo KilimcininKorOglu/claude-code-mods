@@ -51,7 +51,7 @@ function world(on: On, store: Record<string, unknown> = {}, files: Map<string, s
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
   on('ui.panes', () => ({ value: w.panes }))
-  on('ui.open', (_, e) => { w.panes = [...w.panes, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true }]; return { value: undefined } })
+  on('ui.open', (_, e) => { w.panes = [...w.panes, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true }]; return { value: { isPlaced: true as const } } })
   on('ui.close', (_, e) => { w.panes = w.panes.filter(p => p.id !== e.id); return { value: undefined } })
   return w
 }
@@ -97,6 +97,22 @@ describe('sidebar', () => {
     const pane = await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: PANE })
     // The restored entry keeps the day and time it was first written, not this session's.
     expect(await pane.find({ text: 'edit-loop: yesterday (19.09 13:00)' })).toBeDefined()
+  })
+
+  test('a restore leaves out an entry a later clear took down, also one a newer day cleared', async ($, on) => {
+    // Yesterday's finding closed today: the clear line sits in the newer file, the finding in the older.
+    const cleared = JSON.stringify({ at: NOW, cleared: { consumer: 'i18n-watch', key: 'note' } })
+    const files = new Map([
+      [`${LOG_DIR}/app-2026-09-19.log`, `${LINE('i18n-watch', 'missing translation keys', OLD)}\n`],
+      [`${LOG_DIR}/app-2026-09-20.log`, `${cleared}\n${LINE('i18n-watch', 'translation keys added', NOW)}\n`],
+    ])
+    world(on, { open: true }, files)
+    await started($)
+    expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 1 in the stream')
+    const pane = await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: PANE })
+    expect(await pane.find({ text: 'i18n-watch: translation keys added (20.09 13:00)' })).toBeDefined()
+    // The log command still reads the whole history.
+    expect((await $.command.run(run('log'))).text).toContain('20.09 13:00 i18n-watch: translation keys added')
   })
 
   // The test engine raises no `ui.close`, so the person's close is measured in a live session.

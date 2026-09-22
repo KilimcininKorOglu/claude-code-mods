@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logKept, logLineOf, logName, projectOf, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { clearLineOf, cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -212,6 +212,14 @@ describe('the log', () => {
     expect(readLog('')).toEqual([])
   })
 
+  test('a clear line takes down the entries of its key written before it, not those written after', () => {
+    const at = (key: string, title: string) => logLineOf({ ...kept(section({ until: 'stream', key, title })), at: AT })
+    const text = [at('a', 'red'), at('b', 'other'), clearLineOf('edit-loop', 'a', AT), at('a', 'green'), '{"at":1,"cleared":{"consumer":"a mod","key":"b"}}'].join('\n')
+    expect(readLive(text).map(one => one.section.title)).toEqual(['other', 'green'])
+    // The history reads every entry and skips the clear lines.
+    expect(readLog(text).map(one => one.section.title)).toEqual(['red', 'other', 'green'])
+  })
+
   test('keeps the newest lines of a day and tails the newest entries', () => {
     const lines = Array.from({ length: 502 }, (_, i) => `l${i}`)
     expect(logKept(lines, 'new')).toHaveLength(500)
@@ -230,7 +238,7 @@ describe('$.sidebar', () => {
 
   /** The log the engine hands the noun; the lines land here instead of on disk. */
   const logged: string[] = []
-  const LOG = async (entry: Kept): Promise<void> => { logged.push(logLineOf(entry)) }
+  const LOG = async (line: string): Promise<void> => { logged.push(line) }
 
   test('keeps nothing while the sidebar is closed', async () => {
     const state = stateOf(false)
@@ -266,9 +274,16 @@ describe('$.sidebar', () => {
     expect(state.board.size).toBe(0)
     await bar.clear({ consumer: 'edit-loop', key: 'note' })
     expect(state.stream.map(s => s.key)).toEqual(['other'])
-    // Each stream entry also went to the log, with its own time.
-    expect(logged).toHaveLength(3)
+    // Each stream entry also went to the log, with its own time, and the clear left one line after them.
+    expect(logged).toHaveLength(4)
     expect(readLog(logged.join('\n'))[0]).toEqual({ at: AT, section: { consumer: 'edit-loop', key: 'note', title: 'the 5th edit', lines: [{ text: 'src/app.ts: 5 edits' }], until: 'stream' } })
+    // The history keeps all three entries; what a next session takes back keeps only the one still up.
+    expect(readLog(logged.join('\n'))).toHaveLength(3)
+    expect(readLive(logged.join('\n')).map(one => one.section.key)).toEqual(['other'])
+    // A clear that took no stream entry down writes nothing, so a standing section's clears stay out of the log.
+    await bar.clear({ consumer: 'edit-loop', key: 'note' })
+    expect(logged).toHaveLength(4)
+    logged.length = 0
   })
 
   test('refuses a section of another shape', async () => {

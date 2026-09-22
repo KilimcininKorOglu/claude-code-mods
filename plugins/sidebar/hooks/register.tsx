@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { drawn, dropTurn, isLogOf, logKept, logLineOf, logName, projectOf, pushed, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import { clearLineOf, drawn, dropTurn, isLogOf, logKept, logLineOf, logName, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -117,15 +117,18 @@ async function logFiles($: EngineInterface, state: State, project: string): Prom
 
 /**
  * Takes the newest entries of this project's log back into the stream, oldest first, each with the day
- * and time it was first written. A restored entry is never written to the log again, because it is put
- * into the stream directly rather than through `$.sidebar.set`.
+ * and time it was first written. An entry a later clear took down stays out, even when the clear sits in
+ * a newer day's file. A restored entry is never written to the log again, because it is put into the
+ * stream directly rather than through `$.sidebar.set`.
  */
 async function restoreLog($: EngineInterface, state: State): Promise<void> {
   if (state.dir === '') return
   const project = projectOf(await $.session.cwd())
-  const found = []
+  let text = ''
+  let found: Logged[] = []
   for (const name of await logFiles($, state, project)) {
-    found.unshift(...readLog(await readOrEmpty($, `${state.dir}/${name}`)))
+    text = `${await readOrEmpty($, `${state.dir}/${name}`)}\n${text}`
+    found = readLive(text)
     if (found.length >= LOG_RESTORE) break
   }
   for (const one of found.slice(-LOG_RESTORE)) {
@@ -149,7 +152,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
  * engine call the `engine.create` hook closes over, because the validator refuses that engine as an
  * argument.
  */
-export function createSidebar(redraw: () => void, now: () => Promise<number>, log: (entry: Kept) => Promise<void>, state: State): Sidebar {
+export function createSidebar(redraw: () => void, now: () => Promise<number>, log: (line: string) => Promise<void>, state: State): Sidebar {
   return {
     set: async (section: SidebarSection) => {
       if (!state.open) return false
@@ -161,7 +164,7 @@ export function createSidebar(redraw: () => void, now: () => Promise<number>, lo
       if (kept.until === 'stream') {
         const entry = { ...kept, id: `${kept.id}#${++state.written}`, at: await now() }
         state.stream = pushed(state.stream, entry)
-        await log(entry)
+        await log(logLineOf(entry))
       } else state.board.set(kept.id, kept)
       redraw()
       return true
@@ -171,6 +174,8 @@ export function createSidebar(redraw: () => void, now: () => Promise<number>, lo
       const kept = state.stream.filter(s => !s.id.startsWith(`${id}#`))
       const dropped = kept.length < state.stream.length
       state.stream = kept
+      // The log keeps the entries as history; this line keeps the next session from taking them back.
+      if (dropped) await log(clearLineOf(input.consumer, input.key, await now()))
       if (state.board.delete(id) || dropped) redraw()
     },
     isOpen: async () => state.open,
@@ -222,10 +227,10 @@ export const register: Register = on => {
 
   on('engine.create', async (_, e, next) => {
     const below = await next(e)
-    /** Writes one stream entry to this project's log of today, so a later session takes it back. */
-    const log = async (entry: Kept): Promise<void> => {
+    /** Writes one line to this project's log of today: a stream entry a later session takes back, or a clear. */
+    const log = async (line: string): Promise<void> => {
       if (state.file === '') return
-      state.log = logKept(state.log, logLineOf(entry))
+      state.log = logKept(state.log, line)
       try {
         await below.fs.write(state.file, `${state.log.join('\n')}\n`)
       } catch {
