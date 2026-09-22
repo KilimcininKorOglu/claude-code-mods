@@ -1,0 +1,11 @@
+{
+  "name": "context-restore",
+  "version": "0.1.0",
+  "description": "Puts back the full text of every skill and command the session used when compaction cut it, and hands the model the new text of a skill, command or rules file that changed on disk. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}
