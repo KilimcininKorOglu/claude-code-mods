@@ -48,10 +48,21 @@ const updated = (taskId: string, status: string): ToolUseSummary => use('TaskUpd
 const listed = (...rows: { id: string; status: string }[]): ToolUseSummary =>
   use('TaskList', {}, { tasks: rows.map(r => ({ ...r, subject: r.id, blockedBy: [] })) })
 
-type World = { submitted: string[]; logs: string[]; envSets: string[]; setMessages: (m: SessionMessage[]) => void }
+type Row = { id: string; status: string }
+type World = {
+  submitted: string[]
+  logs: string[]
+  envSets: string[]
+  listCalls: number
+  /** The engine's own task list, which the mod reads with $.tool.call at the session's start. */
+  taskRows: Row[]
+  /** When set, that call fails instead of answering. */
+  listError?: Error
+  setMessages: (m: SessionMessage[]) => void
+}
 
 function world(on: On, env: Record<string, string> = {}, store: Record<string, unknown> = {}): World {
-  const w: World = { submitted: [], logs: [], envSets: [], setMessages: () => undefined }
+  const w: World = { submitted: [], logs: [], envSets: [], listCalls: 0, taskRows: [], setMessages: () => undefined }
   let messages: SessionMessage[] = []
   w.setMessages = m => {
     messages = m
@@ -65,6 +76,12 @@ function world(on: On, env: Record<string, string> = {}, store: Record<string, u
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.messages', () => ({ value: messages }))
+  on('tool.call', (_, e) => {
+    if (e.tool !== 'TaskList') throw new Error(`the world answers TaskList only, not ${e.tool}`)
+    w.listCalls += 1
+    if (w.listError) throw w.listError
+    return { result: { tasks: w.taskRows.map(r => ({ ...r, subject: r.id, blockedBy: [] })) }, text: '' }
+  })
   on('ui.log', (_, e) => {
     w.logs.push(e.text)
     return { value: undefined }
@@ -156,6 +173,30 @@ describe('task-poke', () => {
     await flush()
     expect(w.logs.at(-1)).toContain('1 unfinished task, poke 2/99')
     expect(w.submitted).toHaveLength(2)
+  })
+
+  test("the session's start takes the engine's own list, which the transcript no longer holds", async ($, on) => {
+    const w = world(on)
+    // A resumed session: the engine still knows the tasks, and the transcript window reaches none of them.
+    w.taskRows = [{ id: '1', status: 'in_progress' }, { id: '2', status: 'pending' }, { id: '3', status: 'completed' }]
+    w.setMessages([])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.listCalls).toBe(1)
+    expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/99')
+    expect(w.submitted).toHaveLength(1)
+  })
+
+  test('a failed reading of the engine list says so and leaves the transcript to answer', async ($, on) => {
+    const w = world(on)
+    w.listError = new Error('the task tools are off')
+    w.setMessages([assistant(created('1'))])
+    await $.session.start(session)
+    expect(w.logs[0]).toContain("cannot read the engine's task list")
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/99')
   })
 
   test('a TaskList result replaces the list the replay built', async ($, on) => {

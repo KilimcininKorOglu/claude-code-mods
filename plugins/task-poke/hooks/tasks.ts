@@ -109,8 +109,17 @@ function withUpdate(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
 // The TaskList result carries the whole list, so it is the list at that point of the transcript and
 // replaces what the replay held. A result without a tasks array says nothing, and leaves the list alone.
 function fromTaskList(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
-  const rows = field(use.result, 'tasks')
-  if (!Array.isArray(rows)) return tasks
+  return tasksOfList(use.result) ?? tasks
+}
+
+/**
+ * The list a TaskList result names, or null when it names none. The same shape comes from the
+ * transcript and from the mod's own `$.tool.call({ tool: 'TaskList' })`, which reads the engine's
+ * list itself: the only source that holds a task older than the transcript window.
+ */
+export function tasksOfList(result: unknown): Tasks | null {
+  const rows = field(result, 'tasks')
+  if (!Array.isArray(rows)) return null
   const next: Tasks = new Map()
   for (const row of rows) {
     const id = field(row, 'id')

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { readTurn, type Tasks } from './tasks.ts'
+import { readTurn, tasksOfList, type Tasks } from './tasks.ts'
 
 /** Pokes sent for one stretch of unfinished tasks, until the person sets another limit. */
 export const DEFAULT_MAX_POKES = 99
@@ -129,6 +129,22 @@ async function readLimit($: EngineInterface): Promise<number> {
 }
 
 /**
+ * Reads the engine's own task list once, at the session's start, and keeps it as the list every later
+ * turn is replayed over. A resumed session brings back tasks the transcript window no longer reaches,
+ * and without this reading the mod would count only what that window still holds. The call carries no
+ * message into the conversation: it leaves no tool row and the model never sees it (measured).
+ */
+async function seedTasks($: EngineInterface, state: State): Promise<void> {
+  try {
+    const answer = await $.tool.call({ tool: 'TaskList' })
+    state.tasks = tasksOfList(answer.result) ?? state.tasks
+  } catch (err) {
+    // The task tools are off, or the engine refused the call. The transcript replay still answers.
+    await toStream($, 'unseeded', 'task list', `cannot read the engine's task list, the count is what the transcript holds: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+/**
  * Reads the task list after a main-loop turn and acts on it. The transcript window the engine answers
  * is replayed over the list of the last reading, so a task older than the window still counts. The
  * parser reads that window on every turn, so a bad record fails every later turn too: each distinct
@@ -169,6 +185,7 @@ export const register: Register = on => {
     }
     const r = await next(e)
     resetCount()
+    if (state.enabled) await seedTasks($, state)
     await $.command.register({
       name: 'task-poke',
       description: 'Continue automatically while the task list has unfinished tasks: status, on, off, limit (task-poke)',
@@ -184,7 +201,8 @@ export const register: Register = on => {
       state.enabled = arg === 'on'
       await $.store.set(ENABLED_KEY, state.enabled)
       resetCount()
-      if (!state.enabled) await clearCount($)
+      if (state.enabled) await seedTasks($, state)
+      else await clearCount($)
     } else if (arg.startsWith('limit')) {
       return { text: await setLimit($, state, arg.slice(5).trim()) }
     } else if (arg !== '' && arg !== 'status') {

@@ -11,10 +11,12 @@ A later `TodoWrite` replaces any state built from the Task tools.
 
 ## The count and the transcript window
 
-`$.session.messages()` answers the newest messages of a long transcript alone, so a replay of that window sees no task created before it. The mod therefore replays each window over the list of its last reading: a task created 8000 messages ago and never touched since still counts. Two things still read low:
+`$.session.messages()` answers the newest messages of a long transcript alone, so a replay of that window sees no task created before it. The mod closes that gap from two sides:
 
-- a session the mod did not watch from its start, because it has no earlier reading to keep. A `TaskList` call inside the window repairs that count, because its result is the whole list.
-- a task list built before the mod was loaded or reloaded, for the same reason.
+1. At the session's start it reads the engine's own list once, with `$.tool.call({ tool: 'TaskList' })`. A resumed session brings back tasks whose `TaskCreate` sits far outside the window, and this reading counts them from the first turn. The call carries no message into the conversation: it leaves no tool row and the model never sees it (measured). When it fails, because the task tools are off or the engine refused it, one red line says so and the transcript answers alone.
+2. Each later window is replayed over the list of the last reading, so a task created 8000 messages ago and never touched since stays counted.
+
+A `TaskList` the model itself calls is read the same way: its result is the whole list, and it replaces what the replay held.
 
 ## Task tools on every model
 
@@ -77,23 +79,24 @@ Restart Claude Code. The mod turns the task tools on at session start, so on a m
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.ui.log (via toCount, toStream)
+    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
 Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 
-    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
-    2. Runs:     one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
+    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the engine's task list through one $.tool.call at the session's start; the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
+    2. Runs:     one read-only TaskList call at the session's start and at /task-poke on; one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) and the poke limit in $.store; the environment variable lasts for the process only
     5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status, a TaskCreate result without task.id or a TaskList row without an id stops the pokes, and one line names the error until the error changes
 
 ## Limits
 
-- `$.session.messages()` returns the newest 4096 messages. The mod keeps the list of its last reading, so a task older than that window still counts, but a session it did not watch from the start reads low until a `TaskList` call lands in the window.
+- `$.session.messages()` returns the newest 4096 messages. The reading at the session's start and the list the mod keeps between turns cover what that window loses.
 - A `TaskGet` result is not parsed. `TodoWrite`, `TaskCreate`, `TaskUpdate` and `TaskList` build the state.
-- The list the mod keeps lives in the session's plugin state, so a `/reload-plugins` starts it over from the transcript window.
+- The list the mod keeps lives in the session's plugin state. A `/reload-plugins` runs `session.start` again, so the engine's list is read again with it.
+- A new session starts with an empty engine list: Claude Code carries tasks into a resumed session, not into a fresh one (measured).
 
 ## Development
 
