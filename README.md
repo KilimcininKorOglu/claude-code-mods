@@ -4,6 +4,8 @@ Claude Mods for Claude Code. A Claude Mod is a Claude Code plugin whose `hooks/h
 
 Function hooks are early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` is set, and the API can change between releases.
 
+Every mod has a page of its own at [cc-mods.keremgok.tr](https://cc-mods.keremgok.tr), in English and in Turkish. The site is built from this repository: a mod's `README.md` is its English page and its `README.tr.md` the Turkish one, so a push to `main` publishes both.
+
 ## Install
 
 ```sh
@@ -88,6 +90,7 @@ plugins/<mod>/                    one directory per mod
   tests/register.test.ts          tests with claude-code/testing
   tsconfig.json
   README.md                       validator output and threat model
+  README.tr.md                    the same README in Turkish, kept in step with it
 templates/mod/                    the template that make new-mod copies
 ```
 

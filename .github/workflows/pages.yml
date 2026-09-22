@@ -8,6 +8,7 @@ on:
     paths:
       - 'docs/**'
       - 'plugins/*/README.md'
+      - 'plugins/*/README.tr.md'
       - 'plugins/*/.claude-plugin/plugin.json'
       - '.claude-plugin/marketplace.json'
       - '.github/workflows/pages.yml'
