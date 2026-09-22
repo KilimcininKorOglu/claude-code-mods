@@ -231,6 +231,15 @@ export function seedFromResume(s: State, e: ResumeFields, now: number): string |
   return `resuming cold. The first message re-writes ${fmtCount(s.ctx)} tokens, about ${fmtUsd(usd)}.`
 }
 
+/**
+ * Where the engine keeps a session's transcript: under `projects/`, in a directory named after the
+ * session's start directory with every character but a letter or a digit turned into `-` (measured on
+ * 2.1.280).
+ */
+export function transcriptPath(configDir: string, cwd: string, sid: string): string {
+  return `${configDir}/projects/${cwd.replace(/[^A-Za-z0-9]/g, '-')}/${sid}.jsonl`
+}
+
 /** /clear starts a new conversation in the same process; nothing measured before it still applies. */
 export function resetForClear(s: State): void {
   s.pending?.cancel()

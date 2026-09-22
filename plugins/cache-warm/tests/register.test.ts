@@ -63,6 +63,8 @@ type World = {
   live: { tokens?: number }
   /** The merged settings `$.settings.read()` answers; `/fast` writes `fastMode` there. */
   settings: Record<string, unknown>
+  /** The session transcripts on disk, by path, with their last write time. */
+  transcripts: Map<string, number>
 }
 
 // The engine beneath the mod: the store, the session, and a fork that answers
@@ -76,8 +78,12 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
     logs: [],
     live: {},
     settings: {},
+    transcripts: new Map(),
   }
   on('settings.read', () => ({ value: w.settings }))
+  on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/u' : undefined }))
+  on('fs.exists', (_, e) => ({ value: w.transcripts.has(e.path) }))
+  on('fs.stat', (_, e) => ({ value: { kind: 'file' as const, size: 1, mtimeMs: w.transcripts.get(e.path) ?? 0, isLink: false } }))
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
@@ -361,6 +367,26 @@ describe('always', () => {
     const off = await $.command.run(run('cache-warm', 'off'))
     expect(off.text).toBe('off, and no longer starts itself in any session')
     expect(w.store.has('always')).toBe(false)
+  })
+
+  test('a reload in a warm conversation reads the last request from the transcript and pings on time', async ($, on) => {
+    const w = world(on, [warm], { store: [['always', true]] })
+    w.live.tokens = 200_000
+    w.transcripts.set('/Users/u/.claude/projects/-work-app-v1/S1.jsonl', START - 10 * MIN)
+    await $.session.start({ ...session, cwd: '/work/app.v1' })
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always, no end · ping in 40m')
+    await w.clock.advance(40 * MIN)
+    expect(w.forks).toBe(1)
+  })
+
+  test('a reload whose transcript is older than the cache waits for the first turn instead of paying a cold ping', async ($, on) => {
+    const w = world(on, [warm], { store: [['always', true]] })
+    w.live.tokens = 200_000
+    w.transcripts.set('/Users/u/.claude/projects/-work/S1.jsonl', START - 2 * HOUR)
+    await $.session.start(session)
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always, no end · waiting for the first turn')
+    await w.clock.advance(2 * HOUR)
+    expect(w.forks).toBe(0)
   })
 
   test('the endless loop keeps pinging past six hours', async ($, on) => {
