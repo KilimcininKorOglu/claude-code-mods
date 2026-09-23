@@ -6,24 +6,24 @@ const CONSUMER = 'mcp-doctor'
 const USAGE = 'expects nothing (the status), reconnect <server>, on or off'
 
 /**
- * The on/off setting, every watched server that is not connected with its reason, whether ToolSearch
- * answers here, and the measure in flight, so two measures never interleave.
+ * The on/off setting, every watched server that is not connected with its reason, the failed servers
+ * whose section the sidebar has not taken yet, whether ToolSearch answers here, and the measure in
+ * flight, so two measures never interleave.
  */
-type State = { enabled: boolean; failed: Map<string, string>; toolSearch: 'ok' | 'missing'; chain: Promise<void> }
+type State = { enabled: boolean; failed: Map<string, string>; unplaced: Set<string>; toolSearch: 'ok' | 'missing'; chain: Promise<void> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** A server that is not connected: a standing section with a reconnect button, or one transcript line. */
-async function showFailed($: EngineInterface, f: Failure): Promise<void> {
+/** A server that is not connected as a standing section with a reconnect button; false while the sidebar is closed or missing. */
+async function placeFailed($: EngineInterface, f: Failure): Promise<boolean> {
   try {
-    const shown = await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(`failed-${f.name}`), title: 'MCP server', lines: failedLines(f), buttons: [reconnectButton(f.name)], until: 'session', order: 15 })
-    if (shown) return
+    return await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(`failed-${f.name}`), title: 'MCP server', lines: failedLines(f), buttons: [reconnectButton(f.name)], until: 'session', order: 15 })
   } catch {
     // The sidebar mod is not installed.
+    return false
   }
-  $.ui.log(`${failedText(f)}; /mcp-doctor reconnect ${f.name}`)
 }
 
 /** A server that came back: its standing section goes, and one green line says so. */
@@ -37,12 +37,21 @@ async function showBack($: EngineInterface, name: string): Promise<void> {
   $.ui.log(backText(name))
 }
 
-/** Records and shows every server that failed and was not known as failed yet. */
+/**
+ * Records and shows every server that failed. A new one the sidebar does not take gets one transcript
+ * line, and its section is drawn at the next measure after the sidebar opens.
+ */
 async function addFailures($: EngineInterface, state: State, failures: readonly Failure[]): Promise<void> {
   for (const f of failures) {
-    if (state.failed.has(f.name)) continue
+    const isKnown = state.failed.has(f.name)
+    if (isKnown && !state.unplaced.has(f.name)) continue
     state.failed.set(f.name, f.reason)
-    await showFailed($, f)
+    if (await placeFailed($, f)) {
+      state.unplaced.delete(f.name)
+      continue
+    }
+    if (!isKnown) $.ui.log(`${failedText(f)}; /mcp-doctor reconnect ${f.name}`)
+    state.unplaced.add(f.name)
   }
 }
 
@@ -51,6 +60,7 @@ async function dropFailures($: EngineInterface, state: State, isBack: (name: str
   for (const name of [...state.failed.keys()]) {
     if (!isBack(name)) continue
     state.failed.delete(name)
+    state.unplaced.delete(name)
     await showBack($, name)
   }
 }
@@ -131,7 +141,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, failed: new Map(), toolSearch: 'ok', chain: Promise.resolve() }
+  const state: State = { enabled: true, failed: new Map(), unplaced: new Set(), toolSearch: 'ok', chain: Promise.resolve() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

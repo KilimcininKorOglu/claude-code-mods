@@ -105,6 +105,25 @@ describe('mcp-doctor', () => {
     expect(w.logs).toEqual([])
   })
 
+  withSidebar('a sidebar closed at the first measure gets the section at the next one, and the transcript line comes once', async ($, on) => {
+    const { w, clock } = world(on)
+    seatSidebar(on, w)
+    w.failed = [{ name: 'flaky' }]
+    await started($)
+    await settle(clock)
+    expect(w.logs).toEqual(['flaky: not connected (disconnected); /mcp-doctor reconnect flaky'])
+    await $.turn.complete(turn())
+    await settle(clock)
+    expect(w.logs).toHaveLength(1)
+    w.bar.open = true
+    await $.turn.complete(turn())
+    await settle(clock)
+    expect(w.bar.sections.map(s => s.key)).toEqual(['failed-flaky'])
+    await $.turn.complete(turn())
+    await settle(clock)
+    expect(w.bar.sections).toHaveLength(1)
+  })
+
   test('a closed sidebar gets one transcript line naming the reconnect command, and a pending server is not taken as back', async ($, on) => {
     const { w, clock } = world(on)
     w.failed = [{ name: 'flaky' }]

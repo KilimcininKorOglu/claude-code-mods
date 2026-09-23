@@ -1,6 +1,6 @@
 {
   "name": "mcp-doctor",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Tells the person when an MCP server failed to connect or dropped, with a reconnect button, and when it is back. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

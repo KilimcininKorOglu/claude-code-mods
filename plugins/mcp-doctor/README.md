@@ -11,7 +11,7 @@ A Claude Code Mod that tells you when an MCP server failed to connect or dropped
        flaky: not connected (CONNECTION_CLOSED: Connection closed)
        [ reconnect flaky ]
 
-   While the sidebar is closed, one transcript line says the same and names the command: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`.
+   While the sidebar is closed, one transcript line says the same and names the command: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`. The section is drawn at the next measure after the sidebar opens.
 4. The button runs `/mcp-doctor reconnect <server>`, which asks the engine to run `/mcp reconnect <server>` and reads the list again. A server still failed afterwards gets one line with the engine's answer.
 5. A server that is back loses its red section and gets one green line: `flaky: connected again`. A server still connecting is left as it is.
 6. The same failure is written once. A later turn that finds the same server failed writes nothing.
@@ -43,7 +43,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ ./register.ts hooks: session.start, command.run{command=mcp-doctor}, turn.complete, prompt.attachment{type=deferred_tools_delta}
-    ❯ ./register.ts calls: $.clock.after (via later, runCommand), $.command.register, $.command.run (via reconnect), $.sidebar.clear (via showBack), $.sidebar.set (via showBack, showFailed), $.store.get, $.store.set (via setEnabled), $.tool.call (via measure), $.ui.log (via later, measure, reconnect, showBack, showFailed)
+    ❯ ./register.ts calls: $.clock.after (via later, runCommand), $.command.register, $.command.run (via reconnect), $.sidebar.clear (via showBack), $.sidebar.set (via placeFailed, showBack), $.store.get, $.store.set (via setEnabled), $.tool.call (via measure), $.ui.log (via addFailures, later, measure, reconnect, showBack)
 
 Reach L2, it drives Claude: it runs the `/mcp reconnect` command.
 

@@ -11,7 +11,7 @@ Bir MCP server bağlanamadığında ya da bağlantısı koptuğunda bunu size s�
        flaky: not connected (CONNECTION_CLOSED: Connection closed)
        [ reconnect flaky ]
 
-   Sidebar kapalıyken tek bir transcript satırı aynı şeyi söyler ve komutu adlandırır: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`.
+   Sidebar kapalıyken tek bir transcript satırı aynı şeyi söyler ve komutu adlandırır: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`. Sidebar açıldıktan sonraki ilk ölçümde section çizilir.
 4. Tuş `/mcp-doctor reconnect <server>` komutunu çalıştırır. Bu komut engine'den `/mcp reconnect <server>` çalıştırmasını ister ve listeyi yeniden okur. Sonrasında hâlâ başarısız olan bir server, engine'in cevabını taşıyan tek bir satır alır.
 5. Geri gelen bir server kırmızı section'ını kaybeder ve tek bir yeşil satır alır: `flaky: connected again`. Hâlâ bağlanan bir server olduğu gibi kalır.
 6. Aynı hata bir kere yazılır. Aynı server'ı yine başarısız bulan sonraki bir turn hiçbir şey yazmaz.
@@ -43,7 +43,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=mcp-doctor}, turn.complete, prompt.attachment{type=deferred_tools_delta}
-    ❯ ./register.ts calls: $.clock.after (via later, runCommand), $.command.register, $.command.run (via reconnect), $.sidebar.clear (via showBack), $.sidebar.set (via showBack, showFailed), $.store.get, $.store.set (via setEnabled), $.tool.call (via measure), $.ui.log (via later, measure, reconnect, showBack, showFailed)
+    ❯ ./register.ts calls: $.clock.after (via later, runCommand), $.command.register, $.command.run (via reconnect), $.sidebar.clear (via showBack), $.sidebar.set (via placeFailed, showBack), $.store.get, $.store.set (via setEnabled), $.tool.call (via measure), $.ui.log (via addFailures, later, measure, reconnect, showBack)
 
 Reach L2, Claude'u yönlendirir: `/mcp reconnect` komutunu çalıştırır.
 
