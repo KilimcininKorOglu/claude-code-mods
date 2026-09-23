@@ -426,6 +426,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "mcp-doctor",
+      "source": "./plugins/mcp-doctor",
+      "description": "Tells the person when an MCP server failed to connect or dropped, with a reconnect button, and when it is back.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
