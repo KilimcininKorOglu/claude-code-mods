@@ -377,6 +377,8 @@ describe('always', () => {
     expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always, no end · ping in 40m')
     await w.clock.advance(40 * MIN)
     expect(w.forks).toBe(1)
+    // No turn ended since the reload, so the price comes from the model the start read.
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toMatch(/last ping read 200k \$0\.05 \(/)
   })
 
   test('a reload whose transcript is older than the cache waits for the first turn instead of paying a cold ping', async ($, on) => {

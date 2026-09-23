@@ -369,6 +369,8 @@ export const register: Register = on => {
     await prune($, s, now)
     await restore($, s, now)
     await readFast($, s)
+    // A reload gets no classic.SessionStart, and a ping can come before the first turn names the model.
+    s.model ??= await $.session.model()
     const live = (await $.session.usage()).context.tokens
     if (live) s.ctx = live
     // A loaded conversation this module has not seen a request of: a reload, or an update mid-session.
