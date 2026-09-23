@@ -24,6 +24,8 @@ export interface PingRecord {
   read: number
   write: number
   usd: number | null
+  /** When the ping's answer came, in ms since the epoch. */
+  at: number
 }
 
 export interface ColdWrite {
@@ -161,12 +163,21 @@ export function unsentText(r: Unsent): string {
   return `the ping failed, the API answered ${r.status ?? 'nothing'} (${r.error})`
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** A local clock time as `05:42`, with the day and month in front when it is not today: `22 Sep 23:10`. */
+export function clockText(at: number, now: number): string {
+  const date = new Date(at)
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return date.toDateString() === new Date(now).toDateString() ? time : `${date.getDate()} ${MONTHS[date.getMonth()]} ${time}`
+}
+
 /** The status line; undefined clears it. The engine puts the mod name in front. */
 export function statusText(s: State, now: number): string | undefined {
   if (s.stopped) return `stopped: ${s.stopped}`
   if (!hasWindow(s)) return undefined
   const next = s.lastRequestAt && !s.compacted ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
-  const ping = s.lastPing ? ` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)}` : ''
+  const ping = s.lastPing ? ` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)} (${clockText(s.lastPing.at, now)})` : ''
   const left = s.endless ? 'always, no end' : `${fmtDuration(s.deadline - now)} left`
   return `${left}${next}${ping}`
 }

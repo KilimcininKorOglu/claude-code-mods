@@ -32,8 +32,10 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
 **A status line under the prompt** while a window is armed or after a stop:
 
-    cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05
+    cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05 (05:42)
     cache-warm: stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone
+
+The time in brackets is when the last ping's answer came, in local time; a ping of an earlier day carries its day and month, as `(22 Sep 23:10)`.
 
 While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. There the line is coloured: a stopped window red, a window whose end is nearer than one ping period yellow, a window that holds green, and the wait for the first turn faint. With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
@@ -63,7 +65,7 @@ The section holds a second, faint line under the window: the last transcript lin
     state       warm, 42m left
     context     200,502 tokens
     cold cost   $4.01 to re-write it (warm turn $0.05)
-    keep warm   on, 5h 10m left · ping in 37m · last ping read 200k $0.05
+    keep warm   on, 5h 10m left · ping in 37m · last ping read 200k $0.05 (05:42)
     break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m
     session     1 cold write paid, $4.01
 

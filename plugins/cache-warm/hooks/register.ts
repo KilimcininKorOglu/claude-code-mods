@@ -164,7 +164,7 @@ async function arm($: EngineInterface, s: State): Promise<void> {
 async function settlePing($: EngineInterface, s: State, usage: Usage, now: number): Promise<void> {
   const price = priceNow(s)
   const usd = price ? responseUsd(usage, price) : null
-  s.lastPing = { read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd }
+  s.lastPing = { read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd, at: now }
   if (!isWarmPing(usage)) {
     if (!s.endless) return stop($, s, coldPingText(usage, usd))
     const write = usage.cache_creation_input_tokens

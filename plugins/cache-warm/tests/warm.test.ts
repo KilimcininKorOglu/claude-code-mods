@@ -4,6 +4,7 @@ import {
   DEFAULT_WINDOW_MS,
   PING_AFTER_MS,
   card,
+  clockText,
   fmtDuration,
   freshState,
   isColdWrite,
@@ -113,7 +114,7 @@ describe('resume and clear', () => {
     s.ctx = 200_000
     s.lastRequestAt = NOW - 2 * HOUR
     s.coldWrites = [{ tokens: 200_000, usd: 4 }]
-    s.lastPing = { read: 1, write: 0, usd: 0 }
+    s.lastPing = { read: 1, write: 0, usd: 0, at: 0 }
     s.stopped = 'x'
     let cancelled = false
     s.pending = { cancel: () => { cancelled = true } }
@@ -156,5 +157,13 @@ describe('text', () => {
     expect(text).toMatch(/state       COLD, last request 2h ago/)
     expect(text).toMatch(/cold cost   \$4\.00 to re-write it \(warm turn \$0\.05\)/)
     expect(text).toMatch(/session     0 cold writes paid, \$0\.00/)
+  })
+})
+
+describe('clockText', () => {
+  test('writes the time alone for today, and the day and month in front for an earlier day', () => {
+    const now = new Date(2026, 8, 23, 9, 0).getTime()
+    expect(clockText(new Date(2026, 8, 23, 5, 42).getTime(), now)).toBe('05:42')
+    expect(clockText(new Date(2026, 8, 22, 23, 10).getTime(), now)).toBe('22 Sep 23:10')
   })
 })

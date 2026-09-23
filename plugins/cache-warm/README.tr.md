@@ -32,8 +32,10 @@ Soğuk bir cache'e giden mesaj durdurulmaz ve geciktirilmez. Cache'i düşmüş,
 
 **Prompt'un altında bir status line**, bir pencere kuruluyken ya da bir duruştan sonra:
 
-    cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05
+    cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05 (05:42)
     cache-warm: stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone
+
+Parantezdeki zaman, son ping'in cevabının geldiği yerel saattir; önceki bir günün ping'i gününü ve ayını da taşır, `(22 Sep 23:10)` gibi.
 
 [sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran ve her değişimde yeniden yazılan bir `cache window` section'ı olarak; status line temiz kalır. Orada satır renklidir: durmuş pencere kırmızı, sonu bir ping periyodundan yakın olan pencere sarı, tutan pencere yeşil, ilk turn beklenirken soluk. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi çizilir.
 
@@ -63,7 +65,7 @@ Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satı
     state       warm, 42m left
     context     200,502 tokens
     cold cost   $4.01 to re-write it (warm turn $0.05)
-    keep warm   on, 5h 10m left · ping in 37m · last ping read 200k $0.05
+    keep warm   on, 5h 10m left · ping in 37m · last ping read 200k $0.05 (05:42)
     break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m
     session     1 cold write paid, $4.01
 

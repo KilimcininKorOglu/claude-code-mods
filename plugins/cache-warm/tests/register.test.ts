@@ -125,7 +125,7 @@ describe('keep warm', () => {
     expect(w.forks).toBe(0)
     await w.clock.advance(MIN)
     expect(w.forks).toBe(1)
-    expect(w.statuses.at(-1)).toBe('5h 10m left · ping in 50m · last ping read 200k $0.05')
+    expect(w.statuses.at(-1)).toMatch(/^5h 10m left · ping in 50m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(2)
   })
@@ -249,7 +249,7 @@ describe('keep warm', () => {
     await $.command.run(run('cache-warm', '1h'))
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
-    expect(w.statuses.at(-1)).toBe('10m left · ping in 50m · last ping read 200k $0.05')
+    expect(w.statuses.at(-1)).toMatch(/^10m left · ping in 50m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
   })
 
   test('stops with the error when the fork throws', async ($, on) => {
@@ -269,7 +269,7 @@ describe('keep warm', () => {
     await $.command.run(run('cache-warm', '6h'))
     await $.turn.complete(turn({ usage: usage({ model: 'claude-sonnet-5' }) }))
     await w.clock.advance(50 * MIN)
-    expect(w.statuses.at(-1)).toBe('5h 10m left · ping in 50m · last ping read 200k $0.05')
+    expect(w.statuses.at(-1)).toMatch(/^5h 10m left · ping in 50m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
   })
 
   test('the window ends on its own and forgets the every period', async ($, on) => {
@@ -363,7 +363,7 @@ describe('always', () => {
     await w.clock.advance(49 * MIN)
     expect(w.forks).toBe(1)
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, always, no end · ping in 50m · last ping read 200k \$0\.05 \(always\)/)
+    expect(status.text).toMatch(/keep warm   on, always, no end · ping in 50m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\) \(always\)/)
     const off = await $.command.run(run('cache-warm', 'off'))
     expect(off.text).toBe('off, and no longer starts itself in any session')
     expect(w.store.has('always')).toBe(false)
