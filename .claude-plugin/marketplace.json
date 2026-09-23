@@ -448,6 +448,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "slash-chain",
+      "source": "./plugins/slash-chain",
+      "description": "Runs slash commands joined with && one after another, waits for each turn, pane or dialog to end, and stops the chain at a failed command or a turn that ended without an answer.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

@@ -1,0 +1,6 @@
+{
+  "description": "slash-chain: session.start, command.run, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": [
+    "./register.ts"
+  ]
+}
