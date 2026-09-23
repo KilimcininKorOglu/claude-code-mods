@@ -96,12 +96,13 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: { text: string; kind?: string }[] }[]; cleared: string[] }
+type Button = { label: string; command: string; args?: string }
+type Bar = { open: boolean; sections: { key: string; lines: { text: string; kind?: string }[]; buttons?: Button[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string; kind?: string }[] }
-    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })) })
+    const s = e as unknown as { key: string; lines: { text: string; kind?: string }[]; buttons?: Button[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })), buttons: s.buttons })
     return { value: bar.open }
   })
   on('sidebar.clear', (_, e) => {
@@ -133,8 +134,12 @@ describe('disk-janitor', () => {
     const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await started($, w)
-    expect(bar.sections.at(-1)).toEqual({ key: 'artifacts', lines: [{ text: 'artifacts 6.5 GB · /disk-janitor', kind: 'warn' }] })
+    expect(bar.sections.at(-1)).toEqual({ key: 'artifacts', lines: [{ text: 'artifacts 6.5 GB · /disk-janitor', kind: 'warn' }], buttons: [{ label: 'clean up', command: 'disk-janitor' }] })
     expect(w.statuses.at(-1)).toBe(undefined)
+    // The button runs the command as a plugin: it opens the pane, and deletes nothing by itself.
+    expect((await $.command.run(run('', { kind: 'plugin' } as PromptOrigin))).text).toBe('pane open: Enter picks a row, the delete button asks twice, Esc closes')
+    expect(w.panes.map(p => p.id)).toEqual(['disk-janitor'])
+    expect(w.removed).toEqual([])
     const ui = await pane($)
     await ui.press({ key: 'row:target' })
     await ui.press({ key: 'delete' })

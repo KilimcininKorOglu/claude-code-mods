@@ -29,6 +29,9 @@ type State = { scan?: Scan; selected: Set<string>; confirm: boolean; busy: boole
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'disk-janitor', key: 'artifacts' }
 
+/** The section's button: `/disk-janitor`, which opens the pane or closes it. */
+const PANE_BUTTON = { label: 'clean up', command: 'disk-janitor' }
+
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -130,7 +133,8 @@ async function toSidebar($: EngineInterface, state: State, text: string | undefi
       return await $.sidebar.isOpen()
     }
     const lines = [{ text, kind: statusTone(kb) }, ...(state.event === undefined ? [] : [{ text: state.event, kind: 'dim' as const }])]
-    return await $.sidebar.set({ ...SECTION, title: 'build artifacts', lines, until: 'session', order: 20 })
+    // The button opens the pane, where the person picks and deletes; a command a plugin runs never deletes.
+    return await $.sidebar.set({ ...SECTION, title: 'build artifacts', lines, buttons: [PANE_BUTTON], until: 'session', order: 20 })
   } catch {
     // The sidebar mod is not installed.
     return false

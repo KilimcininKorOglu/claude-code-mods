@@ -16,11 +16,14 @@ A Claude Code Mod that measures the build artifacts of the session's repository,
        disk-janitor: artifacts 7.4 GB · /disk-janitor
        disk-janitor: over 20 GB: artifacts 23.1 GB · /disk-janitor
 
-   While the [sidebar](../sidebar) is open, that line goes there instead, as a `build artifacts` section that stays for the session, and the status line stays clear. The line is yellow from 5 GB and red from 20 GB, and the section goes down under 5 GB. A second, faint line under it holds the last deletion:
+   While the [sidebar](../sidebar) is open, that line goes there instead, as a `build artifacts` section that stays for the session, and the status line stays clear. The line is yellow from 5 GB and red from 20 GB, and the section goes down under 5 GB. A second, faint line under it holds the last deletion, and a `clean up` button opens the pane:
 
        disk-janitor: build artifacts
        artifacts 7.4 GB · /disk-janitor
        deleted 2 dir(s), 2.5 GB
+       [ clean up ]
+
+   The button runs `/disk-janitor`, which opens the pane (and closes it when it is open). It deletes nothing by itself: the picks and the two presses stay in the pane.
 
    With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
@@ -68,9 +71,9 @@ Restart Claude Code. The mod needs no key and no setting. Start Claude Code insi
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.280:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=janitor}, ui.render{component=Pane}, ui.close
+    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane}, ui.close
     ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
 Reach L2, runs processes and deletes directories.

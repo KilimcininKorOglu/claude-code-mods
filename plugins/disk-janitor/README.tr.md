@@ -16,11 +16,14 @@ Session'ın repository'sindeki build artifact'lerini ölçen, 5 GB'ı geçtikler
        disk-janitor: artifacts 7.4 GB · /disk-janitor
        disk-janitor: over 20 GB: artifacts 23.1 GB · /disk-janitor
 
-   [sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran bir `build artifacts` section'ı olarak; status line temiz kalır. Satır 5 GB'dan itibaren sarı, 20 GB'dan itibaren kırmızıdır ve section 5 GB'ın altında kalkar. Altındaki ikinci, soluk satır son silmeyi tutar:
+   [sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran bir `build artifacts` section'ı olarak; status line temiz kalır. Satır 5 GB'dan itibaren sarı, 20 GB'dan itibaren kırmızıdır ve section 5 GB'ın altında kalkar. Altındaki ikinci, soluk satır son silmeyi tutar; bir `clean up` tuşu pane'i açar:
 
        disk-janitor: build artifacts
        artifacts 7.4 GB · /disk-janitor
        deleted 2 dir(s), 2.5 GB
+       [ clean up ]
+
+   Tuş `/disk-janitor` komutunu çalıştırır; komut pane'i açar (açıksa kapatır). Tuş kendi başına hiçbir şey silmez: seçim ve iki basış pane'de kalır.
 
    Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi çizilir.
 
@@ -68,9 +71,9 @@ Claude Code'u yeniden başlatın. Mod'un key'e ve ayara ihtiyacı yoktur. Claude
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=janitor}, ui.render{component=Pane}, ui.close
+    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane}, ui.close
     ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
 Reach L2, process çalıştırır ve dizin siler.
