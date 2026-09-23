@@ -437,6 +437,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "orphan-server",
+      "source": "./plugins/orphan-server",
+      "description": "Lists the servers a Bash call of the model started in this repository that still listen on a port, with their age, session and a stop button.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

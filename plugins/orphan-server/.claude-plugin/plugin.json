@@ -1,0 +1,11 @@
+{
+  "name": "orphan-server",
+  "version": "0.1.0",
+  "description": "Lists the servers a Bash call of the model started in this repository that still listen on a port, with their age, session and a stop button. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}
