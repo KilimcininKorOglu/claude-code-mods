@@ -9,6 +9,12 @@ Bir Claude Code Mod'u. Bir ana döngü turu bittiğinde ve task listesi hâlâ p
 
 Sonraki bir `TodoWrite`, Task tool'larından kurulmuş her state'in yerini alır.
 
+## Poke nasıl gönderilir
+
+Poke mod'un kendi markdown komutunu, `/task-poke:send <prompt>` komutunu çalıştırır; bu komutun gövdesi yalnız argümanlarıdır. Transcript o komut satırını gösterir ve model poke'u yazıldığı gibi, yazılmış bir slash komutu gibi okur. Bir `$.prompt.submit` metni ona `The task-poke plugin sent a message:` çerçevesi içinde ulaşırdı. Komut tur bittikten sonra bir timer'dan çalışır, çünkü engine turun beklediği `turn.complete` hook'u içinde `$.command.run` çağrısını reddeder. Engine komutu reddederse kırmızı bir kayıt bunu söyler ve poke o çerçeveyle bir plugin prompt'u olarak gider.
+
+2.1.282 üzerindeki canlı kontrolde iki task'tan birini pending bırakan bir tur `/task-poke:send The task list still has unfinished tasks. ...` olarak üç poke aldı, model her birini yalnız sözle cevapladı ve mod üçüncüden sonra durdu.
+
 ## Sayım ve transcript penceresi
 
 `$.session.messages()` uzun bir transcript'in yalnız en yeni mesajlarını cevaplar, yani o pencerenin replay'i ondan önce oluşturulmuş hiçbir task'ı görmez. Mod bu boşluğu iki taraftan kapatır:
@@ -62,6 +68,9 @@ Sayım, bir şeyi ilerleten ilk turda sıfıra döner, yani uzun bir task üzeri
     /task-poke on       açar (varsayılan), session'lar arasında saklanır
     /task-poke off      kapatır, session'lar arasında saklanır
     /task-poke limit 20 arka arkaya en fazla 20 poke; 1 ile 999 arası, varsayılan 99, session'lar arasında saklanır
+    /task-poke:send <prompt>  bir poke'un çalıştırdığı komut; yazılırsa prompt'u yazıldığı gibi gönderir
+
+`/task-poke:send` mod'un ikinci komutudur ve mod başına tek komut kuralının istisnasıdır, çünkü model'e plugin çerçevesi olmadan prompt veren tek yol bir markdown komutudur.
 
 ## Kurulum
 
@@ -86,17 +95,17 @@ Claude Code'u yeniden başlatın. Mod task tool'larını session başlangıcınd
 
 ## Nereye uzanır
 
-Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, classic.Stop, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
+    ❯ ./register.ts calls: $.clock.after (via sendPoke), $.command.register, $.command.run (via sendPoke), $.env.get, $.env.set, $.prompt.submit (via submitPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
 Reach L2, Claude'u sürer. Transcript'i okur. Bir environment variable yazar.
 
     1. Okur:     transcript'i $.session.messages üzerinden (TodoWrite, TaskCreate, TaskUpdate, TaskList ve AskUserQuestion tool adları, input'ları ve sonuçları); engine'in task listesini session başlangıcında tek bir $.tool.call ile; her prompt'un origin kind'ını, hiçbir zaman metnini değil; her turun Stop input'undaki background task sayısını; CLAUDE_CODE_ENABLE_TODO_TOOLS
-    2. Çalıştırır: session başlangıcında ve /task-poke on anında salt okuma bir TaskList çağrısı; bitmemiş task'larla biten her ana döngü turu için bir $.prompt.submit, arka arkaya en fazla 99 ya da ayarladığınız limit kadar, ve hiçbir şeyi ilerletmeyen arka arkaya en fazla 3 tane; ayarlı değilken session başına bir kere CLAUDE_CODE_ENABLE_TODO_TOOLS=1 ayarlar
+    2. Çalıştırır: session başlangıcında ve /task-poke on anında salt okuma bir TaskList çağrısı; bitmemiş task'larla biten her ana döngü turu için bir /task-poke:send çalıştırması, arka arkaya en fazla 99 ya da ayarladığınız limit kadar, ve hiçbir şeyi ilerletmeyen arka arkaya en fazla 3 tane; ayarlı değilken session başına bir kere CLAUDE_CODE_ENABLE_TODO_TOOLS=1 ayarlar
     3. Gönderir: yalnız sabit poke prompt'unu, normal bir tur olarak
     4. Saklar:   $.store içinde bir boolean (enabled) ve poke limitini; environment variable yalnız process boyunca yaşar
     5. Düşman girdi: transcript'ten hiçbir metin poke prompt'una ulaşmaz; bilinmeyen bir task status'u, task.id taşımayan bir TaskCreate sonucu ya da id taşımayan bir TaskList satırı poke'ları durdurur ve hata değişene kadar bir satır hatayı adlandırır

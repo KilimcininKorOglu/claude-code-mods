@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type {
   CommandRunInput,
   On,
@@ -54,7 +54,13 @@ const listed = (...rows: { id: string; status: string }[]): ToolUseSummary =>
 
 type Row = { id: string; status: string }
 type World = {
+  /** Every prompt that reached the engine: a poke through the mod's `send` command, or a submitted prompt. */
   submitted: string[]
+  /** The pokes that went through the `send` command; `sendFails` makes the engine refuse that command. */
+  sends: number
+  sendFails?: true
+  /** The mod sends its poke from a timer, so a test settles this clock before it reads what was sent. */
+  clock: MockClock
   logs: string[]
   envSets: string[]
   listCalls: number
@@ -66,7 +72,7 @@ type World = {
 }
 
 function world(on: On, env: Record<string, string> = {}, store: Record<string, unknown> = {}): World {
-  const w: World = { submitted: [], logs: [], envSets: [], listCalls: 0, taskRows: [], setMessages: () => undefined }
+  const w: World = { submitted: [], sends: 0, clock: mock.clock(on), logs: [], envSets: [], listCalls: 0, taskRows: [], setMessages: () => undefined }
   let messages: SessionMessage[] = []
   w.setMessages = m => {
     messages = m
@@ -93,6 +99,12 @@ function world(on: On, env: Record<string, string> = {}, store: Record<string, u
   on('prompt.submit', (_, e) => {
     w.submitted.push(e.text)
     return { text: e.text }
+  })
+  on('command.run', { command: 'task-poke:send' }, (_, e) => {
+    if (w.sendFails === true) throw new Error('unknown command')
+    w.submitted.push(e.args)
+    w.sends += 1
+    return {}
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   return w
@@ -125,19 +137,29 @@ function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.isOpen', () => ({ value: bar.open }))
 }
 
-const flush = async (): Promise<void> => {
-  for (let i = 0; i < 5; i += 1) await Promise.resolve()
-}
-
 describe('task-poke', () => {
   test('pokes while a TodoWrite list has unfinished tasks', async ($, on) => {
     const w = world(on)
     w.setMessages([todoWrite('completed', 'in_progress', 'pending')])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(1)
+    expect(w.sends).toBe(1)
+    expect(w.submitted[0]).toContain('Continue with the next pending or in-progress task.')
     expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/99')
+  })
+
+  test('a send command the engine refuses sends the poke as a plugin prompt and says so', async ($, on) => {
+    const w = world(on)
+    w.sendFails = true
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await w.clock.settle()
+    expect(w.sends).toBe(0)
+    expect(w.submitted).toHaveLength(1)
+    expect(w.logs.at(-1)).toContain('the send command did not run, the poke goes out as a plugin prompt')
   })
 
   test('stays idle when every TodoWrite task is completed', async ($, on) => {
@@ -145,7 +167,7 @@ describe('task-poke', () => {
     w.setMessages([todoWrite('pending'), todoWrite('completed', 'completed')])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(0)
   })
 
@@ -154,12 +176,12 @@ describe('task-poke', () => {
     w.setMessages([assistant(created('1'), created('2')), assistant(updated('1', 'completed'))])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/99')
 
     w.setMessages([assistant(created('1'), created('2')), assistant(updated('1', 'completed'), updated('2', 'deleted'))])
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(1)
   })
 
@@ -168,13 +190,13 @@ describe('task-poke', () => {
     w.setMessages([assistant(created('1'))])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/99')
 
     // The window moved past the TaskCreate: only the list of the last reading holds that task.
     w.setMessages([])
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.logs.at(-1)).toContain('1 unfinished task, poke 2/99')
     expect(w.submitted).toHaveLength(2)
   })
@@ -186,7 +208,7 @@ describe('task-poke', () => {
     w.setMessages([])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.listCalls).toBe(1)
     expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/99')
     expect(w.submitted).toHaveLength(1)
@@ -199,7 +221,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     expect(w.logs[0]).toContain("cannot read the engine's task list")
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/99')
   })
 
@@ -208,12 +230,12 @@ describe('task-poke', () => {
     w.setMessages([assistant(created('1'), created('2'))])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(1)
 
     w.setMessages([assistant(listed({ id: '1', status: 'completed' }, { id: '2', status: 'completed' }))])
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(1)
   })
 
@@ -222,7 +244,7 @@ describe('task-poke', () => {
     w.setMessages([assistant(created('7')), assistant(use('TaskUpdate', { id: '7', status: 'completed' }))])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(0)
   })
 
@@ -236,7 +258,7 @@ describe('task-poke', () => {
     w.setMessages([assistant(created('1')), assistant(updated('1', 'completed'), failed)])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(0)
   })
 
@@ -245,7 +267,7 @@ describe('task-poke', () => {
     w.setMessages([assistant(created('1')), todoWrite('completed')])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(0)
   })
 
@@ -255,14 +277,14 @@ describe('task-poke', () => {
     await $.session.start(session)
     for (let i = 0; i < DEFAULT_MAX_POKES + 2; i += 1) {
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     expect(w.submitted).toHaveLength(DEFAULT_MAX_POKES)
     expect(w.logs.filter(l => l.includes('stopped after 99 pokes'))).toHaveLength(1)
 
     await $.prompt.submit(typed())
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(DEFAULT_MAX_POKES + 1)
   })
 
@@ -276,7 +298,7 @@ describe('task-poke', () => {
     expect((await $.command.run(run('limit 2'))).text).toBe('limit 2: at most 2 poke(s) go out for one stretch of unfinished tasks')
     for (let i = 0; i < 4; i += 1) {
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     expect(w.submitted).toHaveLength(2)
     expect(w.logs.filter(l => l.includes('stopped after 2 pokes'))).toHaveLength(1)
@@ -291,7 +313,7 @@ describe('task-poke', () => {
     await $.turn.complete(turn({ agentId: 'a1' }))
     w.setMessages([todoWrite('pending'), assistant(use('AskUserQuestion', { questions: [] }))])
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(0)
   })
 
@@ -319,7 +341,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     const { text } = await $.command.run(run('off'))
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(text).toBe('off · 0/99 pokes since your last prompt')
     expect(w.submitted).toHaveLength(0)
   })
@@ -331,7 +353,7 @@ describe('task-poke', () => {
     w.setMessages([todoWrite('completed', 'in_progress', 'pending')])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(bar.sections).toEqual([{ key: 'pokes', title: 'task list', lines: [{ text: '2 unfinished tasks, poke 1/99', kind: 'ok' }], until: 'session' }])
     expect(w.logs).toEqual([])
   })
@@ -344,7 +366,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     for (let i = 0; i < DEFAULT_MAX_POKES + 2; i += 1) {
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     // One entry per turn, plus the limit entry: green up to the last poke, then yellow, then red.
     const kinds = bar.sections.map(s => s.lines[0]?.kind)
@@ -364,10 +386,10 @@ describe('task-poke', () => {
     w.setMessages([todoWrite('pending')])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     w.setMessages([todoWrite('completed')])
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(bar.cleared).toEqual(['pokes'])
   })
 
@@ -378,7 +400,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     for (let i = 0; i < 6; i += 1) {
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     expect(w.submitted).toHaveLength(MAX_STALLS)
     const stopped = w.logs.filter(l => l.includes('moved nothing'))
@@ -388,7 +410,7 @@ describe('task-poke', () => {
     await $.prompt.submit(typed())
     w.setMessages(working(todoWrite('pending')))
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(MAX_STALLS + 1)
   })
 
@@ -402,13 +424,13 @@ describe('task-poke', () => {
     for (let i = 0; i < MAX_STALLS + 2; i += 1) {
       await $.classic.Stop({ stop_hook_active: false, background_tasks: running })
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     expect(w.submitted).toEqual([])
     expect(w.logs.some(l => l.includes('moved nothing'))).toBe(false)
     await $.classic.Stop({ stop_hook_active: false, background_tasks: [] })
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(1)
   })
 
@@ -422,7 +444,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     for (let i = 0; i < 6; i += 1) {
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     expect(w.logs.filter(l => l.includes('moved nothing'))).toHaveLength(0)
     expect(w.submitted).toHaveLength(6)
@@ -433,12 +455,12 @@ describe('task-poke', () => {
     w.setMessages([todoWrite('pending', 'pending'), prompted()])
     await $.session.start(session)
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     for (let i = 0; i < 4; i += 1) {
       // One task finishes at each turn's end, so no poke moved nothing.
       w.setMessages([todoWrite(i % 2 === 0 ? 'completed' : 'pending', 'pending'), prompted()])
       await $.turn.complete(turn())
-      await flush()
+      await w.clock.settle()
     }
     expect(w.logs.filter(l => l.includes('moved nothing'))).toHaveLength(0)
     expect(w.submitted).toHaveLength(5)
@@ -450,7 +472,7 @@ describe('task-poke', () => {
     await $.session.start(session)
     await $.turn.complete(turn())
     await $.turn.complete(turn())
-    await flush()
+    await w.clock.settle()
     expect(w.submitted).toHaveLength(0)
     const errors = w.logs.filter(l => l.includes('cannot read the task list'))
     expect(errors).toHaveLength(1)

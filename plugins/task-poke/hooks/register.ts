@@ -19,6 +19,9 @@ const POKE_TEXT =
   'The task list still has unfinished tasks. Continue with the next pending or in-progress task. ' +
   'If a task is blocked or needs a decision from me, say so and stop.'
 
+/** The mod's markdown command (`commands/send.md`), whose body is its arguments alone. */
+const SEND_COMMAND = 'task-poke:send'
+
 /** The section this mod owns in the shared sidebar: the count of the running stretch. */
 const SECTION = { consumer: 'task-poke', key: 'pokes' }
 
@@ -109,8 +112,8 @@ async function toStream($: EngineInterface, key: string, title: string, text: st
   $.ui.log(text)
 }
 
-/** A plugin prompt runs once the session is idle, so the hook does not wait for it. */
-function sendPoke($: EngineInterface): void {
+/** The poke as a plugin prompt, which the model reads inside a `The task-poke plugin sent a message:` frame. */
+function submitPoke($: EngineInterface): void {
   void $.prompt.submit({ text: POKE_TEXT }).then(
     res => {
       if (res.drop !== undefined) void toStream($, 'dropped', 'poke dropped', `the poke was dropped: ${res.drop}`)
@@ -119,6 +122,21 @@ function sendPoke($: EngineInterface): void {
       void toStream($, 'failed', 'poke not sent', `the poke was not submitted: ${String(err)}`)
     },
   )
+}
+
+/**
+ * Sends the poke through the mod's own `send` command, so the model reads the text alone, as a typed
+ * prompt. The command runs once the session is idle, from a timer, because the engine refuses
+ * `$.command.run` inside the `turn.complete` hook the turn waits on. A run the engine refuses sends the
+ * poke as a plugin prompt instead.
+ */
+function sendPoke($: EngineInterface): void {
+  $.clock.after(0, () => {
+    $.command.run({ command: SEND_COMMAND, args: POKE_TEXT }).catch((err: unknown) => {
+      void toStream($, 'unsent', 'poke sent as a plugin prompt', `the send command did not run, the poke goes out as a plugin prompt: ${String(err)}`)
+      submitPoke($)
+    })
+  })
 }
 
 /** The limit: the count turns red, and one entry says the pokes stopped. */

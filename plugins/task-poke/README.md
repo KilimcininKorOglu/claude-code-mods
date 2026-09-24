@@ -9,6 +9,12 @@ It reads both task formats:
 
 A later `TodoWrite` replaces any state built from the Task tools.
 
+## How the poke is sent
+
+The poke runs the mod's own markdown command `/task-poke:send <prompt>`, whose body is its arguments alone. The transcript shows that command line, and the model reads the poke as it is written, as it reads a typed slash command. A `$.prompt.submit` text would reach it inside a `The task-poke plugin sent a message:` frame. The command runs from a timer once the turn ended, because the engine refuses `$.command.run` inside the `turn.complete` hook the turn waits on. When the engine refuses the command, one red entry says so and the poke goes out as a plugin prompt, with that frame.
+
+In the live check on 2.1.282 a turn that left one of two tasks pending got three pokes as `/task-poke:send The task list still has unfinished tasks. ...`, the model answered each with words, and the mod stopped after the third.
+
 ## The count and the transcript window
 
 `$.session.messages()` answers the newest messages of a long transcript alone, so a replay of that window sees no task created before it. The mod closes that gap from two sides:
@@ -62,6 +68,9 @@ The count goes back to zero at the first turn that moved something, so a model w
     /task-poke on       enable (default), stored across sessions
     /task-poke off      disable, stored across sessions
     /task-poke limit 20 at most 20 pokes in a row; 1 to 999, 99 by default, stored across sessions
+    /task-poke:send <prompt>  the command a poke runs; typed, it sends the prompt as written
+
+`/task-poke:send` is the mod's second command, the one exception to one command per mod, because only a markdown command hands the model a prompt without the plugin frame.
 
 ## Install
 
@@ -86,17 +95,17 @@ Restart Claude Code. The mod turns the task tools on at session start, so on a m
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.281:
+Validated with `claude plugin validate` on Claude Code 2.1.282:
 
     ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, classic.Stop, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
+    ❯ ./register.ts calls: $.clock.after (via sendPoke), $.command.register, $.command.run (via sendPoke), $.env.get, $.env.set, $.prompt.submit (via submitPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
 Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 
     1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the engine's task list through one $.tool.call at the session's start; the origin kind of each prompt, never its text; the number of background tasks in each turn's Stop input; CLAUDE_CODE_ENABLE_TODO_TOOLS
-    2. Runs:     one read-only TaskList call at the session's start and at /task-poke on; one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set, and at most 3 in a row that move nothing; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
+    2. Runs:     one read-only TaskList call at the session's start and at /task-poke on; one /task-poke:send run per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set, and at most 3 in a row that move nothing; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) and the poke limit in $.store; the environment variable lasts for the process only
     5. Hostile input: no text from the transcript reaches the poke prompt; an unknown task status, a TaskCreate result without task.id or a TaskList row without an id stops the pokes, and one line names the error until the error changes
