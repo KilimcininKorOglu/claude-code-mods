@@ -45,9 +45,12 @@ export function currentText(engineText: string, fileBody: string, path: string, 
   return tail === '' ? fileBody : `${fileBody.trimEnd()}\n${tail}`
 }
 
-/** The rules files an `instructions` attachment carries, by the `Contents of <path> (` line each starts with. */
-export function rulePathsOf(text: string): string[] {
-  return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => p.includes('/rules/'))
+/**
+ * The watched files an `instructions` attachment carries, by the `Contents of <path> (` line each starts
+ * with: every rules file, and the user's global CLAUDE.md. A project's CLAUDE.md is not watched.
+ */
+export function rulePathsOf(text: string, globalFile: string): string[] {
+  return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => p.includes('/rules/') || p === globalFile)
 }
 
 /** The last part of a path, as the texts name a file. */

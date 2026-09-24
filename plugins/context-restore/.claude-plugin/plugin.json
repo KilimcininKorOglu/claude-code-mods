@@ -1,7 +1,7 @@
 {
   "name": "context-restore",
-  "version": "0.2.0",
-  "description": "Hands a skill or command call the current text of its file when the file changed on disk after the session loaded it, and hands the model a rules file that changed on disk. Needs function hooks (early access).",
+  "version": "0.3.0",
+  "description": "Hands a skill or command call the current text of its file when the file changed on disk after the session loaded it, and hands the model a rules file or the global CLAUDE.md that changed on disk. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -118,6 +118,26 @@ describe('context-restore', () => {
     expect((await $.command.run(run(''))).text).toBe('on · every skill and command call is checked against its file, 1 rules file(s) watched · last: changed on disk, the new text went to the model: db.md')
   })
 
+  test('the global CLAUDE.md that changed on disk reaches the model whole, and a project CLAUDE.md does not', async ($, on) => {
+    const w = world(on)
+    const global = '/Users/u/.claude/CLAUDE.md'
+    const project = '/work/CLAUDE.md'
+    w.files.set(global, { text: '# Rules\n\n- Answer in Turkish.', mtimeMs: T0 - 5 })
+    w.files.set(project, { text: '# Project', mtimeMs: T0 - 5 })
+    await started($)
+    const attachment = `Contents of ${global} (user's private global instructions for all projects):\n\n# Rules\n\n- Answer in Turkish.\n\nContents of ${project} (project instructions, checked into the codebase):\n\n# Project`
+    await $.prompt.attachment({ type: 'instructions', text: attachment, origin: { kind: 'engine' } })
+    w.files.set(project, { text: '# Project, changed', mtimeMs: T0 + 10 })
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([])
+    w.files.set(global, { text: '# Rules\n\n- Answer in Turkish.\n- Never use em dashes.', mtimeMs: T0 + 20 })
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([`context-restore: CLAUDE.md (${global}) changed on disk after this session read it. Its current text follows and replaces the earlier one; follow it from now on.\n\n# Rules\n\n- Answer in Turkish.\n- Never use em dashes.`])
+    expect(w.logs).toEqual(['changed on disk, the new text went to the model: CLAUDE.md'])
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([])
+  })
+
   test('off leaves the engine\'s text as it is', async ($, on) => {
     const w = world(on)
     await started($)

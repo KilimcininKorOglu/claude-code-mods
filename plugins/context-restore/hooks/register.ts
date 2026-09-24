@@ -73,9 +73,9 @@ async function fresherText($: EngineInterface, state: State, name: string, text:
   return currentText(text, await readBody($, file), file, at > state.startedAt)
 }
 
-/** Records the rules files the session read, with the time each was last written. */
+/** Records the rules files and the global CLAUDE.md the session read, with the time each was last written. */
 async function recordRules($: EngineInterface, state: State, text: string): Promise<void> {
-  for (const path of rulePathsOf(text)) {
+  for (const path of rulePathsOf(text, `${state.config}/CLAUDE.md`)) {
     const at = await mtimeOf($, path)
     if (at !== undefined) state.rules.set(path, at)
   }

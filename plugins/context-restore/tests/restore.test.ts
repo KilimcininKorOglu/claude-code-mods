@@ -43,8 +43,8 @@ describe('restore', () => {
     expect(currentText('Review src/a.ts and report.\n', file, PATH, true)).toBe(`Review src/a.ts and report.\n\n${appendedNote(PATH, file)}`)
   })
 
-  test('the rules files of an instructions attachment are read from their Contents lines', () => {
-    const text = 'Contents of /Users/u/.claude/CLAUDE.md (user\'s private global instructions for all projects):\n\nx\n\nContents of /Users/u/.claude/rules/context7.md (user\'s private global instructions for all projects):\n\ny\n\nContents of /work/.claude/rules/db.md (project instructions, checked into the codebase):\n\nz'
-    expect(rulePathsOf(text)).toEqual(['/Users/u/.claude/rules/context7.md', '/work/.claude/rules/db.md'])
+  test('the rules files and the global CLAUDE.md of an instructions attachment are read from their Contents lines', () => {
+    const text = 'Contents of /Users/u/.claude/CLAUDE.md (user\'s private global instructions for all projects):\n\nx\n\nContents of /Users/u/.claude/rules/context7.md (user\'s private global instructions for all projects):\n\ny\n\nContents of /work/CLAUDE.md (project instructions, checked into the codebase):\n\nw\n\nContents of /work/.claude/rules/db.md (project instructions, checked into the codebase):\n\nz'
+    expect(rulePathsOf(text, '/Users/u/.claude/CLAUDE.md')).toEqual(['/Users/u/.claude/CLAUDE.md', '/Users/u/.claude/rules/context7.md', '/work/.claude/rules/db.md'])
   })
 })
