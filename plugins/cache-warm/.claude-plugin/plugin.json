@@ -1,6 +1,6 @@
 {
   "name": "cache-warm",
-  "version": "0.6.8",
+  "version": "0.6.9",
   "description": "Keeps the 1-hour prompt cache warm for a window you set, or with no end in every session under always, with one cache-shared fork per idle stretch, arms a window for you after a paid cold write, and shows the cache state, the cold price and this session's cold writes. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

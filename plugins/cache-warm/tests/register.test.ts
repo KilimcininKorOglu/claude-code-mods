@@ -407,7 +407,7 @@ describe('always', () => {
     await w.clock.advance(49 * MIN)
     expect(w.forks).toBe(1)
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, always, no end · ping in 50m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\) \(always\)/)
+    expect(status.text).toMatch(/keep warm   on, always · ping in 50m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\) \(always\)/)
     const off = await $.command.run(run('cache-warm', 'off'))
     expect(off.text).toBe('off, and no longer starts itself in any session')
     expect(w.store.has('always')).toBe(false)
@@ -418,7 +418,7 @@ describe('always', () => {
     w.live.tokens = 200_000
     w.transcripts.set('/Users/u/.claude/projects/-work-app-v1/S1.jsonl', START - 10 * MIN)
     await $.session.start({ ...session, cwd: '/work/app.v1' })
-    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always, no end · ping in 40m')
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · ping in 40m')
     await w.clock.advance(40 * MIN)
     expect(w.forks).toBe(1)
     // No turn ended since the reload, so the price comes from the model the start read.
@@ -430,7 +430,7 @@ describe('always', () => {
     w.live.tokens = 200_000
     w.transcripts.set('/Users/u/.claude/projects/-work/S1.jsonl', START - 2 * HOUR)
     await $.session.start(session)
-    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always, no end · waiting for the first turn')
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · waiting for the first turn')
     await w.clock.advance(2 * HOUR)
     expect(w.forks).toBe(0)
   })
@@ -443,7 +443,7 @@ describe('always', () => {
     for (let i = 0; i < 8; i += 1) await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(8)
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    expect(status.text).toMatch(/keep warm   on, always · /)
   })
 
   test('a ping that found the cache gone re-writes it and the endless loop carries on', async ($, on) => {
@@ -456,7 +456,7 @@ describe('always', () => {
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(2)
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    expect(status.text).toMatch(/keep warm   on, always · /)
     expect(status.text).toMatch(/session     1 cold write paid, \$4\.00/)
   })
 
@@ -468,7 +468,7 @@ describe('always', () => {
     expect(w.statuses.at(-1)).toMatch(/^stopped: the engine did not send the ping/)
     await $.turn.complete(turn())
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    expect(status.text).toMatch(/keep warm   on, always · /)
     // The endless loop is back, so no per-session window took its place.
     expect(w.store.has('deadline:S1')).toBe(false)
     await w.clock.advance(50 * MIN)
@@ -482,7 +482,7 @@ describe('always', () => {
     await w.clock.advance(50 * MIN)
     await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
     const status = await $.command.run(run('cache-status'))
-    expect(status.text).toMatch(/keep warm   on, always, no end/)
+    expect(status.text).toMatch(/keep warm   on, always · /)
     expect(w.store.has('deadline:S1')).toBe(false)
   })
 })

@@ -178,7 +178,7 @@ export function statusText(s: State, now: number): string | undefined {
   if (!hasWindow(s)) return undefined
   const next = s.lastRequestAt && !s.compacted ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
   const ping = s.lastPing ? ` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)} (${clockText(s.lastPing.at, now)})` : ''
-  const left = s.endless ? 'always, no end' : `${fmtDuration(s.deadline - now)} left`
+  const left = s.endless ? 'always' : `${fmtDuration(s.deadline - now)} left`
   return `${left}${next}${ping}`
 }
 
