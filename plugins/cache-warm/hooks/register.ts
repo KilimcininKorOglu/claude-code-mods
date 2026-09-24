@@ -357,13 +357,17 @@ async function stampRequest($: EngineInterface, s: State): Promise<void> {
  * The time of the last request of a conversation this module did not see, read from the last write of
  * the session's transcript: a reloaded module starts with no request time, and `always` would wait for
  * the first turn to arm its ping. Only a cache that is still warm is taken, so a reload never pays for a
- * cold ping the next message would pay anyway. A transcript the engine keeps elsewhere reads as none.
+ * cold ping the next message would pay anyway. The transcript lies under the directory the session started
+ * in, which a shell `cd` does not move (measured: a module reloaded after `cd sub` looked under `sub`).
  */
-async function seedFromTranscript($: EngineInterface, s: State, cwd: string, now: number): Promise<void> {
+async function seedFromTranscript($: EngineInterface, s: State, now: number): Promise<void> {
   const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) ?? ''}/.claude`
-  const path = transcriptPath(configDir, cwd, s.sid)
+  const path = transcriptPath(configDir, await $.session.root(), s.sid)
   try {
-    if (!(await $.fs.exists(path))) return
+    if (!(await $.fs.exists(path))) {
+      $.ui.log(`the last request time of this session was not read: ${path} does not exist`)
+      return
+    }
     const { mtimeMs } = await $.fs.stat(path)
     if (now - mtimeMs < TTL_MS) s.lastRequestAt = mtimeMs
   } catch (err) {
@@ -386,7 +390,7 @@ export const register: Register = on => {
     const live = (await $.session.usage()).context.tokens
     if (live) s.ctx = live
     // A loaded conversation this module has not seen a request of: a reload, or an update mid-session.
-    if (live && !s.lastRequestAt) await seedFromTranscript($, s, e.cwd, now)
+    if (live && !s.lastRequestAt) await seedFromTranscript($, s, now)
     // The always switch is one global key, so every session of every project starts the endless loop,
     // whatever the last window of this session left behind.
     if (s.always) await startEndless($, s)

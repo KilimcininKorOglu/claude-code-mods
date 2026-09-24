@@ -71,6 +71,8 @@ type World = {
   settings: Record<string, unknown>
   /** The session transcripts on disk, by path, with their last write time. */
   transcripts: Map<string, number>
+  /** The directory the session started in, which a shell `cd` does not move. */
+  root: string
 }
 
 // The engine beneath the mod: the store, the session, and a fork that answers
@@ -85,7 +87,9 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
     live: {},
     settings: {},
     transcripts: new Map(),
+    root: '/work',
   }
+  on('session.root', () => ({ value: w.root }))
   on('settings.read', () => ({ value: w.settings }))
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/u' : undefined }))
   on('fs.exists', (_, e) => ({ value: w.transcripts.has(e.path) }))
@@ -165,6 +169,7 @@ describe('keep warm', () => {
     const bar: Bar = { open: true, sections: [] }
     seatSidebar(on, bar)
     w.live.tokens = 315_000
+    w.transcripts.set('/Users/u/.claude/projects/-work/S1.jsonl', START - 2 * HOUR)
     await $.session.start(session)
     await $.command.run(run('cache-warm'))
     await $.turn.complete(turn())
@@ -416,6 +421,7 @@ describe('always', () => {
   test('a reload in a warm conversation reads the last request from the transcript and pings on time', async ($, on) => {
     const w = world(on, [warm], { store: [['always', true]] })
     w.live.tokens = 200_000
+    w.root = '/work/app.v1'
     w.transcripts.set('/Users/u/.claude/projects/-work-app-v1/S1.jsonl', START - 10 * MIN)
     await $.session.start({ ...session, cwd: '/work/app.v1' })
     expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · ping in 40m')
@@ -423,6 +429,21 @@ describe('always', () => {
     expect(w.forks).toBe(1)
     // No turn ended since the reload, so the price comes from the model the start read.
     expect((await $.command.run(run('cache-warm', 'status'))).text).toMatch(/last ping read 200k \$0\.05 \(/)
+  })
+
+  test('a reload after a shell cd reads the transcript under the directory the session started in', async ($, on) => {
+    const w = world(on, [warm], { store: [['always', true]] })
+    w.live.tokens = 200_000
+    w.transcripts.set('/Users/u/.claude/projects/-work/S1.jsonl', START - 10 * MIN)
+    await $.session.start({ ...session, cwd: '/work/plugins/sub' })
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · ping in 40m')
+  })
+
+  test('a reload in a live conversation whose transcript it cannot find says so', async ($, on) => {
+    const w = world(on, [], { store: [['always', true]] })
+    w.live.tokens = 200_000
+    await $.session.start(session)
+    expect(w.logs).toEqual(['the last request time of this session was not read: /Users/u/.claude/projects/-work/S1.jsonl does not exist'])
   })
 
   test('a reload whose transcript is older than the cache waits for the first turn instead of paying a cold ping', async ($, on) => {
