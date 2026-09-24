@@ -18,7 +18,7 @@
        all 2 command(s) ran
        stopped after /tiny: its turn ended with aborted; not run: /context
 
-5. Bir zincir beklerken yazdığınız bir prompt ya da yeni bir zincir onu iptal eder: `cancelled; not run: /context`. Yeni zincir oradan başlar. Tek başına yazdığınız bir komut (`/cost`) bekleyen zincirin yanında çalışır ve onu iptal etmez, çünkü mod yalnız argümanlarında `&& /<name>` olan komutları hook'lar. Engine bir komutun çıktısının önüne o komutu hook'layan her plugin'in adını yazar. Daha geniş bir hook, diğer modların çıktısına da bu modun adını eklerdi.
+5. Bir zincir beklerken yazdığınız bir prompt ya da yeni bir zincir onu iptal eder: `cancelled; not run: /context`. Yeni zincir oradan başlar. Tek başına yazdığınız bir komut (`/cost`) bekleyen zincirin yanında çalışır ve onu iptal etmez, çünkü mod yalnız argümanlarında `&& /<name>` olan komutları hook'lar. Engine yine de her plugin komutunun çıktısının önüne bu modun adını yazar (`task-poke+slash-chain: ...`): yazacağı adları yalnız bir hook'un `command` matcher'ına bakarak seçer, bir zincir ise herhangi bir komutla başlayabilir, yani bu hook tek bir komut adı veremez (2.1.281 üzerinde iki probe plugin ile ölçüldü: hiç çalışmayan, yalnız `args` matcher'ı olan bir hook adlandırıldı, `command` matcher'ı olan bir hook adlandırılmadı).
 
 Model bu mod'dan not almaz.
 

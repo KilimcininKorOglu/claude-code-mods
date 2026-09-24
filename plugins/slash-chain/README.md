@@ -18,7 +18,7 @@ A Claude Code Mod that runs slash commands joined with `&&` one after another, a
        all 2 command(s) ran
        stopped after /tiny: its turn ended with aborted; not run: /context
 
-5. A prompt or a new chain you type while a chain waits cancels it: `cancelled; not run: /context`. The new chain starts from there. A single command you type (`/cost`) runs beside the waiting chain and does not cancel it, because the mod hooks only the commands whose arguments hold `&& /<name>`. The engine writes the name of every plugin that hooks a command in front of that command's output, so a wider hook would sign every other mod's output too.
+5. A prompt or a new chain you type while a chain waits cancels it: `cancelled; not run: /context`. The new chain starts from there. A single command you type (`/cost`) runs beside the waiting chain and does not cancel it, because the mod hooks only the commands whose arguments hold `&& /<name>`. The engine still writes this mod's name in front of every plugin command's output (`task-poke+slash-chain: ...`): it picks the names it writes by a hook's `command` matcher alone, and a chain can start with any command, so this hook cannot name one (measured on 2.1.281 with two probe plugins: a hook with only an `args` matcher that never ran was named, a hook with a `command` matcher was not).
 
 The model gets no note from this mod.
 

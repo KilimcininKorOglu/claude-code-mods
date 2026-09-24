@@ -148,9 +148,10 @@ export const register: Register = on => {
 
   on('command.run', { command: COMMAND }, async ($, e) => ({ text: await runCommand($, state, e.args) }))
 
-  // Only a command whose arguments hold `&& /<name>` (SEPARATOR in chain.ts) passes here. The engine names
-  // every plugin that hooks a command in front of its output, so a hook without this matcher signed every
-  // other command. A literal, so `claude plugin validate` prints the pattern.
+  // Only a command whose arguments hold `&& /<name>` (SEPARATOR in chain.ts) runs this hook, so a single
+  // command typed while a chain waits does not cancel it. The engine still names this plugin in front of
+  // every command's output: it picks those names by a hook's `command` matcher alone, and a chain can start
+  // with any command (measured on 2.1.281). A literal, so `claude plugin validate` prints the pattern.
   on('command.run', { args: /(?:^|\s)&&\s*\/[A-Za-z0-9_:.-]+(?=\s|$)/ }, async ($, e, next) => {
     // A new chain the person types while one waits ends the waiting one, then starts its own.
     if (state.running !== undefined && PERSON.has(e.origin.kind)) cancel($, state)
