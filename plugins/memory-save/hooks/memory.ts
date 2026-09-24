@@ -28,8 +28,11 @@ export type Reply = { ops: Op[]; topics: TopicAppend[]; refused: string[] }
 
 export type Parsed = { ok: true; reply: Reply } | { ok: false; error: string }
 
-/** `skipped` holds the lines of remove and replace ops the file has no line for. */
-export type Changes = { added: number; removed: number; replaced: number; created: boolean; skipped: string[]; refused: string[] }
+/**
+ * `skipped` holds the lines of remove and replace ops the file has no line for. `retired` holds the
+ * CRITICAL RULES bullets this save removed; they are counted in `removed` too.
+ */
+export type Changes = { added: number; removed: number; replaced: number; created: boolean; skipped: string[]; refused: string[]; retired: string[] }
 
 export type Applied =
   | { ok: true; changed: false; skipped: string[]; refused: string[] }
@@ -245,7 +248,7 @@ function sizeNotes(state: Inspection): string {
       ? ` MEMORY.md is ALREADY over a hard cap, so this save is a SHRINK-ONLY save: add NO new bullet, and remove at least ${mustRemove(state)}. A save that does not make the file smaller is refused, and nothing is written.`
       : ''
     notes.push(
-      `MANDATORY OFFLOAD: MEMORY.md is now ${state.lines} lines / ${state.chars} characters — at or near a cap (BOTH limits apply: keep under 200 lines AND under 50000 characters). You MUST move the oldest/least-critical entries (resolved warnings, superseded facts, dated notes, completed-work records) to a topic file (history.md, or a dedicated subject file when a topic is large), leaving MEMORY.md a lean index of ACTIVE rules and current architecture facts. Remove at least ${mustRemove(state)} in THIS save.${shrinkOnly}`,
+      `MANDATORY OFFLOAD: MEMORY.md is now ${state.lines} lines / ${state.chars} characters — at or near a cap (BOTH limits apply: keep under 200 lines AND under 50000 characters). You MUST move the oldest/least-critical entries (resolved warnings, superseded facts, dated notes, completed-work records) to a topic file (history.md, or a dedicated subject file when a topic is large), leaving MEMORY.md a lean index of ACTIVE rules and current architecture facts. NEVER move or remove a bullet under '## CRITICAL RULES' in this save: the mod refuses that remove; shorten such a bullet with a replace op instead. Remove at least ${mustRemove(state)} in THIS save.${shrinkOnly}`,
     )
   }
   if (state.longBullets.length > 0) {
@@ -266,7 +269,7 @@ function skippedNote(skipped: readonly string[]): string {
 function refusedNote(refused: readonly string[]): string {
   if (refused.length === 0) return ''
   const list = refused.map(r => `  - ${r}`).join('\n')
-  return `MANDATORY OP SHAPE: the last save refused these ops and wrote the rest. An "add" names a heading MEMORY.md already has: one of the four '## ' sections, or a '### ' subheading of the file, copied exactly. A new bullet is at most ${MAX_BULLET} characters: split a longer one into focused bullets, or move its detail to a topic file. Refused:\n${list}`
+  return `MANDATORY OP SHAPE: the last save refused these ops and wrote the rest. An "add" names a heading MEMORY.md already has: one of the four '## ' sections, or a '### ' subheading of the file, copied exactly. A new bullet is at most ${MAX_BULLET} characters: split a longer one into focused bullets, or move its detail to a topic file. A save under the MANDATORY OFFLOAD note never removes a '## CRITICAL RULES' bullet: shorten it with a replace op, and remove it only in a later save when the conversation shows the rule no longer holds. Refused:\n${list}`
 }
 
 /**
@@ -468,33 +471,71 @@ function tooLong(kind: Op['op'], text: string): string | undefined {
   return text.length > MAX_BULLET ? `${kind}: bullet of ${text.length} characters, the limit is ${MAX_BULLET}: ${text.slice(0, 60)}…` : undefined
 }
 
-function applyOp(lines: string[], op: Op, newBullets: string[]): string | undefined {
+/** Whether line `at` sits under '## CRITICAL RULES': the last '## ' heading above it is that section. */
+function inCriticalRules(lines: string[], at: number): boolean {
+  for (let i = at; i >= 0; i--) {
+    const line = lines[i] ?? ''
+    if (line.startsWith('## ')) return isHeading(line, 'CRITICAL RULES')
+  }
+  return false
+}
+
+/**
+ * What one save's ops share: the bullets they wrote, whether the save runs under the size offload note,
+ * and the CRITICAL RULES bullets it removed.
+ */
+type Work = { newBullets: string[]; offload: boolean; retired: string[] }
+
+/** Whether the file is at or over the soft caps, where the prompt tells the fork to move entries out. */
+function atSoftCap(current: string | undefined): boolean {
+  if (current === undefined) return false
+  const state = inspect(current)
+  return state.lines >= SOFT_LINES || state.chars >= SOFT_CHARS
+}
+
+/** Why the line a remove or replace names must stay, or undefined when the op may change it. */
+function keptLine(lines: string[], at: number, op: Exclude<Op, { op: 'add' }>, offload: boolean): string | undefined {
+  // A '### ' subheading may go (the fork removes an 'Unsorted' line once its bullets moved); the title and
+  // the four '## ' sections may not, because the file must stay in the template.
+  if (/^#{1,2} /.test(lines[at] ?? '')) return `${op.op}: the line is a section heading: ${op.line.slice(0, 60)}`
+  // A size offload chose user rules to move out (measured on a project at the soft line cap), so a
+  // CRITICAL RULES bullet goes only in a save without that note, where the fork found it no longer holds.
+  if (op.op === 'remove' && offload && inCriticalRules(lines, at)) return `remove: the line is a CRITICAL RULES bullet, and this save only makes room: ${op.line.slice(0, 60)}`
+  return undefined
+}
+
+function applyOp(lines: string[], op: Op, work: Work): string | undefined {
   if (op.op === 'add') {
     const text = bullet(op.text)
     const error = tooLong('add', text) ?? addTo(lines, op.section, text)
-    if (error === undefined) newBullets.push(text)
+    if (error === undefined) work.newBullets.push(text)
     return error
   }
   const at = indexOfLine(lines, op.line)
   if (at === -1) return `${op.op}: line not found: ${op.line.slice(0, 60)}`
-  // A '### ' subheading may go (the fork removes an 'Unsorted' line once its bullets moved); the title and
-  // the four '## ' sections may not, because the file must stay in the template.
-  if (/^#{1,2} /.test(lines[at] ?? '')) return `${op.op}: the line is a section heading: ${op.line.slice(0, 60)}`
+  const kept = keptLine(lines, at, op, work.offload)
+  if (kept !== undefined) return kept
   if (op.op === 'remove') {
+    if (inCriticalRules(lines, at)) work.retired.push(lines[at] ?? op.line)
     lines.splice(at, 1)
     return undefined
   }
   const text = bullet(op.text)
   const long = tooLong('replace', text)
   if (long !== undefined) return long
-  newBullets.push(text)
+  work.newBullets.push(text)
   lines[at] = text
   return undefined
 }
 
-function tally(ops: Op[], created: boolean, skipped: string[], refused: string[]): Changes {
+/** A retired CRITICAL RULES bullet is kept in history.md, so a wrong removal can be put back. */
+function retiredTopic(retired: readonly string[]): TopicAppend[] {
+  return retired.length === 0 ? [] : [{ file: 'history.md', append: `## Retired CRITICAL RULES\n\n${retired.join('\n')}` }]
+}
+
+function tally(ops: Op[], created: boolean, skipped: string[], refused: string[], retired: string[]): Changes {
   const count = (kind: Op['op']): number => ops.filter(o => o.op === kind).length
-  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created, skipped, refused }
+  return { added: count('add'), removed: count('remove'), replaced: count('replace'), created, skipped, refused, retired }
 }
 
 /** Lists every topic file the reply writes under '## Topic Files' when the file does not name it yet. */
@@ -522,19 +563,21 @@ export function apply(project: string, current: string | undefined, reply: Reply
   const done: Op[] = []
   const skipped: string[] = []
   const refused = [...reply.refused]
+  const work: Work = { newBullets, offload: atSoftCap(current), retired: [] }
   for (const op of reply.ops) {
     if (op.op !== 'add' && indexOfLine(lines, op.line) === -1) {
       skipped.push(op.line)
       continue
     }
-    const error = applyOp(lines, op, newBullets)
+    const error = applyOp(lines, op, work)
     if (error !== undefined) refused.push(error)
     else done.push(op)
   }
   if (done.length === 0 && reply.topics.length === 0) return { ok: true, changed: false, skipped, refused }
-  pointTopics(lines, reply.topics, newBullets, refused)
-  const changes = tally(done, current === undefined, skipped, refused)
-  return { ok: true, changed: true, text: `${lines.join('\n')}\n`, changes, newBullets, topics: reply.topics }
+  const topics = [...reply.topics, ...retiredTopic(work.retired)]
+  pointTopics(lines, topics, newBullets, refused)
+  const changes = tally(done, current === undefined, skipped, refused, work.retired)
+  return { ok: true, changed: true, text: `${lines.join('\n')}\n`, changes, newBullets, topics }
 }
 
 /** `2 skipped, not in the file: - Walk a backfill…; - Old note…` */
@@ -619,7 +662,8 @@ export function changeText(changes: Changes, topics: TopicAppend[]): string {
   const topicPart = files.length > 0 ? `; appended to ${files.join(', ')}` : ''
   const skippedPart = changes.skipped.length > 0 ? `; ${skippedText(changes.skipped)}` : ''
   const refusedPart = changes.refused.length > 0 ? `; refused: ${changes.refused.join('; ')}` : ''
-  return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}${skippedPart}${refusedPart}`
+  const retiredPart = changes.retired.length > 0 ? `; retired from CRITICAL RULES, kept in history.md: ${changes.retired.join('; ')}` : ''
+  return `MEMORY.md: ${parts.join(', ') || 'topic files only'}${topicPart}${skippedPart}${refusedPart}${retiredPart}`
 }
 
 /** How many characters of the last event the sidebar's second line holds. */
@@ -654,6 +698,7 @@ export function changeShort(changes: Changes, topics: TopicAppend[]): string {
   if (topics.length > 0) parts.push(topicNames(topics))
   if (changes.skipped.length > 0) parts.push(`${changes.skipped.length} skipped`)
   if (changes.refused.length > 0) parts.push(`${changes.refused.length} refused`)
+  if (changes.retired.length > 0) parts.push(`${changes.retired.length} rule(s) retired`)
   return parts.join(' ') || 'saved'
 }
 

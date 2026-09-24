@@ -209,7 +209,9 @@ async function save($: EngineInterface, state: State): Promise<void> {
   await writeTopics($, project, dir, result.topics)
   await $.fs.write(file, result.text)
   logEvent($, state, changeText(result.changes, result.topics))
-  await report($, state, changeShort(result.changes, result.topics), result.changes.refused.length + result.changes.skipped.length > 0 ? 'warn' : 'ok')
+  // A retired CRITICAL RULES bullet is yellow too, so the person sees a rule leave and can put it back.
+  const { refused, skipped, retired } = result.changes
+  await report($, state, changeShort(result.changes, result.topics), refused.length + skipped.length + retired.length > 0 ? 'warn' : 'ok')
 }
 
 /** Returns the session's memory context, or undefined when the project has no MEMORY.md. */

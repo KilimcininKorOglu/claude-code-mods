@@ -16,6 +16,7 @@ import {
   skeleton,
   topicFiles,
   validate,
+  type Op,
   type Reply,
 } from '../hooks/memory.ts'
 
@@ -121,7 +122,7 @@ describe('apply', () => {
     expect(r.text).toContain('- Run `make test` before a commit.\n- Use pnpm.\n\n## Architecture')
     expect(r.text).toContain('## Active Warnings\n\n- The cache is stale after a rebase.\n\n## Topic Files')
     expect(r.text).not.toContain('## Active Warnings\n\n- None yet.')
-    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false, skipped: [], refused: [] })
+    expect(r.changes).toEqual({ added: 2, removed: 0, replaced: 0, created: false, skipped: [], refused: [], retired: [] })
   })
 
   test('removes and replaces exact lines', async () => {
@@ -193,9 +194,42 @@ describe('apply', () => {
     if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
     expect(r.text).toContain('- Run `make test` before a commit.')
     expect(r.text).toContain('- New warning.')
-    expect(r.changes).toEqual({ added: 1, removed: 0, replaced: 0, created: false, skipped: ['- **Run `make test` before a commit.**'], refused: [] })
+    expect(r.changes).toEqual({ added: 1, removed: 0, replaced: 0, created: false, skipped: ['- **Run `make test` before a commit.**'], refused: [], retired: [] })
     expect(changeText(r.changes, [])).toBe('MEMORY.md: 1 added; 1 skipped, not in the file: - **Run `make test` before a commit.**')
     expect(changeShort(r.changes, [])).toBe('+1 1 skipped')
+  })
+
+  const RULE = '- Keep `network_mode: host`, because the user chose it.'
+  const WITH_RULE = FILE.replace('- Run `make test` before a commit.', `- Run \`make test\` before a commit.\n\n### Deploy\n\n${RULE}`)
+  const RULE_OPS: Op[] = [
+    { op: 'remove', line: RULE },
+    { op: 'replace', line: '- Run `make test` before a commit.', text: '- Run `make check` before a commit.' },
+    { op: 'remove', line: '- The API lives in `api/`.' },
+  ]
+
+  test('a save below the soft caps may retire a CRITICAL RULES bullet: history.md keeps it and both texts name it', async () => {
+    const r = apply('demo', WITH_RULE, reply({ ops: RULE_OPS }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).not.toContain(RULE)
+    expect(r.text).toContain('- Run `make check` before a commit.')
+    expect(r.text).toContain('- `history.md`.')
+    expect(r.topics).toEqual([{ file: 'history.md', append: `## Retired CRITICAL RULES\n\n${RULE}` }])
+    expect(r.changes).toMatchObject({ removed: 2, replaced: 1, refused: [], retired: [RULE] })
+    expect(changeText(r.changes, r.topics)).toBe(`MEMORY.md: 2 removed, 1 replaced; appended to history.md; retired from CRITICAL RULES, kept in history.md: ${RULE}`)
+    expect(changeShort(r.changes, r.topics)).toBe('-2 ~1 topic: history 1 rule(s) retired')
+  })
+
+  test('a save at the soft line cap only makes room, so it keeps every CRITICAL RULES bullet', async () => {
+    const filler = Array.from({ length: 160 }, (_, i) => `- Fact ${i}.`).join('\n')
+    const full = WITH_RULE.replace('- The API lives in `api/`.', `- The API lives in \`api/\`.\n${filler}`)
+    const r = apply('demo', full, reply({ ops: RULE_OPS }))
+    if (!r.ok || !r.changed) throw new Error(JSON.stringify(r))
+    expect(r.text).toContain(RULE)
+    expect(r.text).toContain('- Run `make check` before a commit.')
+    expect(r.text).not.toContain('- The API lives in `api/`.')
+    expect(r.topics).toEqual([])
+    expect(r.changes).toMatchObject({ removed: 1, replaced: 1, retired: [] })
+    expect(r.changes.refused).toEqual([`remove: the line is a CRITICAL RULES bullet, and this save only makes room: ${RULE}`])
   })
 
   test('adds a bullet under a subheading the file has, and refuses a heading it does not have', async () => {
@@ -431,14 +465,14 @@ describe('texts', () => {
   })
 
   test('changeText and changeShort name every change', async () => {
-    const changes = { added: 12, removed: 1, replaced: 0, created: false, skipped: [], refused: [] }
+    const changes = { added: 12, removed: 1, replaced: 0, created: false, skipped: [], refused: [], retired: [] }
     const topics = [{ file: 'history.md', append: 'x' }]
     expect(changeText(changes, topics)).toBe('MEMORY.md: 12 added, 1 removed; appended to history.md')
     expect(changeShort(changes, topics)).toBe('+12 -1 topic: history')
   })
 
   test('changeShort names at most three topic files and counts the rest', async () => {
-    const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [], refused: [] }
+    const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [], refused: [], retired: [] }
     const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
     expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
   })
