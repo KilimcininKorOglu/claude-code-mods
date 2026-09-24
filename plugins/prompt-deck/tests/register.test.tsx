@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On, PromptOrigin, PromptSubmitInput, RenderPropsOf } from 'claude-code'
 
 tier('user')
@@ -11,12 +11,23 @@ const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): Promp
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 100, scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['AbovePrompt']
 
-/** What reached the engine beneath the plugin, and what the plugin kept in the store. */
-type World = { entered: { text: string; origin?: PromptOrigin }[]; store: Record<string, unknown>; gitFails?: true; root: string }
+/**
+ * What reached the engine beneath the plugin, by the way it went (a typed or plugin prompt, or the mod's
+ * `send` command), the lines it logged, and what it kept in the store.
+ */
+type World = {
+  entered: { text: string; origin?: PromptOrigin; via: 'prompt' | 'send' }[]
+  logs: string[]
+  store: Record<string, unknown>
+  gitFails?: true
+  sendFails?: true
+  root: string
+  clock: MockClock
+}
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { entered: [], store, root: '/Users/u/app' }
-  mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
+  const clock = mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') })
+  const w: World = { entered: [], logs: [], store, root: '/Users/u/app', clock }
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
@@ -35,9 +46,15 @@ function world(on: On, store: Record<string, unknown> = {}): World {
     return <Text>{''}</Text>
   })
   on('prompt.submit', (_, e) => {
-    w.entered.push({ text: e.text, origin: e.origin })
+    w.entered.push({ text: e.text, origin: e.origin, via: 'prompt' })
     return { text: e.text, origin: e.origin }
   })
+  on('command.run', { command: 'prompt-deck:send' }, (_, e) => {
+    if (w.sendFails === true) throw new Error('unknown command')
+    w.entered.push({ text: e.args, origin: e.origin, via: 'send' })
+    return {}
+  })
+  on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   return w
 }
 
@@ -60,7 +77,8 @@ describe('prompt-deck', () => {
     expect(button?.props.hotkey).toBe('1')
     expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (3)')
     await ui.press({ key: 'deck:1' })
-    expect(w.entered.at(-1)?.text).toBe('commitle')
+    await w.clock.settle()
+    expect(w.entered.at(-1)).toEqual({ text: 'commitle', origin: { kind: 'plugin', name: 'prompt-deck' }, via: 'send' })
     expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (4)')
   })
 
@@ -103,6 +121,7 @@ describe('prompt-deck', () => {
     expect((await ui.find({ type: 'Button', key: 'deck:2' }))?.props.label).toBe('devam et')
     expect((await $.command.run(run('list'))).text).toBe(`on · project app\n1. ${long} (pinned)\n2. devam et (4)`)
     await ui.press({ key: 'deck:1' })
+    await w.clock.settle()
     expect(w.entered.at(-1)?.text).toBe(long)
     expect((await $.command.run(run('remove 1'))).text).toBe('removed; 1 prompt(s) left')
     expect(w.store['pins:/Users/u/app']).toEqual([])
@@ -139,5 +158,24 @@ describe('prompt-deck', () => {
     expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. devam et (7)')
     expect(w.store['counts']).toBe(undefined)
     expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 7, last: 5 } })
+  })
+
+  test('a prompt that reads as a command chain, and a send the engine refuses, go out as a plugin prompt', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const chain = 'testleri çalıştır && /commit'
+    expect((await $.command.run(run(`add ${chain}`))).text).toBe('pinned at 1 of 5')
+    expect((await $.command.run(run('add devam et'))).text).toBe('pinned at 2 of 5')
+    const ui = await band($)
+    await ui.press({ key: 'deck:1' })
+    await w.clock.settle()
+    expect(w.entered.at(-1)?.text).toBe(chain)
+    expect(w.entered.at(-1)?.via).toBe('prompt')
+    w.sendFails = true
+    await ui.press({ key: 'deck:2' })
+    await w.clock.settle()
+    expect(w.entered.at(-1)?.text).toBe('devam et')
+    expect(w.entered.at(-1)?.via).toBe('prompt')
+    expect(w.logs.at(-1)).toContain('the send command did not run, the prompt goes out as a plugin prompt')
   })
 })

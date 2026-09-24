@@ -13,9 +13,9 @@ Bu projede sık gönderdiğiniz kısa prompt'ları öğrenen ve onları, elle sa
 7. 0.2.0 öncesi bir sürümün deck'i her projeyi tek bir yerde sayıyordu. 0.2.0'ı yükleyen ilk proje o sayımları bir kere alır ve bunu bir satırda söyler; diğer her proje boş başlar.
 8. 0.5.0 öncesi bir sürümün deck'i yalnız proje adıyla key'leniyordu. 0.5.0'ı yükleyen o addaki ilk checkout onu bir kere kendi path'inin key'ine taşır ve bunu bir satırda söyler; aynı addaki başka bir checkout boş başlar.
 
-Engine basılan bir prompt'u `The prompt-deck plugin sent a message:` olarak ve altında prompt ile gösterir; model onu bir user turn olarak cevaplar (2.1.278 üzerinde ölçüldü). Bir plugin'in kendi `$.prompt.submit` çağrısı, çağıran plugin dışındaki her hook'a ulaşır, bu yüzden mod plugin adını dışarıda bırakamaz.
+Bir basış mod'un kendi markdown komutunu, `/prompt-deck:send <prompt>` komutunu çalıştırır; bu komutun gövdesi yalnız argümanlarıdır. Transcript o komut satırını gösterir ve model prompt'u yazıldığı gibi, yazılmış bir slash komutu gibi okur (2.1.282 üzerinde ölçüldü). `&& /<name>` içeren bir prompt orada bir komut zinciri olarak okunurdu, bu yüzden bir plugin prompt'u olarak gider. Engine'in komutunu reddettiği bir basış da öyle gider ve bunu söyleyen bir satır yazılır. Model bir plugin prompt'unu `The prompt-deck plugin sent a message:` çerçevesi içinde okur.
 
-Canlı kontrolde üç kere gönderilen bir prompt `1: reply with the single word ok` olarak göründü, `1` tuşu onu gönderdi, model cevapladı ve `/prompt-deck` 4 kullanım gösterdi.
+Canlı kontrolde sabitlenmiş bir `Yalnız tamam kelimesini yaz.` `1: Yalnız tamam kelimesini yaz.` olarak göründü, `1` tuşu onu `/prompt-deck:send Yalnız tamam kelimesini yaz.` olarak gönderdi ve model prompt'u çerçevesiz okuyup `tamam` cevabını verdi.
 
 ## Komut
 
@@ -25,6 +25,9 @@ Canlı kontrolde üç kere gönderilen bir prompt `1: reply with the single word
     /prompt-deck remove <n>     listenin n. sırasındaki prompt'u unutur, sabitlenmiş ya da sayılan
     /prompt-deck clear          her prompt'u unutur
     /prompt-deck on | off       varsayılan on; off sayımları korur
+    /prompt-deck:send <prompt>  bir basışın çalıştırdığı komut; yazılırsa prompt'u yazıldığı gibi gönderir
+
+`/prompt-deck:send` mod'un ikinci komutudur ve mod başına tek komut kuralının istisnasıdır, çünkü model'e plugin çerçevesi olmadan prompt veren tek yol bir markdown komutudur.
 
 ## Kurulum
 
@@ -41,16 +44,16 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, command.run{command=deck}, prompt.submit, ui.render{component=AbovePrompt}
-    ❯ ./register.tsx calls: $.clock.now (via countUse), $.command.register, $.process.run (via resolveRoot), $.prompt.submit (via sendPressed), $.session.cwd (via resolveRoot), $.store.delete (via adoptLegacy, adoptNamed), $.store.get (via adoptLegacy, adoptNamed, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy, adoptNamed), $.ui.resolve
+    ❯ ./register.tsx hooks: session.start, command.run{command=prompt-deck}, prompt.submit, ui.render{component=AbovePrompt}
+    ❯ ./register.tsx calls: $.clock.after (via sendPrompt), $.clock.now (via countUse), $.command.register, $.command.run (via sendPrompt), $.process.run (via resolveRoot), $.prompt.submit (via submitPrompt), $.session.cwd (via resolveRoot), $.store.delete (via adoptLegacy, adoptNamed), $.store.get (via adoptLegacy, adoptNamed, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy, adoptNamed, sendPrompt, submitPrompt), $.ui.resolve
 
 Reach L2, git çalıştırır ve Claude'u sürer: bir basış bir prompt gönderir.
 
     1. Okur:     gönderilen her prompt'un metnini ve origin'ini; session'ın çalışma dizinini
     2. Çalıştırır: git rev-parse --show-toplevel, session başına bir kere, projenin kökünü bulmak için
-    3. Gönderir: saklanmış bir prompt'u user turn olarak, yalnız kişinin basışıyla; makineden hiçbir şey çıkmaz
+    3. Gönderir: saklanmış bir prompt'u /prompt-deck:send ile user turn olarak, yalnız kişinin basışıyla; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde, proje başına, kullanım sayıları ve son kullanım zamanıyla en fazla 200 kısa prompt, en fazla 5 sabitlenmiş prompt ve on/off ayarı
     5. Düşman girdi: yalnız composer ya da Remote Control'den gelen prompt'lar sayılır ve yalnız yazılmış bir /prompt-deck add bir prompt'u sabitler; yani bir notification, bir peer ya da bir plugin banda prompt koyamaz
 

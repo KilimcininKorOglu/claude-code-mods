@@ -1,12 +1,17 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { band, countsKey, fit, listText, MAX_KEPT, mergeCounts, normalize, normalizePin, pinsKey, projectName, record, removeAt, type Counts } from '../hooks/deck.ts'
+import { band, countsKey, fit, listText, MAX_KEPT, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from '../hooks/deck.ts'
 
 tier('user')
 
 const uses = (list: [string, number][]): Counts => Object.fromEntries(list.map(([t, n], i) => [t, { n, last: i }]))
 
 describe('deck', () => {
+  test('reads a prompt as a command chain only when it holds && and a slash command name', async () => {
+    for (const t of ['test && /commit', '&& /x', 'a &&/b c']) expect(readsAsChain(t), t).toBe(true)
+    for (const t of ['a && b', 'a & /b', 'a &&/', 'path a&&/b']) expect(readsAsChain(t), t).toBe(false)
+  })
+
   test('keeps only a short one-line prompt that is not a slash command', async () => {
     expect(normalize('  commitle  ')).toBe('commitle')
     for (const t of ['', '   ', '/prompt-deck', 'a\nb', 'x'.repeat(81)]) expect(normalize(t), JSON.stringify(t)).toBe(undefined)

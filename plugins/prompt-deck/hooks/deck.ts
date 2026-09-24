@@ -31,7 +31,15 @@ export function normalizePin(text: string): string | undefined {
   return t === '' || t.includes('\n') || t.startsWith('/') ? undefined : t
 }
 
-const byUse = ([, a]: [string, { n: number; last: number }], [, b]: [string, { n: number; last: number }]): number => b.n - a.n || b.last - a.last
+/**
+ * Whether a prompt holds `&& /<name>` and so reads as a chain of slash commands once it is a command's
+ * arguments, the pattern the slash-chain mod runs as a second step.
+ */
+export function readsAsChain(text: string): boolean {
+  return /(?:^|\s)&&\s*\/[A-Za-z0-9_:.-]+(?=\s|$)/.test(text)
+}
+
+const byUse =([, a]: [string, { n: number; last: number }], [, b]: [string, { n: number; last: number }]): number => b.n - a.n || b.last - a.last
 
 /** Every kept prompt, the most used first, the latest first on a tie. */
 export function ranked(counts: Counts): string[] {

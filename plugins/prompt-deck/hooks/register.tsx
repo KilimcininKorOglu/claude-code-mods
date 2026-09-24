@@ -1,9 +1,12 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { BAND_SIZE, band, countsKey, fit, listText, mergeCounts, normalize, normalizePin, pinsKey, projectName, record, removeAt, type Counts } from './deck.ts'
+import { BAND_SIZE, band, countsKey, fit, listText, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from './deck.ts'
 
 /** The key the mod used before the counts were split per project. */
 const LEGACY_KEY = 'counts'
 const ENABLED_KEY = 'enabled'
+
+/** The mod's markdown command (`commands/send.md`), whose body is its arguments alone. */
+const SEND_COMMAND = 'prompt-deck:send'
 
 const USAGE = 'expects nothing (the band), list, add <text>, remove <n>, clear, on or off'
 
@@ -94,13 +97,34 @@ async function countUse($: EngineInterface, state: State, text: string): Promise
   await saveCounts($, state, record(stored, text, await $.clock.now()))
 }
 
+/** A prompt the model reads inside a `The prompt-deck plugin sent a message:` frame. */
+function submitPrompt($: EngineInterface, text: string): void {
+  $.prompt.submit({ text }).catch((err: unknown) => $.ui.log(`the prompt was not sent: ${String(err)}`))
+}
+
+/**
+ * Sends a prompt through the mod's own `send` command, so the model reads the text alone, as the person
+ * would type it. The command runs from a timer, because the engine refuses `$.command.run` inside a hook
+ * the turn waits on. A prompt that reads as a command chain, and a run the engine refuses, go out as a
+ * plugin prompt instead.
+ */
+function sendPrompt($: EngineInterface, text: string): void {
+  if (readsAsChain(text)) return submitPrompt($, text)
+  $.clock.after(0, () => {
+    $.command.run({ command: SEND_COMMAND, args: text }).catch((err: unknown) => {
+      $.ui.log(`the send command did not run, the prompt goes out as a plugin prompt: ${String(err)}`)
+      submitPrompt($, text)
+    })
+  })
+}
+
 /**
  * Sends a pressed prompt and counts the press here, because the engine passes the plugin's own
- * `$.prompt.submit` through every hook but this plugin's (measured on 2.1.278).
+ * `$.command.run` through every hook but this plugin's (measured on 2.1.282).
  */
 async function sendPressed($: EngineInterface, state: State, text: string): Promise<void> {
   await countUse($, state, text)
-  await $.prompt.submit({ text })
+  sendPrompt($, text)
 }
 
 async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
