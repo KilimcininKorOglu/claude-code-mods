@@ -16,7 +16,7 @@ So the mod does two things:
    - A file with no placeholder is compared with the engine's text. When they differ, the file's text takes the place of the engine's copy, and the arguments the engine added after it (`ARGUMENTS: ...`) stay. The engine then sends the new text, also on a Skill tool call.
    - A file with placeholders (`$ARGUMENTS`, `$1`, `${...}`, `` !`...` ``) cannot be compared, because the engine filled them in. When the file was written after the session started, the engine's filled text stays and the file's current text follows it, with a note that it replaces the instructions above and that the arguments above still apply.
    - A skill or command that is not called again is not sent again.
-2. It records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and only a path with `/rules/` in it counts), and the global `CLAUDE.md` (`~/.claude/CLAUDE.md`, under `CLAUDE_CONFIG_DIR` when it is set). A project's `CLAUDE.md` does not count. At each prompt you send, a rules file written since the session read it reaches the model with that prompt, as a note only the model reads: the file, and its current text, which replaces the earlier one. Each change is sent once.
+2. It records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and only a path with `/rules/` in it counts), and the global `CLAUDE.md` (`~/.claude/CLAUDE.md`, under `CLAUDE_CONFIG_DIR` when it is set). A project's `CLAUDE.md` does not count. At each prompt you send, a rules file whose text changed since the session read it reaches the model with that prompt (a file written again with the same text sends nothing), as a note only the model reads: the file, and its current text, which replaces the earlier one. Each change is sent once.
 
 You read one line per event in the [sidebar](../sidebar) stream, or in the transcript while the sidebar is closed:
 
@@ -49,7 +49,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.281:
 
     ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=instructions}, prompt.submit
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody, recordRules), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, it reads files.

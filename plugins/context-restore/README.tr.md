@@ -16,7 +16,7 @@ Bu yüzden mod iki şey yapar:
    - Placeholder taşımayan bir dosya engine'in metniyle karşılaştırılır. Farklıysa engine'in kopyasının yerine dosyanın metni konur ve engine'in arkasına eklediği argümanlar (`ARGUMENTS: ...`) kalır. Engine o zaman yeni metni gönderir, bir Skill tool çağrısında da.
    - Placeholder taşıyan bir dosya (`$ARGUMENTS`, `$1`, `${...}`, `` !`...` ``) karşılaştırılamaz, çünkü engine onları doldurmuştur. Dosya session başladıktan sonra yazıldıysa engine'in doldurulmuş metni kalır ve dosyanın güncel metni onun ardından gelir, yukarıdaki talimatların yerine geçtiğini ve yukarıdaki argümanların hâlâ geçerli olduğunu söyleyen bir not ile.
    - Yeniden çağrılmayan bir skill ya da command yeniden gönderilmez.
-2. `instructions` attachment'ının taşıdığı her rules dosyasını kaydeder (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yol sayılır), ve global `CLAUDE.md` dosyasını (`~/.claude/CLAUDE.md`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altında). Bir projenin `CLAUDE.md` dosyası sayılmaz. Gönderdiğiniz her prompt'ta, session onu okuduktan sonra yazılmış bir rules dosyası o prompt ile modele yalnız modelin okuduğu bir not olarak gider: dosya ve öncekinin yerine geçen güncel metni. Her değişiklik bir kere gönderilir.
+2. `instructions` attachment'ının taşıdığı her rules dosyasını kaydeder (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yol sayılır), ve global `CLAUDE.md` dosyasını (`~/.claude/CLAUDE.md`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altında). Bir projenin `CLAUDE.md` dosyası sayılmaz. Gönderdiğiniz her prompt'ta, session onu okuduktan sonra metni değişmiş bir rules dosyası (aynı metinle yeniden yazılan bir dosya hiçbir şey göndermez) o prompt ile modele yalnız modelin okuduğu bir not olarak gider: dosya ve öncekinin yerine geçen güncel metni. Her değişiklik bir kere gönderilir.
 
 Her olay için [sidebar](../sidebar) stream'inde, sidebar kapalıyken transcript'te tek satır okursunuz:
 
@@ -49,7 +49,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=instructions}, prompt.submit
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody, recordRules), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, dosya okur.

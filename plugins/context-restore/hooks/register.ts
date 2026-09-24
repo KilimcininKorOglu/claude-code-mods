@@ -7,9 +7,9 @@ const USAGE = 'expects nothing (the status), on or off'
 
 /**
  * The on/off setting, the directory the session started in, the host's config directory, when the session
- * started, every rules file it read with the time it was last written, and the last thing the mod did.
+ * started, every rules file it read with the time it was last written and its text, and the last thing the mod did.
  */
-type State = { enabled: boolean; root: string; config: string; startedAt: number; rules: Map<string, number>; last?: string }
+type State = { enabled: boolean; root: string; config: string; startedAt: number; rules: Map<string, { at: number; text: string }>; last?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -73,25 +73,30 @@ async function fresherText($: EngineInterface, state: State, name: string, text:
   return currentText(text, await readBody($, file), file, at > state.startedAt)
 }
 
-/** Records the rules files and the global CLAUDE.md the session read, with the time each was last written. */
+/** Records the rules files and the global CLAUDE.md the session read, with the time each was last written and its text. */
 async function recordRules($: EngineInterface, state: State, text: string): Promise<void> {
   for (const path of rulePathsOf(text, `${state.config}/CLAUDE.md`)) {
     const at = await mtimeOf($, path)
-    if (at !== undefined) state.rules.set(path, at)
+    if (at !== undefined) state.rules.set(path, { at, text: String(await $.fs.read(path)) })
   }
 }
 
 /** One rules file that changed on disk: its label, its path and its new text. */
 type Change = { label: string; path: string; text: string }
 
-/** The rules files that changed on disk since the session read them; each record takes the new time. */
+/**
+ * The rules files whose text changed on disk since the session read them; each record takes the new time
+ * and text. A file written again with the same text (an editor's save, a checkout) sends nothing, because
+ * its whole text would reach the model for no change (measured: a touched CLAUDE.md sent 21 KB).
+ */
 async function changedRules($: EngineInterface, state: State): Promise<Change[]> {
   const out: Change[] = []
   for (const [path, seen] of state.rules) {
     const at = await mtimeOf($, path)
-    if (at === undefined || at === seen) continue
-    state.rules.set(path, at)
-    out.push({ label: baseName(path), path, text: String(await $.fs.read(path)) })
+    if (at === undefined || at === seen.at) continue
+    const text = String(await $.fs.read(path))
+    state.rules.set(path, { at, text })
+    if (text !== seen.text) out.push({ label: baseName(path), path, text })
   }
   return out
 }

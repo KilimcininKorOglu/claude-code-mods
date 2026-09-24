@@ -138,6 +138,19 @@ describe('context-restore', () => {
     expect(w.notes.at(-1)).toEqual([])
   })
 
+  test('a rules file written again with the same text sends nothing, and its next real change does', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await $.prompt.attachment({ type: 'instructions', text: `Contents of ${RULES_FILE} (user's private global instructions for all projects):\n\nUse parameters.`, origin: { kind: 'engine' } })
+    w.files.set(RULES_FILE, { text: 'Use parameters.', mtimeMs: T0 + 10 })
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([])
+    expect(w.logs).toEqual([])
+    w.files.set(RULES_FILE, { text: 'Use parameters, always.', mtimeMs: T0 + 20 })
+    await prompt($)
+    expect(w.notes.at(-1)?.[0]?.endsWith('\n\nUse parameters, always.')).toBe(true)
+  })
+
   test('off leaves the engine\'s text as it is', async ($, on) => {
     const w = world(on)
     await started($)
