@@ -130,6 +130,29 @@ describe('slash-chain', () => {
     expect(w.ran).toEqual(['tiny'])
   })
 
+  test('a single command the person types does not reach the mod, so a waiting chain goes on', async ($, on) => {
+    const { w, clock } = world($, on)
+    await started($)
+    await $.command.run(typed('tiny', '&& /context'))
+    await $.command.run(typed('cost', ''))
+    expect(w.logs).toEqual(['1/2: /tiny'])
+    await $.turn.complete(turn('answer'))
+    await settle(clock)
+    expect(w.ran).toEqual(['tiny', 'cost', 'context'])
+    expect(w.logs.at(-1)).toBe('all 2 command(s) ran')
+  })
+
+  test('a new chain the person types ends the waiting one and runs its own', async ($, on) => {
+    const { w, clock } = world($, on)
+    await started($)
+    await $.command.run(typed('tiny', '&& /context'))
+    await $.command.run(typed('cost', '&& /review'))
+    await settle(clock)
+    expect(w.logs.slice(0, 3)).toEqual(['1/2: /tiny', 'cancelled; not run: /context', '1/2: /cost'])
+    expect(w.ran).toEqual(['tiny', 'cost', 'review'])
+    expect(w.logs.at(-1)).toBe('all 2 command(s) ran')
+  })
+
   test('off leaves the command as the engine handed it', async ($, on) => {
     const { w, clock } = world($, on)
     await started($)

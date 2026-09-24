@@ -18,7 +18,7 @@
        all 2 command(s) ran
        stopped after /tiny: its turn ended with aborted; not run: /context
 
-5. Bir zincir beklerken yazdığınız bir prompt ya da komut onu iptal eder: `cancelled; not run: /context`. Yeni bir zincir oradan başlar.
+5. Bir zincir beklerken yazdığınız bir prompt ya da yeni bir zincir onu iptal eder: `cancelled; not run: /context`. Yeni zincir oradan başlar. Tek başına yazdığınız bir komut (`/cost`) bekleyen zincirin yanında çalışır ve onu iptal etmez, çünkü mod yalnız argümanlarında `&& /<name>` olan komutları hook'lar. Engine bir komutun çıktısının önüne o komutu hook'layan her plugin'in adını yazar. Daha geniş bir hook, diğer modların çıktısına da bu modun adını eklerdi.
 
 Model bu mod'dan not almaz.
 
@@ -45,7 +45,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, command.run, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit
+    ❯ ./register.ts hooks: session.start, command.run{command=slash-chain}, command.run{args=/"(?:^|\\s)&&\\s*\\/[A-Za-z0-9_:.-]+(?=\\s|$)"/}, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit
     ❯ ./register.ts calls: $.clock.after (via advance), $.command.register, $.command.run (via runStep), $.store.get, $.store.set (via setEnabled), $.ui.log (via advance, cancel, runFirst, stop)
 
 Reach L2, Claude'u yönlendirir: zincirlediğiniz slash komutlarını çalıştırır.

@@ -18,7 +18,7 @@ A Claude Code Mod that runs slash commands joined with `&&` one after another, a
        all 2 command(s) ran
        stopped after /tiny: its turn ended with aborted; not run: /context
 
-5. A prompt or a command you type while a chain waits cancels it: `cancelled; not run: /context`. A new chain starts from there.
+5. A prompt or a new chain you type while a chain waits cancels it: `cancelled; not run: /context`. The new chain starts from there. A single command you type (`/cost`) runs beside the waiting chain and does not cancel it, because the mod hooks only the commands whose arguments hold `&& /<name>`. The engine writes the name of every plugin that hooks a command in front of that command's output, so a wider hook would sign every other mod's output too.
 
 The model gets no note from this mod.
 
@@ -45,7 +45,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
-    ❯ ./register.ts hooks: session.start, command.run, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit
+    ❯ ./register.ts hooks: session.start, command.run{command=slash-chain}, command.run{args=/"(?:^|\\s)&&\\s*\\/[A-Za-z0-9_:.-]+(?=\\s|$)"/}, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit
     ❯ ./register.ts calls: $.clock.after (via advance), $.command.register, $.command.run (via runStep), $.store.get, $.store.set (via setEnabled), $.ui.log (via advance, cancel, runFirst, stop)
 
 Reach L2, it drives Claude: it runs the slash commands you chained.
