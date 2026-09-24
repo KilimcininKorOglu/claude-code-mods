@@ -239,7 +239,7 @@ export function seedFromResume(s: State, e: ResumeFields, now: number): string |
   s.compacted = false
   if (e.prompt_cache_likely_expired !== true || s.ctx < BIG_TOKENS) return null
   const usd = typeof e.estimated_cache_write_usd === 'number' ? e.estimated_cache_write_usd : writeUsd(s.ctx, priceNow(s))
-  return `resuming cold. The first message re-writes ${fmtCount(s.ctx)} tokens, about ${fmtUsd(usd)}.`
+  return `the cache expired while the session was closed. The first message will re-write ${fmtCount(s.ctx)} tokens, about ${fmtUsd(usd)}.`
 }
 
 /**

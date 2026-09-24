@@ -92,7 +92,7 @@ describe('resume and clear', () => {
       source: 'resume', model: 'claude-fable-5-1', context_tokens: 396_113,
       seconds_since_last_response: 3 * 3600, prompt_cache_likely_expired: true, estimated_cache_write_usd: 7.92,
     }, NOW)
-    expect(line).toBe('resuming cold. The first message re-writes 396,113 tokens, about $7.92.')
+    expect(line).toBe('the cache expired while the session was closed. The first message will re-write 396,113 tokens, about $7.92.')
     expect(s.ctx).toBe(396_113)
     expect(s.lastRequestAt).toBe(NOW - 3 * HOUR)
     expect(s.model).toBe('claude-fable-5-1')
