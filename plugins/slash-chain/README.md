@@ -60,6 +60,8 @@ Reach L2, it drives Claude: it runs the slash commands you chained.
 
 - The steps after the first run as a plugin (`origin.kind: 'plugin'`), so a command that answers only the person refuses there. `/disk-janitor delete <path>` is one.
 - A local command succeeds when it does not throw. The engine gives no other error signal, so a command that prints an error and returns counts as done.
+- A skill or prompt command succeeds when its turn ends with `answer`. The engine gives a turn no exit code, so a model that says it failed and ends its turn normally counts as done: measured on 2.1.281, `/fail && /exit`, where `/fail` answered `I could not write CLAUDE.md.`, ran `/exit`, and the session closed. A turn you stop with Esc does stop the chain: `/slow && /exit` stopped with `stopped after /slow: its turn ended with aborted; not run: /exit`, and the session stayed open.
+- `/exit` runs as a later step: the engine takes it from a plugin, and the session closes.
 - An unknown first command never reaches the mod: the engine answers `Unknown skill`, and nothing after it runs. An unknown later command stops the chain with the engine's error: `stopped after /x: it failed: $.command.run: no command named /x in this session`.
 - Only `&&` is read. `||`, `;` and `|` stay in the arguments.
 - A focused pane is recognized when it opens during its step. A pane a command opens later, from a timer, is not waited for.

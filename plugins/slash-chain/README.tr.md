@@ -60,6 +60,8 @@ Reach L2, Claude'u yönlendirir: zincirlediğiniz slash komutlarını çalışt�
 
 - İlkinden sonraki adımlar plugin olarak çalışır (`origin.kind: 'plugin'`), bu yüzden yalnız kişiye cevap veren bir komut orada reddeder. `/disk-janitor delete <path>` bunlardan biridir.
 - Yerel bir komut throw etmediğinde başarılı sayılır. Engine başka bir hata işareti vermez, bu yüzden bir hata yazıp dönen bir komut bitmiş sayılır.
+- Bir skill ya da prompt komutu, turn'ü `answer` ile bittiğinde başarılı sayılır. Engine bir turn'e exit code vermez, bu yüzden başarısız olduğunu söyleyip turn'ünü normal bitiren bir model bitmiş sayılır: 2.1.281 üzerinde ölçüldü, `/fail` komutu `I could not write CLAUDE.md.` cevabını verdiği hâlde `/fail && /exit` zinciri `/exit` komutunu çalıştırdı ve session kapandı. Esc ile durdurduğunuz bir turn ise zinciri durdurur: `/slow && /exit` zinciri `stopped after /slow: its turn ended with aborted; not run: /exit` ile durdu ve session açık kaldı.
+- `/exit` sonraki bir adım olarak çalışır: engine onu bir plugin'den kabul eder ve session kapanır.
 - Bilinmeyen bir ilk komut mod'a hiç ulaşmaz: engine `Unknown skill` cevabını verir, ve arkasındaki hiçbir şey çalışmaz. Bilinmeyen sonraki bir komut zinciri engine'in hatasıyla durdurur: `stopped after /x: it failed: $.command.run: no command named /x in this session`.
 - Yalnız `&&` okunur. `||`, `;` ve `|` argümanlarda kalır.
 - Focus alan bir pane, adımı sırasında açıldığında tanınır. Bir komutun sonradan, bir timer'dan açtığı bir pane beklenmez.
