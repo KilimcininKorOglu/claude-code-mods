@@ -104,7 +104,8 @@ describe('limit-watch', () => {
     const w = world(on)
     w.setLimits([fiveHour(23), { kind: 'seven_day', percentUsed: 8, resetsAt: '2026-09-20T00:00:00Z' }])
     await $.session.start(session)
-    expect(w.statuses.at(-1)).toBe('5h 23%, reset in 3h · 7d 8%, reset in 1d 12h · measuring the pace')
+    // The 7-day pace is the cycle's own average, so it needs no samples: 8% in 5.5 days fills after the reset.
+    expect(w.statuses.at(-1)).toBe('5h 23%, reset in 3h · 7d 8%, reset in 1d 12h · no limit fills before its reset')
   })
 
   test('says so when the account reports no limits', async ($, on) => {
@@ -230,7 +231,8 @@ describe('limit-watch', () => {
       lines: [
         { text: '5h 23%, reset in 3h', kind: 'ok' },
         { text: '7d 88%, reset in 1d 12h', kind: 'warn' },
-        { text: 'measuring the pace', kind: 'dim' },
+        // 88% after 5.5 days of the cycle is 2/3% an hour, so the last 12% take 18 hours.
+        { text: '7d hits 100% in ~18h', kind: 'warn' },
       ],
     })
     expect(w.statuses.at(-1)).toBe(undefined)

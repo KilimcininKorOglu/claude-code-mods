@@ -38,8 +38,8 @@ Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir ses
 
 - `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana döngü turundan sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başlangıcında ya da timer'da başarısız olan bir okuma bir kere `cannot read the usage limits: <error>` olarak log'lanır ve 60 saniyelik timer çalışmaya devam eder.
 - Her okuma bir örnektir (`{ at, percent }`) ve `$.store` içinde tutulur, böylece bir restart hızı korur.
-- Hız, yakın bir aralığın ilk ve son örneği arasındaki yüzde değişimidir, saat başına. Aralık 5 saatlik limit için son bir saat, 7 günlük ve spend limitleri için son 24 saattir; böylece hız bugün nasıl çalıştığınızı izler, cycle'ın başında nasıl çalıştığınızı değil.
-- Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (7 günlük ve spend limitleri) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
+- 5 saatlik ve spend limitleri hızı örneklerinden okur: yakın bir aralığın ilk ve son örneği arasındaki yüzde değişimi, saat başına. Aralık 5 saatlik limit için son bir saat, spend limiti için son 24 saattir; böylece hız bugün nasıl çalıştığınızı izler. Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (spend limiti) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
+- 7 günlük limit hızı cycle'ın şimdiye kadarki ortalaması olarak okur: yüzde, cycle'ın başından beri geçen süreye bölünür (`resetsAt` eksi 7 gün). Geceler, boş saatler ve hiçbir session'ın çalışmadığı süre de bu süreye girer, yani hız için örnek gerekmez. Hız cycle'ın ikinci gününden itibaren gösterilir. Bu kuraldan önce ölçüldü: 2,4 yoğun saatten sonra %4, `7d hits 100% in ~2d 8h` olarak okundu, çünkü o saatlerin hızı iki güne aralıksız yayıldı; aynı okumanın cycle ortalaması limiti yaklaşık 6 günde doldurur.
 - Status line'ın son kısmı %100'e kalan süre için `(100 - percent) / pace` kullanır. O süreden önce reset olan bir limit dolan sayılmaz.
 - Yeni bir cycle, `resetsAt` 5 dakikadan fazla kaydığında başlar; `resetsAt` taşımayan bir limit içinse yüzde yarım puandan fazla düştüğünde. Yeni bir cycle o limitin örneklerini ve uyarılarını temizler.
 - Bilinmeyen biçimde saklanmış bir değer tek bir log satırıyla bildirilir ve örnekler baştan başlar.
@@ -69,7 +69,7 @@ Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
@@ -85,7 +85,8 @@ Reach L0, çizer ve hatırlar.
 ## Sınırlar
 
 - Yeni bir session, Claude bir kere cevap verene kadar okuma taşımaz, çünkü rakamlar son API cevabından gelir.
-- 7 günlük limit ancak 2 saatlik örnekten sonra hız gösterir.
+- 7 günlük limit cycle'ının ilk 24 saatinde hız göstermez.
+- 7 günlük hız, cycle'ın `resetsAt`'ten tam 7 gün önce başladığını varsayar.
 - Bir spend limit %100'ü geçebilir. Bar dolu yerde durur; yüzde durmaz.
 - `/limit-watch` tek bir pane'i açıp kapar. İkinci çalıştırma onu kapatır.
 

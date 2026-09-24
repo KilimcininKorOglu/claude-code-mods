@@ -25,13 +25,14 @@ export type Tracks = Record<string, Track>
 
 /**
  * How one kind of limit is named and measured. `lookback` is the span of recent samples the pace
- * is read from. `minSpan` is the shortest span that gives a pace worth showing.
+ * is read from. `minSpan` is the shortest span that gives a pace worth showing. A limit with a
+ * `cycle` reads its pace as the average since the cycle began, `resetsAt` minus `cycle`, instead.
  */
-export type Profile = { short: string; name: string; lookback: number; minSpan: number }
+export type Profile = { short: string; name: string; lookback: number; minSpan: number; cycle?: number }
 
 const PROFILES: Record<string, Profile> = {
   five_hour: { short: '5h', name: '5-hour limit', lookback: HOUR, minSpan: 10 * MINUTE },
-  seven_day: { short: '7d', name: '7-day limit', lookback: DAY, minSpan: 2 * HOUR },
+  seven_day: { short: '7d', name: '7-day limit', lookback: DAY, minSpan: DAY, cycle: 7 * DAY },
   spend_limit: { short: 'spend', name: 'Spend limit', lookback: DAY, minSpan: 2 * HOUR },
 }
 
@@ -104,6 +105,21 @@ export function pace(track: Track | undefined, kind: string, now: number): Pace 
   const span = first !== undefined && last !== undefined ? last.at - first.at : 0
   if (first === undefined || last === undefined || span < minSpan) return { missing: minSpan - span }
   return { perHour: ((last.percent - first.percent) / span) * HOUR, span }
+}
+
+/**
+ * The pace a forecast uses. A limit with a `cycle` and a reset time averages its percentage over
+ * the whole cycle so far, nights and idle hours included, because a few busy hours of samples
+ * stretched over days put the 7-day limit at 100% days too early (measured: 4% after 2.4 busy hours
+ * read as full in 2d 8h). Any other limit reads the pace from its samples.
+ */
+export function limitPace(limit: SessionRateLimit, track: Track | undefined, now: number): Pace {
+  const { cycle, minSpan } = profile(limit.kind)
+  const reset = resetTime(limit)
+  if (cycle === undefined || reset === undefined) return pace(track, limit.kind, now)
+  const span = now - (reset - cycle)
+  if (span < minSpan) return { missing: minSpan - span }
+  return { perHour: (limit.percentUsed / span) * HOUR, span }
 }
 
 export type Forecast =
@@ -192,7 +208,7 @@ function limitPart(limit: SessionRateLimit, now: number): string {
 
 /** The tail names the limit that fills first, or says why none does. */
 function statusTail(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): string {
-  const forecasts = limits.map(l => ({ limit: l, f: forecast(l, pace(tracks[l.kind], l.kind, now), now) }))
+  const forecasts = limits.map(l => ({ limit: l, f: forecast(l, limitPace(l, tracks[l.kind], now), now) }))
   const reached = forecasts.find(x => x.f.kind === 'reached')
   if (reached !== undefined) return `${profile(reached.limit.kind).short} limit reached`
   const filling = forecasts
@@ -220,7 +236,7 @@ function limitTone(percent: number): Tone {
 
 /** The colour of the tail: red for a limit already reached, yellow for one that fills before its reset. */
 function tailTone(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): Tone {
-  const forecasts = limits.map(l => forecast(l, pace(tracks[l.kind], l.kind, now), now))
+  const forecasts = limits.map(l => forecast(l, limitPace(l, tracks[l.kind], now), now))
   if (forecasts.some(f => f.kind === 'reached')) return 'error'
   if (forecasts.some(f => f.kind === 'full-at')) return 'warn'
   return forecasts.every(f => f.kind === 'measuring') ? 'dim' : 'ok'

@@ -7,7 +7,7 @@ import {
   markWarned,
   mergeWarned,
   newThresholds,
-  pace,
+  limitPace,
   paceText,
   parseTracks,
   percentText,
@@ -147,7 +147,7 @@ export const register: Register = on => {
 
 function limitBlock(els: Elements, limit: SessionRateLimit, tracks: Tracks, now: number, width: number) {
   const { Box, Text } = els
-  const p = pace(tracks[limit.kind], limit.kind, now)
+  const p = limitPace(limit, tracks[limit.kind], now)
   const bar = barCells(limit.percentUsed, width)
   const reset = resetTime(limit)
   return (

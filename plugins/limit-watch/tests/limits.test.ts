@@ -6,6 +6,7 @@ import {
   forecast,
   markWarned,
   mergeWarned,
+  limitPace,
   newThresholds,
   pace,
   record,
@@ -59,6 +60,47 @@ describe('pace', () => {
     const p = pace(tracks.five_hour, 'five_hour', T0 + 120 * MINUTE)
     expect('perHour' in p && p.span).toBe(HOUR)
     expect('perHour' in p ? Math.round(p.perHour * 1000) / 1000 : NaN).toBe(2)
+  })
+})
+
+describe('7-day pace', () => {
+  const DAY = 24 * HOUR
+  const sevenDay = (percentUsed: number, resetsAt: number): SessionRateLimit => ({
+    kind: 'seven_day',
+    percentUsed,
+    resetsAt: new Date(resetsAt).toISOString(),
+  })
+  /** 0% to 4% over 2.4 busy hours, the samples of the measured session. */
+  const busy = (now: number): Tracks => {
+    let tracks: Tracks = {}
+    const reset = now + 6 * DAY + 18 * HOUR
+    for (const [minutes, percent] of [[0, 0], [72, 2], [144, 4]] as const) {
+      tracks = record(tracks, [sevenDay(percent, reset)], now - 144 * MINUTE + minutes * MINUTE)
+    }
+    return tracks
+  }
+
+  test('measures through the first day of the cycle, whatever the samples say', async () => {
+    const now = T0
+    const limit = sevenDay(4, now + 6 * DAY + 18 * HOUR)
+    expect(limitPace(limit, busy(now).seven_day, now)).toEqual({ missing: 18 * HOUR })
+    expect(statusLine([limit], busy(now), now)).toBe('7d 4%, reset in 6d 18h · measuring the pace')
+  })
+
+  test('averages over the whole cycle, so busy hours do not read as a full limit days early', async () => {
+    const now = T0
+    const limit = sevenDay(30, now + 5 * DAY)
+    const p = limitPace(limit, busy(now).seven_day, now)
+    expect(p).toEqual({ perHour: 30 / 48, span: 2 * DAY })
+    expect(forecast(limit, p, now)).toEqual({ kind: 'full-at', at: now + (70 / (30 / 48)) * HOUR })
+    expect(forecast(sevenDay(10, now + 5 * DAY), limitPace(sevenDay(10, now + 5 * DAY), undefined, now), now)).toEqual({
+      kind: 'reset-first',
+    })
+  })
+
+  test('a 7-day limit without a reset time reads its pace from the samples', async () => {
+    const limit: SessionRateLimit = { kind: 'seven_day', percentUsed: 4 }
+    expect(limitPace(limit, undefined, T0)).toEqual({ missing: DAY })
   })
 })
 

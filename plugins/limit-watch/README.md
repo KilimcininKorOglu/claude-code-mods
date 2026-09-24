@@ -38,8 +38,8 @@ Each warning comes once per limit cycle. A new session in the same cycle does no
 
 - `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limit-watch` opens the pane. A read that fails at session start or on the timer is logged once as `cannot read the usage limits: <error>`, and the 60 second timer keeps running.
 - Every reading is one sample `{ at, percent }`, kept in `$.store` so that a restart keeps the pace.
-- The pace is the change in percent between the first and the last sample of a recent span, per hour. The span is the last hour for the 5-hour limit and the last 24 hours for the 7-day and spend limits, so the pace follows how you work now and not how you worked earlier in the cycle.
-- A pace is shown only when its samples span at least 10 minutes (5-hour limit) or 2 hours (7-day and spend limits). A shorter span gives a pace that one step of the percentage can double.
+- The 5-hour and spend limits read the pace from their samples: the change in percent between the first and the last sample of a recent span, per hour. The span is the last hour for the 5-hour limit and the last 24 hours for the spend limit, so the pace follows how you work now. A pace is shown only when its samples span at least 10 minutes (5-hour limit) or 2 hours (spend limit). A shorter span gives a pace that one step of the percentage can double.
+- The 7-day limit reads the pace as the average of its whole cycle so far: the percentage divided by the time since the cycle began, `resetsAt` minus 7 days. Nights and idle hours are part of that time, and so is the time no session ran, so the pace needs no samples. It is shown from the cycle's second day on. Measured before this rule: 4% after 2.4 busy hours read as `7d hits 100% in ~2d 8h`, because the pace of those hours was stretched over two days without a break; the cycle average of the same reading fills the limit in about 6 days.
 - The status line tail uses `(100 - percent) / pace` as the time to 100%. A limit that resets before that time does not count as filling.
 - A new cycle starts when `resetsAt` moves by more than 5 minutes, or, for a limit without `resetsAt`, when the percentage falls by more than half a point. A new cycle clears the samples and the warnings of that limit.
 - A stored value of an unknown shape is reported with one log line, and the samples start over.
@@ -69,7 +69,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.281:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
@@ -85,7 +85,8 @@ Reach L0, draws and remembers.
 ## Limits
 
 - A new session has no reading until Claude answers once, because the figures come from the last API response.
-- The 7-day limit shows a pace only after 2 hours of samples.
+- The 7-day limit shows no pace in the first 24 hours of its cycle.
+- The 7-day pace assumes the cycle began exactly 7 days before `resetsAt`.
 - A spend limit can pass 100%. The bar stops at full; the percentage does not.
 - `/limit-watch` toggles one pane. The second run closes it.
 
