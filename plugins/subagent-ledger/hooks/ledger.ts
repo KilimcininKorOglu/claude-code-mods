@@ -13,8 +13,16 @@ export const ROWS = 5
 /** Where a subagent stands: its loop runs, it answered, or its run ended without an answer. */
 export type Status = 'running' | 'done' | 'stopped'
 
-/** One subagent's run: what it is, what it runs on, what it has spent so far, and where it stands. */
-export type Run = { type: string; description: string; model: string; turns: number; ms: number; tokens: number; status: Status }
+/** The tokens of a run by kind: the input the cache did not serve, the output, the cache reads and the cache writes. */
+export type Split = { input: number; output: number; cacheRead: number; cacheWrite: number }
+
+export const NO_SPLIT: Split = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+
+/**
+ * One subagent's run: what it is, what it runs on, what it has spent so far, and where it stands. `tokens`
+ * is the sum of `split`, kept whole because the order, the limit and the totals read it.
+ */
+export type Run = { type: string; description: string; model: string; turns: number; ms: number; tokens: number; split: Split; status: Status }
 
 /** The status a subagent's `turn.complete` leaves: done on an answer, stopped on an interrupt, an error or a refusal. */
 export function statusAfter(reason: string): Status {
@@ -44,6 +52,22 @@ export function tokensOf(usage: Usage | undefined): number {
   return (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0)
 }
 
+/** A run's split with one more turn's tokens added. */
+export function addSplit(split: Split, usage: Usage | undefined): Split {
+  if (usage === undefined) return split
+  return {
+    input: split.input + (usage.input_tokens ?? 0),
+    output: split.output + (usage.output_tokens ?? 0),
+    cacheRead: split.cacheRead + (usage.cache_read_input_tokens ?? 0),
+    cacheWrite: split.cacheWrite + (usage.cache_creation_input_tokens ?? 0),
+  }
+}
+
+/** The row's token part: the total, then the input, the output, the cache reads and the cache writes. */
+export function splitText(tokens: number, split: Split): string {
+  return `T ${fmtTok(tokens)} · I ${fmtTok(split.input)} · O ${fmtTok(split.output)} · CR ${fmtTok(split.cacheRead)} · CW ${fmtTok(split.cacheWrite)}`
+}
+
 export function fmtTok(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
@@ -65,11 +89,11 @@ export function labelOf(run: Run): string {
   return full.length <= MAX_LABEL ? full : `${full.slice(0, MAX_LABEL - 1)}…`
 }
 
-/** One row of the pane: what the subagent is, what it runs on, its turns, its time and its tokens. */
+/** One row of the pane: what the subagent is, what it runs on, its turns, its time and its tokens by kind. */
 export function rowText(run: Run): string {
   const model = run.model === '' ? '' : `${shortModel(run.model)} · `
   const stopped = run.status === 'stopped' ? ' · stopped' : ''
-  return `${labelOf(run)} · ${model}${run.turns} turn · ${fmtDuration(run.ms)} · ${fmtTok(run.tokens)}${stopped}`
+  return `${labelOf(run)} · ${model}${run.turns} turn · ${fmtDuration(run.ms)} · ${splitText(run.tokens, run.split)}${stopped}`
 }
 
 /** The runs the pane draws, the costliest first. */

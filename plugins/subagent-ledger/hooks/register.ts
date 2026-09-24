@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { DEFAULT_LIMIT_K, limitOf, limitText, sidebarLines, statusAfter, statusText, tokensOf, totalText, type Run, type Usage } from './ledger.ts'
+import { addSplit, DEFAULT_LIMIT_K, limitOf, limitText, NO_SPLIT, sidebarLines, statusAfter, statusText, tokensOf, totalText, type Run, type Usage } from './ledger.ts'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
@@ -43,7 +43,7 @@ async function clearShown($: EngineInterface): Promise<void> {
 function runOf(state: State, agentId: string): Run {
   const had = state.runs.get(agentId)
   if (had !== undefined) return had
-  const made: Run = { type: 'agent', description: '', model: '', turns: 0, ms: 0, tokens: 0, status: 'running' }
+  const made: Run = { type: 'agent', description: '', model: '', turns: 0, ms: 0, tokens: 0, split: NO_SPLIT, status: 'running' }
   state.runs.set(agentId, made)
   return made
 }
@@ -66,6 +66,7 @@ async function countTurn($: EngineInterface, state: State, e: Ended): Promise<vo
   run.turns += 1
   run.ms += e.durationMs
   run.tokens += tokensOf(usage)
+  run.split = addSplit(run.split, usage)
   run.status = statusAfter(e.reason)
   // The turn's own model is what answered; the spawn's resolved model stands until a turn names one.
   if (usage?.model !== undefined) run.model = usage.model
@@ -127,7 +128,7 @@ export const register: Register = on => {
   on('agent.spawn', async ($, e, next) => {
     const r = await next(e)
     if (!state.enabled || r.agentId === undefined) return r
-    state.runs.set(r.agentId, { type: e.subagentType, description: e.description, model: r.model, turns: 0, ms: 0, tokens: 0, status: 'running' })
+    state.runs.set(r.agentId, { type: e.subagentType, description: e.description, model: r.model, turns: 0, ms: 0, tokens: 0, split: NO_SPLIT, status: 'running' })
     await show($, state)
     return r
   })

@@ -1,6 +1,6 @@
 {
   "name": "subagent-ledger",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Shows each subagent of the session with its turns, duration and tokens, and marks a costly one. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

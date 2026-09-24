@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput, TurnUsage } from 'claude-code'
 
-import { fmtDuration, fmtTok, limitOf, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
+import { addSplit, fmtDuration, fmtTok, limitOf, NO_SPLIT, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
 
 tier('user')
 
@@ -51,7 +51,7 @@ async function step($: Engine, agentId: string): Promise<void> {
   for await (const chunk of stream) void chunk
 }
 
-const runAt = (tokens: number, status: Run['status']): Run => ({ type: 'Explore', description: '', model: '', turns: 1, ms: 1000, tokens, status })
+const runAt = (tokens: number, status: Run['status']): Run => ({ type: 'Explore', description: '', model: '', turns: 1, ms: 1000, tokens, split: NO_SPLIT, status })
 
 /** The status lines the mod wrote, newest last. */
 type World = { statuses: (string | undefined)[] }
@@ -96,16 +96,20 @@ describe('subagent-ledger', () => {
   test('reads the tokens, the texts and the limit', () => {
     expect(tokensOf(usage())).toBe(10_000)
     expect(tokensOf(undefined)).toBe(0)
+    // The split keeps each kind apart, and its parts add up to what tokensOf counts.
+    const split = addSplit(addSplit(NO_SPLIT, usage()), undefined)
+    expect(split).toEqual({ input: 1000, output: 500, cacheRead: 8000, cacheWrite: 500 })
+    expect(split.input + split.output + split.cacheRead + split.cacheWrite).toBe(tokensOf(usage()))
     expect(fmtTok(81_000)).toBe('81k')
     expect(fmtTok(1_500_000)).toBe('1.5M')
     expect(fmtDuration(42_000)).toBe('42s')
     expect(fmtDuration(130_000)).toBe('2m 10s')
-    expect(rowText({ type: 'Explore', description: 'find the parser', model: 'claude-haiku-4-5-20251001', turns: 3, ms: 42_000, tokens: 81_000, status: 'done' }))
-      .toBe('find the parser · haiku-4-5 · 3 turn · 42s · 81k')
+    const parser: Run = { type: 'Explore', description: 'find the parser', model: 'claude-haiku-4-5-20251001', turns: 3, ms: 42_000, tokens: 81_000, split: { input: 2000, output: 1000, cacheRead: 70_000, cacheWrite: 8000 }, status: 'done' }
+    expect(rowText(parser)).toBe('find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k')
     // A spawn that named no task shows its agent type, and a long task is cut at 40 characters.
-    expect(rowText({ ...runAt(81_000, 'stopped') })).toBe('Explore · 1 turn · 1s · 81k · stopped')
+    expect(rowText({ ...runAt(81_000, 'stopped') })).toBe('Explore · 1 turn · 1s · T 81k · I 0 · O 0 · CR 0 · CW 0 · stopped')
     expect(rowText({ ...runAt(1000, 'done'), description: 'port the config loader to the new schema version' }))
-      .toBe('port the config loader to the new schem… · 1 turn · 1s · 1k')
+      .toBe('port the config loader to the new schem… · 1 turn · 1s · T 1k · I 0 · O 0 · CR 0 · CW 0')
     expect([statusAfter('answer'), statusAfter('aborted'), statusAfter('error'), statusAfter('refusal')]).toEqual(['done', 'stopped', 'stopped', 'stopped'])
     expect(shortModel('claude-fable-5-1')).toBe('fable-5-1')
     expect(shortModel('gpt-x')).toBe('gpt-x')
@@ -115,7 +119,7 @@ describe('subagent-ledger', () => {
   })
 
   test('the pane draws five rows and counts the rest, red past the limit', () => {
-    const runs = Array.from({ length: 7 }, (_, i): Run => ({ type: 'Explore', description: `${i}`, model: '', turns: 1, ms: 1000, tokens: (i + 1) * 50_000, status: 'done' }))
+    const runs = Array.from({ length: 7 }, (_, i): Run => ({ type: 'Explore', description: `${i}`, model: '', turns: 1, ms: 1000, tokens: (i + 1) * 50_000, split: NO_SPLIT, status: 'done' }))
     const lines = sidebarLines(runs, 200)
     expect(lines).toHaveLength(6)
     expect(lines[0]?.kind).toBe('error')
@@ -141,7 +145,7 @@ describe('subagent-ledger', () => {
     expect(w.statuses.at(-1)).toBe('1 subagent · 2 turn · 3s · 20k')
     const text = (await $.command.run(run(''))).text
     expect(text).toContain('on · limit 200k · 1 subagent · 2 turn · 3s · 20k')
-    expect(text).toContain('find the parser · fable-5-1 · 2 turn · 3s · 20k')
+    expect(text).toContain('find the parser · fable-5-1 · 2 turn · 3s · T 20k · I 2k · O 1k · CR 16k · CW 1k')
   })
 
   test('the limit the person sets holds, and off counts nothing', async ($, on) => {
@@ -164,7 +168,7 @@ describe('subagent-ledger', () => {
     await started($)
     await spawn($, 'Explore', 'find the parser')
     await $.turn.complete(turn({ agentId: 'a-Explore' }))
-    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'find the parser · fable-5-1 · 1 turn · 1s · 10k', kind: 'ok' }])
+    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'find the parser · fable-5-1 · 1 turn · 1s · T 10k · I 1k · O 500 · CR 8k · CW 500', kind: 'ok' }])
     expect(w.statuses.at(-1)).toBe(undefined)
     await $.command.run(run('off'))
     expect(bar.cleared).toBe(1)
@@ -176,7 +180,7 @@ describe('subagent-ledger', () => {
     seatSidebar(on, bar)
     await started($)
     await spawn($, 'Explore', 'find the parser')
-    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'find the parser · fable-5-1 · 0 turn · 0s · 0', kind: 'warn' }])
+    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'find the parser · fable-5-1 · 0 turn · 0s · T 0 · I 0 · O 0 · CR 0 · CW 0', kind: 'warn' }])
     await step($, 'a-Explore')
     await $.turn.complete(turn({ agentId: 'a-Explore' }))
     expect(bar.sections.at(-1)?.lines[0]?.kind).toBe('ok')
@@ -189,7 +193,7 @@ describe('subagent-ledger', () => {
     await started($)
     await spawn($, 'Explore', 'x')
     await $.turn.complete(aborted('a-Explore'))
-    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'x · fable-5-1 · 1 turn · 1s · 10k · stopped', kind: 'dim' }])
+    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'x · fable-5-1 · 1 turn · 1s · T 10k · I 1k · O 500 · CR 8k · CW 500 · stopped', kind: 'dim' }])
     const drawn = bar.sections.length
     await step($, 'a-Explore')
     expect(bar.sections.at(-1)?.lines[0]?.kind).toBe('warn')
@@ -197,7 +201,7 @@ describe('subagent-ledger', () => {
     await step($, 'a-Explore')
     expect(bar.sections.length).toBe(drawn + 1)
     await $.turn.complete(turn({ agentId: 'a-Explore' }))
-    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'x · fable-5-1 · 2 turn · 2s · 20k', kind: 'ok' })
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'x · fable-5-1 · 2 turn · 2s · T 20k · I 2k · O 1k · CR 16k · CW 1k', kind: 'ok' })
   })
 
   withSidebar('a main-loop step draws nothing', async ($, on) => {
