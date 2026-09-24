@@ -39,6 +39,25 @@ type State = {
   refused: string[]
   /** The short form of the last transcript line, drawn faint under the state in the sidebar. */
   event?: string
+  /** Whether the person sent a prompt since the last save was asked for. */
+  personSpoke: boolean
+  /** Whether a main-loop tool ran since the last save was asked for; a subagent's tools do not count. */
+  toolRan: boolean
+}
+
+/** The person's own input: Enter at the prompt (typed or queued) or the bridge. */
+const PERSON: ReadonlySet<string> = new Set(['composer', 'bridge'])
+
+/**
+ * Whether the turn that just ended gave the fork anything to read: a prompt the person sent, or a
+ * main-loop tool. A turn a plugin or a background task's notification started, where the model only
+ * answered in words, is skipped: the next save reads the whole conversation, that turn included.
+ */
+function worthSaving(state: State): boolean {
+  const worth = state.personSpoke || state.toolRan
+  state.personSpoke = false
+  state.toolRan = false
+  return worth
 }
 
 function message(err: unknown): string {
@@ -255,7 +274,7 @@ async function drain($: EngineInterface, state: State): Promise<void> {
 }
 
 export const register: Register = on => {
-  const state: State = { running: false, pending: false, skipped: [], refused: [] }
+  const state: State = { running: false, pending: false, skipped: [], refused: [], personSpoke: false, toolRan: false }
 
   on('session.start', async ($, e, next) => {
     // A new start (a reload, an enable) looks the project up again.
@@ -273,9 +292,23 @@ export const register: Register = on => {
     return withMemory($, state, r)
   })
 
+  // Only the origin is read, never the prompt's text.
+  on('prompt.submit', async (_, e, next) => {
+    const kind = (e.origin as { kind?: string } | undefined)?.kind
+    if (kind !== undefined && PERSON.has(kind)) state.personSpoke = true
+    return next(e)
+  })
+
+  // Only whether a main-loop tool ran is read, never its input or result.
+  on('tool.call', async (_, e, next) => {
+    if (e.agentId === undefined) state.toolRan = true
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     if (e.agentId !== undefined || e.reason === 'error' || e.reason === 'refusal') return r
+    if (!worthSaving(state)) return r
     // Not awaited: the save runs in the background, so the next prompt is not held.
     void drain($, state)
     return r

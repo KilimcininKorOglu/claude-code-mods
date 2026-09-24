@@ -19,14 +19,20 @@ The language line is there because long turns whose context was mostly English e
 
 ### Saves the memory
 
-After every main-loop turn that ended with an answer or an interruption:
+After every main-loop turn that ended with an answer or an interruption, and that gave the fork something to read (see the next section):
 
 1. It reads `~/.cli-tweaks/memory/<project>/MEMORY.md`, when the file exists.
-2. It sends one message to `$.model.fork`. The fork sees the whole session transcript and shares its prompt cache, but it has no tools. The message carries the current file, the writing rules and the reply format. The writing rules, the template and the MIGRATION, OFFLOAD and BULLET SPLIT notes are the texts of the classic memory-save Stop hook, word for word; only the parts about stopping are left out, because the fork does not stop.
+2. It sends one message to `$.model.fork`. The fork sees the whole session transcript and shares its prompt cache, but it has no tools. The message carries the current file, the writing rules and the reply format. The writing rules, the template and the MIGRATION, OFFLOAD and BULLET SPLIT notes are the texts of the classic memory-save Stop hook, word for word; only the parts about stopping are left out, because the fork does not stop. The OFFLOAD note has one sentence more: it tells the fork not to move a `## CRITICAL RULES` bullet out.
 3. The fork answers with JSON: bullets to add, remove or replace, and text to append to topic files such as `history.md`.
 4. The mod applies the answer, checks the result and writes the files.
 
 The save runs in the background. The next prompt is not held while the fork runs. One save runs at a time; a turn that ends during a save asks for one more save after it.
+
+### Skips a turn with nothing new
+
+A turn is saved when you sent a prompt since the last save, or when a main-loop tool ran in it. A turn that a plugin prompt (a `task-poke` continue prompt, for example) or a background task's notification started, and in which the model only answered in words, is not saved and shows nothing. A subagent's tools do not count, because a background agent keeps running while the main loop only waits. Nothing is lost: the fork reads the whole conversation, so the next save sees the skipped turn too. The one case it does not cover is a session that closes right after such a turn.
+
+Measured before this check: a session that waited for two background agents got three continue prompts in a row, answered each with one sentence, and ran a save for each; one of those saves moved five bullets out of MEMORY.md.
 
 The project name is the primary repository name, also inside a git worktree, else the git top level, else the working directory.
 
@@ -114,14 +120,14 @@ The mod has no command. To stop the saves, disable it: `claude plugin disable me
 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, tool.call, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, logEvent), $.ui.status (via clearReport, report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 
 Reach L2, writes files, runs git and drives Claude.
 
-    1. Reads:    HOME; MEMORY.md, its topic files and the directory listing under ~/.cli-tweaks/memory/<project>/; the session transcript, through the fork
+    1. Reads:    HOME; MEMORY.md, its topic files and the directory listing under ~/.cli-tweaks/memory/<project>/; the session transcript, through the fork; the origin of each prompt and whether a main-loop tool ran, never the prompt text or a tool input
     2. Runs:     git rev-parse, twice per session, to name the project; one tool-less $.model.fork per main-loop turn
     3. Sends:    MEMORY.md as session context at startup, resume, /clear and compaction; the fork message (the writing rules and the current MEMORY.md) to the session's own API client, on top of the session's transcript
     4. Persists: MEMORY.md, MEMORY.pre-migration.md, topic files and the last unreadable fork reply (memory-save.failed-reply.txt) under ~/.cli-tweaks/memory/<project>/

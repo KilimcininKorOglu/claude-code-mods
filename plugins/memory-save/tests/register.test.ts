@@ -1,5 +1,5 @@
-import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { ModelForkResult, On, SessionStartInput, TurnCompleteInput } from 'claude-code'
+import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
+import type { ModelForkResult, On, PromptOrigin, SessionStartInput, TurnCompleteInput } from 'claude-code'
 
 /** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the hooks of `seatSidebar` answer. */
 const SIDEBAR: Plugin = {
@@ -67,6 +67,8 @@ function world(on: On, files: Record<string, string> = {}): World {
   mock.env(on, { HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('tool.call', () => ({ result: undefined, text: '' }))
   on('process.run', (_, e) => ({
     value: { exitCode: 0, stdout: e.argv.includes('--git-common-dir') ? '/src/app/.git\n' : '', stderr: '' },
   }))
@@ -98,6 +100,16 @@ function world(on: On, files: Record<string, string> = {}): World {
   return w
 }
 
+/** A turn a prompt of `kind` started, with the given main-loop and subagent tools run inside it. */
+async function turnOf($: Engine, kind: string, t: TurnCompleteInput = turn(), tools: (string | undefined)[] = []): Promise<void> {
+  await $.prompt.submit({ text: 'go on', origin: { kind } as PromptOrigin, wait: false })
+  for (const agentId of tools) await $.tool.call({ tool: 'Read', file_path: '/src/app/a.ts', ...(agentId === undefined ? {} : { agentId }) })
+  await $.turn.complete(t)
+}
+
+/** A turn the person started. */
+const spoken = ($: Engine, t: TurnCompleteInput = turn()): Promise<void> => turnOf($, 'composer', t)
+
 /** The save runs unawaited, so the test moves the clock past each fork before it looks. */
 async function settled(w: World, statuses: number): Promise<void> {
   for (let i = 0; i < statuses; i++) await w.clock.advance(1000)
@@ -109,7 +121,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push('{"ops":[{"op":"add","section":"CRITICAL RULES","text":"- Use pnpm."}],"topics":[]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.get(FILE)).toContain('- Run `make test` before a commit.\n- Use pnpm.\n')
     expect(w.logs).toEqual(['MEMORY.md: 1 added'])
@@ -124,7 +136,7 @@ describe('memory-save', () => {
     seatSidebar(on, bar)
     w.replies.push('{"ops":[{"op":"add","section":"CRITICAL RULES","text":"- Use pnpm."}],"topics":[]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(bar.sections[0]?.key).toBe('save')
     expect(bar.sections[0]?.lines).toHaveLength(1)
@@ -139,7 +151,7 @@ describe('memory-save', () => {
     const w = world(on)
     w.replies.push('{"ops":[{"op":"add","section":"Active Warnings","text":"- The build needs Go 1.23."}]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.get(FILE)).toContain('## Active Warnings\n\n- The build needs Go 1.23.\n')
     expect(w.logs).toEqual(['MEMORY.md: created, 1 added'])
@@ -150,7 +162,7 @@ describe('memory-save', () => {
     const w = world(on)
     w.replies.push('{"ops":[],"topics":[]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.size).toBe(0)
     expect(w.logs).toEqual([])
@@ -162,7 +174,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: legacy })
     w.replies.push('{"ops":[{"op":"add","section":"Active Warnings","text":"- New warning."}]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.get(`${DIR}/MEMORY.pre-migration.md`)).toBe(legacy)
     expect(w.logs[0]).toBe('MEMORY.md: put into the four sections (old copy: MEMORY.pre-migration.md)')
@@ -176,7 +188,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push('{"topics":[{"file":"history.md","append":"- Moved the API."}]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.get(`${DIR}/history.md`)).toBe('# app: history\n\n- Moved the API.\n')
     expect(w.files.get(FILE)).toContain('## Topic Files\n\n- `history.md`.\n')
@@ -186,7 +198,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push('I saved it.')
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.get(FILE)).toBe(OLD)
     expect(w.statuses.at(-1)).toBeUndefined()
@@ -198,9 +210,9 @@ describe('memory-save', () => {
     const broken = '{"ops":[{"op":"add","section":"Active Warnings","text":"- A "quoted" word."}]}'
     w.replies.push('{"ops":[', broken)
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 2)
     expect(w.files.get(`${DIR}/memory-save.failed-reply.txt`)).toBe(broken)
     expect(w.logs.at(-1)).toMatch(/this turn's reply was not read \(reply is not valid JSON \(.+\)\); 2 output tokens, kept in memory-save.failed-reply.txt/)
@@ -214,12 +226,12 @@ describe('memory-save', () => {
       '{"ops":[{"op":"remove","line":"- **Gone.**"}]}',
     )
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 2)
     expect(w.files.get(FILE)).toContain('- New.')
     expect(w.statuses.at(-1)).toMatch(/^\+1 1 skipped · /)
     expect(w.logs).toEqual(['MEMORY.md: 1 added; 1 skipped, not in the file: - **Run `make test` before a commit.**'])
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 4)
     expect(w.prompts[1]).toContain('MANDATORY EXACT COPY')
     expect(w.statuses.at(-1)).toMatch(/^no change, 1 skipped · /)
@@ -230,7 +242,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push({ isAnswered: false, reason: 'nothing-to-fork' })
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.statuses.at(-1)).toMatch(/^error: the fork had nothing to fork yet/)
   })
@@ -239,7 +251,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push({ isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage })
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.statuses.at(-1)).toMatch(/^error: the fork got an API error, 529 \(overloaded\)/)
     expect(w.files.has(`${DIR}/memory-save.failed-reply.txt`)).toBe(false)
@@ -250,7 +262,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push({ isAnswered: false, reason: 'empty-reply', usage })
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.statuses.at(-1)).toMatch(/^error: the fork replied with no text/)
   })
@@ -259,7 +271,7 @@ describe('memory-save', () => {
     const w = world(on, { [FILE]: OLD })
     w.replies.push(JSON.stringify({ ops: [{ op: 'add', section: 'Active Warnings', text: `- ${'x'.repeat(700)}` }] }))
     await $.session.start(session)
-    await $.turn.complete(turn())
+    await spoken($)
     await settled(w, 1)
     expect(w.files.get(FILE)).toBe(OLD)
     expect(w.statuses.at(-1)).toMatch(/^no change, 1 refused · /)
@@ -269,10 +281,30 @@ describe('memory-save', () => {
   test('does not save on a subagent turn or an API error turn', async ($, on) => {
     const w = world(on, { [FILE]: OLD })
     await $.session.start(session)
-    await $.turn.complete(turn('a1'))
-    await $.turn.complete({ ...turn(), reason: 'error' })
+    await spoken($, turn('a1'))
+    await spoken($, { ...turn(), reason: 'error' })
     await w.clock.settle()
     expect(w.prompts).toEqual([])
+  })
+
+  test('skips the save after a turn a plugin or a task notification started and no main-loop tool ran in', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    await $.session.start(session)
+    await turnOf($, 'plugin')
+    await turnOf($, 'task-notification', turn(), ['agent-1'])
+    await w.clock.settle()
+    expect(w.prompts).toEqual([])
+    expect(w.statuses).toEqual([])
+  })
+
+  test('saves after a turn a plugin started when a main-loop tool ran in it', async ($, on) => {
+    const w = world(on, { [FILE]: OLD })
+    w.replies.push('{"ops":[{"op":"add","section":"CRITICAL RULES","text":"- One."}]}')
+    await $.session.start(session)
+    await turnOf($, 'plugin', turn(), [undefined])
+    await settled(w, 1)
+    expect(w.prompts).toHaveLength(1)
+    expect(w.files.get(FILE)).toContain('- One.')
   })
 
   test('runs one save at a time and one more for a turn that ended during it', async ($, on) => {
@@ -280,9 +312,9 @@ describe('memory-save', () => {
     w.replies.push('{"ops":[{"op":"add","section":"CRITICAL RULES","text":"- One."}]}')
     w.replies.push('{"ops":[{"op":"add","section":"CRITICAL RULES","text":"- Two."}]}')
     await $.session.start(session)
-    await $.turn.complete(turn())
-    await $.turn.complete(turn())
-    await $.turn.complete(turn())
+    await spoken($)
+    await spoken($)
+    await spoken($)
     await settled(w, 2)
     expect(w.prompts).toHaveLength(2)
     expect(w.prompts[1]).toContain('- One.')

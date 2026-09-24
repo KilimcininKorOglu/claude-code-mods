@@ -19,14 +19,20 @@ Dil satırı orada, çünkü context'i çoğunlukla İngilizce olan uzun turlar 
 
 ### Memory'yi kaydeder
 
-Bir cevapla ya da bir kesintiyle biten her ana döngü turundan sonra:
+Bir cevapla ya da bir kesintiyle biten ve fork'a okuyacak bir şey veren her ana döngü turundan sonra (sonraki bölüme bakın):
 
 1. `~/.cli-tweaks/memory/<project>/MEMORY.md` dosyasını, varsa, okur.
-2. `$.model.fork`'a tek bir mesaj gönderir. Fork bütün session transcript'ini görür ve prompt cache'ini paylaşır, ama tool'u yoktur. Mesaj mevcut dosyayı, yazma kurallarını ve cevap biçimini taşır. Yazma kuralları, template ve MIGRATION, OFFLOAD ve BULLET SPLIT notları klasik memory-save Stop hook'unun metinleridir, kelimesi kelimesine; yalnız durdurmaya dair kısımlar dışarıda bırakılır, çünkü fork durdurmaz.
+2. `$.model.fork`'a tek bir mesaj gönderir. Fork bütün session transcript'ini görür ve prompt cache'ini paylaşır, ama tool'u yoktur. Mesaj mevcut dosyayı, yazma kurallarını ve cevap biçimini taşır. Yazma kuralları, template ve MIGRATION, OFFLOAD ve BULLET SPLIT notları klasik memory-save Stop hook'unun metinleridir, kelimesi kelimesine; yalnız durdurmaya dair kısımlar dışarıda bırakılır, çünkü fork durdurmaz. OFFLOAD notunda bir cümle fazladır: fork'a bir `## CRITICAL RULES` maddesini dışarı taşımamasını söyler.
 3. Fork JSON ile cevap verir: eklenecek, kaldırılacak ya da değiştirilecek madde'ler ve `history.md` gibi topic dosyalarına eklenecek metin.
 4. Mod cevabı uygular, sonucu kontrol eder ve dosyaları yazar.
 
 Kayıt arka planda çalışır. Fork çalışırken sonraki prompt beklemez. Aynı anda bir kayıt çalışır; bir kayıt sırasında biten bir tur, ondan sonra bir kayıt daha ister.
+
+### Yeni bir şey olmayan turu atlar
+
+Son kayıttan beri bir prompt gönderdiyseniz ya da turda bir ana döngü tool'u çalıştıysa tur kaydedilir. Bir plugin prompt'unun (örneğin bir `task-poke` devam prompt'unun) ya da bir arka plan işinin bildiriminin başlattığı ve modelin yalnız sözle cevap verdiği bir tur kaydedilmez ve hiçbir şey göstermez. Bir subagent'ın tool'ları sayılmaz, çünkü ana döngü yalnız beklerken bir arka plan agent'ı çalışmaya devam eder. Hiçbir şey kaybolmaz: fork bütün konuşmayı okur, bu yüzden sonraki kayıt atlanan turu da görür. Bunun karşılamadığı tek durum, böyle bir turun hemen ardından kapanan bir session'dır.
+
+Bu kontrolden önce ölçülen durum: iki arka plan agent'ını bekleyen bir session arka arkaya üç devam prompt'u aldı, her birine tek cümleyle cevap verdi ve her biri için bir kayıt çalıştırdı; bu kayıtlardan biri MEMORY.md'den beş maddeyi dışarı taşıdı.
 
 Proje adı, bir git worktree içinde de birincil repository adıdır; yoksa git top level, yoksa çalışma dizinidir.
 
@@ -114,14 +120,14 @@ Mod'un komutu yoktur. Kayıtları durdurmak için onu devre dışı bırakın: `
 
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, turn.complete
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, tool.call, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, logEvent), $.ui.status (via clearReport, report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 
 Reach L2, dosya yazar, git çalıştırır ve Claude'u sürer.
 
-    1. Okur:     HOME; ~/.cli-tweaks/memory/<project>/ altındaki MEMORY.md, topic dosyalarını ve dizin listesini; fork üzerinden session transcript'ini
+    1. Okur:     HOME; ~/.cli-tweaks/memory/<project>/ altındaki MEMORY.md, topic dosyalarını ve dizin listesini; fork üzerinden session transcript'ini; her prompt'un origin'ini ve bir ana döngü tool'unun çalışıp çalışmadığını (prompt metnini ve tool girdisini hiç okumaz)
     2. Çalıştırır: git rev-parse, session başına iki kere, projeyi adlandırmak için; ana döngü turu başına bir tool'suz $.model.fork
     3. Gönderir: MEMORY.md dosyasını başlangıçta, resume'da, /clear ve compaction'da session context'i olarak; fork mesajını (yazma kuralları ve mevcut MEMORY.md) session'ın kendi API client'ına, session'ın transcript'i üzerine
     4. Saklar:   ~/.cli-tweaks/memory/<project>/ altında MEMORY.md, MEMORY.pre-migration.md, topic dosyalarını ve okunamayan son fork cevabını (memory-save.failed-reply.txt)
