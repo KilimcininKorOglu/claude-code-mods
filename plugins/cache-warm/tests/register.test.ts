@@ -674,7 +674,7 @@ describe('store per session', () => {
     expect([...w.store.keys()]).toEqual(['deadline:other', 'every:other'])
   })
 
-  test('a start clears its own ended window and other windows ended over a week ago', async ($, on) => {
+  test('a start clears every ended window and keeps the running ones', async ($, on) => {
     const w = world(on, [], {
       sid: 'mine',
       store: [
@@ -686,6 +686,6 @@ describe('store per session', () => {
       ],
     })
     await $.session.start(session)
-    expect([...w.store.keys()]).toEqual(['deadline:recent', 'every:recent', 'deadline:live'])
+    expect([...w.store.keys()]).toEqual(['deadline:live'])
   })
 })

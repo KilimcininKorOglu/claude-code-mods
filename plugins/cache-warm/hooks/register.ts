@@ -34,8 +34,6 @@ const KEY_ALWAYS = 'always'
 const DEADLINE = 'deadline:'
 const EVERY = 'every:'
 const REQUEST = 'request:'
-/** Another session's window that ended this long ago is not coming back. */
-const STALE_MS = 7 * 24 * 60 * 60 * 1000
 
 // The window and its ping period belong to the session that armed them, so a
 // second session never inherits them and cannot turn them off. The always
@@ -103,16 +101,15 @@ async function showStatus($: EngineInterface, s: State): Promise<void> {
 }
 
 /**
- * Deletes this session's ended window, and the windows of other sessions that
- * ended more than a week ago. A newer window of another session is left alone,
- * because that session may still resume and renew it.
+ * Deletes every session's ended window. A resumed session reads an ended window
+ * as no window (`restore`), so keeping one only grows the store; a window still
+ * running is left alone.
  */
-async function prune($: EngineInterface, s: State, now: number): Promise<void> {
+async function prune($: EngineInterface, now: number): Promise<void> {
   for (const key of await $.store.keys()) {
     if (!key.startsWith(DEADLINE)) continue
     const deadline = await $.store.get(key)
-    const grace = key === deadlineKey(s) ? 0 : STALE_MS
-    if (typeof deadline === 'number' && deadline + grace > now) continue
+    if (typeof deadline === 'number' && deadline > now) continue
     await $.store.delete(key)
     await $.store.delete(EVERY + key.slice(DEADLINE.length))
   }
@@ -411,7 +408,7 @@ export const register: Register = on => {
     const r = await next(e)
     s.sid = await $.session.id()
     const now = await $.clock.now()
-    await prune($, s, now)
+    await prune($, now)
     await pruneRequests($, s, now)
     await restore($, s, now)
     await readFast($, s)
