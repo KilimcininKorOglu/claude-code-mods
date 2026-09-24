@@ -10,12 +10,12 @@ Session'ın her subagent'ının ne harcadığını gösteren bir Claude Code Mod
 4. [sidebar](../sidebar) açıkken defter, session boyunca duran ve her spawn'da, her subagent turunda ve bir subagent yeniden çalıştığında yeniden yazılan tek bir `subagents` section'ıdır:
 
        subagents
-       Explore: find the parser · haiku-4-5 · 3 turn · 42s · 81k
-       general-purpose: port t… · opus-5 · 7 turn · 4m 10s · 260k
-       Explore: read the tests · haiku-4-5 · 1 turn · 9s · 30k · stopped
+       find the parser · haiku-4-5 · 3 turn · 42s · 81k
+       port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · 260k
+       read the tests · haiku-4-5 · 1 turn · 9s · 30k · stopped
        2 more · 150k
 
-   Bir satır, subagent'ı çalışırken sarı, cevap verince yeşildir. Çalışması cevapsız biten bir subagent'ın satırı soluktur ve sonunda `stopped` yazar. Limiti geçen bir subagent'ın satırı (varsayılan 200k token) bu durumların hepsinde kırmızıdır. Beşinciden sonraki satırlar token'ları toplanmış tek bir soluk satırdır, yani yirmi agent'lık bir dağılım yine altı satır tutar.
+   Bir satırın adı görevinin açıklamasıdır ve 40 karakterde kesilir; açıklama vermeyen bir spawn'ın satırında onun yerine agent type'ı yazar. Bir satır, subagent'ı çalışırken sarı, cevap verince yeşildir. Çalışması cevapsız biten bir subagent'ın satırı soluktur ve sonunda `stopped` yazar. Limiti geçen bir subagent'ın satırı (varsayılan 200k token) bu durumların hepsinde kırmızıdır. Beşinciden sonraki satırlar token'ları toplanmış tek bir soluk satırdır, yani yirmi agent'lık bir dağılım yine altı satır tutar.
 5. Sidebar kapalıyken ya da o mod kurulu değilken toplamlar status line'a gider:
 
        subagent-ledger: 4 subagent · 12 turn · 3m 10s · 210k

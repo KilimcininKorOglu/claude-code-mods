@@ -10,12 +10,12 @@ A Claude Code Mod that shows what each subagent of the session spent: its turns,
 4. While the [sidebar](../sidebar) is open, the ledger is one `subagents` section that stays for the session and is rewritten at each spawn, at each subagent turn and when a subagent runs again:
 
        subagents
-       Explore: find the parser · haiku-4-5 · 3 turn · 42s · 81k
-       general-purpose: port t… · opus-5 · 7 turn · 4m 10s · 260k
-       Explore: read the tests · haiku-4-5 · 1 turn · 9s · 30k · stopped
+       find the parser · haiku-4-5 · 3 turn · 42s · 81k
+       port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · 260k
+       read the tests · haiku-4-5 · 1 turn · 9s · 30k · stopped
        2 more · 150k
 
-   A row is yellow while its subagent runs, green once it answered, and faint with `stopped` at its end when its run ended without an answer. A row whose subagent passed the limit (200k tokens by default) is red in every one of those states. The rows past the fifth are one faint line with their tokens added up, so a fan-out of twenty agents still holds six rows.
+   A row's name is the description of its task, cut at 40 characters; a spawn that named no description shows its agent type there instead. A row is yellow while its subagent runs, green once it answered, and faint with `stopped` at its end when its run ended without an answer. A row whose subagent passed the limit (200k tokens by default) is red in every one of those states. The rows past the fifth are one faint line with their tokens added up, so a fan-out of twenty agents still holds six rows.
 5. With the sidebar closed, or without that mod installed, the totals go to the status line instead:
 
        subagent-ledger: 4 subagent · 12 turn · 3m 10s · 210k

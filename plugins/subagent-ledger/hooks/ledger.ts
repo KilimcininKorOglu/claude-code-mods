@@ -57,11 +57,11 @@ export function fmtDuration(ms: number): string {
 }
 
 /** How wide a row's label may be, so one long description does not push the numbers off. */
-const MAX_LABEL = 28
+const MAX_LABEL = 40
 
-/** The label of one run: its agent type, and its own description after it while it fits. */
+/** The label of one run: the work it was given, or its agent type when the spawn named none. */
 export function labelOf(run: Run): string {
-  const full = run.description === '' ? run.type : `${run.type}: ${run.description}`
+  const full = run.description === '' ? run.type : run.description
   return full.length <= MAX_LABEL ? full : `${full.slice(0, MAX_LABEL - 1)}…`
 }
 
