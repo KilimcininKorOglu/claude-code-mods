@@ -342,6 +342,18 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
 }
 
 /**
+ * Stamps a main-loop request. The request writes the cache a compaction dropped, and it sets the ping
+ * when none is pending: a turn's end sets it otherwise, so the first turn of a session, or the first
+ * after /clear or a compaction, would run one long tool call past the hour with no ping. A pending ping
+ * reads the newest request when it fires and moves itself later, so a later step sets nothing.
+ */
+async function stampRequest($: EngineInterface, s: State): Promise<void> {
+  s.lastRequestAt = await $.clock.now()
+  s.compacted = false
+  if (s.pending === null && hasWindow(s)) await arm($, s)
+}
+
+/**
  * The time of the last request of a conversation this module did not see, read from the last write of
  * the session's transcript: a reloaded module starts with no request time, and `always` would wait for
  * the first turn to arm its ping. Only a cache that is still warm is taken, so a reload never pays for a
@@ -410,7 +422,7 @@ export const register: Register = on => {
   on('command.run', { command: 'cache-status' }, async $ => ({ text: card(s, await $.clock.now()) }))
 
   on('turn.step', async function* ($, e, next) {
-    if (!e.agentId) s.lastRequestAt = await $.clock.now()
+    if (!e.agentId) await stampRequest($, s)
     yield* next(e)
   })
 

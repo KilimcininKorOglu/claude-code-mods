@@ -6,7 +6,7 @@ Davranış, Karan Bansal'ın cache-tax mod'unu (karanb192/claude-code-mods) izle
 
 ## Ne yapar
 
-**Cache'i sıcak tutar.** `/cache-warm` altı saatlik bir pencere kurar. Pencere içinde, main loop'un son model isteğinden 50 dakika sonra mod, session'ın kendi transcript'i üzerinden tool'suz tek bir `$.model.fork` gönderir. Sunucu bunu cache'ten cevaplar, bu da saati tazeler. Her yeni istek ping'i ileri atar, yani aktif bir session hiç ping göndermez.
+**Cache'i sıcak tutar.** `/cache-warm` altı saatlik bir pencere kurar. Pencere içinde, main loop'un son model isteğinden 50 dakika sonra mod, session'ın kendi transcript'i üzerinden tool'suz tek bir `$.model.fork` gönderir. Sunucu bunu cache'ten cevaplar, bu da saati tazeler. Her yeni istek ping'i ileri atar, yani aktif bir session hiç ping göndermez. Bir session'ın ilk isteği ve `/clear` ya da bir compaction sonrasındaki ilk istek de ping'i kurar, yani ilk turn içinde saati aşan tek bir tool çağrısı da ping'ini turn'ün ortasında alır (2.1.281 üzerinde ölçüldü: ping `sleep 110` çalışırken gitti ve turn normal bitti).
 
 **`always` ile sonsuz çalışır.** `/cache-warm always` bir pencere değildir: ping, session yaşadığı sürece 50 dakikada bir çıkar ve bunu bitiren tek şey `/cache-warm off` komutudur. Anahtar, mod'un kendi `$.store` dosyasındaki tek bir global key'dir, yani her projenin her sonraki session'ı aynı döngüyü başlangıçta ve `/clear` sonrasında başlatır. Çalışan bir konuşmaya yüklenen modül (`/reload-plugins`, bir update) son isteğin zamanını session transcript'inin son yazılma zamanından okur (`~/.claude/projects/<dizin>/<session id>.jsonl`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altından) ve ping'i zamanında atar; o yazma bir saatten eskiyse cache gitmiştir ve döngü soğuk bir ping ödemek yerine sonraki turn'ü bekler. Cache'i gitmiş bulan bir ping bu döngüyü bitirmez: o ping'in ödediği write yeni cache'tir, mod bunu bir transcript satırıyla söyler, write'ı session'ın sayacına ekler ve devam eder. Sıcak bir ping context'i read fiyatından okur, 200k token için yaklaşık 0,05 dolar, yani boş geçen bir günün ping'leri yaklaşık 1,40 dolar tutar.
 
@@ -107,7 +107,7 @@ Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
 
 ## Nereye uzanır
 
-Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript), $.ui.status (via showStatusAt)

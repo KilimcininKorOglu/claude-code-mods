@@ -6,7 +6,7 @@ The behavior follows the cache-tax mod by Karan Bansal (karanb192/claude-code-mo
 
 ## What it does
 
-**Keeps the cache warm.** `/cache-warm` arms a six-hour window. Inside the window, 50 minutes after the last model request of the main loop, the mod sends one tool-less `$.model.fork` over the session's own transcript. The server answers it from the cache, which refreshes the hour. Every new request moves the ping later, so an active session sends no ping at all.
+**Keeps the cache warm.** `/cache-warm` arms a six-hour window. Inside the window, 50 minutes after the last model request of the main loop, the mod sends one tool-less `$.model.fork` over the session's own transcript. The server answers it from the cache, which refreshes the hour. Every new request moves the ping later, so an active session sends no ping at all. The first request of a session, and the first after `/clear` or a compaction, sets the ping too, so one tool call that runs past the hour inside the first turn still gets its ping in the middle of the turn (measured on 2.1.281: the ping went out while `sleep 110` ran, and the turn ended normally).
 
 **Runs with no end under `always`.** `/cache-warm always` is not a window: the ping goes out every 50 minutes for as long as the session lives, and `/cache-warm off` is the only thing that ends it. The switch is one global key in the mod's own `$.store`, so every later session of every project starts the same loop at its start and after `/clear`. A module loaded into a running conversation (`/reload-plugins`, an update) reads the last request's time from the last write of the session's transcript (`~/.claude/projects/<directory>/<session id>.jsonl`, under `CLAUDE_CONFIG_DIR` when it is set) and pings on time; when that write is over an hour old, the cache is gone and the loop waits for the next turn instead of paying a cold ping. A ping that finds the cache gone does not end this loop: the write that ping paid for is the new cache, the mod says so in one transcript line, counts the write in the session's tally and keeps going. A warm ping reads the context at the read rate, about $0.05 for 200k tokens, so an idle day of pings costs about $1.40.
 
@@ -107,7 +107,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.280:
+Validated with `claude plugin validate` on Claude Code 2.1.281:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
     ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via ping), $.session.id, $.session.model, $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, startEndless, startWindow, stop), $.store.get (via prune, restore), $.store.keys (via prune), $.store.set (via startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript), $.ui.status (via showStatusAt)

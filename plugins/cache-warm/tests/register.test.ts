@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, ModelForkResult, On, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
 
 tier('user')
@@ -43,6 +43,12 @@ let turns = 0
 const turn = (over: Partial<AnsweredTurn> = {}): TurnCompleteInput => ({
   answer: 'ok', durationMs: 1000, isAborted: false, turnId: `t${++turns}`, reason: 'answer', usage: usage(), ...over,
 })
+
+/** One main-loop model request of turn `t1`, read to its end as the engine reads it. */
+async function step($: Engine, index = 0): Promise<void> {
+  const stream = $.turn.step({ turnId: 't1', index, model: 'claude-fable-5-1', messageCount: 1 })
+  for await (const chunk of stream) void chunk
+}
 
 const run = (command: 'cache-warm' | 'cache-status', args = ''): CommandRunInput => ({
   command, args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
@@ -94,6 +100,9 @@ function world(on: On, answers: ForkAnswer[], opts: { store?: [string, unknown][
   on('session.usage', () => ({ value: { startedAt: START, context: { window: 1_000_000, tokens: w.live.tokens }, rateLimits: [] } }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('turn.step', async function* (_, e) {
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage: usage() }
+  })
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('session.compact', (_, e) => ({ messages: e.messages }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -173,6 +182,41 @@ describe('keep warm', () => {
     await $.turn.complete(turn())
     await w.clock.advance(40 * MIN)
     await $.turn.complete(turn())
+    await w.clock.advance(40 * MIN)
+    expect(w.forks).toBe(0)
+    await w.clock.advance(10 * MIN)
+    expect(w.forks).toBe(1)
+  })
+
+  test('the first request of the first turn sets the ping, so one long tool call before any turn ends is covered', async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    await step($)
+    expect(w.statuses.at(-1)).toBe('6h left · ping in 50m')
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(1)
+  })
+
+  test('the first request after a compaction sets the ping again', async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    await $.turn.complete(turn())
+    await $.session.compact({ trigger: 'auto', messages: [{ role: 'user', text: 'old', toolUses: [] }] })
+    expect(w.statuses.at(-1)).toBe('6h left · waiting for the first turn')
+    await step($)
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(1)
+  })
+
+  test('a later request of a long turn moves the ping it set later', async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    await step($)
+    await w.clock.advance(40 * MIN)
+    await step($, 1)
     await w.clock.advance(40 * MIN)
     expect(w.forks).toBe(0)
     await w.clock.advance(10 * MIN)
