@@ -248,7 +248,7 @@ export const register: Register = on => {
     } else if (arg !== '' && arg !== 'status') {
       return { text: USAGE }
     }
-    return { text: `task-poke is ${state.enabled ? 'on' : 'off'}, ${state.pokes}/${state.max} pokes since your last prompt` }
+    return { text: `${state.enabled ? 'on' : 'off'} · ${state.pokes}/${state.max} pokes since your last prompt` }
   })
 
   // Only the origin is read. The prompt text passes through untouched. This hook never sees its own pokes.

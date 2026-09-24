@@ -320,7 +320,7 @@ describe('task-poke', () => {
     const { text } = await $.command.run(run('off'))
     await $.turn.complete(turn())
     await flush()
-    expect(text).toContain('task-poke is off')
+    expect(text).toBe('off · 0/99 pokes since your last prompt')
     expect(w.submitted).toHaveLength(0)
   })
 
