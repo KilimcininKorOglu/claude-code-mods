@@ -7,10 +7,11 @@ tier('user')
  * The engine's commands: `tiny` hands the model a prompt as a prompt command does, `boom` throws,
  * every other one answers at once as a local command does.
  */
-type World = { ran: string[]; logs: string[] }
+type World = { ran: string[]; logs: string[]; prompts: string[]; tools: string[] }
 
 function world($: Engine, on: On): { w: World; clock: ReturnType<typeof mock.clock> } {
-  const w: World = { ran: [], logs: [] }
+  const w: World = { ran: [], logs: [], prompts: [], tools: [] }
+  on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__slash-chain__${e.name}` } } })
   mock.store(on, {})
   const clock = mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -24,7 +25,7 @@ function world($: Engine, on: On): { w: World; clock: ReturnType<typeof mock.clo
   on('command.run', async (_, e) => {
     w.ran.push(e.args === '' ? e.command : `${e.command} ${e.args}`)
     if (e.command === 'boom') throw new Error('no such command')
-    if (e.command === 'tiny') await $.skill.prompt({ skill: 'tiny', text: 'answer in one word' })
+    if (e.command === 'tiny') w.prompts.push((await $.skill.prompt({ skill: 'tiny', text: 'answer in one word' })).text)
     return {}
   })
   return { w, clock }
@@ -151,6 +152,43 @@ describe('slash-chain', () => {
     expect(w.logs.slice(0, 3)).toEqual(['1/2: /tiny', 'cancelled; not run: /context', '1/2: /cost'])
     expect(w.ran).toEqual(['tiny', 'cost', 'review'])
     expect(w.logs.at(-1)).toBe('all 2 command(s) ran')
+  })
+
+  test('a step the model reports failed stops the chain before the next step', async ($, on) => {
+    const { w, clock } = world($, on)
+    await started($)
+    expect(w.tools).toEqual(['fail'])
+    await $.command.run(typed('tiny', '&& /exit'))
+    await settle(clock)
+    expect(w.prompts).toEqual(['answer in one word\n\n[slash-chain] This is step 1/2 of a chain; after it: /exit. If you could not do what this step asks, call the mcp__slash-chain__fail tool with the reason before you end your turn, and the steps after it do not run.'])
+    const r = await $.tool.call({ tool: 'mcp__slash-chain__fail', reason: 'I could not write CLAUDE.md' })
+    expect(r.result).toBe('The chain stopped; the steps after this one do not run.')
+    expect(w.logs.at(-1)).toBe('stopped after /tiny: the model reported it failed: I could not write CLAUDE.md; not run: /exit')
+    await $.turn.complete(turn('answer'))
+    await settle(clock)
+    expect(w.ran).toEqual(['tiny'])
+  })
+
+  test('a fail call with no step waiting on the turn, from a subagent, or with no reason is refused', async ($, on) => {
+    const { w, clock } = world($, on)
+    await started($)
+    expect((await $.tool.call({ tool: 'mcp__slash-chain__fail', reason: 'x' })).deny).toBe('no slash-chain step waits on this turn, so there is nothing to stop')
+    await $.command.run(typed('tiny', '&& /context'))
+    await settle(clock)
+    expect((await $.tool.call({ tool: 'mcp__slash-chain__fail', reason: 'x', agentId: 'a1' })).deny).toBe('no slash-chain step waits on this turn, so there is nothing to stop')
+    expect((await $.tool.call({ tool: 'mcp__slash-chain__fail', reason: '  ' })).deny).toBe('reason is required: say in one sentence why the step failed')
+    await $.turn.complete(turn('answer'))
+    await settle(clock)
+    expect(w.ran).toEqual(['tiny', 'context'])
+  })
+
+  test('the last step of a chain and a command outside a chain get no note', async ($, on) => {
+    const { w, clock } = world($, on)
+    await started($)
+    await $.command.run(typed('context', '&& /tiny'))
+    await settle(clock)
+    await $.command.run(typed('tiny', ''))
+    expect(w.prompts).toEqual(['answer in one word', 'answer in one word'])
   })
 
   test('off leaves the command as the engine handed it', async ($, on) => {

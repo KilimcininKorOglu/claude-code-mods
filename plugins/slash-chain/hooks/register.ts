@@ -1,5 +1,5 @@
-import type { CommandRunInput, CommandRunResult, EngineInterface, Register } from 'claude-code'
-import { cancelledText, doneText, parseChain, statusText, stepText, stoppedText, thrownWhy, turnWhy, type Step, type Wait } from './chain.ts'
+import type { CommandRunInput, CommandRunResult, EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
+import { cancelledText, doneText, FAIL_DESCRIPTION, FAIL_SCHEMA, FAIL_TOOL, failedWhy, failNote, parseChain, reasonOf, statusText, stepText, stoppedText, thrownWhy, turnWhy, type Step, type Wait } from './chain.ts'
 
 const ENABLED_KEY = 'enabled'
 const COMMAND = 'slash-chain'
@@ -131,6 +131,19 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   return statusText(state.enabled, r === undefined ? undefined : { step: r.step, index: r.index, total: r.total, wait: r.wait })
 }
 
+/**
+ * The model's report that the step it was handed failed: the chain stops before the next step. Only a step
+ * that handed the main loop a prompt can be reported, because only that step waits on the model's turn.
+ */
+function failStep($: EngineInterface, state: State, e: ToolCallInput): ToolCallResult {
+  const r = state.running
+  if (r === undefined || !r.sawPrompt || e.agentId !== undefined) return { deny: 'no slash-chain step waits on this turn, so there is nothing to stop' }
+  const reason = reasonOf(e as Record<string, unknown>)
+  if (reason === undefined) return { deny: 'reason is required: say in one sentence why the step failed' }
+  stop($, state, failedWhy(reason))
+  return { result: 'The chain stopped; the steps after this one do not run.' }
+}
+
 /** Whether a prompt the person sent belongs to the running step (a prompt command's own text) or is this mod's command. */
 function isOwnPrompt(text: string, r: Running): boolean {
   return text.startsWith(`/${r.step.command}`) || text.startsWith(`/${COMMAND}`)
@@ -143,8 +156,15 @@ export const register: Register = on => {
     const r = await next(e)
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     await $.command.register({ name: COMMAND, description: 'Runs /a && /b one after another: status, stop, on, off (slash-chain)', argumentHint: '[stop | on | off]', immediate: true })
+    // Declared once at the start, so the tool list the prompt cache holds does not change mid-session.
+    await $.tool.register({ name: FAIL_TOOL, description: FAIL_DESCRIPTION, inputSchema: FAIL_SCHEMA })
     return r
   })
+
+  // A plugin's tool waits behind ToolSearch by default; this one is listed, so the model can call it at once.
+  on('tool.describe', { tool: 'mcp__slash-chain__fail' }, async (_, e, next) => ({ ...(await next(e)), isDeferred: false }))
+
+  on('tool.call', { tool: 'mcp__slash-chain__fail' }, async ($, e) => failStep($, state, e))
 
   on('command.run', { command: COMMAND }, async ($, e) => ({ text: await runCommand($, state, e.args) }))
 
@@ -158,9 +178,13 @@ export const register: Register = on => {
     return runFirst($, state, e, next)
   })
 
+  // A step that hands the model a prompt waits for its turn; the text tells the model how to report a failure.
   on('skill.prompt', async (_, e, next) => {
-    if (state.running?.wait === 'run') state.running.sawPrompt = true
-    return next(e)
+    const result = await next(e)
+    const r = state.running
+    if (r?.wait !== 'run') return result
+    r.sawPrompt = true
+    return r.left.length === 0 ? result : { ...result, text: `${result.text.trimEnd()}\n\n${failNote(r.index, r.total, r.left)}` }
   })
 
   on('ui.open', async (_, e, next) => {

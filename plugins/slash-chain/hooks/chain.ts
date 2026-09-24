@@ -54,6 +54,39 @@ export function turnWhy(reason: string): string {
   return `its turn ended with ${reason}`
 }
 
+export function failedWhy(reason: string): string {
+  return `the model reported it failed: ${reason}`
+}
+
+/**
+ * The tool the model calls when a step it was handed failed. The engine gives a turn no exit code, so a model
+ * that says it failed and ends its turn normally would run the next step (measured: `/fail && /exit` exited).
+ */
+export const FAIL_TOOL = 'fail'
+export const FAIL_TOOL_ID = `mcp__slash-chain__${FAIL_TOOL}` as const
+
+export const FAIL_DESCRIPTION = 'Stops the running slash-chain (/a && /b) because the step you were handed failed, so the commands after it do not run. Call it only while a slash-chain step waits on your turn, and only when you could not do what that step asked; a step you did does not need it.'
+
+export const FAIL_SCHEMA = {
+  type: 'object',
+  properties: {
+    reason: { type: 'string', description: 'Why the step failed, in one sentence.' },
+  },
+  required: ['reason'],
+}
+
+/** The line the model reads after a chained step's text: how to stop the steps after it. */
+export function failNote(index: number, total: number, left: readonly Step[]): string {
+  const after = left.length === 0 ? 'none' : left.map(s => `/${s.command}`).join(', ')
+  return `[slash-chain] This is step ${index}/${total} of a chain; after it: ${after}. If you could not do what this step asks, call the ${FAIL_TOOL_ID} tool with the reason before you end your turn, and the steps after it do not run.`
+}
+
+/** The reason a fail call carries, or undefined when it holds none. */
+export function reasonOf(input: Record<string, unknown>): string | undefined {
+  const reason = typeof input.reason === 'string' ? input.reason.trim() : ''
+  return reason === '' ? undefined : reason
+}
+
 export function stoppedText(step: Step, why: string, left: readonly Step[]): string {
   return `stopped after /${step.command}: ${why}${notRun(left)}`
 }
