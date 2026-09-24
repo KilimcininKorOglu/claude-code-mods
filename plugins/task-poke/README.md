@@ -53,6 +53,7 @@ The count goes back to zero at the first turn that moved something, so a model w
 - The last assistant message called `AskUserQuestion`.
 - The limit of pokes was sent since your last prompt. One red entry reports the stop.
 - Three pokes in a row moved nothing, as above.
+- Background work still runs: the turn's `Stop` input lists a background task or agent. The model only waits for it, so a poke would buy a turn of words. Such a turn sends no poke and does not count toward the three pokes that moved nothing. The first turn that ends with no background work pokes again. Measured before this check: a session that waited for two background agents got three continue prompts in a row and answered each with one sentence.
 - `/task-poke off` is set.
 
 ## Commands
@@ -85,16 +86,16 @@ Restart Claude Code. The mod turns the task tools on at session start, so on a m
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.281:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
+    ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, classic.Stop, turn.complete
     ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
 Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 
-    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the engine's task list through one $.tool.call at the session's start; the origin kind of each prompt, never its text; CLAUDE_CODE_ENABLE_TODO_TOOLS
+    1. Reads:    the transcript through $.session.messages (tool names, inputs and results of TodoWrite, TaskCreate, TaskUpdate, TaskList and AskUserQuestion); the engine's task list through one $.tool.call at the session's start; the origin kind of each prompt, never its text; the number of background tasks in each turn's Stop input; CLAUDE_CODE_ENABLE_TODO_TOOLS
     2. Runs:     one read-only TaskList call at the session's start and at /task-poke on; one $.prompt.submit per main-loop turn that ends with unfinished tasks, at most 99 in a row, or the limit you set, and at most 3 in a row that move nothing; sets CLAUDE_CODE_ENABLE_TODO_TOOLS=1 once per session when it is unset
     3. Sends:    only the fixed poke prompt, as a normal turn
     4. Persists: one boolean (enabled) and the poke limit in $.store; the environment variable lasts for the process only

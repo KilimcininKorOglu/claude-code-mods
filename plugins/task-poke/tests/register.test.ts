@@ -392,6 +392,26 @@ describe('task-poke', () => {
     expect(w.submitted.filter(t => t !== 'go on')).toHaveLength(MAX_STALLS + 1)
   })
 
+  test('sends no poke and counts no stall while background work runs, and pokes once it ended', async ($, on) => {
+    const w = world(on)
+    on('classic.Stop', () => ({}))
+    // The same list and no tool after the prompt: without the wait, the stall count would stop the pokes.
+    w.setMessages([todoWrite('pending'), prompted()])
+    await $.session.start(session)
+    const running = [{ id: 'a1', type: 'subagent', status: 'running', description: 'Explore the runtime' }]
+    for (let i = 0; i < MAX_STALLS + 2; i += 1) {
+      await $.classic.Stop({ stop_hook_active: false, background_tasks: running })
+      await $.turn.complete(turn())
+      await flush()
+    }
+    expect(w.submitted).toEqual([])
+    expect(w.logs.some(l => l.includes('moved nothing'))).toBe(false)
+    await $.classic.Stop({ stop_hook_active: false, background_tasks: [] })
+    await $.turn.complete(turn())
+    await flush()
+    expect(w.submitted).toHaveLength(1)
+  })
+
   test('a turn whose tool results follow its tool calls counts as work', async ($, on) => {
     const w = world(on)
     // The shape $.session.messages() answers (measured): each tool result is a user row of its own,

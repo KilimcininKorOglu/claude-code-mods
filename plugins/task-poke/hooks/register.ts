@@ -41,6 +41,8 @@ type State = {
   stalls: number
   stallLogged: boolean
   signature: string
+  /** Background tasks in flight when the main loop last stopped, from `classic.Stop` just before `turn.complete`. */
+  background: number
 }
 
 /** Decides what to do after a main-loop turn. `pokes` counts the pokes sent since the last user prompt. */
@@ -176,6 +178,13 @@ async function seedTasks($: EngineInterface, state: State): Promise<void> {
   }
 }
 
+/** Whether the main loop stopped with background work in flight; each stop's count is read once. */
+function waitsInBackground(state: State): boolean {
+  const waits = state.background > 0
+  state.background = 0
+  return waits
+}
+
 /**
  * Reads the task list after a main-loop turn and acts on it. The transcript window the engine answers
  * is replayed over the list of the last reading, so a task older than the window still counts. The
@@ -192,6 +201,9 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
   }
   state.lastError = undefined
   state.tasks = reading.tasks
+  // While background work runs, its notification wakes the session; a poke would only buy a "waiting"
+  // reply (measured: three in a row while two agents ran), so none is sent and none counts as a stall.
+  if (waitsInBackground(state) && reading.open > 0) return toCount($, reading.open, state.pokes, state.max, false)
   trackStall(state, signatureOf(reading.tasks), workedThisTurn(messages))
   if (state.stalls >= MAX_STALLS && reading.open > 0) return atStall($, state, reading.open)
   const decision = decide(reading.open, reading.askedUser, state.pokes, state.max)
@@ -205,7 +217,7 @@ async function afterTurn($: EngineInterface, state: State): Promise<void> {
 export const register: Register = on => {
   const state: State = {
     enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false, tasks: null,
-    stalls: 0, stallLogged: false, signature: '',
+    stalls: 0, stallLogged: false, signature: '', background: 0,
   }
 
   const resetCount = (): void => {
@@ -256,6 +268,13 @@ export const register: Register = on => {
     const r = await next(e)
     if (USER_ORIGINS.includes(e.origin.kind)) resetCount()
     return r
+  })
+
+  // The main loop's stop comes just before its turn.complete (measured: 3 ms), and carries the
+  // background work still in flight. A subagent's stop is SubagentStop, so it never lands here.
+  on('classic.Stop', async (_, e, next) => {
+    state.background = (e.background_tasks ?? []).length
+    return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {

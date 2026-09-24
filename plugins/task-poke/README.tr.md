@@ -53,6 +53,7 @@ Sayım, bir şeyi ilerleten ilk turda sıfıra döner, yani uzun bir task üzeri
 - Son assistant mesajı `AskUserQuestion` çağırdı.
 - Son prompt'unuzdan beri poke limiti gönderildi. Kırmızı bir entry duruşu bildirir.
 - Arka arkaya üç poke hiçbir şeyi ilerletmedi, yukarıdaki gibi.
+- Arka planda iş hâlâ çalışıyor: turun `Stop` input'u bir background task ya da agent listeliyor. Model yalnız onu bekler, yani bir poke kelimelerden oluşan bir tur satın alır. Böyle bir tur poke göndermez ve hiçbir şeyi ilerletmeyen üç poke'a sayılmaz. Background iş olmadan biten ilk tur yeniden poke gönderir. Bu kontrolden önce ölçüldü: iki background agent bekleyen bir session arka arkaya üç devam prompt'u aldı ve her birine tek bir cümleyle cevap verdi.
 - `/task-poke off` ayarlı.
 
 ## Komutlar
@@ -85,16 +86,16 @@ Claude Code'u yeniden başlatın. Mod task tool'larını session başlangıcınd
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, turn.complete
+    ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, classic.Stop, turn.complete
     ❯ ./register.ts calls: $.command.register, $.env.get, $.env.set, $.prompt.submit (via sendPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 
 Reach L2, Claude'u sürer. Transcript'i okur. Bir environment variable yazar.
 
-    1. Okur:     transcript'i $.session.messages üzerinden (TodoWrite, TaskCreate, TaskUpdate, TaskList ve AskUserQuestion tool adları, input'ları ve sonuçları); engine'in task listesini session başlangıcında tek bir $.tool.call ile; her prompt'un origin kind'ını, hiçbir zaman metnini değil; CLAUDE_CODE_ENABLE_TODO_TOOLS
+    1. Okur:     transcript'i $.session.messages üzerinden (TodoWrite, TaskCreate, TaskUpdate, TaskList ve AskUserQuestion tool adları, input'ları ve sonuçları); engine'in task listesini session başlangıcında tek bir $.tool.call ile; her prompt'un origin kind'ını, hiçbir zaman metnini değil; her turun Stop input'undaki background task sayısını; CLAUDE_CODE_ENABLE_TODO_TOOLS
     2. Çalıştırır: session başlangıcında ve /task-poke on anında salt okuma bir TaskList çağrısı; bitmemiş task'larla biten her ana döngü turu için bir $.prompt.submit, arka arkaya en fazla 99 ya da ayarladığınız limit kadar, ve hiçbir şeyi ilerletmeyen arka arkaya en fazla 3 tane; ayarlı değilken session başına bir kere CLAUDE_CODE_ENABLE_TODO_TOOLS=1 ayarlar
     3. Gönderir: yalnız sabit poke prompt'unu, normal bir tur olarak
     4. Saklar:   $.store içinde bir boolean (enabled) ve poke limitini; environment variable yalnız process boyunca yaşar
