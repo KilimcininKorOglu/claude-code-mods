@@ -251,22 +251,32 @@ export function doneTitle(updated: readonly Stale[], settled: readonly Stale[]):
   return updated.length === 0 ? 'manifests back in step' : 'lockfiles settled'
 }
 
+/** A pair that closed without a new lockfile; `tool` names the package manager that read it as in step. */
+export type Settled = Stale & { tool?: string }
+
 /**
- * The transcript line of a finding that closed: the lockfiles a later change brought along, and the
- * manifests that no longer ask for one, because their dependencies match the lockfile's own commit again.
+ * The transcript line of a finding that closed: the lockfiles a later change brought along, the
+ * manifests whose dependencies match the lockfile's own commit again, and the lockfiles their package
+ * manager reads as in step.
  */
-export function doneLog(updated: readonly Stale[], settled: readonly Stale[]): string {
+export function doneLog(updated: readonly Stale[], settled: readonly Settled[]): string {
   const parts: string[] = []
+  const reverted = settled.filter(s => s.tool === undefined)
   if (updated.length > 0) parts.push(`a later change brought the lockfiles along: ${updated.map(s => s.lock).join(' · ')}`)
-  if (settled.length > 0) parts.push(`the dependencies match the lockfile again: ${settled.map(s => s.manifest).join(' · ')}`)
+  if (reverted.length > 0) parts.push(`the dependencies match the lockfile again: ${reverted.map(s => s.manifest).join(' · ')}`)
+  for (const s of settled) if (s.tool !== undefined) parts.push(`${s.tool} reads ${s.lock} as in step with ${s.manifest}`)
   return parts.join(' · ')
 }
 
+function settledLine(s: Settled): string {
+  return s.tool === undefined ? `${s.manifest} asks for no lockfile change any more` : `${s.tool} reads ${s.lock} as in step with ${s.manifest}`
+}
+
 /** One sidebar line per pair that closed, with what closed it. */
-export function doneLines(updated: readonly Stale[], settled: readonly Stale[]): { text: string; kind: 'ok' }[] {
+export function doneLines(updated: readonly Stale[], settled: readonly Settled[]): { text: string; kind: 'ok' }[] {
   return [
     ...updated.map(s => ({ text: `${s.lock} now matches ${s.manifest}`, kind: 'ok' as const })),
-    ...settled.map(s => ({ text: `${s.manifest} asks for no lockfile change any more`, kind: 'ok' as const })),
+    ...settled.map(s => ({ text: settledLine(s), kind: 'ok' as const })),
   ]
 }
 

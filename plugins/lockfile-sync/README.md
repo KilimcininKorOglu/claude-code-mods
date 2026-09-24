@@ -21,7 +21,30 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
    | `mix.exs` | `mix.lock` |
 
    The lockfile is the first one on disk from the manifest's directory up to the repository root, so a workspace package pairs with the root lockfile. A manifest without a lockfile on disk is left alone: the project does not keep one.
-4. When the commit leaves that lockfile out, the mod reads the manifest's diff (`git show --unified=20 HEAD -- <manifest>`) and checks where the changed lines sit. Only a change that can change the lockfile counts:
+4. When the commit leaves that lockfile out, the mod first asks the lockfile's own package manager whether the lockfile still fits the manifest. It runs the check by argv in the lockfile's directory, with a 60 s limit:
+
+   | Lockfile | Check | Behind when |
+   |---|---|---|
+   | `Cargo.lock` | `cargo metadata --locked --format-version 1 --manifest-path <manifest>` | `cannot update the lock file` |
+   | `package-lock.json` | `npm ci --dry-run --ignore-scripts` | `are in sync` in the failure |
+   | `pnpm-lock.yaml` | `pnpm install --frozen-lockfile --lockfile-only --ignore-pnpmfile --ignore-scripts` | `don't match specifiers` |
+   | `bun.lock`, `bun.lockb` | `bun install --frozen-lockfile --dry-run --ignore-scripts` | `lockfile had changes` |
+   | `yarn.lock` (v1) | `yarn check` | `Lockfile does not contain pattern` |
+   | `composer.lock` | `composer validate --no-check-all --no-check-publish --check-lock --no-plugins` | `lock file is not up to date` |
+   | `go.sum` | `go mod tidy -diff` | the diff holds a `go.sum` hunk |
+   | `uv.lock` | `uv lock --check` | `needs to be updated` |
+   | `poetry.lock` | `poetry check --lock` | `changed significantly` |
+   | `pdm.lock` | `pdm lock --check` | `satisfy the project requirements` |
+   | `Pipfile.lock` | `pipenv verify` | `out-of-date` |
+   | `Gemfile.lock` | `bundle lock --print` | the printed lockfile differs, platforms and the Bundler version aside |
+   | `pubspec.lock` | `dart pub get --enforce-lockfile --dry-run` | `Unable to satisfy` |
+   | `mix.lock` | `mix deps.get --check-locked`, with `MIX_DEPS_PATH` in `$TMPDIR/lockfile-sync` | `mix.lock is out of date` |
+
+   Each check was measured to write nothing into the repository. A pass means the lockfile fits and no finding opens: a `features` change in `Cargo.toml` that pulls in no new crate opens nothing, and a `features = ["derive"]` that pulls in `serde_derive` does. A failure that says the lockfile is behind opens the finding. Any other answer proves nothing: the tool is not installed, it ran past the limit, it failed for another reason, the lockfile is a Yarn 2+ `yarn.lock`, or the manifest or the lockfile differs from `HEAD` in the working tree. The check reads the working tree and the finding speaks of the commit, so a lockfile written but left out of the commit would read as in step. A tool that did not start is logged once:
+
+       lockfile-sync: cargo did not run: <reason>; the manifest's diff decides
+
+   Then the mod reads the manifest's diff (`git show --unified=20 HEAD -- <manifest>`) and checks where the changed lines sit. Only a change that can change the lockfile counts:
 
    | Manifest | Counts | Does not count |
    |---|---|---|
@@ -46,14 +69,16 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
 
 7. Each commit that leaves a lockfile out opens its own finding, with its own sidebar entry keyed by its manifests. A later commit adds its finding beside the open ones and never writes over one; a pair an open finding already names is not opened twice. Every finding closes on its own measure.
 
-   A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, asks git again, so it closes two ways:
+   A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, asks git and the package manager again, so it closes three ways:
 
    - the lockfile was written: a later commit changed it, or `git status --porcelain` shows it changed in the working tree;
-   - the manifest asks for no lockfile change any more: `git log -1 -- <lockfile>` names the commit that last wrote the lockfile, and the manifest's diff against that commit touches no dependency. A change that was reverted reads this way.
+   - the package manager reads the lockfile as in step with the manifest (the check of step 4);
+   - the check proves nothing and the manifest asks for no lockfile change any more: `git log -1 -- <lockfile>` names the commit that last wrote the lockfile, and the manifest's diff against that commit touches no dependency. A change that was reverted reads this way. A lockfile the package manager reads as behind stays open whatever the diff says.
 
-   The entry is cleared and a new one says which of the two it was:
+   The entry is cleared and a new one says which of the three it was:
 
        lockfile-sync: a later change brought the lockfiles along: package-lock.json
+       lockfile-sync: cargo reads Cargo.lock as in step with Cargo.toml
        lockfile-sync: the dependencies match the lockfile again: package.json
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: the finding closed by its own work, so a note would only repeat what it just did.
@@ -92,22 +117,25 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.282:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.fs.read (via manifestText), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.env.get (via tmpDir), $.fs.exists (via lockOnDisk), $.fs.read (via treeText), $.process.run (via git, lockVerdict), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson, toolFailed)
 
-Reach L2, runs processes.
+Reach L3, runs processes that reach the network.
 
-    1. Reads:    the Bash command text; whether lockfiles exist in the repository; each open finding's manifest in the working tree; through git, the commit's file list, manifest diffs and each manifest at HEAD
-    2. Runs:     git rev-parse, git show, git status, git log, git diff and git diff --cached --name-only, read-only, by argv: four per commit, two per manifest without its lockfile, and two per open pair at each measure, also at the turn's end
-    3. Sends:    a note to the model after the commit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
-    4. Persists: in $.store, the on/off setting and the mode
-    5. Hostile input: the directory comes from the command text and reaches git only as the working directory, never through a shell; manifest paths reach git as one argv entry after --
+    1. Reads:    the Bash command text; whether lockfiles exist in the repository; each open finding's manifest and lockfile in the working tree; through git, the commit's file list, manifest diffs and each manifest at HEAD; TMPDIR
+    2. Runs:     git rev-parse, git show, git status, git log and git diff, read-only, by argv; and the lockfile's package manager check of step 4, once per manifest without its lockfile at a commit and once per open pair at each measure, also at the turn's end
+    3. Sends:    a note to the model after the commit's result, one more with the next prompt while a finding stands, and one line to the transcript; the package manager may ask its registry for the package metadata it resolves against
+    4. Persists: in $.store, the on/off setting and the mode; the package managers keep their own caches, and mix fetches into $TMPDIR/lockfile-sync/mix-deps
+    5. Hostile input: the directory comes from the command text and reaches git and the package manager only as the working directory, never through a shell; manifest paths reach them as one argv entry. The check runs code the project holds: a Gemfile is Ruby and a mix.exs is Elixir, and both are evaluated. npm, pnpm and bun run with --ignore-scripts, pnpm with --ignore-pnpmfile, and composer with --no-plugins, so their project scripts and plugins do not run
 
 ## Limits
 
-- The mod compares file names and diff sections. It does not check that the lockfile's content matches the manifest.
+- Where the package manager check proves nothing, the mod compares file names and diff sections alone, and does not check that the lockfile's content matches the manifest.
+- The verdict is the package manager's own: `npm ci` does not compare the root package's `version`, and `yarn check` reads a lockfile that still lists a removed dependency as in step.
+- A Yarn 2+ `yarn.lock` has no check here: `yarn install --immutable` links `node_modules` into the project, and `--mode=update-lockfile` does not combine with `--immutable`.
+- While a finding stands, its check runs again at every main-loop turn's end, up to 60 s per pair.
 - A lockfile no commit ever wrote has nothing to compare the manifest against, so only the first measure can close its finding.
 - Two lockfiles of one manager in one directory (a `yarn.lock` beside a `package-lock.json`) pair with the first in the table.
 - A commit through a script or an alias that hides `git commit` is not seen. `cd ~/x` is not expanded.

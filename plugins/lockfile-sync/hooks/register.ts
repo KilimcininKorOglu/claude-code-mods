@@ -1,5 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, isNarrowable, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Mode, type Stale } from './pairs.ts'
+import { checkFor, lockDir, type Verdict } from './checks.ts'
+import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, isNarrowable, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Mode, type Settled, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -14,9 +15,10 @@ type Open = { key: string; stale: Stale[] }
  * logged once. `open` holds every finding still standing, one per commit that left a lockfile out, so a
  * later commit that brings its lockfiles along closes it, and in `deny` mode it also holds the gate shut.
  * A later commit adds its own finding beside them and never writes over one. `owed` says the model is
- * owed a note for the findings that stood at the turn's end.
+ * owed a note for the findings that stood at the turn's end. `lastToolError` is the last package manager
+ * failure logged, so the same one is logged once.
  */
-type State = { enabled: boolean; mode: Mode; lastError?: string; open: Open[]; owed: boolean }
+type State = { enabled: boolean; mode: Mode; lastError?: string; lastToolError?: string; open: Open[]; owed: boolean }
 
 /** Every pair the open findings name. */
 const pairsOf = (state: State): Stale[] => state.open.flatMap(o => o.stale)
@@ -54,12 +56,49 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
   }
 }
 
-/** The manifest in the working tree; an empty answer leaves every changed line counted. */
-async function manifestText($: EngineInterface, root: string, manifest: string): Promise<string> {
+/** A manifest or lockfile in the working tree; an empty answer leaves every changed line counted. */
+async function treeText($: EngineInterface, root: string, path: string): Promise<string> {
   try {
-    return await $.fs.read(`${root}/${manifest}`)
+    return await $.fs.read(`${root}/${path}`)
   } catch {
     return ''
+  }
+}
+
+/** Logs a package manager that did not run once until a different failure comes. */
+function toolFailed($: EngineInterface, state: State, tool: string, err: unknown): void {
+  const text = `${tool} did not run: ${errorText(err)}; the manifest's diff decides`
+  if (text !== state.lastToolError) $.ui.log(text)
+  state.lastToolError = text
+}
+
+/** The mod's own temporary directory, where a check that must fetch keeps what it fetched. */
+async function tmpDir($: EngineInterface): Promise<string> {
+  return `${((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/+$/, '')}/lockfile-sync`
+}
+
+/** What a pair's package manager says of its lockfile, and which one said it. */
+type Checked = { verdict: Verdict; tool?: string }
+
+/**
+ * Asks the pair's package manager whether the lockfile fits the manifest. The tool reads the working tree
+ * and a finding speaks of HEAD, so it runs only while both files read as they do at HEAD: a lockfile written
+ * but left out of the commit would read as in step. No check, a changed file, or a tool that did not run
+ * proves nothing, and the manifest's diff decides.
+ */
+async function lockVerdict($: EngineInterface, state: State, root: string, pair: Stale): Promise<Checked> {
+  if (!(await git($, root, ['diff', '--quiet', 'HEAD', '--', pair.manifest, pair.lock])).ok) return { verdict: 'unknown' }
+  const lockText = await treeText($, root, pair.lock)
+  const check = checkFor(pair.lock, lockText)
+  if (check === undefined) return { verdict: 'unknown' }
+  const dir = lockDir(pair.lock)
+  const init = { cwd: dir === '' ? root : `${root}/${dir}`, timeoutMs: 60_000, env: check.env === undefined ? undefined : check.env(await tmpDir($)) }
+  try {
+    const ran = await $.process.run(check.argv(`${root}/${pair.manifest}`), init)
+    return { verdict: check.judge(ran, lockText), tool: check.tool }
+  } catch (err) {
+    toolFailed($, state, check.tool, err)
+    return { verdict: 'unknown' }
   }
 }
 
@@ -69,10 +108,15 @@ async function lockOnDisk($: EngineInterface, root: string, manifest: string): P
   return undefined
 }
 
-/** The manifest's pairing when the commit changed its dependencies but left its lockfile alone. */
-async function staleLock($: EngineInterface, root: string, manifest: string, changed: Set<string>): Promise<Stale | undefined> {
+/**
+ * The manifest's pairing when the commit left its lockfile alone and the lockfile no longer fits: the package
+ * manager says so, or, when it proves nothing, the manifest's diff changed a dependency.
+ */
+async function staleLock($: EngineInterface, state: State, root: string, manifest: string, changed: Set<string>): Promise<Stale | undefined> {
   const lock = await lockOnDisk($, root, manifest)
   if (lock === undefined || changed.has(lock)) return undefined
+  const { verdict } = await lockVerdict($, state, root, { manifest, lock })
+  if (verdict !== 'unknown') return verdict === 'behind' ? { manifest, lock } : undefined
   const diff = await git($, root, ['show', '--format=', '--unified=20', '--no-color', '--no-ext-diff', 'HEAD', '--', manifest])
   if (!diff.ok) throw new Error(`git show HEAD -- ${manifest} failed`)
   // The section of a changed line is read from the whole manifest, not from the diff's own context.
@@ -104,20 +148,30 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
 }
 
 /**
- * The manifests of the open finding that ask for no lockfile change any more: their dependencies read
- * as they did at the commit that last wrote the lockfile, so the change that opened the finding is gone.
- * A lockfile no commit ever wrote has nothing to compare against and is left alone.
+ * Whether the manifest's dependencies read as they did at the commit that last wrote the lockfile, so the
+ * change that opened the finding is gone. A lockfile no commit ever wrote has nothing to compare against.
  */
-async function settled($: EngineInterface, root: string, stale: readonly Stale[]): Promise<Set<string>> {
-  const out = new Set<string>()
+async function reverted($: EngineInterface, root: string, s: Stale): Promise<boolean> {
+  const at = await git($, root, ['log', '-1', '--format=%H', '--', s.lock])
+  const base = at.ok ? at.out.trim() : ''
+  if (base === '') return false
+  const diff = await git($, root, ['diff', '--unified=20', '--no-color', '--no-ext-diff', base, '--', s.manifest])
+  // `git diff <base>` compares against the working tree, so that is the file the sections are read from.
+  const text = await treeText($, root, s.manifest)
+  return diff.ok && !touchesDependencies(s.manifest, diff.out, text)
+}
+
+/**
+ * The lockfiles of the open finding that no longer fall behind, each with the package manager that read
+ * it as in step, or undefined when the manifest's dependency change was taken back. A lockfile its package
+ * manager reads as behind stays open whatever the diff says.
+ */
+async function settled($: EngineInterface, state: State, root: string, stale: readonly Stale[]): Promise<Map<string, string | undefined>> {
+  const out = new Map<string, string | undefined>()
   for (const s of stale) {
-    const at = await git($, root, ['log', '-1', '--format=%H', '--', s.lock])
-    const base = at.ok ? at.out.trim() : ''
-    if (base === '') continue
-    const diff = await git($, root, ['diff', '--unified=20', '--no-color', '--no-ext-diff', base, '--', s.manifest])
-    // `git diff <base>` compares against the working tree, so that is the file the sections are read from.
-    const text = await manifestText($, root, s.manifest)
-    if (diff.ok && !touchesDependencies(s.manifest, diff.out, text)) out.add(s.lock)
+    const checked = await lockVerdict($, state, root, s)
+    if (checked.verdict === 'in-sync') out.set(s.lock, checked.tool)
+    else if (checked.verdict === 'unknown' && (await reverted($, root, s))) out.set(s.lock, undefined)
   }
   return out
 }
@@ -128,7 +182,7 @@ async function settled($: EngineInterface, root: string, stale: readonly Stale[]
  * closes the finding as well as a lockfile that caught up. A finding that keeps some of its pairs stays
  * open with those alone.
  */
-async function closeResolved($: EngineInterface, state: State, changed: ReadonlySet<string>, back: ReadonlySet<string>): Promise<void> {
+async function closeResolved($: EngineInterface, state: State, changed: ReadonlySet<string>, back: ReadonlyMap<string, string | undefined>): Promise<void> {
   const kept: Open[] = []
   for (const open of state.open) {
     const left = open.stale.filter(s => !changed.has(s.lock) && !back.has(s.lock))
@@ -137,7 +191,7 @@ async function closeResolved($: EngineInterface, state: State, changed: Readonly
       continue
     }
     const updated = open.stale.filter(s => changed.has(s.lock))
-    const settledPairs = open.stale.filter(s => !changed.has(s.lock))
+    const settledPairs: Settled[] = open.stale.filter(s => !changed.has(s.lock)).map(s => ({ ...s, tool: back.get(s.lock) }))
     await dropEntry($, open.key)
     await toPerson($, open.key, doneTitle(updated, settledPairs), doneLines(updated, settledPairs), doneLog(updated, settledPairs))
   }
@@ -152,10 +206,10 @@ async function commitNote($: EngineInterface, state: State, before: Before): Pro
   if (!names.ok) throw new Error('git show --name-status HEAD failed')
   const files = changedFiles(names.out)
   const changed = new Set(files)
-  await closeResolved($, state, changed, await settled($, before.root, pairsOf(state)))
+  await closeResolved($, state, changed, await settled($, state, before.root, pairsOf(state)))
   const stale: Stale[] = []
   for (const manifest of files.filter(isManifest)) {
-    const s = await staleLock($, before.root, manifest, changed)
+    const s = await staleLock($, state, before.root, manifest, changed)
     if (s !== undefined) stale.push(s)
   }
   if (stale.length === 0) return undefined
@@ -203,7 +257,7 @@ async function recheckNow($: EngineInterface, state: State): Promise<boolean> {
   try {
     const before = await beforeCommit($, state, '')
     if (before === undefined) return true
-    await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, before.root, stale))
+    await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, state, before.root, stale))
   } catch (err) {
     report($, state, err)
   }
@@ -246,7 +300,7 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
   try {
     const before = await beforeCommit($, state, command)
     if (before === undefined) return undefined
-    await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, before.root, stale))
+    await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, state, before.root, stale))
     return state.open.length === 0 ? undefined : denyFor($, pairsOf(state), before.root, command)
   } catch (err) {
     report($, state, err)

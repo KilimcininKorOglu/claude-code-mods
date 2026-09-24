@@ -50,6 +50,8 @@ type World = {
   commitFails: boolean; showFails: boolean; notRepo: boolean; lockDirty: boolean; staged: string[]
   /** The commit that last wrote the lockfile, and the manifest's diff against it. */
   lockCommit: string; sinceLock: string
+  /** What every package manager answers, or `throws` for one that cannot start; `treeMoved` puts the pair's files off HEAD. */
+  tool: Ran | 'throws'; treeMoved: boolean
 }
 
 type Ran = { exitCode: number; stdout: string; stderr: string }
@@ -69,13 +71,19 @@ function gitShow(w: World, cmd: string): Ran {
   return ok(cmd.includes('--name-status') ? w.names : DEP_DIFF)
 }
 
+/** The index, whether the pair's files are off HEAD, or the manifest's diff since the lockfile's commit. */
+function gitDiff(w: World, cmd: string): Ran {
+  if (cmd.startsWith('git diff --cached')) return ok(w.staged.join('\0'))
+  if (cmd.startsWith('git diff --quiet')) return { exitCode: w.treeMoved ? 1 : 0, stdout: '', stderr: '' }
+  return ok(w.sinceLock)
+}
+
 function gitAnswer(w: World, cmd: string): Ran {
   if (cmd === 'git rev-parse --show-toplevel') return w.notRepo ? failed('not a git repository') : ok(`${ROOT}\n`)
   if (cmd === 'git rev-parse HEAD') return ok(`${w.head}\n`)
   if (cmd.startsWith('git status')) return ok(w.lockDirty ? ' M package-lock.json\n' : '')
   if (cmd.startsWith('git log')) return ok(w.lockCommit === '' ? '' : `${w.lockCommit}\n`)
-  if (cmd.startsWith('git diff --cached')) return ok(w.staged.join('\0'))
-  if (cmd.startsWith('git diff')) return ok(w.sinceLock)
+  if (cmd.startsWith('git diff')) return gitDiff(w, cmd)
   return gitShow(w, cmd)
 }
 
@@ -84,6 +92,8 @@ function world(on: On): World {
     head: 'aaa', next: 'bbb', names: 'M\tpackage.json\n', files: new Set([`${ROOT}/package-lock.json`]),
     argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false, staged: ['package.json'],
     lockCommit: 'a1b2c3', sinceLock: DEP_DIFF,
+    // A failure no check reads, so the manifest's diff decides unless a test says otherwise.
+    tool: { exitCode: 2, stdout: '', stderr: 'unrelated' }, treeMoved: false,
   }
   mock.store(on, {})
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -93,7 +103,9 @@ function world(on: On): World {
   on('process.run', (_, e) => {
     const cmd = e.argv.join(' ')
     w.argv.push(cmd)
-    return { value: gitAnswer(w, cmd) }
+    if (e.argv[0] === 'git') return { value: gitAnswer(w, cmd) }
+    if (w.tool === 'throws') throw new Error(`${e.argv[0]}: command not found`)
+    return { value: w.tool }
   })
   on('tool.call', { tool: 'Bash' }, (_, e) => {
     if (w.commitFails) return { result: 'Error: Exit code 1', text: 'Exit code 1', isError: true } as never
@@ -114,6 +126,8 @@ describe('lockfile-sync', () => {
       'git rev-parse HEAD',
       'git rev-parse HEAD',
       'git show --format= --name-status --no-renames HEAD',
+      'git diff --quiet HEAD -- package.json package-lock.json',
+      'npm ci --dry-run --ignore-scripts',
       'git show --format= --unified=20 --no-color --no-ext-diff HEAD -- package.json',
       'git show HEAD:package.json',
     ])
@@ -282,6 +296,58 @@ describe('lockfile-sync', () => {
     expect(w.logs.at(-1)).toBe('a later change brought the lockfiles along: package-lock.json')
     await prompt('fourth')
     expect(notes[3]).toEqual([])
+  })
+
+  test('the package manager decides over the diff: in step opens nothing, behind opens the finding', async ($, on) => {
+    const w = world(on)
+    w.files.add(`${ROOT}/Cargo.lock`)
+    w.names = 'M\tCargo.toml\n'
+    // A dependency line changed, and cargo still reads the lockfile as in step: a feature that pulls in nothing.
+    w.tool = ok('{}')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m features' })).context).toBe(undefined)
+    expect(w.argv).toContain(`cargo metadata --locked --format-version 1 --manifest-path ${ROOT}/Cargo.toml`)
+    expect(w.argv.some(a => a.startsWith('git show HEAD:'))).toBe(false)
+    w.tool = { exitCode: 101, stdout: '', stderr: 'error: cannot update the lock file /x/Cargo.lock because --locked was passed to prevent this' }
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m derive' })).context?.[0]).toContain('Cargo.toml but not Cargo.lock')
+  })
+
+  test('with the pair off HEAD in the working tree the tool is not asked, and the diff decides', async ($, on) => {
+    const w = world(on)
+    w.tool = ok('')
+    w.treeMoved = true
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })).context).toEqual([NOTE])
+    expect(w.argv.some(a => a.startsWith('npm '))).toBe(false)
+  })
+
+  test('an open finding closes at the turn end once the package manager reads the lockfile as in step', async ($, on) => {
+    const w = world(on)
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    w.tool = ok('')
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect(w.logs.at(-1)).toBe('npm reads package-lock.json as in step with package.json')
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · no lockfile is open')
+  })
+
+  test('a finding its package manager reads as behind stays open even when the diff is taken back', async ($, on) => {
+    const w = world(on)
+    on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    w.sinceLock = ''
+    w.tool = { exitCode: 1, stdout: '', stderr: 'npm error `npm ci` can only install packages when your package.json and package-lock.json are in sync.' }
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · package-lock.json still behind')
+  })
+
+  test('a package manager that cannot start is logged once, and the diff decides', async ($, on) => {
+    const w = world(on)
+    w.tool = 'throws'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })).context).toEqual([NOTE])
+    w.next = 'ccc'
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m again' })
+    // The test engine reports a world hook that throws as a missing implementation; the host says why the tool did not start.
+    expect(w.logs.filter(l => l.startsWith('npm did not run'))).toEqual(["npm did not run: no implementation for process.run; the manifest's diff decides"])
   })
 
   test('a git error is logged once and the commit result stays', async ($, on) => {

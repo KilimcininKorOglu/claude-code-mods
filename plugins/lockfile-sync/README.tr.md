@@ -21,7 +21,30 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    | `mix.exs` | `mix.lock` |
 
    Lockfile, manifest'in dizininden repository köküne doğru diskte bulunan ilkidir, yani bir workspace package'i kökteki lockfile ile eşleşir. Diskte lockfile'ı olmayan bir manifest'e dokunulmaz: proje bir tane tutmuyordur.
-4. Commit o lockfile'ı dışarıda bıraktığında mod manifest'in diff'ini okur (`git show --unified=20 HEAD -- <manifest>`) ve değişen satırların nerede olduğunu kontrol eder. Yalnız lockfile'ı değiştirebilecek bir değişiklik sayılır:
+4. Commit o lockfile'ı dışarıda bıraktığında mod önce lockfile'ın kendi package manager'ına lockfile'ın manifest'e hâlâ uyup uymadığını sorar. Kontrolü argv ile, lockfile'ın dizininde, 60 sn limitle çalıştırır:
+
+   | Lockfile | Kontrol | Geride sayıldığı durum |
+   |---|---|---|
+   | `Cargo.lock` | `cargo metadata --locked --format-version 1 --manifest-path <manifest>` | `cannot update the lock file` |
+   | `package-lock.json` | `npm ci --dry-run --ignore-scripts` | hata metninde `are in sync` |
+   | `pnpm-lock.yaml` | `pnpm install --frozen-lockfile --lockfile-only --ignore-pnpmfile --ignore-scripts` | `don't match specifiers` |
+   | `bun.lock`, `bun.lockb` | `bun install --frozen-lockfile --dry-run --ignore-scripts` | `lockfile had changes` |
+   | `yarn.lock` (v1) | `yarn check` | `Lockfile does not contain pattern` |
+   | `composer.lock` | `composer validate --no-check-all --no-check-publish --check-lock --no-plugins` | `lock file is not up to date` |
+   | `go.sum` | `go mod tidy -diff` | diff bir `go.sum` hunk'ı taşıyor |
+   | `uv.lock` | `uv lock --check` | `needs to be updated` |
+   | `poetry.lock` | `poetry check --lock` | `changed significantly` |
+   | `pdm.lock` | `pdm lock --check` | `satisfy the project requirements` |
+   | `Pipfile.lock` | `pipenv verify` | `out-of-date` |
+   | `Gemfile.lock` | `bundle lock --print` | yazdırılan lockfile, platformlar ve Bundler sürümü dışında farklı |
+   | `pubspec.lock` | `dart pub get --enforce-lockfile --dry-run` | `Unable to satisfy` |
+   | `mix.lock` | `mix deps.get --check-locked`, `MIX_DEPS_PATH` `$TMPDIR/lockfile-sync` altında | `mix.lock is out of date` |
+
+   Her kontrolün repository'ye hiçbir dosya yazmadığı ölçüldü. Geçen bir kontrol lockfile'ın uyduğunu söyler ve bulgu açılmaz: `Cargo.toml`'da yeni bir crate getirmeyen bir `features` değişikliği bir şey açmaz, `serde_derive`'ı getiren bir `features = ["derive"]` açar. Lockfile'ın geride olduğunu söyleyen bir hata bulguyu açar. Diğer her cevap bir şey kanıtlamaz: araç kurulu değildir, limiti aşmıştır, başka bir sebeple hata vermiştir, lockfile bir Yarn 2+ `yarn.lock` dosyasıdır, ya da manifest veya lockfile working tree'de `HEAD`'den farklıdır. Kontrol working tree'yi okur, bulgu ise commit'i konu alır; yazılıp commit dışında bırakılmış bir lockfile uyumlu okunurdu. Başlayamayan bir araç bir kere log'lanır:
+
+       lockfile-sync: cargo did not run: <reason>; the manifest's diff decides
+
+   Ardından mod manifest'in diff'ini okur (`git show --unified=20 HEAD -- <manifest>`) ve değişen satırların nerede olduğunu kontrol eder. Yalnız lockfile'ı değiştirebilecek bir değişiklik sayılır:
 
    | Manifest | Sayılır | Sayılmaz |
    |---|---|---|
@@ -46,14 +69,16 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
 
 7. Bir lockfile'ı dışarıda bırakan her commit, manifest'lerine göre key'lenmiş kendi sidebar entry'siyle kendi bulgusunu açar. Sonraki bir commit bulgusunu açık olanların yanına ekler ve hiçbirinin üstüne yazmaz; açık bir bulgunun zaten adlandırdığı bir çift ikinci kez açılmaz. Her bulgu kendi ölçümüyle kapanır.
 
-   Bir bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra ve guarded bir git komutundan önce git'e yeniden sorar, yani iki yoldan kapanır:
+   Bir bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra ve guarded bir git komutundan önce git'e ve package manager'a yeniden sorar, yani üç yoldan kapanır:
 
    - lockfile yazıldı: sonraki bir commit onu değiştirdi ya da `git status --porcelain` working tree'de değiştiğini gösteriyor;
-   - manifest artık bir lockfile değişikliği istemiyor: `git log -1 -- <lockfile>` lockfile'ı en son yazan commit'i adlandırır ve manifest'in o commit'e karşı diff'i hiçbir dependency'ye dokunmaz. Geri alınmış bir değişiklik böyle okunur.
+   - package manager lockfile'ı manifest ile uyumlu okuyor (4. adımdaki kontrol);
+   - kontrol bir şey kanıtlamıyor ve manifest artık bir lockfile değişikliği istemiyor: `git log -1 -- <lockfile>` lockfile'ı en son yazan commit'i adlandırır ve manifest'in o commit'e karşı diff'i hiçbir dependency'ye dokunmaz. Geri alınmış bir değişiklik böyle okunur. Package manager'ın geride okuduğu bir lockfile, diff ne derse desin açık kalır.
 
    Entry temizlenir ve yeni bir satır hangisi olduğunu söyler:
 
        lockfile-sync: a later change brought the lockfiles along: package-lock.json
+       lockfile-sync: cargo reads Cargo.lock as in step with Cargo.toml
        lockfile-sync: the dependencies match the lockfile again: package.json
 
    Sidebar kapalıyken aynı metin tek bir transcript satırıdır. Model bunun hiçbirini okumaz: bulgu kendi işiyle kapandı, bir not yalnız az önce yaptığını tekrar ederdi.
@@ -92,22 +117,25 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.fs.exists (via lockOnDisk), $.fs.read (via manifestText), $.process.run (via git), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.env.get (via tmpDir), $.fs.exists (via lockOnDisk), $.fs.read (via treeText), $.process.run (via git, lockVerdict), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson, toolFailed)
 
-Reach L2, process çalıştırır.
+Reach L3, network'e çıkan process'ler çalıştırır.
 
-    1. Okur:     Bash komut metnini; repository'de lockfile'ların var olup olmadığını; her açık bulgunun manifest'ini working tree'de; git üzerinden commit'in dosya listesini, manifest diff'lerini ve her manifest'in HEAD'deki hâlini
-    2. Çalıştırır: git rev-parse, git show, git status, git log, git diff ve git diff --cached --name-only komutlarını salt okuma olarak argv ile: commit başına dört, lockfile'ı olmayan manifest başına iki, ve her ölçümde açık çift başına iki, turun sonunda da
-    3. Gönderir: commit'in sonucundan sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; makineden hiçbir şey çıkmaz
-    4. Saklar:   $.store içinde on/off ayarını ve modu
-    5. Düşman girdi: dizin komut metninden gelir ve git'e yalnız working directory olarak ulaşır, hiçbir zaman bir shell üzerinden geçmez; manifest path'leri git'e `--` sonrası tek bir argv girdisi olarak ulaşır
+    1. Okur:     Bash komut metnini; repository'de lockfile'ların var olup olmadığını; her açık bulgunun manifest'ini ve lockfile'ını working tree'de; git üzerinden commit'in dosya listesini, manifest diff'lerini ve her manifest'in HEAD'deki hâlini; TMPDIR
+    2. Çalıştırır: git rev-parse, git show, git status, git log ve git diff komutlarını salt okuma olarak argv ile; ve 4. adımdaki package manager kontrolünü, bir commit'te lockfile'ı olmayan manifest başına bir kere ve her ölçümde açık çift başına bir kere, turun sonunda da
+    3. Gönderir: commit'in sonucundan sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; package manager çözümlediği paketlerin metadata'sını registry'sinden isteyebilir
+    4. Saklar:   $.store içinde on/off ayarını ve modu; package manager'lar kendi cache'lerini tutar, mix $TMPDIR/lockfile-sync/mix-deps altına fetch eder
+    5. Düşman girdi: dizin komut metninden gelir ve git'e ve package manager'a yalnız working directory olarak ulaşır, hiçbir zaman bir shell üzerinden geçmez; manifest path'leri onlara tek bir argv girdisi olarak ulaşır. Kontrol projenin tuttuğu kodu çalıştırır: Gemfile Ruby, mix.exs Elixir kodudur ve ikisi de evaluate edilir. npm, pnpm ve bun --ignore-scripts ile, pnpm --ignore-pnpmfile ile, composer --no-plugins ile çalışır, yani proje script'leri ve plugin'leri çalışmaz
 
 ## Sınırlar
 
-- Mod dosya adlarını ve diff section'larını karşılaştırır. Lockfile'ın içeriğinin manifest ile eşleştiğini kontrol etmez.
+- Package manager kontrolünün bir şey kanıtlamadığı yerde mod yalnız dosya adlarını ve diff section'larını karşılaştırır ve lockfile'ın içeriğinin manifest ile eşleştiğini kontrol etmez.
+- Karar package manager'ın kendi kararıdır: `npm ci` kök package'in `version` değerini karşılaştırmaz, `yarn check` kaldırılmış bir dependency'yi hâlâ listeleyen bir lockfile'ı uyumlu okur.
+- Yarn 2+ `yarn.lock` için burada bir kontrol yok: `yarn install --immutable` projeye `node_modules` link'ler, `--mode=update-lockfile` ise `--immutable` ile birleşmez.
+- Bir bulgu dururken kontrolü her ana döngü turunun sonunda yeniden çalışır, çift başına en fazla 60 sn.
 - Hiçbir commit'in yazmadığı bir lockfile, manifest'i karşılaştıracak bir şey tutmaz, yani bulgusunu yalnız ilk ölçüm kapatabilir.
 - Bir dizinde bir manager'ın iki lockfile'ı (bir `package-lock.json` yanındaki bir `yarn.lock`) tablodaki ilkiyle eşleşir.
 - `git commit`'i gizleyen bir script ya da alias üzerinden atılan commit görülmez. `cd ~/x` genişletilmez.
