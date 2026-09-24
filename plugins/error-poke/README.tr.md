@@ -23,7 +23,8 @@ Bir API hatasının öldürdüğü turn'ü sürdüren bir Claude Code Mod'u. Eng
 
 6. Sizin kendi prompt'unuz (composer, bridge, SDK) sayacı sıfırlar, yani sonraki hata yine 1'den başlar.
 7. [sidebar](../sidebar) açıkken bu satırlar oraya gider, stream'in içinde kayıtlar olarak; transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
-8. Engine'in reddettiği bir prompt da (session meşgul, bekleyen bir durdurma var) raporlanır ve hiçbir sayı kaybolmaz.
+8. Prompt mod'un kendi markdown komutunu, `/error-poke:send <prompt>` komutunu çalıştırır; bu komutun gövdesi yalnız argümanlarıdır. Transcript o komut satırını gösterir ve model prompt'u yazıldığı gibi, yazılmış bir slash komutu gibi okur; bir `$.prompt.submit` metni ona `The error-poke plugin sent a message:` çerçevesi içinde ulaşırdı. Engine komutu reddederse bir satır bunu söyler ve prompt o çerçeveyle bir plugin prompt'u olarak gider.
+9. Engine'in reddettiği bir plugin prompt'u da (session meşgul, bekleyen bir durdurma var) raporlanır ve hiçbir sayı kaybolmaz.
 
 Mod'un okuduğu şey engine'in kendi `reason` değeridir ve `/error-poke` son turn'ün nasıl bittiğini yazar. Gördüğünüz bir hata prompt almadıysa, o satır engine'in hangi değeri raporladığını söyler.
 
@@ -32,6 +33,9 @@ Mod'un okuduğu şey engine'in kendi `reason` değeridir ve `/error-poke` son tu
     /error-poke            on ya da off, sayaç ve son turn'ün nasıl bittiği
     /error-poke on | off   varsayılan on
     /error-poke limit <n>  üst üste en fazla n devam prompt'u; 1 ile 999 arası, varsayılan 99, session'lar arasında saklanır
+    /error-poke:send <prompt>  bir devam prompt'unun çalıştırdığı komut; yazılırsa prompt'u yazıldığı gibi gönderir
+
+`/error-poke:send` mod'un ikinci komutudur ve mod başına tek komut kuralının istisnasıdır, çünkü model'e plugin çerçevesi olmadan prompt veren tek yol bir markdown komutudur.
 
 ## Kurulum
 
@@ -48,10 +52,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=error-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.prompt.submit (via sendPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.command.run (via sendPoke), $.prompt.submit (via submitPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
 
 Reach L2, Claude'u sürer.
 

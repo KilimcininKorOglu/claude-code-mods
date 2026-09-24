@@ -6,6 +6,9 @@ const LIMIT_KEY = 'limit'
 
 const USAGE = 'expects nothing (the status), on, off or limit <n>'
 
+/** The mod's markdown command (`commands/send.md`), whose body is its arguments alone. */
+const SEND_COMMAND = 'error-poke:send'
+
 /** The origins of a prompt the person sent themselves, which resets the count. */
 const USER_ORIGINS: readonly string[] = ['composer', 'bridge', 'sdk']
 
@@ -28,8 +31,8 @@ async function toPerson($: EngineInterface, key: string, title: string, text: st
   $.ui.log(text)
 }
 
-/** A plugin prompt runs once the session is idle, so the hook does not wait for it. */
-function sendPoke($: EngineInterface): void {
+/** The continue prompt as a plugin prompt, which the model reads inside a `The error-poke plugin sent a message:` frame. */
+function submitPoke($: EngineInterface): void {
   void $.prompt.submit({ text: POKE_TEXT }).then(
     res => {
       if (res.drop !== undefined) void toPerson($, 'dropped', 'continue prompt dropped', `the continue prompt was dropped: ${res.drop}`)
@@ -38,6 +41,18 @@ function sendPoke($: EngineInterface): void {
       void toPerson($, 'failed', 'continue prompt not sent', `the continue prompt was not submitted: ${String(err)}`)
     },
   )
+}
+
+/**
+ * Sends the continue prompt through the mod's own `send` command, so the model reads the text alone, as
+ * a typed prompt. It runs from the delay's timer, where the engine takes `$.command.run`; a run the
+ * engine refuses sends the prompt as a plugin prompt instead.
+ */
+function sendPoke($: EngineInterface): void {
+  $.command.run({ command: SEND_COMMAND, args: POKE_TEXT }).catch((err: unknown) => {
+    void toPerson($, 'unsent', 'continue prompt sent as a plugin prompt', `the send command did not run, the continue prompt goes out as a plugin prompt: ${String(err)}`)
+    submitPoke($)
+  })
 }
 
 /** Acts on one main-loop turn that ended: a continue prompt, the limit, or nothing. */

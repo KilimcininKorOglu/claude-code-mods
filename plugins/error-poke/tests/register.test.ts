@@ -30,11 +30,21 @@ const run = (args: string): CommandRunInput => ({
   command: 'error-poke', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The prompts the mod submitted, the logged lines, `drop` to make the engine refuse one, and the clock. */
-type World = { sent: string[]; logs: string[]; drop?: string; clock: MockClock }
+/**
+ * The prompts that reached the engine (through the mod's `send` command, or submitted), how many went
+ * through `send`, the logged lines, `sendFails` to make the engine refuse that command, `drop` to make it
+ * refuse a submitted prompt, and the clock.
+ */
+type World = { sent: string[]; sends: number; logs: string[]; sendFails?: true; drop?: string; clock: MockClock }
 
 function world(on: On): World {
-  const w: World = { sent: [], logs: [], clock: mock.clock(on) }
+  const w: World = { sent: [], sends: 0, logs: [], clock: mock.clock(on) }
+  on('command.run', { command: 'error-poke:send' }, (_, e) => {
+    if (w.sendFails === true) throw new Error('unknown command')
+    w.sent.push(e.args)
+    w.sends += 1
+    return {}
+  })
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -76,6 +86,7 @@ describe('error-poke', () => {
     await started($)
     await ended($, w, 'error')
     expect(w.sent).toEqual([POKE_TEXT])
+    expect(w.sends).toBe(1)
     expect(w.logs).toEqual(['the turn died on an API error, continuing in 5 s (1/99)'])
     expect((await $.command.run(run(''))).text).toBe('on · 1/99 continue prompts since your last prompt · last turn: error')
   })
@@ -147,12 +158,18 @@ describe('error-poke', () => {
     expect((await $.command.run(run(''))).text).toContain('2/2 continue prompts')
   })
 
-  test('a dropped prompt is reported to the person', async ($, on) => {
+  test('a send command the engine refuses goes out as a plugin prompt, and a dropped one is reported', async ($, on) => {
     const w = world(on)
+    w.sendFails = true
     w.drop = 'the session is busy'
     await started($)
     await ended($, w, 'error')
-    expect(w.logs.at(-1)).toBe('the continue prompt was dropped: the session is busy')
+    expect(w.sends).toBe(0)
+    expect(w.sent).toEqual([POKE_TEXT])
+    expect(w.logs.slice(1)).toEqual([
+      'the send command did not run, the continue prompt goes out as a plugin prompt: HooksError: no implementation for command.run',
+      'the continue prompt was dropped: the session is busy',
+    ])
   })
 
   withSidebar('an open sidebar takes the lines and the transcript stays clean', async ($, on) => {

@@ -23,7 +23,8 @@ A Claude Code Mod that continues a turn an API error killed. When the engine end
 
 6. Your own prompt (the composer, the bridge, the SDK) resets the count, so the next failure starts from 1 again.
 7. While the [sidebar](../sidebar) is open, those lines go there instead, as entries in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
-8. A prompt the engine refuses (the session is busy, a stop is pending) is reported too, and no count is lost.
+8. The prompt runs the mod's own markdown command `/error-poke:send <prompt>`, whose body is its arguments alone. The transcript shows that command line, and the model reads the prompt as it is written, as it reads a typed slash command; a `$.prompt.submit` text would reach it inside a `The error-poke plugin sent a message:` frame. When the engine refuses the command, one line says so and the prompt goes out as a plugin prompt, with that frame.
+9. A plugin prompt the engine refuses (the session is busy, a stop is pending) is reported too, and no count is lost.
 
 The engine's own value for `reason` is what the mod reads, and `/error-poke` prints how the last turn ended. When a failure you saw did not get a prompt, that line tells you which value the engine reported.
 
@@ -32,6 +33,9 @@ The engine's own value for `reason` is what the mod reads, and `/error-poke` pri
     /error-poke            on or off, the count, and how the last turn ended
     /error-poke on | off   on by default
     /error-poke limit <n>  at most n continue prompts in a row; 1 to 999, 99 by default, kept across sessions
+    /error-poke:send <prompt>  the command a continue prompt runs; typed, it sends the prompt as written
+
+`/error-poke:send` is the mod's second command, the one exception to one command per mod, because only a markdown command hands the model a prompt without the plugin frame.
 
 ## Install
 
@@ -48,10 +52,10 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.282:
 
     ❯ ./register.ts hooks: session.start, command.run{command=error-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.prompt.submit (via sendPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.command.run (via sendPoke), $.prompt.submit (via submitPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
 
 Reach L2, drives Claude.
 
