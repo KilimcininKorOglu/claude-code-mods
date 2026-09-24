@@ -49,9 +49,6 @@ code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
 pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; overflow-x: auto; }
 pre code { background: none; padding: 0; }
 
-html[data-lang="tr"] [data-lang-block="en"],
-html[data-lang="en"] [data-lang-block="tr"] { display: none; }
-
 /* The page: one fixed sidebar on the left, everything else on the right. */
 .shell { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); min-height: 100vh; }
 
@@ -109,9 +106,9 @@ header.top a { color: var(--muted); font-size: 14px; }
 header.top .langs { margin-left: auto; }
 
 .langs { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
-.langs button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; padding: 3px 11px; cursor: pointer; }
-html[data-lang="tr"] .langs button[data-set="tr"],
-html[data-lang="en"] .langs button[data-set="en"] { background: var(--link); color: #fff; }
+header.top .langs a { color: var(--muted); font-size: 13px; padding: 3px 11px; }
+header.top .langs a:hover { text-decoration: none; color: var(--text); }
+header.top .langs a[aria-current="true"] { background: var(--link); color: #fff; }
 
 .wrap { max-width: 980px; padding: 0 clamp(20px, 4vw, 48px); }
 
