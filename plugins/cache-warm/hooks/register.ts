@@ -33,6 +33,7 @@ const PING_PROMPT = 'Reply with the single word: warm'
 const KEY_ALWAYS = 'always'
 const DEADLINE = 'deadline:'
 const EVERY = 'every:'
+const REQUEST = 'request:'
 /** Another session's window that ended this long ago is not coming back. */
 const STALE_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -45,6 +46,11 @@ function deadlineKey(s: State): string {
 
 function everyKey(s: State): string {
   return EVERY + s.sid
+}
+
+/** The session's last main-loop request, kept for a module loaded into the running conversation. */
+function requestKey(s: State): string {
+  return REQUEST + s.sid
 }
 
 function errorText(err: unknown): string {
@@ -109,6 +115,18 @@ async function prune($: EngineInterface, s: State, now: number): Promise<void> {
     if (typeof deadline === 'number' && deadline + grace > now) continue
     await $.store.delete(key)
     await $.store.delete(EVERY + key.slice(DEADLINE.length))
+  }
+}
+
+/**
+ * Deletes every other session's last request time that is older than the cache, which is gone by then.
+ * This session's own stays: its age is what tells the seed the cache is gone, and the next turn rewrites it.
+ */
+async function pruneRequests($: EngineInterface, s: State, now: number): Promise<void> {
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(REQUEST) || key === requestKey(s)) continue
+    const at = await $.store.get(key)
+    if (typeof at !== 'number' || now - at >= TTL_MS) await $.store.delete(key)
   }
 }
 
@@ -325,6 +343,7 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
   await readFast($, s)
   // turn.step stamps each request; when no step of this turn did, the turn's end is the floor.
   if (now - s.lastRequestAt > durationMs) s.lastRequestAt = now
+  await $.store.set(requestKey(s), s.lastRequestAt)
   s.compacted = false
   // The stop reason and the line under it belong to the window that ended: one turn later the pane
   // carries the idle line instead, and the reason stays in the transcript.
@@ -354,11 +373,21 @@ async function stampRequest($: EngineInterface, s: State): Promise<void> {
 }
 
 /**
- * The time of the last request of a conversation this module did not see, read from the last write of
- * the session's transcript: a reloaded module starts with no request time, and `always` would wait for
- * the first turn to arm its ping. Only a cache that is still warm is taken, so a reload never pays for a
- * cold ping the next message would pay anyway. The transcript lies under the directory the session started
- * in, which a shell `cd` does not move (measured: a module reloaded after `cd sub` looked under `sub`).
+ * The time of the last request of a conversation this module did not see: a reloaded module starts with
+ * no request time, and `always` would wait for the first turn to arm its ping. Each turn's end keeps that
+ * time in the store; only a session with none kept yet (one that ran an older version) reads the last
+ * write of its transcript, which a reload's own line moves to the reload. Only a cache that is still warm
+ * is taken, so a reload never pays for a cold ping the next message would pay anyway.
+ */
+async function seedLastRequest($: EngineInterface, s: State, now: number): Promise<void> {
+  const kept = await $.store.get(requestKey(s))
+  if (typeof kept !== 'number') return seedFromTranscript($, s, now)
+  if (now - kept < TTL_MS) s.lastRequestAt = kept
+}
+
+/**
+ * The transcript lies under the directory the session started in, which a shell `cd` does not move
+ * (measured: a module reloaded after `cd sub` looked under `sub` and found nothing).
  */
 async function seedFromTranscript($: EngineInterface, s: State, now: number): Promise<void> {
   const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) ?? ''}/.claude`
@@ -383,6 +412,7 @@ export const register: Register = on => {
     s.sid = await $.session.id()
     const now = await $.clock.now()
     await prune($, s, now)
+    await pruneRequests($, s, now)
     await restore($, s, now)
     await readFast($, s)
     // A reload gets no classic.SessionStart, and a ping can come before the first turn names the model.
@@ -390,7 +420,7 @@ export const register: Register = on => {
     const live = (await $.session.usage()).context.tokens
     if (live) s.ctx = live
     // A loaded conversation this module has not seen a request of: a reload, or an update mid-session.
-    if (live && !s.lastRequestAt) await seedFromTranscript($, s, now)
+    if (live && !s.lastRequestAt) await seedLastRequest($, s, now)
     // The always switch is one global key, so every session of every project starts the endless loop,
     // whatever the last window of this session left behind.
     if (s.always) await startEndless($, s)

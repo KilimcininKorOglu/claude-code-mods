@@ -439,6 +439,34 @@ describe('always', () => {
     expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · ping in 40m')
   })
 
+  test('a reload takes the last request a turn kept, not the transcript write the reload itself made', async ($, on) => {
+    const w = world(on, [warm], { store: [['always', true], ['request:S1', START - 30 * MIN]] })
+    w.live.tokens = 200_000
+    w.transcripts.set('/Users/u/.claude/projects/-work/S1.jsonl', START)
+    await $.session.start(session)
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · ping in 20m')
+    await w.clock.advance(20 * MIN)
+    expect(w.forks).toBe(1)
+  })
+
+  test('a kept request older than the cache waits for the first turn, whatever the transcript says', async ($, on) => {
+    const w = world(on, [warm], { store: [['always', true], ['request:S1', START - 2 * HOUR]] })
+    w.live.tokens = 200_000
+    w.transcripts.set('/Users/u/.claude/projects/-work/S1.jsonl', START)
+    await $.session.start(session)
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('always · waiting for the first turn')
+  })
+
+  test('each turn keeps its last request, and a session start drops the ones older than the cache', async ($, on) => {
+    const w = world(on, [], { store: [['request:OLD', START - 2 * HOUR], ['request:S2', START - 10 * MIN]] })
+    await $.session.start(session)
+    expect(w.store.has('request:OLD')).toBe(false)
+    expect(w.store.get('request:S2')).toBe(START - 10 * MIN)
+    await w.clock.advance(5 * MIN)
+    await $.turn.complete(turn())
+    expect(w.store.get('request:S1')).toBe(START + 5 * MIN)
+  })
+
   test('a reload in a live conversation whose transcript it cannot find says so', async ($, on) => {
     const w = world(on, [], { store: [['always', true]] })
     w.live.tokens = 200_000
