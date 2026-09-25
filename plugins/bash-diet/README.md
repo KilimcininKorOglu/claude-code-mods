@@ -151,7 +151,7 @@ A file with a mistake keeps its good rules, and one transcript line names every 
     /bash-diet discover [days] [all]         the output the model read in earlier sessions, by filter, and the commands no filter reads
     /bash-diet learn [days] [write]          commands that failed on a CLI mistake and the form that worked after them
 
-- `gain` reads the records in `~/.claude/bash-diet/gain/`, one file per session and day, kept for 90 days. A token is estimated as four characters.
+- `gain` reads the records in `~/.claude/bash-diet/gain/`, one file per session and day, kept for 90 days. Each report gives the measured characters before and after; the token figure is an estimate of four characters per token, and `history` and `graph` give characters alone.
 - `cost` prices the tokens kept out of the context at the model's list prices of September 2026: once at the cache write rate, and again at the cache read rate for each later request.
 - `discover` and `learn` read this project's transcripts of the last 30 days by default. `discover all` reads every project's; it answers at once, and its report follows as a transcript line.
 - `learn` counts only a single command that failed on an unknown flag, a missing command, a missing argument or a syntax error, followed within three calls by a similar command that worked. `learn write` writes the pairs to `.claude/rules/cli-corrections.md` in the repository, which the model reads in later sessions. A command that may carry a credential is never written.

@@ -151,7 +151,7 @@ Hatalı bir dosya iyi kurallarını tutar ve bir transcript satırı her hatayı
     /bash-diet discover [days] [all]         modelin önceki session'larda okuduğu çıktı, filtreye göre, ve hiçbir filtrenin okumadığı komutlar
     /bash-diet learn [days] [write]          bir CLI hatası ile başarısız olan komutlar ve onlardan sonra çalışan biçim
 
-- `gain`, `~/.claude/bash-diet/gain/` içindeki kayıtları okur: session ve gün başına bir dosya, 90 gün tutulur. Bir token dört karakter olarak tahmin edilir.
+- `gain`, `~/.claude/bash-diet/gain/` içindeki kayıtları okur: session ve gün başına bir dosya, 90 gün tutulur. Her rapor önce ve sonraki ölçülen karakter sayısını verir. Token sayısı, token başına dört karakterle yapılan bir tahmindir. `history` ve `graph` yalnız karakter verir.
 - `cost`, context dışında tutulan token'ları modelin Eylül 2026 liste fiyatlarıyla fiyatlar: bir kez cache write fiyatıyla, ve sonraki her request için yeniden cache read fiyatıyla.
 - `discover` ve `learn` varsayılan olarak bu projenin son 30 günlük transcript'lerini okur. `discover all` her projenin transcript'lerini okur; hemen cevap verir ve raporu bir transcript satırı olarak arkadan gelir.
 - `learn` yalnız bilinmeyen bir flag, bulunmayan bir komut, eksik bir argüman ya da bir syntax hatası ile başarısız olan ve üç çağrı içinde çalışan benzer bir komutun takip ettiği tek bir komutu sayar. `learn write` çiftleri repository'deki `.claude/rules/cli-corrections.md` dosyasına yazar; model onu sonraki session'larda okur. Credential taşıyabilecek bir komut hiçbir zaman yazılmaz.

@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { dailyText, dayOf, gainFileName, graphText, recordsOf, staleGainFiles, summaryText, type GainRecord } from '../hooks/gain.ts'
+import { dailyText, dayOf, gainFileName, graphText, historyText, recordsOf, staleGainFiles, summaryText, type GainRecord } from '../hooks/gain.ts'
 import { costText, priceOf } from '../hooks/pricing.ts'
 
 tier('user')
@@ -25,14 +25,23 @@ describe('gain records', () => {
 
   test('the summary names the first day and the families that saved most', () => {
     const records = [rec(20, 'git status', 800, 200), rec(24, 'cargo test', 40_000, 400), rec(25, 'cargo test', 4_000, 400)]
-    expect(summaryText(records)).toBe('since 2026-09-20: 3 results · ~11k tokens saved (98%)\ntop commands:\n  cargo test  2 results · ~11k tokens saved (98%)\n  git status  1 result · ~150 tokens saved (75%)')
+    expect(summaryText(records)).toBe([
+      'since 2026-09-20: 3 results · 45k → 1.0k chars (−98%) · ~11k tokens estimated',
+      'top commands:',
+      '  cargo test  2 results · 44k → 800 chars (−98%) · ~11k tokens estimated',
+      '  git status  1 result · 800 → 200 chars (−75%) · ~150 tokens estimated',
+    ].join('\n'))
     expect(summaryText([])).toBe('no Bash result shrunk in the last 90 days')
   })
 
   test('daily rows and graph bars cover the last days, a quiet day included', () => {
     const records = [rec(23, 'x', 4_000, 0), rec(25, 'x', 2_000, 0)]
-    expect(dailyText(records, NOW, 3)).toBe('2026-09-23  1 result · ~1.0k tokens saved (100%)\n2026-09-24  -\n2026-09-25  1 result · ~500 tokens saved (100%)')
-    expect(graphText(records, NOW, 3, 10)).toBe(`09-23 ${'█'.repeat(10)} 1.0k\n09-24\n09-25 ${'█'.repeat(5)}      500`)
+    expect(dailyText(records, NOW, 3)).toBe('2026-09-23  1 result · 4.0k → 0 chars (−100%) · ~1.0k tokens estimated\n2026-09-24  -\n2026-09-25  1 result · 2.0k → 0 chars (−100%) · ~500 tokens estimated')
+    expect(graphText(records, NOW, 3, 10)).toBe(`09-23 ${'█'.repeat(10)} 4.0k chars\n09-24\n09-25 ${'█'.repeat(5)}      2.0k chars`)
+  })
+
+  test('a history row names the measured characters, never a token count', () => {
+    expect(historyText([rec(25, 'gh issue', 5_200, 2_108, 'web')])).toBe('09-25 12:00  gh issue  5.2k → 2.1k chars (−59%)  web')
   })
 })
 

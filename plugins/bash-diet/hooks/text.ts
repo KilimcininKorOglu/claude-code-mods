@@ -40,15 +40,21 @@ export function fmtTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
-/**
- * The session's gain: how many results shrank, the characters measured before and after, and the
- * tokens saved as estimated from those characters.
- */
+/** The measured characters before and after: `164k → 71k chars (−57%)`. */
+export function charsText(rawChars: number, shownChars: number): string {
+  const pct = rawChars === 0 ? 0 : Math.round(((rawChars - shownChars) / rawChars) * 100)
+  return `${fmtTokens(rawChars)} → ${fmtTokens(shownChars)} chars (−${pct}%)`
+}
+
+/** The measured characters, then the tokens saved as estimated from them. */
+export function savingText(rawChars: number, shownChars: number): string {
+  return `${charsText(rawChars, shownChars)} · ~${fmtTokens(tokensOf(rawChars - shownChars))} tokens estimated`
+}
+
+/** The session's gain: how many results shrank and what they saved. */
 export function sessionText(calls: number, rawChars: number, shownChars: number): string {
   if (calls === 0) return 'no Bash result shrunk yet'
-  const saved = tokensOf(rawChars - shownChars)
-  const pct = rawChars === 0 ? 0 : Math.round(((rawChars - shownChars) / rawChars) * 100)
-  return `${calls} result(s) shrunk · ${fmtTokens(rawChars)} → ${fmtTokens(shownChars)} chars (−${pct}%) · ~${fmtTokens(saved)} tokens estimated`
+  return `${calls} result(s) shrunk · ${savingText(rawChars, shownChars)}`
 }
 
 export function statusText(enabled: boolean, excludes: string[], session: string): string {

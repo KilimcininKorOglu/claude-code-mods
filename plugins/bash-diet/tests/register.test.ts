@@ -242,10 +242,10 @@ describe('bash-diet', () => {
     const day = JSON.parse(w.files.get(`${GAIN}/2026-09-25-s1.jsonl`) ?? '{}') as Record<string, unknown>
     expect(day).toEqual({ at: w.now, project: 'app', family: 'other', raw: NOISY.length, shown: 'step\nretrying (×40)\ndone'.length })
     const summary = (await $.command.run(run('gain'))).text
-    expect(summary).toMatch(/^since 2026-09-24: 2 results · ~[\d.]+k tokens saved \(\d+%\)\ntop commands:\n  cargo test  1 result · ~9\.9k tokens saved \(99%\)\n  other       1 result/)
+    expect(summary).toMatch(/^since 2026-09-24: 2 results · [\d.]+k → \d+ chars \(−\d+%\) · ~[\d.]+k tokens estimated\ntop commands:\n  cargo test  1 result · 40k → 400 chars \(−99%\) · ~9\.9k tokens estimated\n  other       1 result/)
     expect(summary).toMatch(/\(1 unreadable line\(s\) in \/Users\/u\/\.claude\/bash-diet\/gain left out\)$/)
-    expect((await $.command.run(run('gain project'))).text).toMatch(/^lib  1 result · ~9\.9k tokens saved \(99%\)\napp  1 result/)
-    expect(((await $.command.run(run('gain history'))).text ?? '').split('\n')[0] ?? '').toMatch(/^09-25 14:30  other  \d+ → \d+ tokens \(\d+%\)  app$/)
+    expect((await $.command.run(run('gain project'))).text).toMatch(/^lib  1 result · 40k → 400 chars \(−99%\) · ~9\.9k tokens estimated\napp  1 result/)
+    expect(((await $.command.run(run('gain history'))).text ?? '').split('\n')[0] ?? '').toMatch(/^09-25 14:30  other  \d+ → \d+ chars \(−\d+%\)  app$/)
     expect((await $.command.run(run('gain weekly'))).text).toBe('gain expects nothing, project, daily, graph or history')
     expect((await $.command.run(run('cost'))).text).toMatch(/^this session \(claude-opus-5-5\): \$1\.50 so far\n~\d+ tokens kept out of the context: \$0\.\d{4} saved on the cache write/)
   })

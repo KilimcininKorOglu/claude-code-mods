@@ -3,7 +3,7 @@
  * reports `/bash-diet gain` draws from them.
  */
 
-import { fmtTokens, tokensOf } from './text.ts'
+import { charsText, fmtTokens, savingText } from './text.ts'
 
 /** One shrunk result: when, in which project, which command family, and its size before and after. */
 export type GainRecord = { at: number; project: string; family: string; raw: number; shown: number }
@@ -61,10 +61,8 @@ function totalOf(records: GainRecord[]): Total {
   return records.reduce((t, r) => ({ calls: t.calls + 1, raw: t.raw + r.raw, shown: t.shown + r.shown }), { calls: 0, raw: 0, shown: 0 })
 }
 
-const pct = (t: Total): number => (t.raw === 0 ? 0 : Math.round(((t.raw - t.shown) / t.raw) * 100))
-
-/** `42 results · ~12.4k tokens saved (81%)` */
-const totalText = (t: Total): string => `${t.calls} result${t.calls === 1 ? '' : 's'} · ~${fmtTokens(tokensOf(t.raw - t.shown))} tokens saved (${pct(t)}%)`
+/** `42 results · 164k → 71k chars (−57%) · ~23k tokens estimated` */
+const totalText = (t: Total): string => `${t.calls} result${t.calls === 1 ? '' : 's'} · ${savingText(t.raw, t.shown)}`
 
 /** Records grouped by a key, the largest saving first. */
 function grouped(records: GainRecord[], key: (r: GainRecord) => string): [string, Total][] {
@@ -103,11 +101,11 @@ export function dailyText(records: GainRecord[], now: number, days = 14): string
   return lastDays(records, now, days).map(([d, t]) => (t.calls === 0 ? `${d}  -` : `${d}  ${totalText(t)}`)).join('\n')
 }
 
-/** `/bash-diet gain graph`: the tokens saved per day as bars. */
+/** `/bash-diet gain graph`: the characters saved per day as bars. */
 export function graphText(records: GainRecord[], now: number, days = 14, width = 40): string {
-  const rows = lastDays(records, now, days).map(([d, t]): [string, number] => [d.slice(5), tokensOf(t.raw - t.shown)])
+  const rows = lastDays(records, now, days).map(([d, t]): [string, number] => [d.slice(5), t.raw - t.shown])
   const max = Math.max(1, ...rows.map(([, n]) => n))
-  return rows.map(([d, n]) => `${d} ${'█'.repeat(Math.round((n / max) * width)).padEnd(width)} ${n === 0 ? '' : fmtTokens(n)}`.trimEnd()).join('\n')
+  return rows.map(([d, n]) => `${d} ${'█'.repeat(Math.round((n / max) * width)).padEnd(width)} ${n === 0 ? '' : `${fmtTokens(n)} chars`}`.trimEnd()).join('\n')
 }
 
 /** `/bash-diet gain history`: the newest results, one line each. */
@@ -116,8 +114,7 @@ export function historyText(records: GainRecord[], count = 20): string {
   const newest = [...records].sort((a, b) => b.at - a.at).slice(0, count)
   return newest.map(r => {
     const d = new Date(r.at)
-    const saved = pct({ calls: 1, raw: r.raw, shown: r.shown })
-    return `${dayOf(r.at).slice(5)} ${pad(d.getHours())}:${pad(d.getMinutes())}  ${r.family}  ${fmtTokens(tokensOf(r.raw))} → ${fmtTokens(tokensOf(r.shown))} tokens (${saved}%)  ${r.project}`
+    return `${dayOf(r.at).slice(5)} ${pad(d.getHours())}:${pad(d.getMinutes())}  ${r.family}  ${charsText(r.raw, r.shown)}  ${r.project}`
   }).join('\n')
 }
 
