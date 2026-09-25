@@ -34,3 +34,23 @@ export function shownBlocks(blocks: string[][], cap: number, noun: string): { li
 }
 
 export const plural = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? '' : 's'}`
+
+/** One linter finding: the file, the rule, and the message. */
+export type Issue = { file: string; code: string; text: string }
+
+/** How many rule lines a grouped report shows. */
+const MAX_RULE_LINES = 40
+
+/** Linter findings grouped by rule, the most frequent first, each rule's files listed. */
+export function byRule(issues: Issue[], tool: string): { text: string; elided: boolean } {
+  const groups = new Map<string, Issue[]>()
+  for (const i of issues) groups.set(i.code, [...(groups.get(i.code) ?? []), i])
+  const sorted = [...groups].sort((a, b) => b[1].length - a[1].length)
+  const lines = sorted.flatMap(([code, list]) => {
+    const files = [...new Set(list.map(i => i.file))]
+    return [`${code} (${list.length}): ${list[0]?.text ?? ''}`, `  ${files.slice(0, 5).join(', ')}${files.length > 5 ? `, +${files.length - 5} files` : ''}`]
+  })
+  const cut = lines.length > MAX_RULE_LINES
+  const shown = cut ? [...lines.slice(0, MAX_RULE_LINES), `… +${lines.length - MAX_RULE_LINES} more lines`] : lines
+  return { text: [...shown, `${tool}: ${plural(issues.length, 'issue')} in ${plural(groups.size, 'rule')}`].join('\n'), elided: cut }
+}

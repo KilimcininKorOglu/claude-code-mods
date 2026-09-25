@@ -36,7 +36,8 @@ function targetPlan(target: Target): Plan {
   if (c === undefined || filter === undefined) return { ...OTHER(target.words.slice(1)), target }
   const flags = target.canAddFlags ? (filter.flags?.(c.args) ?? []) : []
   const family = c.sub === '' ? c.tool : `${c.tool} ${c.sub}`
-  return { family, filter, args: c.args, flags, target, nameEnd: c.nameEnd }
+  const nameEnd = filter.flagsAtEnd === true ? target.words.length - 1 : c.nameEnd
+  return { family, filter, args: c.args, flags, target, nameEnd }
 }
 
 /** Runs a plan's filter; a filter that throws leaves the output to the generic cleanup. */

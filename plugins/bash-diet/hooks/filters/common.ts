@@ -21,6 +21,8 @@ export type FilterResult = { text: string; elided: boolean }
 export type Filter = {
   run: (input: FilterInput) => FilterResult
   flags?: (args: string[]) => string[] | undefined
+  /** Puts the flags after the command's last word instead of after its name (`vitest run --reporter=json`). */
+  flagsAtEnd?: boolean
 }
 
 /** A table keyed by `tool sub` (`git status`) or by `tool` alone for every subcommand. */

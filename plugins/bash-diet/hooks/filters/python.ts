@@ -1,5 +1,5 @@
-import { plural } from './blocks.ts'
-import { CAP_ERRORS, CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
+import { byRule, plural, type Issue } from './blocks.ts'
+import { CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
 import { cleanup } from './generic.ts'
 
 // ---------------------------------------------------------------------------------------------- pytest
@@ -67,21 +67,6 @@ function pytestFlags(args: string[]): string[] | undefined {
 }
 
 // -------------------------------------------------------------------------------------------- linters
-
-type Issue = { file: string; code: string; text: string }
-
-/** Linter lines grouped by rule, the most frequent first, each rule's files listed. */
-function byRule(issues: Issue[], tool: string): FilterResult {
-  const groups = new Map<string, Issue[]>()
-  for (const i of issues) groups.set(i.code, [...(groups.get(i.code) ?? []), i])
-  const sorted = [...groups].sort((a, b) => b[1].length - a[1].length)
-  const lines = sorted.flatMap(([code, list]) => {
-    const files = [...new Set(list.map(i => i.file))]
-    return [`${code} (${list.length}): ${list[0]?.text ?? ''}`, `  ${files.slice(0, 5).join(', ')}${files.length > 5 ? `, +${files.length - 5} files` : ''}`]
-  })
-  const c = capped(lines, CAP_ERRORS * 2, 'lines')
-  return { text: [...c.lines, `${tool}: ${plural(issues.length, 'issue')} in ${plural(groups.size, 'rule')}`].join('\n'), elided: c.elided }
-}
 
 /** `path:1:2: E501 Line too long` */
 const RUFF_LINE = /^(.+?):\d+:\d+: ([A-Z]+\d+) (.*)$/
