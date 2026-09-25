@@ -3,20 +3,23 @@ import {
   BACKUP,
   appendTopic,
   buildPrompt,
-  changeShort,
+  changeParts,
   changeText,
   clockText,
   contextText,
+  errorParts,
   eventShort,
   fit,
   inspect,
   isProjectName,
+  noChangeParts,
   parseReply,
   projectNameFrom,
   repairSections,
   skippedText,
   topicFiles,
   unansweredText,
+  type Part,
   type Reply,
   type TopicAppend,
 } from './memory.ts'
@@ -138,9 +141,6 @@ async function writeTopics($: EngineInterface, project: string, dir: string, top
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'memory-save', key: 'save' }
 
-/** How the sidebar colours the line: green for a written save, yellow for a part it left out, red for an error. */
-type Tone = 'ok' | 'warn' | 'error' | 'dim'
-
 /** Writes one transcript line and keeps its short form for the sidebar's second line. */
 function logEvent($: EngineInterface, state: State, text: string): void {
   $.ui.log(text)
@@ -150,12 +150,15 @@ function logEvent($: EngineInterface, state: State, text: string): void {
 /**
  * The save's state, on the shared sidebar while it is open, else on the status line, as before.
  * The sidebar also gets the last transcript line under the state, faint, because the status line
- * says where the save stands and the event says what it did. A sidebar mod that is not installed
- * answers the same as a closed one.
+ * says where the save stands and the event says what it did. The state comes in parts, each in its
+ * own colour, and the clock after them is faint. A sidebar mod that is not installed answers the same
+ * as a closed one.
  */
-async function report($: EngineInterface, state: State, text: string, kind: Tone = 'dim'): Promise<void> {
-  const line = `${text} · ${clockText(await $.clock.now())}`
-  const lines = [{ text: line, kind }, ...(state.event === undefined ? [] : [{ text: state.event, kind: 'dim' as const }])]
+async function report($: EngineInterface, state: State, head: Part[]): Promise<void> {
+  const clock: Part = { text: ` · ${clockText(await $.clock.now())}`, kind: 'dim' }
+  const parts = [...head, clock]
+  const line = parts.map(p => p.text).join('')
+  const lines = [{ text: line, parts }, ...(state.event === undefined ? [] : [{ text: state.event, kind: 'dim' as const }])]
   try {
     if (await $.sidebar.set({ ...SECTION, title: 'MEMORY.md', lines, until: 'session', order: 20 })) {
       $.ui.status(undefined)
@@ -202,8 +205,7 @@ async function ask($: EngineInterface, state: State, project: string, dir: strin
 async function reportNoChange($: EngineInterface, state: State, skipped: string[], refused: string[]): Promise<void> {
   const parts = [skipped.length > 0 ? skippedText(skipped) : '', refused.length > 0 ? `refused: ${refused.join('; ')}` : ''].filter(p => p !== '')
   if (parts.length > 0) logEvent($, state, `MEMORY.md: no change; ${parts.join('; ')}`)
-  const counts = [skipped.length > 0 ? `${skipped.length} skipped` : '', refused.length > 0 ? `${refused.length} refused` : ''].filter(p => p !== '')
-  return counts.length > 0 ? report($, state, `no change, ${counts.join(', ')}`, 'warn') : report($, state, 'no change')
+  return report($, state, noChangeParts(skipped.length, refused.length))
 }
 
 /** Asks the fork what to remember, then writes MEMORY.md and its topic files. */
@@ -228,9 +230,7 @@ async function save($: EngineInterface, state: State): Promise<void> {
   await writeTopics($, project, dir, result.topics)
   await $.fs.write(file, result.text)
   logEvent($, state, changeText(result.changes, result.topics))
-  // A retired CRITICAL RULES bullet is yellow too, so the person sees a rule leave and can put it back.
-  const { refused, skipped, retired } = result.changes
-  await report($, state, changeShort(result.changes, result.topics), refused.length + skipped.length + retired.length > 0 ? 'warn' : 'ok')
+  await report($, state, changeParts(result.changes, result.topics))
 }
 
 /** Returns the session's memory context, or undefined when the project has no MEMORY.md. */
@@ -249,7 +249,7 @@ async function withMemory<R extends { additionalContext?: string[] }>($: EngineI
     const text = await memoryContext($, state)
     return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
   } catch (err) {
-    await report($, state, `error: memory not loaded: ${message(err)}`, 'error')
+    await report($, state, errorParts(`memory not loaded: ${message(err)}`))
     return r
   }
 }
@@ -265,8 +265,8 @@ async function drain($: EngineInterface, state: State): Promise<void> {
     do {
       state.pending = false
       // The fork runs in the background; the line says so until the result replaces it.
-      await report($, state, 'saving…')
-      await save($, state).catch((err: unknown) => report($, state, `error: ${message(err)}`, 'error'))
+      await report($, state, [{ text: 'saving…', kind: 'dim' }])
+      await save($, state).catch((err: unknown) => report($, state, errorParts(message(err))))
     } while (state.pending)
   } finally {
     state.running = false

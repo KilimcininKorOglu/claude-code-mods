@@ -47,7 +47,7 @@ Proje adı, bir git worktree içinde de birincil repository adıdır; yoksa git 
     memory-save: +2 1 refused · 14:32
     memory-save: error: reply has no JSON object · 14:32
 
-[sidebar](../sidebar) açıkken bu durum oraya gider, session boyunca duran ve her kayıtta yeniden yazılan bir `MEMORY.md` section'ı olarak, ve status line boş kalır. Orada satır renklidir: yazılmış bir kayıt yeşil, bir kısmı atlayan ya da reddeden bir kayıt sarı, bir hata kırmızı, `saving…` ya da `no change` soluk. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi, engine'in kendi renginde çizilir.
+[sidebar](../sidebar) açıkken bu durum oraya gider, session boyunca duran ve her kayıtta yeniden yazılan bir `MEMORY.md` section'ı olarak, ve status line boş kalır. Orada satır parça parça renklidir: bir kaydın yazdığı kısım (`+2 -1 ~3 topic: …`) yeşil, her `N skipped`, `N refused` ve `N rule(s) retired` sarı, `error:` başı kırmızı ve mesaj varsayılan renkte, `saving…` ve `no change` soluk, saat de soluktur. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi, engine'in kendi renginde çizilir.
 
 Section, durumun altında ikinci, soluk bir satır taşır: son transcript satırı, başındaki `MEMORY.md:` olmadan. Durum kaydın nerede olduğunu söyler, ikinci satır ne yaptığını:
 

@@ -687,19 +687,54 @@ function topicNames(topics: TopicAppend[]): string {
   return `topic: ${names.slice(0, SHORT_TOPICS).join(', ')}${rest > 0 ? ` +${rest}` : ''}`
 }
 
-/** The short form for the status line. */
-export function changeShort(changes: Changes, topics: TopicAppend[]): string {
+/** How the sidebar colours a line or a part of one. */
+export type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** Parts with a separator between each two, the separator in the line's own colour. */
+function joinParts(parts: Part[], sep: string): Part[] {
+  return parts.flatMap((p, i) => (i === 0 ? [p] : [part(sep, undefined), p]))
+}
+
+/**
+ * The short form for the status line, in parts: what was written green, and each part the save left
+ * out or a rule it retired yellow, so the person sees a rule leave and can put it back.
+ */
+export function changeParts(changes: Changes, topics: TopicAppend[]): Part[] {
   const counts: [string, number][] = [
     ['+', changes.added],
     ['-', changes.removed],
     ['~', changes.replaced],
   ]
-  const parts = counts.filter(([, n]) => n > 0).map(([sign, n]) => `${sign}${n}`)
-  if (topics.length > 0) parts.push(topicNames(topics))
-  if (changes.skipped.length > 0) parts.push(`${changes.skipped.length} skipped`)
-  if (changes.refused.length > 0) parts.push(`${changes.refused.length} refused`)
-  if (changes.retired.length > 0) parts.push(`${changes.retired.length} rule(s) retired`)
-  return parts.join(' ') || 'saved'
+  const written = counts.filter(([, n]) => n > 0).map(([sign, n]) => `${sign}${n}`)
+  if (topics.length > 0) written.push(topicNames(topics))
+  const left: [number, string][] = [
+    [changes.skipped.length, 'skipped'],
+    [changes.refused.length, 'refused'],
+    [changes.retired.length, 'rule(s) retired'],
+  ]
+  const warned = left.filter(([n]) => n > 0).map(([n, what]) => part(`${n} ${what}`, 'warn'))
+  const all = [...(written.length > 0 ? [part(written.join(' '), 'ok')] : []), ...warned]
+  return all.length === 0 ? [part('saved', 'ok')] : joinParts(all, ' ')
+}
+
+/** The short form for the status line. */
+export function changeShort(changes: Changes, topics: TopicAppend[]): string {
+  return changeParts(changes, topics).map(p => p.text).join('')
+}
+
+/** A save that changed no file, faint, with the lines it skipped and the ops it refused yellow. */
+export function noChangeParts(skipped: number, refused: number): Part[] {
+  const counts = [skipped > 0 ? `${skipped} skipped` : '', refused > 0 ? `${refused} refused` : ''].filter(p => p !== '')
+  if (counts.length === 0) return [part('no change', 'dim')]
+  return [part('no change', 'dim'), part(', ', undefined), part(counts.join(', '), 'warn')]
+}
+
+/** An error as `error: <message>`, only the front red. */
+export function errorParts(text: string): Part[] {
+  return [part('error:', 'error'), part(` ${text}`, undefined)]
 }
 
 /** Returns the topic files among a directory's entries: every other `.md` file but the migration backup. */

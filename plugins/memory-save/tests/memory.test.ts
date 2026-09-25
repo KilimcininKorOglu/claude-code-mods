@@ -3,13 +3,16 @@ import {
   apply,
   appendTopic,
   buildPrompt,
+  changeParts,
   changeShort,
   changeText,
   contextText,
+  errorParts,
   fit,
   LANGUAGE_NOTE,
   inspect,
   isProjectName,
+  noChangeParts,
   parseReply,
   projectNameFrom,
   repairSections,
@@ -475,5 +478,25 @@ describe('texts', () => {
     const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [], refused: [], retired: [] }
     const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
     expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
+  })
+
+  test('changeParts colours what was written green and each part left out yellow', async () => {
+    const changes = { added: 2, removed: 0, replaced: 0, created: false, skipped: ['a'], refused: ['b', 'c'], retired: ['d'] }
+    expect(changeParts(changes, [])).toEqual([
+      { text: '+2', kind: 'ok' },
+      { text: ' ' },
+      { text: '1 skipped', kind: 'warn' },
+      { text: ' ' },
+      { text: '2 refused', kind: 'warn' },
+      { text: ' ' },
+      { text: '1 rule(s) retired', kind: 'warn' },
+    ])
+    expect(changeShort(changes, [])).toBe('+2 1 skipped 2 refused 1 rule(s) retired')
+  })
+
+  test('noChangeParts keeps no change faint and the counts yellow; errorParts colours only the front', async () => {
+    expect(noChangeParts(0, 0)).toEqual([{ text: 'no change', kind: 'dim' }])
+    expect(noChangeParts(1, 2)).toEqual([{ text: 'no change', kind: 'dim' }, { text: ', ' }, { text: '1 skipped, 2 refused', kind: 'warn' }])
+    expect(errorParts('boom')).toEqual([{ text: 'error:', kind: 'error' }, { text: ' boom' }])
   })
 })
