@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { byAge, doneText, endedIds, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
+import { byAge, doneLine, doneTitle, endedTasks, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -45,16 +45,17 @@ async function toSidebar($: EngineInterface, tasks: Task[], now: number): Promis
 }
 
 /**
- * A task that ended by itself, as a green entry in the sidebar's stream. The engine's own task
- * notification already tells the person, so a closed sidebar gets no second line here.
+ * A task that ended by itself, as an entry in the sidebar's stream named and coloured by its status.
+ * The engine's own task notification already tells the person, so a closed sidebar gets no second
+ * line here.
  */
-async function toFinished($: EngineInterface, task: Task, now: number): Promise<void> {
+async function toFinished($: EngineInterface, task: Task, status: string, now: number): Promise<void> {
   try {
     await $.sidebar.set({
       consumer: 'bg-tasks',
       key: sectionKey(task.id),
-      title: 'task finished',
-      lines: [{ text: doneText(task, now), kind: 'ok' }],
+      title: doneTitle(status),
+      lines: [doneLine(task, status, now)],
       until: 'stream',
     })
   } catch {
@@ -179,15 +180,15 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', { origin: { kind: 'task-notification' } }, async ($, e, next) => {
-    const ended = endedIds(e.text).flatMap(id => {
+    const ended = endedTasks(e.text).flatMap(({ id, status }) => {
       const task = state.tasks.get(id)
-      return task === undefined ? [] : [task]
+      return task === undefined ? [] : [{ task, status }]
     })
     if (ended.length === 0) return next(e)
     const now = await $.clock.now()
-    for (const task of ended) {
+    for (const { task, status } of ended) {
       state.tasks.delete(task.id)
-      await toFinished($, task, now)
+      await toFinished($, task, status, now)
     }
     await changed($, state)
     return next(e)

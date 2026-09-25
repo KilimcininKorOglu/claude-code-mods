@@ -24,10 +24,13 @@ A Claude Code Mod that shows the background shell tasks of the session on the st
 
 5. While the [sidebar](../sidebar) is open, the list goes there instead: one section with the same rows and a `[ stop ... ]` button per task, and the status line stays empty. A press runs `/bg-tasks stop <id>`, which stops that task the same way. With the sidebar closed, or without that mod installed, everything is as above.
 
-6. A task that ends by itself also writes one green entry into the sidebar's stream, so the pane keeps what finished while the list above it holds only what still runs:
+6. A task that ends by itself also writes one entry into the sidebar's stream, so the pane keeps what ended while the list above it holds only what still runs. The entry names how the task ended, and only that word is coloured: `finished` green for `completed`, `killed` yellow, `failed` (or any other status the engine reports) red:
 
        bg-tasks: task finished
        sleep 600 · finished after 12m
+
+       bg-tasks: task failed
+       npm test · failed after 3m
 
    A task you stopped writes no such entry; the pane already says `stopped: <task>`. With the sidebar closed nothing is written, because the engine's own task notification already reports the end.
 

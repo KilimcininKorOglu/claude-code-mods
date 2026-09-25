@@ -24,10 +24,13 @@ Session'ın arka plandaki shell task'larını status line'da gösteren ve `/bg-t
 
 5. [sidebar](../sidebar) açıkken liste oraya gider: aynı satırları taşıyan bir section ve task başına bir `[ stop ... ]` butonu; status line boş kalır. Bir basış `/bg-tasks stop <id>` komutunu çalıştırır, yani task aynı yolla durur. Sidebar kapalıyken ya da o mod kurulu değilken her şey yukarıdaki gibidir.
 
-6. Kendi kendine biten bir task, sidebar'ın stream'ine bir yeşil kayıt da yazar, böylece pane biteni tutar, üstündeki liste yalnız hâlâ çalışanı tutar:
+6. Kendi kendine biten bir task, sidebar'ın stream'ine bir kayıt da yazar, böylece pane biteni tutar, üstündeki liste yalnız hâlâ çalışanı tutar. Kayıt task'ın nasıl bittiğini adlandırır ve yalnız o kelime renklenir: `completed` için yeşil `finished`, sarı `killed`, kırmızı `failed` (ya da engine'in bildirdiği başka bir status):
 
        bg-tasks: task finished
        sleep 600 · finished after 12m
+
+       bg-tasks: task failed
+       npm test · failed after 3m
 
    Sizin durdurduğunuz bir task böyle bir kayıt yazmaz; pane zaten `stopped: <task>` demiştir. Sidebar kapalıyken hiçbir şey yazılmaz, çünkü engine'in kendi task bildirimi bitişi zaten haber verir.
 

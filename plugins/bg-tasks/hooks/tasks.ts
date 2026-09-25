@@ -24,18 +24,21 @@ export function durationText(ms: number): string {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`
 }
 
+/** A task a notification reports as ended, with the status it ended in. */
+export type Ended = { id: string; status: string }
+
 /**
- * The task ids a notification reports as ended. The engine sends
+ * The tasks a notification reports as ended. The engine sends
  * `<task-notification><task-id>ID</task-id>…<status>completed</status>…` (measured on 2.1.278).
  */
-export function endedIds(text: string): string[] {
-  const ids: string[] = []
+export function endedTasks(text: string): Ended[] {
+  const ended: Ended[] = []
   for (const block of text.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)) {
     const id = /<task-id>([^<]+)<\/task-id>/.exec(block[1] ?? '')?.[1]
-    const status = /<status>([^<]+)<\/status>/.exec(block[1] ?? '')?.[1]
-    if (id !== undefined && status !== 'running') ids.push(id.trim())
+    const status = /<status>([^<]+)<\/status>/.exec(block[1] ?? '')?.[1]?.trim() ?? 'ended'
+    if (id !== undefined && status !== 'running') ended.push({ id: id.trim(), status })
   }
-  return ids
+  return ended
 }
 
 /** Tasks from the oldest to the newest. */
@@ -65,9 +68,36 @@ export function sidebarButtons(tasks: readonly Task[]): { label: string; command
   return byAge(tasks).map(t => ({ label: `stop ${t.label}`, command: 'bg-tasks', args: `stop ${t.id}` }))
 }
 
-/** The stream entry of a task that ended by itself: what it ran and how long it took. */
-export function doneText(task: Task, now: number): string {
-  return `${task.label} · finished after ${durationText(now - task.startedAt)}`
+type Kind = 'ok' | 'warn' | 'error' | 'dim'
+
+/** A piece of a sidebar line in its own colour. */
+type Part = { text: string; kind?: Kind }
+
+/** A sidebar line made of parts; `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Kind; parts?: Part[] }
+
+/**
+ * How an ended task is named and coloured: `completed` finished in green, `killed` in yellow, and
+ * `failed` or any status the engine adds later in red, under its own name.
+ */
+function endedWord(status: string): { word: string; kind: Kind } {
+  if (status === 'completed') return { word: 'finished', kind: 'ok' }
+  return status === 'killed' ? { word: 'killed', kind: 'warn' } : { word: status, kind: 'error' }
+}
+
+/** The stream entry's title for an ended task: `task finished`, `task failed`, `task killed`. */
+export function doneTitle(status: string): string {
+  return `task ${endedWord(status).word}`
+}
+
+/**
+ * The stream entry of a task that ended by itself: what it ran, how it ended and how long it took.
+ * Only the status word is coloured, so a failed task does not read as a finished one.
+ */
+export function doneLine(task: Task, status: string, now: number): Line {
+  const { word, kind } = endedWord(status)
+  const parts: Part[] = [{ text: `${task.label} · ` }, { text: word, kind }, { text: ` after ${durationText(now - task.startedAt)}` }]
+  return { text: parts.map(p => p.text).join(''), parts }
 }
 
 /** A sidebar section key: the task id cut to what the sidebar takes, so each task keeps its own entry. */

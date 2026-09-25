@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 
-import { durationText, endedIds, labelOf, statusText } from '../hooks/tasks.ts'
+import { doneLine, doneTitle, durationText, endedTasks, labelOf, statusText } from '../hooks/tasks.ts'
 
 tier('user')
 
@@ -57,11 +57,12 @@ const SIDEBAR: Plugin = {
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
 /** The sections the sidebar took, and the clears it saw; `open` says whether it takes them at all. */
-type Bar = { open: boolean; sections: { title: string; lines: { text: string; kind?: string }[]; buttons: string[] }[]; clears: number }
+type Line = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+type Bar = { open: boolean; sections: { title: string; lines: Line[]; buttons: string[] }[]; clears: number }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const section = e as unknown as { title: string; lines: { text: string; kind?: string }[]; buttons?: { args: string }[] }
+    const section = e as unknown as { title: string; lines: Line[]; buttons?: { args: string }[] }
     if (bar.open) bar.sections.push({ title: section.title, lines: section.lines, buttons: (section.buttons ?? []).map(b => b.args) })
     return { value: bar.open }
   })
@@ -81,8 +82,19 @@ describe('tasks', () => {
     expect(labelOf('  npm run dev\n  --port 3000')).toBe('npm run dev')
     expect(labelOf('x'.repeat(100))).toHaveLength(80)
     expect([durationText(30_000), durationText(12 * MINUTE), durationText(65 * MINUTE), durationText(49 * 60 * MINUTE)]).toEqual(['<1m', '12m', '1h 5m', '2d 1h'])
-    expect(endedIds(`${notification('a1', 'completed')}\n${notification('a2', 'running')}\n${notification('a3', 'killed')}`)).toEqual(['a1', 'a3'])
+    expect(endedTasks(`${notification('a1', 'completed')}\n${notification('a2', 'running')}\n${notification('a3', 'killed')}`)).toEqual([{ id: 'a1', status: 'completed' }, { id: 'a3', status: 'killed' }])
     expect(statusText([], 0)).toBe(undefined)
+  })
+
+  test('an ended task is named and coloured by its status, only the status word coloured', () => {
+    const task = { id: 'a', label: 'npm test', startedAt: 0, byUser: false }
+    expect(['completed', 'failed', 'killed'].map(doneTitle)).toEqual(['task finished', 'task failed', 'task killed'])
+    expect(doneLine(task, 'failed', 3 * MINUTE)).toEqual({
+      text: 'npm test · failed after 3m',
+      parts: [{ text: 'npm test · ' }, { text: 'failed', kind: 'error' }, { text: ' after 3m' }],
+    })
+    expect(doneLine(task, 'completed', 3 * MINUTE).parts?.[1]).toEqual({ text: 'finished', kind: 'ok' })
+    expect(doneLine(task, 'killed', 3 * MINUTE).parts?.[1]).toEqual({ text: 'killed', kind: 'warn' })
     expect(statusText([{ id: 'b', label: 'sleep 9', startedAt: 5 * MINUTE, byUser: false }, { id: 'a', label: 'npm run dev', startedAt: 0, byUser: true }], 12 * MINUTE)).toBe('2 running · oldest 12m (npm run dev)')
   })
 })
@@ -156,15 +168,26 @@ describe('bg-tasks', () => {
     expect(bar.clears).toBe(1)
   })
 
-  withSidebar('a task that ends by itself writes a green entry into the stream', async ($, on) => {
+  withSidebar('a task that ends by itself writes an entry into the stream, named by how it ended', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], clears: 0 }
     seatSidebar(on, bar)
     await started($)
     await background($, 'sleep 600')
+    await background($, 'npm test')
     await w.clock.advance(12 * MINUTE)
     await $.prompt.submit({ text: notification('b1', 'completed'), origin: { kind: 'task-notification' } } as never)
-    expect(bar.sections.at(-1)).toEqual({ title: 'task finished', lines: [{ text: 'sleep 600 · finished after 12m', kind: 'ok' }], buttons: [] })
+    // The running list is written again after the entry, so the entry is found by its title.
+    expect(bar.sections.find(s => s.title.startsWith('task '))).toEqual({
+      title: 'task finished',
+      lines: [{ text: 'sleep 600 · finished after 12m', parts: [{ text: 'sleep 600 · ' }, { text: 'finished', kind: 'ok' }, { text: ' after 12m' }] }],
+      buttons: [],
+    })
+    // A failed task is not a finished one.
+    await $.prompt.submit({ text: notification('b2', 'failed'), origin: { kind: 'task-notification' } } as never)
+    const failed = bar.sections.filter(s => s.title.startsWith('task ')).at(-1)
+    expect(failed?.title).toBe('task failed')
+    expect(failed?.lines[0]?.text).toBe('npm test · failed after 12m')
   })
 
   withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {
