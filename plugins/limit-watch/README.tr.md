@@ -17,7 +17,7 @@ Son kısım şunlardan biridir:
 
 Bir API key session'ı hiçbir limit bildirmez. Status line o zaman `no usage limits reported yet` der. Yeni bir session da Claude bir kere cevap verene kadar bunu gösterir.
 
-**[sidebar](../sidebar) içinde bir section**, sidebar açıkken o status line'ın yerine: aynı parçalar, limit başına bir satır (%80 altında yeşil, %80'den itibaren sarı, %95'ten itibaren kırmızı, pane'deki bar ile aynı adımlar) ve altlarında hız satırı; bu satır bir limit zaten dolduğunda kırmızı, bir limit reset'inden önce dolduğunda sarı, hiçbiri dolmadığında yeşil ve hız hâlâ ölçülürken soluk olur. Status line o sırada temizlenir. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi kalır.
+**[sidebar](../sidebar) içinde bir section**, sidebar açıkken o status line'ın yerine: aynı parçalar, limit başına bir satır; yalnızca yüzde renklidir (%80 altında yeşil, %80'den itibaren sarı, %95'ten itibaren kırmızı, pane'deki bar ile aynı adımlar) ve reset geri sayımı soluktur. Altlarında hız satırı durur: `limit reached` kırmızı, `hits 100% in` ifadesinin `~<süre>` kısmı sarı olur; hiçbir limit dolmadığında satırın tamamı yeşil, hız hâlâ ölçülürken soluktur. Status line o sırada temizlenir. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi kalır.
 
 **`/limit-watch` ile açılıp kapanan bir pane**, limit başına bir blok ile:
 

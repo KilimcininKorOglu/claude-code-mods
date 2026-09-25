@@ -199,34 +199,16 @@ export function clockText(at: number, now: number): string {
   return date.toDateString() === new Date(now).toDateString() ? time : `${WEEKDAYS[date.getDay()]} ${time}`
 }
 
-/** One status line part per limit, as `5h 23%, reset in 46m`. */
-function limitPart(limit: SessionRateLimit, now: number): string {
-  const reset = resetTime(limit)
-  const head = `${profile(limit.kind).short} ${percentText(limit.percentUsed)}`
-  return reset === undefined ? head : `${head}, reset in ${durationText(reset - now)}`
-}
-
-/** The tail names the limit that fills first, or says why none does. */
-function statusTail(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): string {
-  const forecasts = limits.map(l => ({ limit: l, f: forecast(l, limitPace(l, tracks[l.kind], now), now) }))
-  const reached = forecasts.find(x => x.f.kind === 'reached')
-  if (reached !== undefined) return `${profile(reached.limit.kind).short} limit reached`
-  const filling = forecasts
-    .flatMap(x => (x.f.kind === 'full-at' ? [{ limit: x.limit, at: x.f.at }] : []))
-    .sort((a, b) => a.at - b.at)
-    .at(0)
-  if (filling !== undefined) return `${profile(filling.limit.kind).short} hits 100% in ~${durationText(filling.at - now)}`
-  if (forecasts.every(x => x.f.kind === 'measuring')) return 'measuring the pace'
-  return 'no limit fills before its reset'
-}
-
-export function statusLine(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): string {
-  if (limits.length === 0) return 'no usage limits reported yet'
-  return [...limits.map(l => limitPart(l, now)), statusTail(limits, tracks, now)].join(' · ')
-}
-
-/** How the sidebar colours a line. */
+/** How the sidebar colours a line or a part of one. */
 type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
 
 /** The colour of one limit: red over the top threshold, yellow over the first, green under both. */
 function limitTone(percent: number): Tone {
@@ -234,19 +216,41 @@ function limitTone(percent: number): Tone {
   return percent >= (THRESHOLDS[0] ?? 80) ? 'warn' : 'ok'
 }
 
-/** The colour of the tail: red for a limit already reached, yellow for one that fills before its reset. */
-function tailTone(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): Tone {
-  const forecasts = limits.map(l => forecast(l, limitPace(l, tracks[l.kind], now), now))
-  if (forecasts.some(f => f.kind === 'reached')) return 'error'
-  if (forecasts.some(f => f.kind === 'full-at')) return 'warn'
-  return forecasts.every(f => f.kind === 'measuring') ? 'dim' : 'ok'
+/** One limit as `5h 23%, reset in 46m`: only the percentage coloured, the reset faint. */
+function limitLine(limit: SessionRateLimit, now: number): Line {
+  const reset = resetTime(limit)
+  const head = [part(`${profile(limit.kind).short} `, undefined), part(percentText(limit.percentUsed), limitTone(limit.percentUsed))]
+  return partsLine(reset === undefined ? head : [...head, part(`, reset in ${durationText(reset - now)}`, 'dim')])
+}
+
+/**
+ * The tail names the limit that fills first, or says why none does: a reached limit red, the time
+ * to fill yellow, a pace still being measured faint, and no limit filling green.
+ */
+function tailLine(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): Line {
+  const forecasts = limits.map(l => ({ limit: l, f: forecast(l, limitPace(l, tracks[l.kind], now), now) }))
+  const reached = forecasts.find(x => x.f.kind === 'reached')
+  if (reached !== undefined) return partsLine([part(`${profile(reached.limit.kind).short} `, undefined), part('limit reached', 'error')])
+  const filling = forecasts
+    .flatMap(x => (x.f.kind === 'full-at' ? [{ limit: x.limit, at: x.f.at }] : []))
+    .sort((a, b) => a.at - b.at)
+    .at(0)
+  if (filling !== undefined) {
+    return partsLine([part(`${profile(filling.limit.kind).short} hits 100% in `, undefined), part(`~${durationText(filling.at - now)}`, 'warn')])
+  }
+  if (forecasts.every(x => x.f.kind === 'measuring')) return { text: 'measuring the pace', kind: 'dim' }
+  return { text: 'no limit fills before its reset', kind: 'ok' }
+}
+
+export function statusLine(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): string {
+  if (limits.length === 0) return 'no usage limits reported yet'
+  return [...limits.map(l => limitLine(l, now).text), tailLine(limits, tracks, now).text].join(' · ')
 }
 
 /** The same reading as the status line, one line per limit, for the shared sidebar. */
-export function sidebarLines(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): { text: string; kind?: Tone }[] {
+export function sidebarLines(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): Line[] {
   if (limits.length === 0) return [{ text: 'no usage limits reported yet', kind: 'dim' }]
-  const parts = limits.map(l => ({ text: limitPart(l, now), kind: limitTone(l.percentUsed) }))
-  return [...parts, { text: statusTail(limits, tracks, now), kind: tailTone(limits, tracks, now) }]
+  return [...limits.map(l => limitLine(l, now)), tailLine(limits, tracks, now)]
 }
 
 /** A bar of `width` cells, filled up to the percentage. A percentage above 100 fills the whole bar. */

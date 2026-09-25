@@ -17,7 +17,7 @@ The last part is one of these:
 
 An API key session reports no limits. The status line then reads `no usage limits reported yet`. A new session also shows this until Claude answers once.
 
-**A section in the [sidebar](../sidebar)** instead of that status line while the sidebar is open: the same parts, one line per limit (green under 80%, yellow from 80%, red from 95%, the same steps as the pane's bar) and the pace line under them, itself red when a limit is already reached, yellow when one fills before its reset, green when none does and faint while the pace is still measured. The status line is cleared then. With the sidebar closed, or without that mod installed, the status line stays as above.
+**A section in the [sidebar](../sidebar)** instead of that status line while the sidebar is open: the same parts, one line per limit, with only the percentage coloured (green under 80%, yellow from 80%, red from 95%, the same steps as the pane's bar) and the reset countdown faint, and the pace line under them: `limit reached` red, the `~<time>` of `hits 100% in` yellow, the whole line green when no limit fills and faint while the pace is still measured. The status line is cleared then. With the sidebar closed, or without that mod installed, the status line stays as above.
 
 **A pane, opened and closed with `/limit-watch`**, with one block per limit:
 

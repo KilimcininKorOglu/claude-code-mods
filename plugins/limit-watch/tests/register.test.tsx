@@ -229,10 +229,10 @@ describe('limit-watch', () => {
     expect(bar.sections.at(-1)).toEqual({
       title: 'usage limits',
       lines: [
-        { text: '5h 23%, reset in 3h', kind: 'ok' },
-        { text: '7d 88%, reset in 1d 12h', kind: 'warn' },
+        { text: '5h 23%, reset in 3h', parts: [{ text: '5h ' }, { text: '23%', kind: 'ok' }, { text: ', reset in 3h', kind: 'dim' }] },
+        { text: '7d 88%, reset in 1d 12h', parts: [{ text: '7d ' }, { text: '88%', kind: 'warn' }, { text: ', reset in 1d 12h', kind: 'dim' }] },
         // 88% after 5.5 days of the cycle is 2/3% an hour, so the last 12% take 18 hours.
-        { text: '7d hits 100% in ~18h', kind: 'warn' },
+        { text: '7d hits 100% in ~18h', parts: [{ text: '7d hits 100% in ' }, { text: '~18h', kind: 'warn' }] },
       ],
     })
     expect(w.statuses.at(-1)).toBe(undefined)
@@ -244,10 +244,22 @@ describe('limit-watch', () => {
     const w = world(on)
     w.setLimits([fiveHour(96)])
     await $.session.start(session)
-    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: '5h 96%, reset in 3h', kind: 'error' })
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({
+      text: '5h 96%, reset in 3h',
+      parts: [{ text: '5h ' }, { text: '96%', kind: 'error' }, { text: ', reset in 3h', kind: 'dim' }],
+    })
     w.setLimits([fiveHour(100)])
     await $.turn.complete(turn())
-    expect(bar.sections.at(-1)?.lines.at(-1)).toEqual({ text: '5h limit reached', kind: 'error' })
+    expect(bar.sections.at(-1)?.lines.at(-1)).toEqual({ text: '5h limit reached', parts: [{ text: '5h ' }, { text: 'limit reached', kind: 'error' }] })
+  })
+
+  withSidebar('a tail with no single token to colour keeps its whole-line colour', async ($, on) => {
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    const w = world(on)
+    w.setLimits([fiveHour(23), { kind: 'seven_day', percentUsed: 8, resetsAt: '2026-09-20T00:00:00Z' }])
+    await $.session.start(session)
+    expect(bar.sections.at(-1)?.lines.at(-1)).toEqual({ text: 'no limit fills before its reset', kind: 'ok' })
   })
 
   withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {
