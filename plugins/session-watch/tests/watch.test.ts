@@ -1,6 +1,9 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { addSplit, contextTone, failedGit, fmtTok, gitLine, NO_SPLIT, parseStatus, sidebarLines, statusText, storedSplits, withSplit, type Reading } from '../hooks/watch.ts'
+import {
+  addSplit, contextTone, endFile, failedGit, fmtTok, gitLine, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  type Reading,
+} from '../hooks/watch.ts'
 
 tier('user')
 
@@ -14,6 +17,7 @@ const reading = (over: Partial<Reading> = {}): Reading => ({
   context: { tokens: 245_000, window: 1_000_000, percent: 25 },
   costUsd: 1.234,
   split: { input: 3000, output: 45_000, cacheRead: 1_100_000, cacheWrite: 80_000 },
+  seeding: false,
   model: 'claude-opus-5-5',
   effort: 'high',
   version: '2.1.282',
@@ -54,10 +58,15 @@ describe('reading', () => {
     ])
   })
 
+  test('while the transcripts are read, the tokens line says so instead of a partial count', () => {
+    expect(sidebarLines(reading({ seeding: true }))[1]).toEqual({ text: 'tokens: reading the transcripts', kind: 'dim' })
+  })
+
   test('what is not known yet is said, not zeroed', () => {
     const lines = sidebarLines(reading({ context: { window: 200_000 }, costUsd: undefined, effort: undefined, git: undefined }))
     expect(lines.map(l => l.text)).toEqual(['context: no reply yet', 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
     expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no thinking setting')
+    expect(sidebarLines(reading({ seeding: true }))[1]?.text).toBe('tokens: reading the transcripts')
     expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · thinking budget 12000')
   })
 
@@ -72,7 +81,25 @@ describe('token totals', () => {
     const one = addSplit(NO_SPLIT, { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20 })
     expect(addSplit(one, { output_tokens: 5 })).toEqual({ input: 10, output: 10, cacheRead: 100, cacheWrite: 20 })
     expect(addSplit(one, undefined)).toBe(one)
-    expect([830, 245_400, 1_234_567].map(fmtTok)).toEqual(['830', '245k', '1.2M'])
+    expect([830, 245_400, 1_234_567, 3_240_000_000].map(fmtTok)).toEqual(['830', '245k', '1.2M', '3.2B'])
+    // A count of another type from a transcript adds nothing.
+    expect(addSplit(NO_SPLIT, { input_tokens: '5' as unknown as number, output_tokens: -1 })).toEqual(NO_SPLIT)
+  })
+
+  test('the transcripts lie under a directory named after the start directory', () => {
+    expect(transcriptDir('/Users/k/.claude', '/Users/k/my app.v2')).toBe('/Users/k/.claude/projects/-Users-k-my-app-v2')
+  })
+
+  test('a transcript read in pieces counts each response once, its last row, and a line cut between files alone', () => {
+    const row = (id: string, output: number) => JSON.stringify({ type: 'assistant', message: { id, usage: { input_tokens: 1, output_tokens: output } } })
+    const s = usageScannerOf()
+    const text = `${row('a', 5)}\n${row('a', 9)}\n{"type":"user","message":{"usage":"assistant"}}\nnot json "usage" "assistant"\n${row('b', 1)}`
+    scanUsage(s, text.slice(0, 30))
+    scanUsage(s, text.slice(30))
+    endFile(s)
+    // The second file starts with a row of its own, not the first file's unfinished line.
+    scanUsage(s, `${row('c', 100)}\n`)
+    expect(usageTotal(s)).toEqual({ input: 3, output: 110, cacheRead: 0, cacheWrite: 0 })
   })
 
   test('the store keeps the last 20 sessions, this one last, and drops a value of another shape', () => {

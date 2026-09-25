@@ -16,26 +16,100 @@ export type Usage = {
   cache_creation_input_tokens?: number
 }
 
+const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+
+/** A count read from a usage record, which a transcript line makes untrusted; another value reads as 0. */
+const countOf = (v: unknown): number => (isCount(v) ? v : 0)
+
 /** A split with one more turn's tokens added. */
 export function addSplit(split: Split, usage: Usage | undefined): Split {
   if (usage === undefined) return split
   return {
-    input: split.input + (usage.input_tokens ?? 0),
-    output: split.output + (usage.output_tokens ?? 0),
-    cacheRead: split.cacheRead + (usage.cache_read_input_tokens ?? 0),
-    cacheWrite: split.cacheWrite + (usage.cache_creation_input_tokens ?? 0),
+    input: split.input + countOf(usage.input_tokens),
+    output: split.output + countOf(usage.output_tokens),
+    cacheRead: split.cacheRead + countOf(usage.cache_read_input_tokens),
+    cacheWrite: split.cacheWrite + countOf(usage.cache_creation_input_tokens),
   }
+}
+
+/** Two splits added. */
+export function sumSplits(a: Split, b: Split): Split {
+  return { input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite }
 }
 
 const totalOf = (s: Split): number => s.input + s.output + s.cacheRead + s.cacheWrite
 
-/** A token count as `830`, `245k` or `1.2M`. */
+/** A token count as `830`, `245k`, `1.2M` or `3.1B`. */
 export function fmtTok(n: number): string {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   return n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)
 }
 
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+/**
+ * The directory of a session's transcripts: under `projects/`, named after the session's start directory
+ * with every character but a letter or a digit turned into `-` (measured on 2.1.280). It holds
+ * `<session id>.jsonl` and, for a session that ran subagents, `<session id>/subagents/*.jsonl`.
+ */
+export function transcriptDir(configDir: string, root: string): string {
+  return `${configDir}/projects/${root.replace(/[^A-Za-z0-9]/g, '-')}`
+}
+
+/**
+ * A transcript read piece by piece: the usage of each model response, by message id. The engine writes
+ * one line per content block of a response, each with the response's usage, so a response counts once;
+ * its last line wins, because a streamed response's earlier lines can carry a smaller output count.
+ */
+export type UsageScanner = { rest: string; byId: Map<string, Usage>; noId: Split }
+
+export const usageScannerOf = (): UsageScanner => ({ rest: '', byId: new Map(), noId: NO_SPLIT })
+
+type UsageRow = { type?: unknown; message?: { id?: unknown; usage?: unknown } }
+
+/** The row a line holds, or undefined for a line that is not JSON (a line cut at the snapshot's end). */
+function rowOf(line: string): UsageRow | undefined {
+  try {
+    return JSON.parse(line) as UsageRow
+  } catch {
+    return undefined
+  }
+}
+
+/** A model response's id and usage, from a transcript line, or undefined for a line of another kind. */
+function responseOf(line: string): { id: unknown; usage: Usage } | undefined {
+  // Parsing every row of a long transcript costs more than it needs: only a response's own row counts.
+  if (!line.includes('"usage"') || !line.includes('"assistant"')) return undefined
+  const row = rowOf(line)
+  const usage = row?.message?.usage
+  if (row?.type !== 'assistant' || typeof usage !== 'object' || usage === null) return undefined
+  return { id: row.message?.id, usage: usage as Usage }
+}
+
+function takeUsageLine(s: UsageScanner, line: string): void {
+  const r = responseOf(line)
+  if (r === undefined) return
+  if (typeof r.id === 'string') s.byId.set(r.id, r.usage)
+  else s.noId = addSplit(s.noId, r.usage)
+}
+
+/** Reads the next piece of a transcript; a line cut between pieces waits for the rest. */
+export function scanUsage(s: UsageScanner, text: string): void {
+  const lines = (s.rest + text).split('\n')
+  s.rest = lines.pop() ?? ''
+  for (const line of lines) takeUsageLine(s, line)
+}
+
+/** Reads what is left after a file's last piece, so the next file starts on a line of its own. */
+export function endFile(s: UsageScanner): void {
+  if (s.rest.trim() !== '') takeUsageLine(s, s.rest)
+  s.rest = ''
+}
+
+/** The totals of every transcript read so far. */
+export function usageTotal(s: UsageScanner): Split {
+  endFile(s)
+  return [...s.byId.values()].reduce(addSplit, s.noId)
+}
 
 function isSplit(v: unknown): v is Split {
   const s = v as Partial<Split> | null
@@ -123,6 +197,8 @@ export type Reading = {
   context: { tokens?: number; window: number; percent?: number }
   costUsd?: number
   split: Split
+  /** Whether the session's transcripts are still being read into the totals. */
+  seeding: boolean
   model: string
   effort: Effort
   version: string
@@ -144,7 +220,8 @@ function contextLine(c: Reading['context']): Line {
   return { text: `context ${c.percent}% · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`, kind: contextTone(c.percent) }
 }
 
-function tokensLine(s: Split): Line {
+function tokensLine(s: Split, seeding: boolean): Line {
+  if (seeding) return { text: 'tokens: reading the transcripts', kind: 'dim' }
   return { text: `tokens T ${fmtTok(totalOf(s))} · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}` }
 }
 
@@ -178,7 +255,7 @@ export function gitLine(git: GitState | undefined): Line {
 
 /** The reading as the sidebar section's lines, in the order the person reads them. */
 export function sidebarLines(r: Reading): Line[] {
-  return [contextLine(r.context), tokensLine(r.split), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, gitLine(r.git)]
+  return [contextLine(r.context), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, gitLine(r.git)]
 }
 
 /** The short status line while the sidebar is closed: `ctx 24% · $1.23 · main*`. */

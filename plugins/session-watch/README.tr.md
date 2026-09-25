@@ -15,7 +15,7 @@ Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u
     main · 1 untracked · no upstream
 
 - `context`: son cevabın input token'ı, modelin context window'u ve ikisinin oranı. %50 altı yeşil, %50 ile %80 arası sarı, %80 üstü kırmızı. Üç değeri de engine verir (`$.session.usage().context`), mod hiçbirini hesaplamaz. İlk cevaptan önce satır `context: no reply yet` yazar.
-- `tokens`: session'ın toplamları: `T` hepsi, `I` input, `O` output, `CR` cache read, `CW` cache write. `/cost` gibi her turn sayılır, bir subagent'ınki de. Toplamlar session başına `$.store` içinde tutulur, böylece reload edilen bir modül kaldığı yerden devam eder.
+- `tokens`: session'ın toplamları: `T` hepsi, `I` input, `O` output, `CR` cache read, `CW` cache write. Toplamı tutulmamış bir session, toplamları bir kez kendi transcript'lerinden (main loop'unkinden ve her subagent'ınkinden) okur ve her model cevabını bir kez sayar. Ondan sonra her turn kendi token'larını ekler, bir subagent'ınki de. Toplamlar session başına `$.store` içinde tutulur, böylece reload edilen bir modül kaldığı yerden devam eder. Transcript'ler okunurken satır `tokens: reading the transcripts` yazar. 2.1.282 üzerinde resume edilen bir session'da ölçüldü: toplamlar `/cost`'un session modeline ait satırına eşitti, `6 input, 19 output, 222.3k cache read, 21.5k cache write`.
 - `cost`: session'ın maliyeti, `/cost`'un toplamı olarak ABD doları.
 - `model`: main loop'un modeli ve main loop'un son model request'inin thinking ayarı (`effort`): `low` ile `max` arası, bir budget, effort'u olmayan bir model için `no thinking setting`, ya da ilk request'ten önce `thinking: not read yet`.
 - `Claude Code`: engine'in sürümü.
@@ -61,19 +61,20 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, tool.call{tool=Bash}, command.run{command=session-watch}
-    ❯ ./register.ts calls: $.clock.every, $.command.register, $.process.run (via readGit), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.get, $.store.set (via countTurn), $.ui.log (via refresh), $.ui.status (via show)
+    ❯ ./register.ts calls: $.clock.after (via startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via transcriptsOf), $.fs.list (via transcriptsOf), $.fs.stat (via transcriptsOf), $.process.run (via readGit), $.process.spawn (via readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals), $.ui.status (via show)
 
-Reach L2, git çalıştırır.
+Reach L2, git ve head çalıştırır.
 
-    1. Okur:     session'ın usage değerlerini (context, maliyet), modelini, id'sini, başlangıç dizinini ve engine sürümünü; her turn'ün token sayılarını ve her request'in thinking ayarını; git adını geçip geçmediğini görmek için her Bash komutunun metnini
-    2. Çalıştırır: her okumada session'ın başlangıç dizininde git status --porcelain=v2 --branch; interactive bir session'da bir 30 saniyelik timer
+    1. Okur:     session'ın usage değerlerini (context, maliyet), modelini, id'sini, başlangıç dizinini ve engine sürümünü; her turn'ün token sayılarını ve her request'in thinking ayarını; git adını geçip geçmediğini görmek için her Bash komutunun metnini; toplamı tutulmamış her session'da bir kez, <config dizini>/projects/ altındaki transcript'lerini, yalnız model cevaplarının usage alanını
+    2. Çalıştırır: her okumada session'ın başlangıç dizininde git status --porcelain=v2 --branch; her transcript üzerinde bir kez head -c <boyut>; interactive bir session'da bir 30 saniyelik timer
     3. Gönderir: makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde son 20 session'ın token toplamlarını
-    5. Düşman girdi: git'in çıktısı satır biçimine göre parse edilir ve yalnız sayılır; başka biçimde saklanmış bir değer yok sayılır
+    5. Düşman girdi: git'in çıktısı satır biçimine göre parse edilir ve yalnız sayılır; bir transcript satırı JSON olarak parse edilir ve yalnız dört token sayısı eklenir, başka tipte bir sayı hiçbir şey eklemez; başka biçimde saklanmış bir değer yok sayılır
 
 ## Sınırlar
 
-- Kurulumdan önce açılmış bir session'da token toplamları, modülün ilk yüklendiği andan başlar.
+- Token toplamları transcript'lerin kaydettiği model request'lerini sayar. Engine'in onların dışında yaptığı bir request sayılmaz: bir plugin'in kendi model çağrısı (`$.model.fork`), bir compaction özeti ve küçük yan çağrılar (`/cost`'ta bir `haiku` satırı). `cost` her request'i sayar, bu yüzden toplamlar değişmezken artabilir.
+- Transcript'lerin boyutlarının okunduğu anı aşan bir turn iki kez sayılabilir: o andan önce yazılan cevapları transcript'ten okunur, `turn.complete` de bütün turn'ü ekler.
 - Thinking ayarı main loop'un son request'inindir; bir subagent'ın kendi ayarı gösterilmez.
 - `git status` session'ın başladığı dizini okur; başka bir repository'ye yapılan bir Bash `cd` onu taşımaz.
 - git'i adını geçmeden bir script üzerinden çalıştıran bir Bash komutu, git satırını yalnız turn sonunda ya da timer'da yeniler.
