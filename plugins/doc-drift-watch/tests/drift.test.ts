@@ -25,6 +25,13 @@ describe('drift', () => {
     expect(commitDir('git -C ../other commit -m x', '/s')).toBe('/s/../other')
   })
 
+  test('a directory the shell expands first is named, never joined as text', async () => {
+    expect(() => commitDir('D=/tmp/x; cd $D && git commit -m x', '/s')).toThrow("the commit's directory is not known: cd $D")
+    expect(() => commitDir('cd ~/work && git commit -m x', '/s')).toThrow("the commit's directory is not known: cd ~/work")
+    expect(() => commitDir('git -C "$(pwd)/a" commit -m x', '/s')).toThrow('the commit\'s directory is not known: git -C "$(pwd)/a"')
+    expect(commitDir("cd 'price$' && git commit -m x", '/s')).toBe('/s/price$')
+  })
+
   test('reads each stale anchor under its doc', async () => {
     expect(parseDrift(OUTPUT)).toEqual([
       { doc: 'README.md', line: '12', kind: 'file-line', why: 'missing-file', ref: 'old.go:5' },

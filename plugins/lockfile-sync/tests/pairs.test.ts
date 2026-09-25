@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { changedFiles, denyText, isGuarded, isManifest, lockCandidates, modeOf, noteText, touchesDependencies } from '../hooks/pairs.ts'
+import { changedFiles, commitDir, denyText, isGuarded, isManifest, lockCandidates, modeOf, noteText, touchesDependencies } from '../hooks/pairs.ts'
 
 tier('user')
 
@@ -13,6 +13,14 @@ const fileOf = (...lines: string[]): string => lines.filter(l => !l.startsWith('
 /** The whole file is the diff's own post-image, which is the case a hunk that starts at line 1 covers. */
 const touches = (manifest: string, ...lines: string[]): boolean =>
   touchesDependencies(manifest, diffOf(...lines), fileOf(...lines))
+
+describe('commits', () => {
+  test('finds the commit\'s directory, and names one the shell expands first', () => {
+    expect(commitDir('cd sub && git -C inner commit -m x', '/r')).toBe('/r/sub/inner')
+    expect(() => commitDir('cd $D && git commit -m x', '/r')).toThrow("the commit's directory is not known: cd $D")
+    expect(() => commitDir('cd `mktemp -d` && git commit -m x', '/r')).toThrow("the commit's directory is not known: cd `mktemp")
+  })
+})
 
 describe('pairs', () => {
   test('lists added and modified files, not deleted ones', () => {

@@ -77,6 +77,11 @@ describe('commits', () => {
     expect(commitDir('cd sub && git -C inner commit -m x', '/r')).toBe('/r/sub/inner')
   })
 
+  test('a directory the shell expands first is named, never joined as text', () => {
+    expect(() => commitDir('cd $D && git commit -m x', '/r')).toThrow("the commit's directory is not known: cd $D")
+    expect(() => commitDir('git -C ~/app commit -m x', '/r')).toThrow("the commit's directory is not known: git -C ~/app")
+  })
+
   test('the gate stops a commit, a push and a merge, and nothing else', () => {
     for (const command of ['git commit -m x', 'git push', 'git -c a=b merge main', 'cd app && git push origin main']) {
       expect(isGuarded(command), command).toBe(true)

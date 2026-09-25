@@ -37,7 +37,17 @@ export function modeOf(arg: string): Mode | undefined {
 
 const unquote = (word: string): string => word.replace(/^(["'])(.*)\1$/, '$2')
 
-const joinDir = (base: string, dir: string): string => (dir.startsWith('/') ? dir : `${base.replace(/\/+$/, '')}/${dir}`)
+/**
+ * A directory word joined to the one before it. A word the shell expands first (`$D`, `~`, a backquote,
+ * outside single quotes) names no directory this text can tell, so it throws rather than run git in a
+ * directory that is not there.
+ */
+function joinDir(base: string, word: string, how: string): string {
+  const expands = !word.startsWith("'") && (/[$`]/.test(word) || word.startsWith('~'))
+  if (expands) throw new Error(`the commit's directory is not known: ${how} ${word}`)
+  const dir = unquote(word)
+  return dir.startsWith('/') ? dir : `${base.replace(/\/+$/, '')}/${dir}`
+}
 
 /**
  * The directory the commit runs in: the session's directory, moved by the last `cd` before the commit and by
@@ -48,8 +58,8 @@ export function commitDir(command: string, cwd: string): string {
   if (commit === null) return cwd
   const cds = [...command.slice(0, commit.index).matchAll(/(?:^|[;&|(]\s*)cd\s+("[^"]*"|'[^']*'|[^\s;&|)]+)/g)]
   const lastCd = cds.at(-1)?.[1]
-  const afterCd = lastCd === undefined ? cwd : joinDir(cwd, unquote(lastCd))
-  return [...commit[0].matchAll(/-C\s+(\S+)/g)].reduce((dir, c) => joinDir(dir, unquote(c[1] ?? '.')), afterCd)
+  const afterCd = lastCd === undefined ? cwd : joinDir(cwd, lastCd, 'cd')
+  return [...commit[0].matchAll(/-C\s+(\S+)/g)].reduce((dir, c) => joinDir(dir, c[1] ?? '.', 'git -C'), afterCd)
 }
 
 /** The lockfiles each manifest's package manager writes. */

@@ -1,6 +1,6 @@
 {
   "name": "doc-drift-watch",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "After each commit the model makes, tells it which doc lines that commit made stale, from ripwire doc-drift, and holds each finding open until the doc holds again. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
