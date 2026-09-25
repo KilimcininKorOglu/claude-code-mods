@@ -4,8 +4,8 @@ A Claude Code Mod that measures how much of your context each Bash command spent
 
 ## What it does
 
-1. The mod hooks the Bash tool. After a successful call it adds up the characters of `stdout` and `stderr`, the two streams the model read.
-2. A result over the limit (20 KB by default, about 5000 tokens) is a finding. The model reads this note after the tool's result:
+1. After each batch of tool calls resolves, and before the next model request, the mod measures every Bash result in characters, as the model reads it. The measure comes after every mod that rewrote a result, so a result another mod shrank (such as [bash-diet](../bash-diet)) counts at its shrunk size, whichever order the plugins load in. Subagent calls are measured the same way.
+2. A result over the limit (20 KB by default, about 5000 tokens) is a finding. The model reads this note before its next request:
 
        output-flood: "pytest tests/ -v" returned 30 KB of output, over the 20 KB limit, and all of it is now in the context. Next time run the one test or file this turn needs, and let the runner report only failures (pytest -x -q, go test -run, cargo test <name>, jest -t).
 
@@ -39,23 +39,23 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.282:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=output-flood}, tool.call{tool=Bash}
+    ❯ ./register.ts hooks: session.start, command.run{command=output-flood}, classic.PostToolBatch
     ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setLimit), $.ui.log (via toPerson)
 
 Reach L1, reads the session.
 
-    1. Reads:    each Bash command's text, and the length of its two output streams; it never parses the output itself
+    1. Reads:    each Bash command's text, and the length of its result as the model reads it; it never parses the output itself
     2. Runs:     nothing
-    3. Sends:    a note to the model after the tool's result, and one line to the transcript; nothing leaves the machine
+    3. Sends:    a note to the model before its next request, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the limit
     5. Hostile input: only the length of the output is measured; the command text reaches the note cut to 60 characters and is never run
 
 ## Limits
 
 - The output is already in the context when the note is written. The mod cannot take it back; the note is for the next command.
-- A failed command (a non-zero exit the engine reports as an error) is measured from its error text, because a failing test run is the largest output of all. The note rides after the model's own error text, which stays as it is.
+- A failed command (a non-zero exit the engine reports as an error) is measured from its error text, because a failing test run is the largest output of all. The error text stays as it is. Claude Code cuts that text at 10,000 characters, so a failed command passes a limit of 20 KB only when you set a lower one.
 - A backgrounded command is not measured: its result carries a task id, not the output.
 - The advice is matched on the command text. A command hidden behind a script or a `make` target gets the general advice.
 - The size is counted in characters, not tokens. A line of ASCII is about four characters per token, and other text more.

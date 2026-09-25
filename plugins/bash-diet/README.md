@@ -146,7 +146,7 @@ Reach L2, writes files and runs processes.
 - A backgrounded command (`run_in_background`) is not filtered: its result is a task id.
 - A command inside `$(...)`, a heredoc, a process substitution, or with its output redirected to a file is not filtered.
 - A chain of several printing commands gets only the generic cleanup (colour codes, carriage-return redraws, repeated lines).
-- `output-flood` measures the result it sees. Whether that is the filtered one depends on the order the engine runs the two mods' hooks in.
+- `output-flood` 0.3.0 and later measure the filtered result, whichever order the two mods load in. An older `output-flood` loaded after bash-diet measures the output before the filter, and its note names a size the model never read.
 
 ## Development
 

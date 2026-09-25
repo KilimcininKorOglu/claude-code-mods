@@ -4,8 +4,8 @@ Her Bash komutunun context'inizden ne kadar harcadığını ölçen bir Claude C
 
 ## Ne yapar
 
-1. Mod Bash tool'unu hook'lar. Başarılı bir çağrıdan sonra `stdout` ve `stderr` karakterlerini, yani modelin okuduğu iki stream'i toplar.
-2. Limitin üstündeki bir sonuç (varsayılan 20 KB, yaklaşık 5000 token) bir bulgudur. Model bu notu tool'un sonucundan sonra okur:
+1. Her tool çağrısı grubu bittikten sonra ve bir sonraki model request'inden önce, mod her Bash sonucunu modelin okuduğu haliyle karakter olarak ölçer. Ölçüm, sonucu değiştiren bütün modlardan sonra yapılır. Bu yüzden başka bir modun ([bash-diet](../bash-diet) gibi) küçülttüğü bir sonuç, plugin'ler hangi sırada yüklenirse yüklensin küçülmüş boyutuyla sayılır. Subagent çağrıları da aynı şekilde ölçülür.
+2. Limitin üstündeki bir sonuç (varsayılan 20 KB, yaklaşık 5000 token) bir bulgudur. Model bu notu bir sonraki request'inden önce okur:
 
        output-flood: "pytest tests/ -v" returned 30 KB of output, over the 20 KB limit, and all of it is now in the context. Next time run the one test or file this turn needs, and let the runner report only failures (pytest -x -q, go test -run, cargo test <name>, jest -t).
 
@@ -39,23 +39,23 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=output-flood}, tool.call{tool=Bash}
+    ❯ ./register.ts hooks: session.start, command.run{command=output-flood}, classic.PostToolBatch
     ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setLimit), $.ui.log (via toPerson)
 
 Reach L1, session'ı okur.
 
-    1. Okur:     her Bash komutunun metnini ve iki çıktı stream'inin uzunluğunu; çıktının kendisini hiçbir zaman parse etmez
+    1. Okur:     her Bash komutunun metnini ve sonucunun modelin okuduğu haliyle uzunluğunu; çıktının kendisini hiçbir zaman parse etmez
     2. Çalıştırır: hiçbir şey
-    3. Gönderir: tool'un sonucundan sonra modele bir not ve transcript'e bir satır; makineden hiçbir şey çıkmaz
+    3. Gönderir: modelin bir sonraki request'inden önce ona bir not ve transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve limiti
     5. Düşman girdi: yalnız çıktının uzunluğu ölçülür; komut metni nota 60 karaktere kesilerek ulaşır ve hiçbir zaman çalıştırılmaz
 
 ## Sınırlar
 
 - Not yazıldığında çıktı zaten context'tedir. Mod onu geri alamaz; not sonraki komut içindir.
-- Başarısız bir komut (engine'in hata olarak bildirdiği sıfır olmayan bir exit) hata metninden ölçülür, çünkü başarısız bir test koşusu en büyük çıktıdır. Not modelin kendi hata metninin ardından gelir, o metin olduğu gibi kalır.
+- Başarısız bir komut (engine'in hata olarak bildirdiği sıfır olmayan bir exit) hata metninden ölçülür, çünkü başarısız bir test koşusu en büyük çıktıdır. Hata metni olduğu gibi kalır. Claude Code bu metni 10.000 karakterde keser, bu yüzden başarısız bir komut 20 KB limitini ancak daha düşük bir limit ayarladığınızda geçer.
 - Arka plana alınmış bir komut ölçülmez: sonucu çıktıyı değil bir task id taşır.
 - Tavsiye komut metnine göre eşleştirilir. Bir script ya da bir `make` target'ı arkasına gizlenmiş bir komut genel tavsiyeyi alır.
 - Boyut karakter olarak sayılır, token olarak değil. Bir ASCII satırı token başına yaklaşık dört karakterdir, diğer metinler daha fazla.

@@ -146,7 +146,7 @@ Reach L2, dosya yazar ve process çalıştırır.
 - Arka plana alınmış bir komut (`run_in_background`) filtrelenmez: sonucu bir task id'dir.
 - `$(...)` içindeki, bir heredoc'taki, bir process substitution'daki ya da çıktısı bir dosyaya redirect edilen bir komut filtrelenmez.
 - Çıktı basan birden çok komuttan oluşan bir zincir yalnız genel cleanup'ı alır (renk kodları, carriage-return yeniden çizimleri, tekrarlanan satırlar).
-- `output-flood` gördüğü sonucu ölçer. Bunun filtrelenmiş sonuç olup olmadığı, engine'in iki modun hook'larını çalıştırdığı sıraya bağlıdır.
+- `output-flood` 0.3.0 ve sonrası, iki mod hangi sırada yüklenirse yüklensin filtrelenmiş sonucu ölçer. bash-diet'ten sonra yüklenen daha eski bir `output-flood` çıktıyı filtreden önce ölçer, ve notu modelin hiç okumadığı bir boyutu söyler.
 
 ## Geliştirme
 

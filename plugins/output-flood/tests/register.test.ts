@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { adviceFor, fmtKb, limitOf, sizeOf, statusText } from '../hooks/flood.ts'
@@ -30,26 +30,36 @@ const run = (args: string): CommandRunInput => ({
   command: 'output-flood', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The logged lines, and the Bash result the world answers with. */
-type World = { logs: string[]; result: { stdout: string; stderr: string; backgroundTaskId?: string }; isError?: true }
+/** The logged lines. */
+type World = { logs: string[] }
 
 function world(on: On): World {
-  const w: World = { logs: [], result: { stdout: '', stderr: '' } }
+  const w: World = { logs: [] }
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
-  // A non-zero exit is an error result: `result` holds the error text, never the tool's record, and
-  // `text` is what the model reads, `Exit code N` and the output.
-  on('tool.call', { tool: 'Bash' }, () => {
-    if (w.isError !== true) return { result: w.result } as never
-    const text = `Exit code 1\n${w.result.stdout}\n${w.result.stderr}`
-    return { result: text, text, isError: true } as never
-  })
+  on('classic.PostToolBatch', () => ({}))
   return w
 }
 
-const bash = (command: string) => ({ tool: 'Bash' as const, command })
+type Call = { tool: string; command: string; response: unknown }
+
+/**
+ * A batch of calls as the engine hands it after they resolved: an untouched Bash result is the tool's
+ * record, a rewritten or failed one the text the model reads.
+ */
+async function batch($: Engine, calls: Call[]): Promise<string[] | undefined> {
+  const tool_calls = calls.map((c, i) => ({ tool_name: c.tool, tool_input: { command: c.command }, tool_use_id: `t${i}`, tool_response: c.response }))
+  const r = await $.classic.PostToolBatch({ tool_calls } as never)
+  return r.additionalContext
+}
+
+const bash = ($: Engine, command: string, response: unknown) => batch($, [{ tool: 'Bash', command, response }])
+
+const record = (stdout: string, stderr = '') => ({ stdout, stderr, interrupted: false })
+
+const started = ($: Engine) => $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
 
 describe('output-flood', () => {
   test('reads a size, a limit and the advice per kind of command', () => {
@@ -66,51 +76,63 @@ describe('output-flood', () => {
 
   test('a result over the limit gets a note, and a smaller one none', async ($, on) => {
     const w = world(on)
-    await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
-    w.result = { stdout: 'x'.repeat(10_000), stderr: '' }
-    expect((await $.tool.call(bash('pytest tests/'))).context).toBe(undefined)
-    w.result = { stdout: 'x'.repeat(30 * 1024), stderr: 'y'.repeat(100) }
-    const r = await $.tool.call(bash('pytest tests/ -v'))
-    expect(r.context?.[0]).toContain('"pytest tests/ -v" returned 30 KB of output, over the 20 KB limit')
-    expect(r.context?.[0]).toContain('Next time run the one test')
+    await started($)
+    expect(await bash($, 'pytest tests/', record('x'.repeat(10_000)))).toBe(undefined)
+    const notes = await bash($, 'pytest tests/ -v', record('x'.repeat(30 * 1024), 'y'.repeat(100)))
+    expect(notes?.[0]).toContain('"pytest tests/ -v" returned 30 KB of output, over the 20 KB limit')
+    expect(notes?.[0]).toContain('Next time run the one test')
     expect(w.logs).toEqual(['30 KB of output from "pytest tests/ -v", over 20 KB'])
     expect((await $.command.run(run(''))).text).toBe('on · limit 20 KB · 1 result(s) over it, 30 KB in all')
   })
 
-  test('a failed run over the limit is measured from its error text, which stays as it is', async ($, on) => {
+  test('a result another mod shrank is measured as the model reads it, not as the command printed it', async ($, on) => {
     const w = world(on)
-    await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
-    w.isError = true
-    w.result = { stdout: 'F'.repeat(30 * 1024), stderr: '' }
-    const r = await $.tool.call(bash('npm test'))
-    expect(r.isError).toBe(true)
-    expect(r.text).toBe(`Exit code 1\n${'F'.repeat(30 * 1024)}\n`)
-    expect(r.context?.[0]).toContain('"npm test" returned 30 KB of output, over the 20 KB limit')
+    await started($)
+    expect(await bash($, 'yes | head -n 5000', 'y (×5000)')).toBe(undefined)
+    expect(w.logs).toEqual([])
+  })
+
+  test('a failed run over the limit is measured from its error text', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const notes = await bash($, 'npm test', `<tool_use_error>Exit code 1\n${'F'.repeat(30 * 1024)}</tool_use_error>`)
+    expect(notes?.[0]).toContain('"npm test" returned 30 KB of output, over the 20 KB limit')
     expect(w.logs).toEqual(['30 KB of output from "npm test", over 20 KB'])
+  })
+
+  test('each flooding call of a batch gets its note, and another tool\'s call is not measured', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const big = record('x'.repeat(30 * 1024))
+    const notes = await batch($, [
+      { tool: 'Bash', command: 'git log', response: big },
+      { tool: 'Read', command: 'ignored', response: 'x'.repeat(30 * 1024) },
+      { tool: 'Bash', command: 'find /', response: big },
+    ])
+    expect(notes).toHaveLength(2)
+    expect(notes?.[1]).toContain('"find /" returned 30 KB')
+    expect(w.logs).toHaveLength(2)
   })
 
   test('the same command is reported once, and a backgrounded command is not measured', async ($, on) => {
     const w = world(on)
-    await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
-    w.result = { stdout: 'x'.repeat(30 * 1024), stderr: '' }
-    await $.tool.call(bash('make build'))
-    expect((await $.tool.call(bash('make build'))).context).toBe(undefined)
+    await started($)
+    await bash($, 'make build', record('x'.repeat(30 * 1024)))
+    expect(await bash($, 'make build', record('x'.repeat(30 * 1024)))).toBe(undefined)
     expect(w.logs).toHaveLength(1)
     // The repeat is quiet, and still counted: the status counts the results it sizes.
     expect((await $.command.run(run(''))).text).toBe('on · limit 20 KB · 2 result(s) over it, 60 KB in all')
-    w.result = { stdout: 'x'.repeat(30 * 1024), stderr: '', backgroundTaskId: 'b1' }
-    expect((await $.tool.call(bash('make watch'))).context).toBe(undefined)
+    expect(await bash($, 'make watch', { ...record('x'.repeat(30 * 1024)), backgroundTaskId: 'b1' })).toBe(undefined)
   })
 
   test('the limit the person sets holds, and off measures nothing', async ($, on) => {
-    const w = world(on)
-    await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
+    world(on)
+    await started($)
     expect((await $.command.run(run('limit x'))).text).toBe('limit expects a whole number of KB from 1 to 1000')
     expect((await $.command.run(run('limit 1'))).text).toBe('limit 1 KB: a result over 1 KB is reported')
-    w.result = { stdout: 'x'.repeat(2 * 1024), stderr: '' }
-    expect((await $.tool.call(bash('ls -R /'))).context?.[0]).toContain('over the 1 KB limit')
+    expect((await bash($, 'ls -R /', record('x'.repeat(2 * 1024))))?.[0]).toContain('over the 1 KB limit')
     expect((await $.command.run(run('off'))).text).toBe('off: results are not measured')
-    expect((await $.tool.call(bash('du -a /'))).context).toBe(undefined)
+    expect(await bash($, 'du -a /', record('x'.repeat(2 * 1024)))).toBe(undefined)
     expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or limit <kb>')
   })
 
@@ -118,9 +140,8 @@ describe('output-flood', () => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [] }
     seatSidebar(on, bar)
-    await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
-    w.result = { stdout: 'x'.repeat(30 * 1024), stderr: '' }
-    await $.tool.call(bash('git log'))
+    await started($)
+    await bash($, 'git log', record('x'.repeat(30 * 1024)))
     expect(bar.sections).toHaveLength(1)
     expect(bar.sections[0]?.lines[0]).toBe('30 KB of output from "git log", over 20 KB')
     expect(bar.sections[0]?.lines[1]).toContain('bound it')
