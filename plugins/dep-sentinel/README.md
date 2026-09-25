@@ -26,14 +26,14 @@ A Claude Code Mod that checks each package the model installs before the install
        dep-sentinel: the install ran unchecked for: lodash (api.osv.dev answered HTTP 503)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
+7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An unchecked package shows its name red and the reason faint; a package skipped on request is yellow, because you asked for it. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
 
 8. An unchecked finding is never a remembered answer: the check it is owed is run again, so it closes two ways. A later install of the package in the same ecosystem checks it (an npm `lodash` does not close a PyPI `lodash`), and a guarded git command runs the check itself, in both modes. The entry is cleared and a new one takes its place:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
        dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash
 
-   What a late answer has to say is written as its own red entry, because the install it belongs to already ran:
+   What a late answer has to say is written as its own entry, because the install it belongs to already ran. There the pinned old version and `has N known vulnerability(ies)` are red, the latest version and `fixed in X` green, and `no fixed version is listed` and the age of a new package yellow:
 
        dep-sentinel: the check that was owed says: lodash@4.17.21 has 1 known vulnerability(ies) on OSV.dev: GHSA-29mw-wpgm-hmr9; fixed in 4.17.22
 

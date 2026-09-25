@@ -2,7 +2,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { distance, lookAlike } from '../hooks/popular.ts'
 import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry.ts'
-import { denyText, gateText, isGuarded, modeOf, registryReasons, targetVersion, vulnReason } from '../hooks/rules.ts'
+import { denyText, failureLines, gateText, isGuarded, modeOf, reasonLines, registryReasonParts, registryReasons, skippedLines, targetVersion, vulnParts, vulnReason } from '../hooks/rules.ts'
 
 tier('user')
 
@@ -85,6 +85,30 @@ describe('rules', () => {
       .toBe('lodash@4.17.15 has 2 known vulnerability(ies) on OSV.dev: GHSA-1, GHSA-2; fixed in 4.17.21')
     expect(vulnReason({ ecosystem: 'npm', name: 'x', exact: false }, '1.0.0', { ids: [], fixed: [] })).toBe(undefined)
     expect(denyText(['a', 'b'])).toBe('dep-sentinel stopped this install: a · b. Install the latest version or the right name instead. If the user needs exactly this, tell them why, then run the same command again with the DEP_SENTINEL_SKIP=1 prefix.')
+  })
+
+  test('the sidebar colours the old version, the latest, the vulnerabilities, the fix and the age', async () => {
+    const [oldPin] = registryReasonParts({ ecosystem: 'npm', name: 'lodash', version: '4.17.15', exact: true }, old, NOW)
+    expect(oldPin).toEqual([
+      { text: 'lodash@' },
+      { text: '4.17.15', kind: 'error' },
+      { text: ' (npm) is not the latest version: the latest is ' },
+      { text: '4.18.1', kind: 'ok' },
+    ])
+    expect(vulnParts({ ecosystem: 'npm', name: 'lodash', exact: true }, '4.17.21', { ids: ['GHSA-1'], fixed: [] })).toEqual([
+      { text: 'lodash@4.17.21 ' },
+      { text: 'has 1 known vulnerability(ies)', kind: 'error' },
+      { text: ' on OSV.dev: GHSA-1; ' },
+      { text: 'no fixed version is listed', kind: 'warn' },
+    ])
+    expect(vulnParts({ ecosystem: 'npm', name: 'lodash', exact: true }, '4.17.15', { ids: ['GHSA-1'], fixed: ['4.17.21'] })?.at(-1)).toEqual({ text: 'fixed in 4.17.21', kind: 'ok' })
+    const young = { latest: '1.0.0', versions: ['1.0.0'], created: NOW - 2 * DAY }
+    expect(registryReasonParts({ ecosystem: 'npm', name: 'fresh-pkg', exact: false }, young, NOW)[0]?.[1]).toEqual({ text: '2 day(s) ago', kind: 'warn' })
+    expect(reasonLines([oldPin ?? []])[0]?.text).toBe('lodash@4.17.15 (npm) is not the latest version: the latest is 4.18.1')
+    expect(failureLines([{ name: 'lodash', why: 'api.osv.dev answered HTTP 503' }])).toEqual([
+      { text: 'lodash (api.osv.dev answered HTTP 503)', parts: [{ text: 'lodash', kind: 'error' }, { text: ' (api.osv.dev answered HTTP 503)', kind: 'dim' }] },
+    ])
+    expect(skippedLines(['lodash'])).toEqual([{ text: 'lodash', kind: 'warn' }])
   })
 
   test('the gate stops a commit, a push and a merge, and says why', () => {

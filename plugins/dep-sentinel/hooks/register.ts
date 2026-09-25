@@ -1,7 +1,32 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
 import { cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl, type Info } from './registry.ts'
-import { checkedLog, denyText, doneLines, gateCheckedLog, gateText, isGuarded, lateReasonLog, missingReason, modeOf, openNote, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
+import {
+  checkedLog,
+  denyText,
+  doneLines,
+  failureLines,
+  failureText,
+  gateCheckedLog,
+  gateText,
+  isGuarded,
+  lateReasonLog,
+  missingReason,
+  modeOf,
+  openNote,
+  reasonLines,
+  registryReasonParts,
+  skippedLines,
+  targetVersion,
+  textOf,
+  uncheckedLog,
+  uncheckedNote,
+  vulnParts,
+  type Failure,
+  type Line,
+  type Mode,
+  type Reason,
+} from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -15,7 +40,7 @@ const HEADERS = { 'User-Agent': 'dep-sentinel (Claude Code mod; github.com/Kilim
 const GO_PARENT_TRIES = 4
 
 /** One package's check: reasons to stop it, or why it could not be checked. */
-type Outcome = { reasons: string[]; failure?: string }
+type Outcome = { reasons: Reason[]; failure?: Failure }
 
 /**
  * The packages an earlier install could not check, each with the install it came from, so the check can
@@ -98,11 +123,11 @@ async function lookUp($: EngineInterface, p: Install): Promise<Info | undefined>
   return info
 }
 
-async function osvCheck($: EngineInterface, p: Install, version: string): Promise<string | undefined> {
+async function osvCheck($: EngineInterface, p: Install, version: string): Promise<Reason | undefined> {
   const body = JSON.stringify({ version: version.replace(/^v(?=\d)/, p.ecosystem === 'Go' ? 'v' : ''), package: { name: p.name, ecosystem: p.ecosystem } })
   const r = await $.http.fetch('https://api.osv.dev/v1/query', { method: 'POST', headers: { ...HEADERS, 'Content-Type': 'application/json' }, body })
   if (!r.ok) throw new Error(`api.osv.dev answered HTTP ${r.status}`)
-  return vulnReason(p, version, osvVulns(JSON.parse(r.text)))
+  return vulnParts(p, version, osvVulns(JSON.parse(r.text)))
 }
 
 async function checkOne($: EngineInterface, p: Install, now: number): Promise<Outcome> {
@@ -110,9 +135,9 @@ async function checkOne($: EngineInterface, p: Install, now: number): Promise<Ou
     const info = await lookUp($, p)
     if (info === undefined) return { reasons: [missingReason(p)] }
     const vuln = await osvCheck($, p, targetVersion(p, info))
-    return { reasons: [...registryReasons(p, info, now), ...(vuln === undefined ? [] : [vuln])] }
+    return { reasons: [...registryReasonParts(p, info, now), ...(vuln === undefined ? [] : [vuln])] }
   } catch (err) {
-    return { reasons: [], failure: `${p.name} (${errorText(err)})` }
+    return { reasons: [], failure: { name: p.name, why: errorText(err) } }
   }
 }
 
@@ -120,7 +145,7 @@ async function checkOne($: EngineInterface, p: Install, now: number): Promise<Ou
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: readonly Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'dep-sentinel', key, title, lines, until: 'stream' })
     if (taken) return
@@ -167,7 +192,7 @@ function withNote(r: ToolCallResult, note: string): ToolCallResult {
 async function recheckOpen($: EngineInterface, state: State, now: number): Promise<void> {
   if (state.open.size === 0) return
   const named = openNames(state)
-  const reasons: string[] = []
+  const reasons: Reason[] = []
   for (const [key, install] of [...state.open]) {
     const outcome = await checkOne($, install, now)
     if (outcome.failure !== undefined) continue
@@ -177,7 +202,7 @@ async function recheckOpen($: EngineInterface, state: State, now: number): Promi
   if (state.open.size > 0) return
   await dropEntry($, 'unchecked')
   await toPerson($, 'unchecked', 'packages checked after all', doneLines(named), gateCheckedLog(named))
-  if (reasons.length > 0) await toPerson($, 'late', 'the late check has something to say', sidebarLines(reasons), lateReasonLog(reasons))
+  if (reasons.length > 0) await toPerson($, 'late', 'the late check has something to say', reasonLines(reasons), lateReasonLog(reasons.map(textOf)))
 }
 
 /**
@@ -255,20 +280,21 @@ export const register: Register = on => {
     if (plan.installs.length === 0 || !(await isEnabled($))) return next(e)
     if (plan.skipped) {
       const names = plan.installs.map(p => p.name)
-      await toPerson($, 'skipped', 'installs skipped on request', sidebarLines(names), `skipped on request: ${names.join(', ')}`)
+      await toPerson($, 'skipped', 'installs skipped on request', skippedLines(names), `skipped on request: ${names.join(', ')}`)
       return next(e)
     }
     const now = await $.clock.now()
     const outcomes = await Promise.all(plan.installs.map(p => checkOne($, p, now)))
     await closeChecked($, state, checkedOf(plan.installs, outcomes))
     const reasons = outcomes.flatMap(o => o.reasons)
-    if (reasons.length > 0) return { deny: denyText(reasons) }
-    const failures = outcomes.map(o => o.failure).filter((f): f is string => f !== undefined)
+    if (reasons.length > 0) return { deny: denyText(reasons.map(textOf)) }
+    const failures = outcomes.map(o => o.failure).filter((f): f is Failure => f !== undefined)
     const r = await next(e)
     if (failures.length === 0) return r
     plan.installs.forEach((p, i) => { if (outcomes[i]?.failure !== undefined) state.open.set(openKey(p), p) })
     // The note goes to the model, the finding to the person: neither reads the other's channel.
-    await toPerson($, 'unchecked', 'packages the install did not check', sidebarLines(failures), uncheckedLog(failures))
-    return withNote(r, uncheckedNote(failures))
+    const texts = failures.map(failureText)
+    await toPerson($, 'unchecked', 'packages the install did not check', failureLines(failures), uncheckedLog(texts))
+    return withNote(r, uncheckedNote(texts))
   })
 }

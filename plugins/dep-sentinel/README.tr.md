@@ -26,14 +26,14 @@ Modelin kurduğu her paketi, kurulum çalışmadan önce kontrol eden bir Claude
        dep-sentinel: the install ran unchecked for: lodash (api.osv.dev answered HTTP 503)
 
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-7. [sidebar](../sidebar) açıkken kontrolsüz kalan ve atlanan paketler oraya gider, paket başına bir satır, stream'in içinde kayıtlar olarak; transcript temiz kalır. Bir kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırları yazılır.
+7. [sidebar](../sidebar) açıkken kontrolsüz kalan ve atlanan paketler oraya gider, paket başına bir satır, stream'in içinde kayıtlar olarak; transcript temiz kalır. Kontrolsüz bir paketin adı kırmızı, sebebi soluktur; istek üzerine atlanan bir paket sarıdır, çünkü onu siz istediniz. Bir kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırları yazılır.
 
 8. Kontrolsüz kalmış bir bulgu asla hatırlanan bir cevap değildir: borçlu olduğu kontrol tekrar çalıştırılır, yani iki yoldan kapanır. Paketin aynı ekosistemdeki sonraki bir kurulumu onu kontrol eder (bir npm `lodash` bir PyPI `lodash` bulgusunu kapatmaz) ve guarded bir git komutu kontrolü kendisi çalıştırır, iki modda da. Kayıt temizlenir ve yerine yenisi gelir:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
        dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash
 
-   Geç gelen cevabın söyledikleri kendi kırmızı kaydı olarak yazılır, çünkü ait olduğu kurulum çoktan çalışmıştır:
+   Geç gelen cevabın söyledikleri kendi kaydı olarak yazılır, çünkü ait olduğu kurulum çoktan çalışmıştır. Orada sabitlenmiş eski sürüm ve `has N known vulnerability(ies)` kırmızı, en son sürüm ve `fixed in X` yeşil, `no fixed version is listed` ve yeni bir paketin yaşı sarıdır:
 
        dep-sentinel: the check that was owed says: lodash@4.17.21 has 1 known vulnerability(ies) on OSV.dev: GHSA-29mw-wpgm-hmr9; fixed in 4.17.22
 
