@@ -63,12 +63,48 @@ function waitText(ms: number): string {
 
 /** The line the person reads when a prompt is scheduled. The engine adds the mod name. */
 export function pokeLog(pokes: number, max: number): string {
-  return `the turn died on an API error, continuing in ${waitText(pokeDelay(pokes))} (${pokes}/${max})`
+  return pokeLines(pokes, max).map(l => l.text).join('\n')
 }
 
 /** The line the person reads once the mod stops trying. */
 export function limitLog(max: number): string {
-  return `stopped after ${max} continue prompts; the API keeps failing. Send a prompt to reset the count.`
+  return limitLines(max).map(l => l.text).join('\n')
+}
+
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The count's colour: yellow once it is within 10% of the limit, faint before. */
+export function countTone(pokes: number, max: number): Tone {
+  return pokes >= max * 0.9 ? 'warn' : 'dim'
+}
+
+/** `pokeLog` as a sidebar line: `API error` red, the count faint or yellow near the limit. */
+export function pokeLines(pokes: number, max: number): Line[] {
+  return [partsLine([
+    part('the turn died on an ', undefined),
+    part('API error', 'error'),
+    part(`, continuing in ${waitText(pokeDelay(pokes))} `, undefined),
+    part(`(${pokes}/${max})`, countTone(pokes, max)),
+  ])]
+}
+
+/** `limitLog` as a sidebar line: the stop red, the way to reset faint. */
+export function limitLines(max: number): Line[] {
+  return [partsLine([part(`stopped after ${max} continue prompts`, 'error'), part('; the API keeps failing. ', undefined), part('Send a prompt to reset the count.', 'dim')])]
+}
+
+/** A `<head>: <detail>` event as a sidebar line: the head red, the detail in the default colour. */
+export function eventLines(head: string, detail: string): Line[] {
+  return [partsLine([part(head, 'error'), part(`: ${detail}`, undefined)])]
 }
 
 /**

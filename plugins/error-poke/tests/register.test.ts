@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { DEFAULT_MAX_POKES, decide, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLog, statusText } from '../hooks/poke.ts'
+import { DEFAULT_MAX_POKES, decide, eventLines, limitLines, limitLog, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLines, pokeLog, statusText } from '../hooks/poke.ts'
 
 tier('user')
 
@@ -180,5 +180,21 @@ describe('error-poke', () => {
     await ended($, w, 'error')
     expect(bar.sections).toEqual([{ key: 'poke-1', title: 'turn continued after an API error', lines: ['the turn died on an API error, continuing in 5 s (1/99)'] }])
     expect(w.logs).toEqual([])
+  })
+
+  test('the sidebar lines colour the API error red and the count faint, yellow near the limit', () => {
+    expect(pokeLines(1, 99)).toEqual([{
+      text: pokeLog(1, 99),
+      parts: [{ text: 'the turn died on an ' }, { text: 'API error', kind: 'error' }, { text: ', continuing in 5 s ' }, { text: '(1/99)', kind: 'dim' }],
+    }])
+    expect(pokeLines(90, 99)[0]?.parts?.at(-1)).toEqual({ text: '(90/99)', kind: 'warn' })
+    expect(pokeLines(89, 99)[0]?.parts?.at(-1)).toEqual({ text: '(89/99)', kind: 'dim' })
+    expect(limitLines(2)).toEqual([{
+      text: limitLog(2),
+      parts: [{ text: 'stopped after 2 continue prompts', kind: 'error' }, { text: '; the API keeps failing. ' }, { text: 'Send a prompt to reset the count.', kind: 'dim' }],
+    }])
+    expect(eventLines('the continue prompt was dropped', 'busy')).toEqual([
+      { text: 'the continue prompt was dropped: busy', parts: [{ text: 'the continue prompt was dropped', kind: 'error' }, { text: ': busy' }] },
+    ])
   })
 })

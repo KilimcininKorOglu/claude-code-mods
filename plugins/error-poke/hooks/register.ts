@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, Timer } from 'claude-code'
-import { DEFAULT_MAX_POKES, decide, limitLog, limitOf, limitText, POKE_TEXT, pokeDelay, pokeLog, statusText } from './poke.ts'
+import { DEFAULT_MAX_POKES, decide, eventLines, limitLines, limitOf, limitText, POKE_TEXT, pokeDelay, pokeLines, statusText, type Line } from './poke.ts'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
@@ -22,23 +22,23 @@ type State = { enabled: boolean; max: number; pokes: number; limitLogged: boolea
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line. The model reads nothing of this; it reads the continue prompt itself.
  */
-async function toPerson($: EngineInterface, key: string, title: string, text: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: Line[]): Promise<void> {
   try {
-    if (await $.sidebar.set({ consumer: 'error-poke', key, title, lines: [{ text, kind: 'error' }], until: 'stream' })) return
+    if (await $.sidebar.set({ consumer: 'error-poke', key, title, lines, until: 'stream' })) return
   } catch {
     // The sidebar mod is not installed.
   }
-  $.ui.log(text)
+  $.ui.log(lines.map(l => l.text).join('\n'))
 }
 
 /** The continue prompt as a plugin prompt, which the model reads inside a `The error-poke plugin sent a message:` frame. */
 function submitPoke($: EngineInterface): void {
   void $.prompt.submit({ text: POKE_TEXT }).then(
     res => {
-      if (res.drop !== undefined) void toPerson($, 'dropped', 'continue prompt dropped', `the continue prompt was dropped: ${res.drop}`)
+      if (res.drop !== undefined) void toPerson($, 'dropped', 'continue prompt dropped', eventLines('the continue prompt was dropped', res.drop))
     },
     (err: unknown) => {
-      void toPerson($, 'failed', 'continue prompt not sent', `the continue prompt was not submitted: ${String(err)}`)
+      void toPerson($, 'failed', 'continue prompt not sent', eventLines('the continue prompt was not submitted', String(err)))
     },
   )
 }
@@ -50,7 +50,7 @@ function submitPoke($: EngineInterface): void {
  */
 function sendPoke($: EngineInterface): void {
   $.command.run({ command: SEND_COMMAND, args: POKE_TEXT }).catch((err: unknown) => {
-    void toPerson($, 'unsent', 'continue prompt sent as a plugin prompt', `the send command did not run, the continue prompt goes out as a plugin prompt: ${String(err)}`)
+    void toPerson($, 'unsent', 'continue prompt sent as a plugin prompt', eventLines('the send command did not run, the continue prompt goes out as a plugin prompt', String(err)))
     submitPoke($)
   })
 }
@@ -62,11 +62,11 @@ async function afterTurn($: EngineInterface, state: State, reason: string): Prom
   if (decision === 'limit') {
     if (state.limitLogged) return
     state.limitLogged = true
-    await toPerson($, 'limit', 'continue prompts stopped', limitLog(state.max))
+    await toPerson($, 'limit', 'continue prompts stopped', limitLines(state.max))
     return
   }
   state.pokes += 1
-  await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', pokeLog(state.pokes, state.max))
+  await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', pokeLines(state.pokes, state.max))
   state.pending?.cancel()
   state.pending = $.clock.after(pokeDelay(state.pokes), () => {
     state.pending = undefined
