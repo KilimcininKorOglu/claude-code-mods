@@ -17,8 +17,8 @@ Modelin attığı commit'in hangi doc satırlarını bayattığını modele söy
        doc-drift-watch: 1 doc line(s) stale: README.md:7 points at other.go:3, a file that no longer exists
 
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken bu satırlar oraya gider, doc başına bir entry, kırmızı, stream'in içinde bir kayıt olarak; transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
-7. Bulgu sonra açık kalır, doc başına bir tane. Her main-loop turn sonunda mod her açık doc'u tekrar ölçer: `ripwire <root> --doc-drift=<doc> --with-history`, yani yalnız o doc'a daraltılmış bir koşu. Anchor'larının hepsi tekrar tutan bir doc kapanır: kırmızı entry temizlenir, yerine bir yeşil satır gelir.
+6. [sidebar](../sidebar) açıkken bu satırlar oraya gider, doc başına bir entry, stream'in içinde bir kayıt olarak: `doc:line` soluk, eskimiş referans kırmızı, kaymış bir satırda şimdi duran şey sarı; transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
+7. Bulgu sonra açık kalır, doc başına bir tane. Her main-loop turn sonunda mod her açık doc'u tekrar ölçer: `ripwire <root> --doc-drift=<doc> --with-history`, yani yalnız o doc'a daraltılmış bir koşu. Anchor'larının hepsi tekrar tutan bir doc kapanır: entry temizlenir, yerine bir yeşil satır gelir.
 
        doc-drift-watch: README.md: 1 doc line(s) hold again
 

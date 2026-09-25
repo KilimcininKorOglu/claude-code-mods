@@ -108,15 +108,32 @@ export function addedBy(before: readonly Stale[], after: readonly Stale[]): Stal
   return after.filter(s => !known.has(identity(s)))
 }
 
-function describe(s: Stale): string {
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** What is wrong with one anchor, in parts: the stale reference red, and what now sits at a moved line yellow. */
+function describeParts(s: Stale): Part[] {
+  const ref = part(s.ref, 'error')
   switch (s.why) {
-    case 'missing-file': return `points at ${s.ref}, a file that no longer exists`
-    case 'past-eof': return `points at ${s.ref}, past the end of that file`
-    case 'line-moved': return `points at ${s.ref}, where ${s.got ?? 'another symbol'} now sits`
-    case 'undefined': return `names \`${s.ref}\`, which the code no longer defines`
-    case 'deleted': return `names \`${s.ref}\`, which ${s.got ?? 'a commit'} deleted`
-    default: return `${s.why || s.kind}: ${s.ref}`
+    case 'missing-file': return [part('points at ', undefined), ref, part(', a file that no longer exists', undefined)]
+    case 'past-eof': return [part('points at ', undefined), ref, part(', past the end of that file', undefined)]
+    case 'line-moved': return [part('points at ', undefined), ref, part(', where ', undefined), part(s.got ?? 'another symbol', 'warn'), part(' now sits', undefined)]
+    case 'undefined': return [part('names `', undefined), ref, part('`, which the code no longer defines', undefined)]
+    case 'deleted': return [part('names `', undefined), ref, part(`\`, which ${s.got ?? 'a commit'} deleted`, undefined)]
+    default: return [part(`${s.why || s.kind}: `, undefined), ref]
   }
+}
+
+function describe(s: Stale): string {
+  return describeParts(s).map(p => p.text).join('')
 }
 
 /** At most this many lines are named; the rest are counted. */
@@ -137,11 +154,11 @@ export function logText(added: readonly Stale[]): string {
   return `${added.length} doc line(s) stale: ${namedLines(added)}`
 }
 
-/** One sidebar line per stale anchor, so the section reads as a list. */
-export function sidebarLines(added: readonly Stale[]): { text: string; kind: 'error' }[] {
-  const lines = added.slice(0, MAX_NAMED).map(s => ({ text: `${s.doc}:${s.line} ${describe(s)}`, kind: 'error' as const }))
+/** One sidebar line per stale anchor, so the section reads as a list: where it is faint, what is stale in colour. */
+export function sidebarLines(added: readonly Stale[]): Line[] {
+  const lines = added.slice(0, MAX_NAMED).map(s => partsLine([part(`${s.doc}:${s.line} `, 'dim'), ...describeParts(s)]))
   const rest = added.length - MAX_NAMED
-  if (rest > 0) lines.push({ text: `and ${rest} more`, kind: 'error' })
+  if (rest > 0) lines.push({ text: `and ${rest} more`, kind: 'dim' })
   return lines
 }
 
@@ -165,7 +182,7 @@ export function doneLog(doc: string, count: number, side: Closing): string {
 }
 
 /** The green sidebar line of a closed finding. */
-export function doneLines(doc: string, count: number, side: Closing): { text: string; kind: 'ok' }[] {
+export function doneLines(doc: string, count: number, side: Closing): Line[] {
   return [{ text: closingText(doc, count, side), kind: 'ok' }]
 }
 

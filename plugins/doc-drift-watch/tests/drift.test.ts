@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { addedBy, commitDir, isCommit, noteText, parseDrift } from '../hooks/drift.ts'
+import { addedBy, commitDir, isCommit, noteText, parseDrift, sidebarLines } from '../hooks/drift.ts'
 
 tier('user')
 
@@ -48,5 +48,22 @@ describe('drift', () => {
     const added = addedBy(before, after)
     expect(added.map(s => s.ref)).toEqual(['old.go:5', 'parseConfig', 'main.go:40'])
     expect(noteText(added)).toBe('doc-drift-watch: this commit made 3 doc line(s) stale: README.md:12 points at old.go:5, a file that no longer exists · README.md:30 names `parseConfig`, which a1b2c3d 2026-09-01 deleted · docs/plan.md:7 points at main.go:40, where loadConfig now sits. Update them in a follow-up commit, or tell the user why a line stays.')
+  })
+
+  test('a sidebar line keeps the place faint, the stale reference red and what sits there now yellow', async () => {
+    const lines = sidebarLines(parseDrift(OUTPUT))
+    expect(lines[2]).toEqual({
+      text: 'docs/plan.md:7 points at main.go:40, where loadConfig now sits',
+      parts: [
+        { text: 'docs/plan.md:7 ', kind: 'dim' },
+        { text: 'points at ' },
+        { text: 'main.go:40', kind: 'error' },
+        { text: ', where ' },
+        { text: 'loadConfig', kind: 'warn' },
+        { text: ' now sits' },
+      ],
+    })
+    const many = Array.from({ length: 10 }, (_, i) => ({ doc: 'a.md', line: String(i), kind: 'file-line', why: 'past-eof', ref: `x.go:${i}` }))
+    expect(sidebarLines(many).at(-1)).toEqual({ text: 'and 2 more', kind: 'dim' })
   })
 })

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { addedBy, byDoc, commitDir, denyText, doneLines, doneLog, identity, isCommit, isGuarded, isNarrowable, logText, modeOf, noteText, openNote, parseDrift, sectionKey, sidebarLines, type Closing, type Mode, type Stale } from './drift.ts'
+import { addedBy, byDoc, commitDir, denyText, doneLines, doneLog, identity, isCommit, isGuarded, isNarrowable, logText, modeOf, noteText, openNote, parseDrift, sectionKey, sidebarLines, type Closing, type Line, type Mode, type Stale } from './drift.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -69,7 +69,7 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, doc: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'warn' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, doc: string, title: string, lines: readonly Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(doc), title, lines, until: 'stream' })
     if (taken) return

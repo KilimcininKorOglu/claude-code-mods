@@ -17,8 +17,8 @@ A Claude Code Mod that tells the model which doc lines its commit made stale. Af
        doc-drift-watch: 1 doc line(s) stale: README.md:7 points at other.go:3, a file that no longer exists
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those lines go there instead, one entry per doc, red, as an entry in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
-7. The finding then stays open, one per doc. At each main-loop turn's end the mod measures each open doc again with `ripwire <root> --doc-drift=<doc> --with-history`, a run narrowed to that one doc. A doc whose anchors all hold again is closed: the red entry is cleared and one green line takes its place.
+6. While the [sidebar](../sidebar) is open, those lines go there instead, one entry per doc, as an entry in its stream: the `doc:line` faint, the stale reference red, and what now sits at a moved line yellow, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+7. The finding then stays open, one per doc. At each main-loop turn's end the mod measures each open doc again with `ripwire <root> --doc-drift=<doc> --with-history`, a run narrowed to that one doc. A doc whose anchors all hold again is closed: the entry is cleared and one green line takes its place.
 
        doc-drift-watch: README.md: 1 doc line(s) hold again
 
