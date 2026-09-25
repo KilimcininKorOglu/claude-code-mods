@@ -3,7 +3,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 import type { FilterResult } from '../hooks/filters/common.ts'
 import { GH, markdownBody } from '../hooks/filters/gh.ts'
 import { GIT } from '../hooks/filters/git.ts'
-import { planFor } from '../hooks/pipeline.ts'
+import { planFor, runFilter } from '../hooks/pipeline.ts'
 
 tier('user')
 
@@ -129,6 +129,27 @@ describe('git remote and write operations', () => {
       .toBe('* main\n  remote-only (2):\n    feat-a\n    feat-b')
     expect(run('git stash', 'stash@{0}: WIP on main: 6a6cd6b z\nstash@{1}: On feat: 1a2b3c4 try\n', ['list']).text).toBe('stash@{0}: main: z\nstash@{1}: feat: try')
     expect(run('git checkout', "Switched to branch 'feat-a'\nYour branch is up to date with 'origin/feat-a'.\n").text).toBe("Switched to branch 'feat-a'")
+  })
+
+  // A repository on this machine lists 128 tags, sorted by name: v1.4.0 ... v2.0.97.
+  test('a long tag list keeps both ends and the count through the plan; a tag written is left alone', () => {
+    const tags = Array.from({ length: 128 }, (_, i) => `v2.0.${i}`)
+    const plan = planFor('git tag -l')
+    if (plan === undefined) throw new Error('no plan for git tag')
+    const r = runFilter(plan, `${tags.join('\n')}\n`, 0, false)
+    expect(r.text).toBe([...tags.slice(0, 10), '… +108 tags', ...tags.slice(-10), '128 tags'].join('\n'))
+    expect(r.elided).toBe(true)
+    expect(run('git tag', 'v1\nv2\n').text).toBe('v1\nv2')
+    expect(run('git tag', 'fatal: tag \'v1\' already exists\n', ['v1']).text).toBe("fatal: tag 'v1' already exists")
+    expect(run('git tag', `${tags.join('\n')}\n`, ['--contains', 'abc123']).elided).toBe(true)
+  })
+
+  // Captured from `git remote -v` in a repository with two remotes; the host names are made up.
+  test('git remote -v writes a remote once when it fetches and pushes to the same URL', () => {
+    const text = 'mirror\tssh://git@git.example.org/k/app.git (fetch)\nmirror\tssh://git@git.example.org/k/app.git (push)\norigin\thttps://github.com/k/app.git (fetch)\norigin\tssh://git@github.com/k/app.git (push)\n'
+    expect(planFor('git remote -v')?.family).toBe('git remote')
+    expect(run('git remote', text, ['-v']).text).toBe('mirror  ssh://git@git.example.org/k/app.git\norigin  https://github.com/k/app.git (fetch)\norigin  ssh://git@github.com/k/app.git (push)')
+    expect(run('git remote', 'mirror\norigin\n').text).toBe('mirror\norigin')
   })
 })
 

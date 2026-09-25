@@ -268,6 +268,54 @@ function checkout(input: { text: string; exitCode: number }): FilterResult {
   return whole([orOk(lines, 'ok')])
 }
 
+// ------------------------------------------------------------------------------------------ tag, remote
+
+/** `git tag` options that write or check a tag instead of listing. */
+const TAG_WRITE = ['-a', '--annotate', '-s', '--sign', '-u', '--local-user', '-m', '--message', '-F', '--file', '-d', '--delete', '-f', '--force', '-v', '--verify']
+
+/** `git tag` options that list, some with a value of their own (`--contains v1`). */
+const TAG_LIST = ['-l', '--list', '--contains', '--no-contains', '--merged', '--no-merged', '--points-at', '--sort']
+
+/** How many tags each end of a long list keeps. */
+const TAG_ENDS = 10
+
+/**
+ * A tag list as both ends and a count: git sorts tags by name unless `--sort` says otherwise, so the
+ * newest can stand at either end.
+ */
+function tag(input: { args: string[]; text: string }): FilterResult {
+  const names = input.args.some(a => !a.startsWith('-'))
+  if (hasArg(input.args, ...TAG_WRITE) || (names && !hasArg(input.args, ...TAG_LIST))) return cleanup(input.text)
+  const rows = linesOf(input.text).filter(l => l.trim() !== '')
+  if (rows.length <= TAG_ENDS * 2) return whole(rows)
+  const between = `… +${rows.length - TAG_ENDS * 2} tags`
+  return { text: [...rows.slice(0, TAG_ENDS), between, ...rows.slice(-TAG_ENDS), `${rows.length} tags`].join('\n'), elided: true }
+}
+
+/** One `git remote -v` row: `origin<TAB>https://x (fetch)`. */
+const REMOTE_ROW = /^(\S+)\s+(\S+) \((fetch|push)\)$/
+
+/** A remote's lines: one when it fetches and pushes to the same URL, else both with their role. */
+function remoteLines(name: string, urls: Map<string, string>): string[] {
+  const fetch = urls.get('fetch')
+  const push = urls.get('push')
+  if (fetch === push) return [`${name}  ${fetch ?? ''}`]
+  return [...(fetch === undefined ? [] : [`${name}  ${fetch} (fetch)`]), ...(push === undefined ? [] : [`${name}  ${push} (push)`])]
+}
+
+/** `git remote -v`: the fetch and push rows of a remote as one line when they name the same URL. */
+function remote(input: { args: string[]; text: string }): FilterResult {
+  if (!hasArg(input.args, '-v', '--verbose') || input.args.some(a => !a.startsWith('-'))) return cleanup(input.text)
+  const rows = linesOf(input.text).filter(l => l.trim() !== '').map(l => REMOTE_ROW.exec(l))
+  if (rows.some(m => m === null)) return cleanup(input.text)
+  const remotes = new Map<string, Map<string, string>>()
+  for (const m of rows as RegExpExecArray[]) {
+    const urls = remotes.get(m[1] ?? '') ?? new Map<string, string>()
+    remotes.set(m[1] ?? '', urls.set(m[3] ?? '', m[2] ?? ''))
+  }
+  return whole([...remotes].flatMap(([name, urls]) => remoteLines(name, urls)))
+}
+
 export const GIT: FilterTable = {
   'git status': { run: status },
   'git diff': { run: diff },
@@ -284,6 +332,8 @@ export const GIT: FilterTable = {
   'git restore': { run: checkout },
   'git add': { run: ({ text }) => cleanup(text) },
   'git worktree': { run: ({ text }) => cleanup(text) },
+  'git tag': { run: tag },
+  'git remote': { run: remote },
   'yadm status': { run: status },
   'yadm diff': { run: diff },
   'yadm log': { run: log, flags: logFlags },
