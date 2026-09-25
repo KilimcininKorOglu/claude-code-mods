@@ -147,4 +147,35 @@ describe('python', () => {
     expect(run('pip install', 'Collecting rich\n  Downloading rich-15.0.0-py3-none-any.whl (240 kB)\n     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 240.0/240.0 kB 2.1 MB/s eta 0:00:00\nRequirement already satisfied: pygments in ./venv (2.19.2)\nInstalling collected packages: rich\nSuccessfully installed rich-15.0.0\n', ['install', 'rich']).text)
       .toBe('Successfully installed rich-15.0.0')
   })
+
+  // Captured from flake8 7 and pylint 3 over a two-file package with the same mistakes in each.
+  test('flake8 groups by code through the plan; another format is left to the cleanup', () => {
+    const one = (f: string): string => `${f}:1:1: F401 'os' imported but unused\n${f}:1:1: F401 'sys' imported but unused\n${f}:3:1: E302 expected 2 blank lines, found 0\n${f}:4:5: F841 local variable 'x' is assigned to but never used\n${f}:14:12: F821 undefined name 'undefined_name'\n`
+    const plan = planFor('python3 -m flake8 pkg')
+    if (plan === undefined) throw new Error('no plan for flake8')
+    expect(runFilter(plan, one('pkg/app.py') + one('pkg/util.py'), 1, false).text).toBe([
+      "F401 (4): 'os' imported but unused", '  pkg/app.py, pkg/util.py',
+      'E302 (2): expected 2 blank lines, found 0', '  pkg/app.py, pkg/util.py',
+      "F841 (2): local variable 'x' is assigned to but never used", '  pkg/app.py, pkg/util.py',
+      "F821 (2): undefined name 'undefined_name'", '  pkg/app.py, pkg/util.py',
+      'flake8: 10 issues in 4 rules',
+    ].join('\n'))
+    expect(run('flake8', '', [], 0).text).toBe('flake8: no issues')
+    expect(run('flake8', '4     E302 expected 2 blank lines, found 0\n4\n', ['--statistics', '--count'], 1).text).toBe('4     E302 expected 2 blank lines, found 0\n4')
+  })
+
+  test('pylint groups by message, keeps the rating, and leaves the quoted duplicate lines to the full output', () => {
+    const one = (m: string, f: string): string => `************* Module ${m}\n${f}:1:0: C0114: Missing module docstring (missing-module-docstring)\n${f}:3:0: C0116: Missing function or method docstring (missing-function-docstring)\n${f}:13:0: C0116: Missing function or method docstring (missing-function-docstring)\n${f}:14:11: E0602: Undefined variable 'undefined_name' (undefined-variable)\n`
+    const text = `${one('pkg.util', 'pkg/util.py')}${one('pkg.app', 'pkg/app.py')}pkg/app.py:1:0: R0801: Similar lines in 2 files\n==pkg.app:[3:14]\n==pkg.util:[3:14]\n    x=1\n    return a+b (duplicate-code)\n\n-----------------------------------\nYour code has been rated at 0.00/10\n\n`
+    const r = run('pylint', text, ['pkg'], 30)
+    expect(r.text).toBe([
+      'C0116 missing-function-docstring (4): Missing function or method docstring', '  pkg/util.py, pkg/app.py',
+      'C0114 missing-module-docstring (2): Missing module docstring', '  pkg/util.py, pkg/app.py',
+      "E0602 undefined-variable (2): Undefined variable 'undefined_name'", '  pkg/util.py, pkg/app.py',
+      'R0801 (1): Similar lines in 2 files', '  pkg/app.py',
+      'pylint: 9 issues in 4 rules; Your code has been rated at 0.00/10',
+    ].join('\n'))
+    expect(r.elided).toBe(true)
+    expect(run('pylint', '\n-------------------------------------------------------------------\nYour code has been rated at 10.00/10 (previous run: 9.50/10, +0.50)\n\n').text).toBe('pylint: Your code has been rated at 10.00/10 (previous run: 9.50/10, +0.50)')
+  })
 })

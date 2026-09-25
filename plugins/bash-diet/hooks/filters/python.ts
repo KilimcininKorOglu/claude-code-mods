@@ -112,6 +112,40 @@ function mypy(input: { text: string }): FilterResult {
   return byRule(issues, 'mypy')
 }
 
+/**
+ * flake8's default format, `path:3:1: E302 message`, grouped by code. Another format (`-q`,
+ * `--statistics`, `--count`) prints lines of its own, which the cleanup keeps.
+ */
+function flake8(input: { text: string; exitCode: number }): FilterResult {
+  const lines = linesOf(input.text).filter(l => l.trim() !== '')
+  const issues = ruffConcise(lines)
+  if (lines.length === 0 && input.exitCode === 0) return whole(['flake8: no issues'])
+  if (issues.length === 0 || issues.length < lines.length) return cleanup(input.text)
+  return byRule(issues, 'flake8')
+}
+
+/** `path:1:0: C0114: Missing module docstring (missing-module-docstring)`; R0801 has no symbol on its line. */
+const PYLINT_LINE = /^(.+?):\d+:\d+: ([A-Z]\d{4}): (.*?)(?: \(([\w-]+)\))?$/
+
+/** A pylint line that says nothing on its own: a module header, the rule above the rating, a blank. */
+const PYLINT_FRAME = /^(\*{5,} Module |-{5,}$|\s*$)/
+
+/**
+ * pylint's text report grouped by message, the rating as one line. The lines a `duplicate-code`
+ * message quotes are left out, and the full output keeps them.
+ */
+function pylint(input: { text: string }): FilterResult {
+  if (input.text.trimStart().startsWith('[')) return cleanup(input.text)
+  const lines = linesOf(input.text)
+  const found = lines.map(l => PYLINT_LINE.exec(l))
+  const issues = found.filter(m => m !== null).map(m => ({ file: m[1] ?? '', code: m[4] === undefined ? m[2] ?? '' : `${m[2]} ${m[4]}`, text: m[3] ?? '' }))
+  const rating = lines.find(l => /Your code has been rated at/.test(l))?.trim()
+  if (issues.length === 0) return rating === undefined ? cleanup(input.text) : whole([`pylint: ${rating}`])
+  const dropped = lines.some((l, i) => found[i] === null && !PYLINT_FRAME.test(l) && l.trim() !== rating)
+  const r = byRule(issues, 'pylint')
+  return { text: rating === undefined ? r.text : `${r.text}; ${rating}`, elided: r.elided || dropped }
+}
+
 // ------------------------------------------------------------------------------------------ packages
 
 /** `pip list`: `Package Version` rows as one `name version` list. */
@@ -161,6 +195,8 @@ export const PYTHON: FilterTable = {
   'ruff format': { run: ({ text }) => cleanup(text) },
   ruff: { run: ruff },
   mypy: { run: mypy },
+  flake8: { run: flake8 },
+  pylint: { run: pylint },
   pip: { run: ({ text }) => cleanup(text) },
   pip3: { run: ({ text }) => cleanup(text) },
   'uv pip': { run: uvPip },
