@@ -101,18 +101,34 @@ export function logText(id: string, v: Verdict): string {
   return findingText(id, v)
 }
 
-/** The finding as sidebar lines. */
-export function sidebarLines(id: string, v: Verdict): { text: string; kind: 'error' }[] {
-  return [{ text: findingText(id, v), kind: 'error' }]
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The finding as sidebar lines: the test id default, the failure count red, the explanation faint. */
+export function sidebarLines(id: string, v: Verdict): Line[] {
+  const why = ` runs in the last 7 days and both passed and failed on the same code ${times(v.sameCode)}`
+  return [partsLine([part(`${id} `, undefined), part(`failed ${v.failures} of ${v.runs}`, 'error'), part(why, 'dim')])]
 }
+
+const NO_LONGER = 'is no longer flaky'
+const NO_LONGER_WHY = ': nothing in the last 7 days has it passing and failing on the same code'
 
 /** The transcript line of a finding the window no longer holds. */
 export function doneLog(id: string): string {
-  return `${id} is no longer flaky: nothing in the last 7 days has it passing and failing on the same code`
+  return `${id} ${NO_LONGER}${NO_LONGER_WHY}`
 }
 
-export function doneLines(id: string): { text: string; kind: 'ok' }[] {
-  return [{ text: doneLog(id), kind: 'ok' }]
+/** The closing as sidebar lines: the test id default, `is no longer flaky` green, the explanation faint. */
+export function doneLines(id: string): Line[] {
+  return [partsLine([part(`${id} `, undefined), part(NO_LONGER, 'ok'), part(NO_LONGER_WHY, 'dim')])]
 }
 
 /** Whether the test still both passed and failed on one tree inside the window. */

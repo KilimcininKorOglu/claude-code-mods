@@ -74,12 +74,13 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; title: string; lines: { text: string; kind?: string }[] }[]; cleared: string[] }
+type SidebarLine = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: SidebarLine[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[] }
-    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })) })
+    const s = e as unknown as { key: string; title: string; lines: SidebarLine[] }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind, parts: l.parts })) })
     return { value: bar.open }
   })
   on('sidebar.clear', (_, e) => {
@@ -105,20 +106,28 @@ describe('flaky-memory', () => {
     expect(w.logs).toEqual([LINE])
   })
 
-  withSidebar('an open sidebar takes the finding in red, and the closing in green', async ($, on) => {
+  withSidebar('an open sidebar takes the failure count in red, and the closing in green', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     w.outputs.push({ text: FAIL, failed: true }, { text: PASS }, { text: FAIL, failed: true })
     for (let i = 0; i < 3; i += 1) await $.tool.call({ tool: 'Bash', command: 'go test ./...' })
-    expect(bar.sections).toEqual([{ key: 'go:TestX', title: 'flaky test', lines: [{ text: LINE, kind: 'error' }] }])
+    const parts = [{ text: 'go:TestX ' }, { text: 'failed 2 of 3', kind: 'error' }, { text: ' runs in the last 7 days and both passed and failed on the same code once', kind: 'dim' }]
+    expect(bar.sections).toEqual([{ key: 'go:TestX', title: 'flaky test', lines: [{ text: LINE, parts }] }])
     expect(w.logs).toEqual([])
     // A week later the contradicting runs are outside the window, and the next run closes the finding.
     await w.clock.advance(WINDOW_MS + 1000)
     w.outputs.push({ text: FAIL, failed: true })
     await $.tool.call({ tool: 'Bash', command: 'go test ./...' })
     expect(bar.cleared).toEqual(['go:TestX'])
-    expect(bar.sections.at(-1)).toEqual({ key: 'go:TestX', title: 'no longer flaky', lines: [{ text: expect.stringContaining('no longer flaky'), kind: 'ok' }] })
+    expect(bar.sections.at(-1)).toEqual({
+      key: 'go:TestX',
+      title: 'no longer flaky',
+      lines: [{
+        text: 'go:TestX is no longer flaky: nothing in the last 7 days has it passing and failing on the same code',
+        parts: [{ text: 'go:TestX ' }, { text: 'is no longer flaky', kind: 'ok' }, { text: ': nothing in the last 7 days has it passing and failing on the same code', kind: 'dim' }],
+      }],
+    })
   })
 
   test('a failure after a code change is not called flaky', async ($, on) => {

@@ -16,7 +16,7 @@ Aynı anda sizin için bir satır yazılır, böylece modele ne söylendiğini g
 
     flaky-memory: go:TestFlip failed 2 of 3 runs in the last 7 days and both passed and failed on the same code once
 
-[sidebar](../sidebar) açıkken bu satır oraya gider, stream'in içinde kırmızı bir kayıt olarak; transcript temiz kalır. Pencere artık o testin tek bir tree üzerinde hem geçişini hem kalmasını tutmadığında kayıt düşer ve yeşil bir kayıt bunu söyler:
+[sidebar](../sidebar) açıkken bu satır oraya gider, stream'in içinde bir kayıt olarak: `failed 2 of 3` kırmızı, açıklama soluk çizilir; transcript temiz kalır. Pencere artık o testin tek bir tree üzerinde hem geçişini hem kalmasını tutmadığında kayıt düşer ve yeni bir kayıt bunu söyler, `is no longer flaky` yeşil çizilir:
 
     flaky-memory: no longer flaky
     go:TestFlip is no longer flaky: nothing in the last 7 days has it passing and failing on the same code

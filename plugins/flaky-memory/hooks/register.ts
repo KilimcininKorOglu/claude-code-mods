@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { fingerprintOf, type TreeState } from './fingerprint.ts'
-import { doneLines, doneLog, emptyHistory, findingsFor, isFlaky, listText, logText, noteText, readHistory, record, sectionKey, sidebarLines, type History } from './history.ts'
+import { doneLines, doneLog, emptyHistory, findingsFor, isFlaky, listText, logText, noteText, readHistory, record, sectionKey, sidebarLines, type History, type Line } from './history.ts'
 import { isTestCommand, parseOutput } from './parse.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -64,7 +64,7 @@ function finished(r: ToolCallResult<'Bash'>): boolean {
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line. The model's note is another channel and carries the instruction the person does not read.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     if (await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(key), title, lines, until: 'stream' })) return
   } catch {

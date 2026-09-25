@@ -16,7 +16,7 @@ The same moment writes one line for you, so you see what the model was told. The
 
     flaky-memory: go:TestFlip failed 2 of 3 runs in the last 7 days and both passed and failed on the same code once
 
-While the [sidebar](../sidebar) is open, that line goes there instead, as a red entry in its stream, and the transcript stays clean. When the window no longer holds a pass and a failure of that test on one tree, the entry goes down and a green one says so:
+While the [sidebar](../sidebar) is open, that line goes there instead, as an entry in its stream with `failed 2 of 3` in red and the explanation faint, and the transcript stays clean. When the window no longer holds a pass and a failure of that test on one tree, the entry goes down and a new one says so, with `is no longer flaky` in green:
 
     flaky-memory: no longer flaky
     go:TestFlip is no longer flaky: nothing in the last 7 days has it passing and failing on the same code
