@@ -58,9 +58,27 @@ export function rowText(task: Task, now: number): string {
   return `${durationText(now - task.startedAt).padStart(6)}  ${task.byUser ? 'you  ' : 'model'}  ${task.label}`
 }
 
+/** A task that has run this long draws its age in yellow, so a runaway one stands out. */
+const LONG_MS = 60 * MINUTE
+
+/**
+ * One sidebar row, the same text the pane draws: the age faint, or yellow past an hour, who
+ * backgrounded it faint, and the command in the default colour.
+ */
+function rowLine(task: Task, now: number): Line {
+  const age = now - task.startedAt
+  const parts: Part[] = [
+    { text: durationText(age).padStart(6), kind: age >= LONG_MS ? 'warn' : 'dim' },
+    { text: '  ' },
+    { text: task.byUser ? 'you  ' : 'model', kind: 'dim' },
+    { text: `  ${task.label}` },
+  ]
+  return { text: parts.map(p => p.text).join(''), parts }
+}
+
 /** The sidebar section's lines: the same rows the pane draws. */
-export function sidebarLines(tasks: readonly Task[], now: number): { text: string }[] {
-  return byAge(tasks).map(t => ({ text: rowText(t, now) }))
+export function sidebarLines(tasks: readonly Task[], now: number): Line[] {
+  return byAge(tasks).map(t => rowLine(t, now))
 }
 
 /** The sidebar section's buttons: one stop per task, run as `/bg-tasks stop <id>`. */

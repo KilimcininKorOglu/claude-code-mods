@@ -162,7 +162,14 @@ describe('bg-tasks', () => {
     seatSidebar(on, bar)
     await started($)
     await background($, 'npm run dev')
-    expect(bar.sections.at(-1)).toEqual({ title: '1 running', lines: [{ text: '   <1m  model  npm run dev' }], buttons: ['stop b1'] })
+    expect(bar.sections.at(-1)).toEqual({
+      title: '1 running',
+      lines: [{ text: '   <1m  model  npm run dev', parts: [{ text: '   <1m', kind: 'dim' }, { text: '  ' }, { text: 'model', kind: 'dim' }, { text: '  npm run dev' }] }],
+      buttons: ['stop b1'],
+    })
+    // Past an hour the age turns yellow, so a runaway task stands out.
+    await w.clock.advance(61 * MINUTE)
+    expect(bar.sections.at(-1)?.lines[0]?.parts?.[0]).toEqual({ text: ' 1h 1m', kind: 'warn' })
     expect(w.statuses.at(-1)).toBe(undefined)
     await $.tool.call({ tool: 'TaskStop', task_id: 'b1' } as never)
     expect(bar.clears).toBe(1)

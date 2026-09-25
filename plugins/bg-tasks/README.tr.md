@@ -22,7 +22,7 @@ Session'ın arka plandaki shell task'larını status line'da gösteren ve `/bg-t
 
    Bir satırda Enter, o task'ı engine'in TaskStop tool'u ile durdurur; onay sizin tuşunuzdur. Pane `stopped: npm run dev` der, ya da sebebiyle `not stopped: ...` der ve task o zaman listede kalır.
 
-5. [sidebar](../sidebar) açıkken liste oraya gider: aynı satırları taşıyan bir section ve task başına bir `[ stop ... ]` butonu; status line boş kalır. Bir basış `/bg-tasks stop <id>` komutunu çalıştırır, yani task aynı yolla durur. Sidebar kapalıyken ya da o mod kurulu değilken her şey yukarıdaki gibidir.
+5. [sidebar](../sidebar) açıkken liste oraya gider: aynı satırları taşıyan bir section ve task başına bir `[ stop ... ]` butonu; status line boş kalır. Bir satırda yaş ve task'ı arka plana kimin aldığı soluk, komut varsayılan renkte çizilir; bir saat ya da daha uzun bir yaş sarıya döner, böylece kontrolden çıkmış bir task göze çarpar. Bir basış `/bg-tasks stop <id>` komutunu çalıştırır, yani task aynı yolla durur. Sidebar kapalıyken ya da o mod kurulu değilken her şey yukarıdaki gibidir.
 
 6. Kendi kendine biten bir task, sidebar'ın stream'ine bir kayıt da yazar, böylece pane biteni tutar, üstündeki liste yalnız hâlâ çalışanı tutar. Kayıt task'ın nasıl bittiğini adlandırır ve yalnız o kelime renklenir: `completed` için yeşil `finished`, sarı `killed`, kırmızı `failed` (ya da engine'in bildirdiği başka bir status):
 

@@ -22,7 +22,7 @@ A Claude Code Mod that shows the background shell tasks of the session on the st
 
    Enter on a row stops that task through the engine's TaskStop tool, with your press as the consent. The pane says `stopped: npm run dev`, or `not stopped: ...` with the reason, and the task stays listed then.
 
-5. While the [sidebar](../sidebar) is open, the list goes there instead: one section with the same rows and a `[ stop ... ]` button per task, and the status line stays empty. A press runs `/bg-tasks stop <id>`, which stops that task the same way. With the sidebar closed, or without that mod installed, everything is as above.
+5. While the [sidebar](../sidebar) is open, the list goes there instead: one section with the same rows and a `[ stop ... ]` button per task, and the status line stays empty. In a row the age and who backgrounded it are faint and the command keeps the default colour; an age of an hour or more turns yellow, so a runaway task stands out. A press runs `/bg-tasks stop <id>`, which stops that task the same way. With the sidebar closed, or without that mod installed, everything is as above.
 
 6. A task that ends by itself also writes one entry into the sidebar's stream, so the pane keeps what ended while the list above it holds only what still runs. The entry names how the task ended, and only that word is coloured: `finished` green for `completed`, `killed` yellow, `failed` (or any other status the engine reports) red:
 
