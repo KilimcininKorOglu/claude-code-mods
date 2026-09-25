@@ -62,6 +62,38 @@ describe('files', () => {
     expect(run('env', 'A=1\nB=2\n').redacted).toBe(undefined)
   })
 
+  // Captured from macOS ls -R and GNU gls -R over a small tree with a node_modules directory.
+  const LS_R_BSD = 'a\nf1.txt\nf2.txt\nnode_modules\n\nsrc/a:\nb\ng1.ts\ng2.ts\n\nsrc/a/b:\nh1.md\nh2.md\n\nsrc/node_modules:\nx\n\nsrc/node_modules/x:\nn1.js\nn2.js\nn3.js\n'
+  const LS_R_GNU = `src:\n${LS_R_BSD}`
+
+  test('ls -R lists one line per directory through the plan, and counts the directories under node_modules', () => {
+    const plan = planFor('ls -R src')
+    if (plan === undefined) throw new Error('no plan for ls -R')
+    const want = 'src/ a f1.txt f2.txt node_modules\nsrc/a/ b g1.ts g2.ts\nsrc/a/b/ h1.md h2.md\n9 entries in 3 directories; 2 directories under noise directories not listed'
+    expect(runFilter(plan, LS_R_BSD, 0, false)).toEqual({ text: want, elided: true })
+    expect(run('ls', LS_R_GNU, ['-R', 'src']).text).toBe(want)
+    const long = 'total 0\ndrwxr-xr-x  6 kerem  wheel  192 Sep 25 19:27 a\n-rw-r--r--  1 kerem  wheel    12 Sep 25 19:27 f1.txt\n\nsrc/a:\ntotal 0\n-rw-r--r--  1 kerem  wheel  2048 Sep 25 19:27 g1.ts\n'
+    expect(run('ls', long, ['-lR', 'src']).text).toBe('src/ a/ f1.txt (12B)\nsrc/a/ g1.ts (2.0K)\n3 entries in 2 directories')
+  })
+
+  // Captured from macOS cp, mv, rm, ln and GNU gcp, grm with -v.
+  test('cp, mv, rm and ln with -v keep every error, the first paths and the count', () => {
+    const paths = Array.from({ length: 40 }, (_, i) => `moved/node_modules/x/n${i}.js`)
+    const plan = planFor('rm -rv moved')
+    if (plan === undefined) throw new Error('no plan for rm -rv')
+    const r = runFilter(plan, [...paths, 'rm: moved/locked: Permission denied'].join('\n'), 1, false)
+    expect(r.text).toBe(['rm: moved/locked: Permission denied', ...paths.slice(0, 5), '… +35 more', '40 paths removed'].join('\n'))
+    expect(r.elided).toBe(true)
+    const gnu = Array.from({ length: 8 }, (_, i) => `removed 'g2/f${i}.txt'`).concat(["removed directory 'g2'"]).join('\n')
+    expect(run('grm', gnu, ['-rv', 'g2']).text.split('\n').at(-1)).toBe('9 paths removed')
+    expect(run('cp', "src -> dst/\nsrc/f1.txt -> dst/f1.txt\n", ['-Rv', 'src', 'dst']).text).toBe('src -> dst/\nsrc/f1.txt -> dst/f1.txt\n2 paths copied')
+    expect(run('mv', 'mv: rename nope to x: No such file or directory\n', ['nope', 'x']).text).toBe('mv: rename nope to x: No such file or directory')
+    expect(planFor('ln -sfv a b')?.family).toBe('ln')
+    // Without -v they stay quiet, so a chain around them is still the printing command's output.
+    expect(planFor('rm -rf dist && cargo test')?.family).toBe('cargo test')
+    expect(planFor('rm -rv dist && cargo test')?.family).toBe('other')
+  })
+
   test('a grep at the end of a pipeline is what the filter reads', () => {
     expect(planFor('git log | grep fix')?.family).toBe('grep')
   })

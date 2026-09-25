@@ -1,5 +1,5 @@
 import { plural } from './blocks.ts'
-import { CAP_INVENTORY, capped, cutLine, hasArg, linesOf, type FilterResult, type FilterTable } from './common.ts'
+import { asksVerbose, CAP_ERRORS, CAP_INVENTORY, capped, cutLine, hasArg, linesOf, type FilterInput, type FilterResult, type FilterTable } from './common.ts'
 import { cleanup } from './generic.ts'
 
 /** Directories whose contents are generated or vendored; a listing names them without their size or rows. */
@@ -31,14 +31,78 @@ function humanSize(bytes: number): string {
 
 /** A listing: directories first with a slash, files with their size, noise directories named only. */
 function ls(input: { args: string[]; text: string }): FilterResult {
-  const lines = linesOf(input.text).filter(l => !/^total \d+/.test(l) && l.trim() !== '')
-  if (lines.some(l => /^\S+:$/.test(l))) return cleanup(input.text)
+  const all = linesOf(input.text)
+  if (all.some((_, i) => isSectionHeader(all, i))) return lsSections(input.args, all)
+  const lines = all.filter(l => !/^total \d+/.test(l) && l.trim() !== '')
   const rows = lines.map(l => longRow(l) ?? l).filter(r => r !== '')
   const noise = rows.filter(r => NOISE_DIRS.has(r.replace(/\/$/, '')))
   const kept = rows.filter(r => !noise.includes(r))
   const sorted = [...kept.filter(r => r.endsWith('/')), ...kept.filter(r => !r.endsWith('/'))]
   const c = capped(sorted, CAP_INVENTORY, 'entries')
   return { text: [...c.lines, ...(noise.length > 0 ? [`(${noise.join(' ')} not listed)`] : [])].join('\n'), elided: c.elided }
+}
+
+type Section = { dir: string; rows: string[] }
+
+/** A `dir:` line that opens a section of `ls -R` or of `ls a b`: the first line, or one after a blank line. */
+function isSectionHeader(lines: string[], i: number): boolean {
+  return /^.+:$/.test(lines[i] ?? '') && (i === 0 || lines[i - 1] === '')
+}
+
+/** The sections of a listing. BSD ls prints the first one without a header, so it is named `first`. */
+function sectionsOf(lines: string[], first: string): Section[] {
+  const out: Section[] = [{ dir: first, rows: [] }]
+  lines.forEach((l, i) => {
+    if (isSectionHeader(lines, i)) out.push({ dir: l.slice(0, -1), rows: [] })
+    else if (l.trim() !== '' && !/^total \d+/.test(l)) out[out.length - 1]?.rows.push(l)
+  })
+  return out.filter(s => s.rows.length > 0)
+}
+
+/** A section's entries: a long row as its name and size, `.` and `..` left out. */
+function entriesOf(rows: string[]): string[] {
+  return rows.map(l => (longRow(l) ?? l).replace(/ {2}(\S+)$/, ' ($1)')).filter(r => r !== '' && r !== '.' && r !== '..')
+}
+
+const isNoisePath = (dir: string): boolean => dir.split('/').some(p => NOISE_DIRS.has(p))
+
+/**
+ * A recursive or multi-directory listing as one line per directory. A directory under a noise directory
+ * (`node_modules`, `.git`) is counted, not listed.
+ */
+function lsSections(args: string[], lines: string[]): FilterResult {
+  const operands = args.filter(a => !a.startsWith('-'))
+  const sections = sectionsOf(lines, operands.length === 1 ? (operands[0] ?? '.') : '.')
+  const kept = sections.filter(s => !isNoisePath(s.dir))
+  const entries = kept.map(s => entriesOf(s.rows))
+  const c = capped(kept.map((s, i) => cutLine(`${s.dir.replace(/\/$/, '')}/ ${entries[i]?.join(' ') ?? ''}`, 400)), CAP_INVENTORY, 'directories')
+  const skipped = sections.length - kept.length
+  const total = `${plural(entries.flat().length, 'entry', 'entries')} in ${plural(kept.length, 'directory', 'directories')}`
+  const noise = skipped === 0 ? '' : `; ${plural(skipped, 'directory', 'directories')} under noise directories not listed`
+  return { text: [...c.lines, total + noise].join('\n'), elided: c.elided || skipped > 0 }
+}
+
+// ------------------------------------------------------------------------------ cp, mv, rm, ln -v
+
+/** An error line of a file operation: `rm: x: No such file or directory`, `gcp: cannot stat 'x'`. */
+const FILE_OP_ERROR = /^g?(cp|mv|rm|ln): /
+
+/** How many paths a verbose file operation shows before it counts the rest. */
+const FILE_OP_SHOWN = 5
+
+/**
+ * `cp`, `mv`, `rm` and `ln` with `-v`, which print one line per path: every error, the first paths, and
+ * the count. Without `-v` they print only errors, which the cleanup keeps.
+ */
+function fileOp(verb: string) {
+  return (input: FilterInput): FilterResult => {
+    if (!asksVerbose(input.args)) return cleanup(input.text)
+    const lines = linesOf(input.text).filter(l => l.trim() !== '')
+    const errors = capped(lines.filter(l => FILE_OP_ERROR.test(l)), CAP_ERRORS, 'errors')
+    const done = lines.filter(l => !FILE_OP_ERROR.test(l))
+    const shown = capped(done.map(l => cutLine(l, 160)), FILE_OP_SHOWN, 'more')
+    return { text: [...errors.lines, ...shown.lines, `${plural(done.length, 'path')} ${verb}`].join('\n'), elided: errors.elided || shown.elided }
+  }
 }
 
 // ---------------------------------------------------------------------------------------------- find
@@ -148,4 +212,5 @@ export const SYSTEM: FilterTable = {
   printenv: { run: env },
   ps: { run: ps },
   tree: { run: tree },
+  ...Object.fromEntries(Object.entries({ cp: 'copied', mv: 'moved', rm: 'removed', ln: 'linked' }).flatMap(([tool, verb]) => [[tool, { run: fileOp(verb) }], [`g${tool}`, { run: fileOp(verb) }]])),
 }

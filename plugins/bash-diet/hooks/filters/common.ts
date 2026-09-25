@@ -121,6 +121,11 @@ export function hasArg(args: string[], ...names: string[]): boolean {
   return args.some(a => names.some(n => a === n || a.startsWith(`${n}=`)))
 }
 
+/** Whether the arguments hold `--verbose`, `-v`, or a short-option bundle with `v` in it (`-rv`, `-sfv`). */
+export function asksVerbose(args: readonly string[]): boolean {
+  return args.some(a => a === '--verbose' || /^-[a-zA-Z]*v[a-zA-Z]*$/.test(a))
+}
+
 /** A result that keeps every line, only joined. */
 export function whole(lines: string[]): FilterResult {
   return { text: lines.join('\n'), elided: false }

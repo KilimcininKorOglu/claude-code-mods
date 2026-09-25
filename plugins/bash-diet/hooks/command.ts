@@ -1,3 +1,4 @@
+import { asksVerbose } from './filters/common.ts'
 import { hidesStdout, isAssignment, parse, type Segment, type Stage, type Token } from './shell.ts'
 
 /** The variable that leaves one call's output as it is: `BASH_DIET_RAW=1 git diff`. */
@@ -105,9 +106,19 @@ function stageOf(g: Segment): { stage: Stage; alone: boolean } | undefined {
   return rest.every(isCutter) ? { stage: first, alone: false } : undefined
 }
 
+/** Quiet commands that print one line per path with `-v`; with it they are the output. */
+const VERBOSE_WHEN_ASKED = new Set(['rm', 'mv', 'cp', 'ln'])
+
+/** A quiet command, unless it is one of `VERBOSE_WHEN_ASKED` given `-v` (also in `-rv`) or `--verbose`. */
+function isQuiet(st: Stage): boolean {
+  const name = nameOf(st)
+  if (!QUIET.has(name)) return false
+  return !VERBOSE_WHEN_ASKED.has(name) || !asksVerbose(st.words.map(w => w.text))
+}
+
 /** The segments that print something: a chain of `cd x && cargo test` is `cargo test`'s output. */
 const loud = (segments: Segment[]): Segment[] =>
-  segments.filter(g => g.background || !g.stages.every(st => QUIET.has(nameOf(st))))
+  segments.filter(g => g.background || !g.stages.every(isQuiet))
 
 /** Reads a command: raw, opaque, a chain of several commands, or the one command to filter. */
 export function read(command: string): Reading {
