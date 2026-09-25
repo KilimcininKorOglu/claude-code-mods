@@ -2,7 +2,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 
 import type { FilterResult } from '../hooks/filters/common.ts'
 import { JS } from '../hooks/filters/js.ts'
-import { planFor } from '../hooks/pipeline.ts'
+import { planFor, runFilter } from '../hooks/pipeline.ts'
 
 tier('user')
 
@@ -24,9 +24,15 @@ describe('package managers', () => {
   })
 
   test('pnpm and bun installs drop progress; lists stay as rows', () => {
-    expect(run('pnpm', 'Progress: resolved 1, reused 0, downloaded 0, added 0\nPackages: +2\n++\nProgress: resolved 2, reused 2, downloaded 0, added 2, done\n\ndevDependencies:\n+ is-odd 3.0.1\n\nDone in 637ms using pnpm v10.28.2\n', ['add', '-D', 'is-odd']).text)
+    // Through the plan, as the hook runs it: the subcommand is classified apart from the arguments.
+    const planned = (cmd: string, text: string): string => {
+      const plan = planFor(cmd)
+      if (plan === undefined) throw new Error(`no plan for ${cmd}`)
+      return runFilter(plan, text, 0, false).text
+    }
+    expect(planned('pnpm add -D is-odd', 'Progress: resolved 1, reused 0, downloaded 0, added 0\nPackages: +2\n++\nProgress: resolved 2, reused 2, downloaded 0, added 2, done\n\ndevDependencies:\n+ is-odd 3.0.1\n\nDone in 637ms using pnpm v10.28.2\n'))
       .toBe('devDependencies:\n+ is-odd 3.0.1\nDone in 637ms using pnpm v10.28.2')
-    expect(run('pnpm', 'Legend: production dependency, optional only, dev only\n\nb@1.0.0 /tmp/b\n\ndevDependencies:\nis-odd 3.0.1\n', ['list']).text).toBe('b@1.0.0 /tmp/b\ndevDependencies:\nis-odd 3.0.1')
+    expect(planned('pnpm list', 'Legend: production dependency, optional only, dev only\n\nb@1.0.0 /tmp/b\n\ndevDependencies:\nis-odd 3.0.1\n')).toBe('b@1.0.0 /tmp/b\ndevDependencies:\nis-odd 3.0.1')
     expect(run('bun install', 'bun install v1.4.0 (34cbb9a40)\n[286.86ms] migrated lockfile from pnpm-lock.yaml\nSaved lockfile\n\n1 package installed [293.00ms]\n').text)
       .toBe('bun install v1.4.0 (34cbb9a40)\nSaved lockfile\n1 package installed [293.00ms]')
   })

@@ -32,12 +32,11 @@ function install(input: { text: string }): FilterResult {
   return whole(kept.length === 0 ? ['ok'] : kept)
 }
 
-function pnpm(input: { args: string[]; text: string; exitCode: number }): FilterResult {
-  const sub = input.args.find(a => !a.startsWith('-')) ?? ''
-  if (['list', 'ls', 'outdated', 'why'].includes(sub)) return tree(input)
-  if (['install', 'i', 'add', 'remove', 'rm', 'update', 'up'].includes(sub)) return install(input)
-  return npm(input)
-}
+/** pnpm's subcommands: the classifier keeps the subcommand apart from the arguments, so each has its own entry. */
+const PNPM: FilterTable = Object.fromEntries([
+  ...['list', 'ls', 'outdated', 'why'].map(sub => [`pnpm ${sub}`, { run: tree }]),
+  ...['install', 'i', 'add', 'remove', 'rm', 'update', 'up'].map(sub => [`pnpm ${sub}`, { run: install }]),
+])
 
 // ------------------------------------------------------------------------------------------- tests
 
@@ -178,7 +177,8 @@ export const JS: FilterTable = {
   'npm ls': { run: tree },
   'npm list': { run: tree },
   'npm outdated': { run: tree },
-  pnpm: { run: pnpm },
+  ...PNPM,
+  pnpm: { run: npm },
   'bun install': { run: install },
   'bun add': { run: install },
   'bun remove': { run: install },
