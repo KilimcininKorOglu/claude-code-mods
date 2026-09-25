@@ -97,12 +97,13 @@ const SIDEBAR: Plugin = {
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
 type Button = { label: string; command: string; args?: string }
-type Bar = { open: boolean; sections: { key: string; lines: { text: string; kind?: string }[]; buttons?: Button[] }[]; cleared: string[] }
+type Drawn = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+type Bar = { open: boolean; sections: { key: string; lines: Drawn[]; buttons?: Button[] }[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string; kind?: string }[]; buttons?: Button[] }
-    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })), buttons: s.buttons })
+    const s = e as unknown as { key: string; lines: Drawn[]; buttons?: Button[] }
+    if (bar.open) bar.sections.push({ key: s.key, lines: s.lines, buttons: s.buttons })
     return { value: bar.open }
   })
   on('sidebar.clear', (_, e) => {
@@ -129,12 +130,16 @@ describe('disk-janitor', () => {
     ].join('\n'))
   })
 
-  withSidebar('an open sidebar takes the total, in yellow, and the deletion goes under it', async ($, on) => {
+  withSidebar('an open sidebar takes the total, its size in yellow, and the deletion goes under it', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], cleared: [] }
     seatSidebar(on, bar)
     await started($, w)
-    expect(bar.sections.at(-1)).toEqual({ key: 'artifacts', lines: [{ text: 'artifacts 6.5 GB · /disk-janitor', kind: 'warn' }], buttons: [{ label: 'clean up', command: 'disk-janitor' }] })
+    expect(bar.sections.at(-1)).toEqual({
+      key: 'artifacts',
+      lines: [{ text: 'artifacts 6.5 GB · /disk-janitor', parts: [{ text: 'artifacts ' }, { text: '6.5 GB', kind: 'warn' }, { text: ' · /disk-janitor', kind: 'dim' }] }],
+      buttons: [{ label: 'clean up', command: 'disk-janitor' }],
+    })
     expect(w.statuses.at(-1)).toBe(undefined)
     // The button runs the command as a plugin: it opens the pane, and deletes nothing by itself.
     expect((await $.command.run(run('', { kind: 'plugin' } as PromptOrigin))).text).toBe('pane open: Enter picks a row, the delete button asks twice, Esc closes')
@@ -155,10 +160,13 @@ describe('disk-janitor', () => {
     seatSidebar(on, bar)
     w.sizes.set(`${ROOT}/target`, 30 * GB)
     await started($, w)
-    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'over 20 GB: artifacts 32.5 GB · /disk-janitor', kind: 'error' })
+    expect(bar.sections.at(-1)?.lines[0]).toEqual({
+      text: 'over 20 GB: artifacts 32.5 GB · /disk-janitor',
+      parts: [{ text: 'over 20 GB: artifacts ' }, { text: '32.5 GB', kind: 'error' }, { text: ' · /disk-janitor', kind: 'dim' }],
+    })
     expect((await $.command.run(run('delete dist'))).text).toContain('deleted 1 dir(s)')
     await w.clock.settle()
-    expect(bar.sections.at(-1)?.lines[1]).toEqual({ text: 'deleted 1 dir(s), 1 MB', kind: 'dim' })
+    expect(bar.sections.at(-1)?.lines[1]).toEqual({ text: 'deleted 1 dir(s), 1 MB', parts: [{ text: 'deleted 1 dir(s), 1 MB', kind: 'ok' }] })
   })
 
   test('the pane deletes the picked directories on the second press, and logs what went and what stayed', async ($, on) => {

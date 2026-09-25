@@ -1,5 +1,5 @@
 /** The lines the user reads about a scan and a deletion. */
-import { sizeText } from './classify.ts'
+import { part, partsLine, sizeText, type Line } from './classify.ts'
 import type { Found, Scan } from './scan.ts'
 
 export function totalKb(scan: Scan): number {
@@ -28,12 +28,15 @@ export function reportText(o: Outcome, data: readonly string[]): string {
   return parts.join(' · ')
 }
 
-/** The sidebar's second line after a deletion: how much went, without the names the pane holds. */
-export function deletedShort(o: Outcome): string {
-  const parts = [o.deleted.length === 0 ? 'deleted nothing' : `deleted ${o.deleted.length} dir(s), ${sizeText(o.freedKb)}`]
-  if (o.skipped.length > 0) parts.push(`${o.skipped.length} skipped`)
-  if (o.failed.length > 0) parts.push(`${o.failed.length} failed`)
-  return parts.join(' · ')
+/**
+ * The sidebar's second line after a deletion: how much went, without the names the pane holds. What
+ * went is green, what was skipped yellow, what failed red, and the rest faint.
+ */
+export function deletedShort(o: Outcome): Line {
+  const parts = [o.deleted.length === 0 ? part('deleted nothing', 'dim') : part(`deleted ${o.deleted.length} dir(s), ${sizeText(o.freedKb)}`, 'ok')]
+  if (o.skipped.length > 0) parts.push(part(' · ', 'dim'), part(`${o.skipped.length} skipped`, 'warn'))
+  if (o.failed.length > 0) parts.push(part(' · ', 'dim'), part(`${o.failed.length} failed`, 'error'))
+  return partsLine(parts)
 }
 
 /**

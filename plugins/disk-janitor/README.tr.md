@@ -16,7 +16,7 @@ Session'ın repository'sindeki build artifact'lerini ölçen, 5 GB'ı geçtikler
        disk-janitor: artifacts 7.4 GB · /disk-janitor
        disk-janitor: over 20 GB: artifacts 23.1 GB · /disk-janitor
 
-   [sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran bir `build artifacts` section'ı olarak; status line temiz kalır. Satır 5 GB'dan itibaren sarı, 20 GB'dan itibaren kırmızıdır ve section 5 GB'ın altında kalkar. Altındaki ikinci, soluk satır son silmeyi tutar; bir `clean up` tuşu pane'i açar:
+   [sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran bir `build artifacts` section'ı olarak; status line temiz kalır. Yalnızca boyut renklidir: 5 GB'dan itibaren sarı, 20 GB'dan itibaren kırmızı; `· /disk-janitor` soluktur ve section 5 GB'ın altında kalkar. Altındaki ikinci, soluk satır son silmeyi tutar: silinen kısım yeşil, `N skipped` sarı, `N failed` kırmızıdır; bir `clean up` tuşu pane'i açar:
 
        disk-janitor: build artifacts
        artifacts 7.4 GB · /disk-janitor

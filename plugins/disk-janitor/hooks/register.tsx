@@ -1,5 +1,5 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText, statusTone, type Class } from './classify.ts'
+import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusLine, type Class, type Line } from './classify.ts'
 import { carriedSelection, deletedShort, listText, reportText, rowText, totalKb, type Outcome } from './report.ts'
 import { MAX_FOUND, type Found, type Scan } from './scan.ts'
 
@@ -24,7 +24,7 @@ type Elements = ReturnType<EngineInterface['ui']['resolve']>
  * that directory, not under `$.session.cwd()`, because a Bash `cd` moves the
  * session's directory and would point the scan at another repository.
  */
-type State = { scan?: Scan; selected: Set<string>; confirm: boolean; busy: boolean; scannedAt: number; lastError?: string; cwd?: string; event?: string }
+type State = { scan?: Scan; selected: Set<string>; confirm: boolean; busy: boolean; scannedAt: number; lastError?: string; cwd?: string; event?: Line }
 
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'disk-janitor', key: 'artifacts' }
@@ -126,13 +126,13 @@ async function removeDir($: EngineInterface, root: string, f: Found): Promise<st
  * faint. A closed sidebar, and a sidebar mod that is not installed, both answer false, so the status
  * line is drawn instead.
  */
-async function toSidebar($: EngineInterface, state: State, text: string | undefined, kb: number): Promise<boolean> {
+async function toSidebar($: EngineInterface, state: State, line: Line | undefined): Promise<boolean> {
   try {
-    if (text === undefined) {
+    if (line === undefined) {
       await $.sidebar.clear(SECTION)
       return await $.sidebar.isOpen()
     }
-    const lines = [{ text, kind: statusTone(kb) }, ...(state.event === undefined ? [] : [{ text: state.event, kind: 'dim' as const }])]
+    const lines = [line, ...(state.event === undefined ? [] : [state.event])]
     // The button opens the pane, where the person picks and deletes; a command a plugin runs never deletes.
     return await $.sidebar.set({ ...SECTION, title: 'build artifacts', lines, buttons: [PANE_BUTTON], until: 'session', order: 20 })
   } catch {
@@ -143,9 +143,8 @@ async function toSidebar($: EngineInterface, state: State, text: string | undefi
 
 /** Shows the measured total on the one channel that takes it. */
 async function showTotal($: EngineInterface, state: State): Promise<void> {
-  const kb = state.scan === undefined ? 0 : totalKb(state.scan)
-  const text = state.scan === undefined ? undefined : statusText(kb)
-  $.ui.status((await toSidebar($, state, text, kb)) ? undefined : text)
+  const line = state.scan === undefined ? undefined : statusLine(totalKb(state.scan))
+  $.ui.status((await toSidebar($, state, line)) ? undefined : line?.text)
 }
 
 /** Measures the session's repository, shows the total and redraws the pane; a running measurement or deletion is left to finish. */

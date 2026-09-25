@@ -16,7 +16,7 @@ A Claude Code Mod that measures the build artifacts of the session's repository,
        disk-janitor: artifacts 7.4 GB · /disk-janitor
        disk-janitor: over 20 GB: artifacts 23.1 GB · /disk-janitor
 
-   While the [sidebar](../sidebar) is open, that line goes there instead, as a `build artifacts` section that stays for the session, and the status line stays clear. The line is yellow from 5 GB and red from 20 GB, and the section goes down under 5 GB. A second, faint line under it holds the last deletion, and a `clean up` button opens the pane:
+   While the [sidebar](../sidebar) is open, that line goes there instead, as a `build artifacts` section that stays for the session, and the status line stays clear. Only the size is coloured, yellow from 5 GB and red from 20 GB, and `· /disk-janitor` is faint; the section goes down under 5 GB. A second, faint line under it holds the last deletion, with what went green, `N skipped` yellow and `N failed` red, and a `clean up` button opens the pane:
 
        disk-janitor: build artifacts
        artifacts 7.4 GB · /disk-janitor

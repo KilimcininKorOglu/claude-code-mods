@@ -1,6 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText } from '../hooks/classify.ts'
+import { deletedShort } from '../hooks/report.ts'
 
 tier('user')
 
@@ -32,5 +33,20 @@ describe('classify', () => {
     expect(statusText(4.9 * 1024 * 1024)).toBe(undefined)
     expect(statusText(7.4 * 1024 * 1024)).toBe('artifacts 7.4 GB · /disk-janitor')
     expect(statusText(23.1 * 1024 * 1024)).toBe('over 20 GB: artifacts 23.1 GB · /disk-janitor')
+  })
+
+  test('the deletion line colours what went, what was skipped and what failed', async () => {
+    const line = deletedShort({ deleted: ['a'], skipped: ['b (x)', 'c (y)'], failed: ['d (z)'], freedKb: 2048 })
+    expect(line).toEqual({
+      text: 'deleted 1 dir(s), 2 MB · 2 skipped · 1 failed',
+      parts: [
+        { text: 'deleted 1 dir(s), 2 MB', kind: 'ok' },
+        { text: ' · ', kind: 'dim' },
+        { text: '2 skipped', kind: 'warn' },
+        { text: ' · ', kind: 'dim' },
+        { text: '1 failed', kind: 'error' },
+      ],
+    })
+    expect(deletedShort({ deleted: [], skipped: [], failed: [], freedKb: 0 }).parts).toEqual([{ text: 'deleted nothing', kind: 'dim' }])
   })
 })
