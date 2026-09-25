@@ -32,6 +32,20 @@ export function addSplit(split: Split, usage: Usage | undefined): Split {
   }
 }
 
+/**
+ * The usage a model call's or a compaction's result carries, or undefined where it made no request (a
+ * fork with nothing to fork, a skipped compaction, a compaction a hook answered).
+ */
+export function usageOf(result: unknown): Usage | undefined {
+  const usage = typeof result === 'object' && result !== null ? (result as { usage?: unknown }).usage : undefined
+  return typeof usage === 'object' && usage !== null ? (usage as Usage) : undefined
+}
+
+/** The value an op event's result carries (`{ value }`), or undefined for a `{ deny }`. */
+export function valueOf(result: unknown): unknown {
+  return typeof result === 'object' && result !== null ? (result as { value?: unknown }).value : undefined
+}
+
 /** Two splits added. */
 export function sumSplits(a: Split, b: Split): Split {
   return { input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite }

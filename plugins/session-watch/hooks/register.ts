@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, endFile, failedGit, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Effort, type GitState, type Reading, type Split, type Usage,
 } from './watch.ts'
 
@@ -175,6 +175,27 @@ export const register: Register = on => {
     const r = await next(e)
     await countTurn($, state, e.usage)
     if (e.agentId === undefined) await refresh($, state)
+    return r
+  })
+
+  // A plugin's own model calls and a compaction's summary are requests no transcript records, so they
+  // count here, as /cost counts them. The engine's own side calls reach no hook and stay out.
+  // A model call is an op event: its hooks resolve to `{ value }` or `{ deny }`, not the bare result.
+  on('model.fork', async ($, e, next) => {
+    const r = await next(e)
+    await countTurn($, state, usageOf(valueOf(r)))
+    return r
+  })
+
+  on('model.complete', async ($, e, next) => {
+    const r = await next(e)
+    await countTurn($, state, usageOf(valueOf(r)))
+    return r
+  })
+
+  on('session.compact', async ($, e, next) => {
+    const r = await next(e)
+    await countTurn($, state, usageOf(r))
     return r
   })
 

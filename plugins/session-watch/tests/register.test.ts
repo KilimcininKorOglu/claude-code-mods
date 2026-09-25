@@ -1,5 +1,5 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On, TurnCompleteInput, TurnUsage } from 'claude-code'
+import type { CommandRunInput, On, SessionMessage, TurnCompleteInput, TurnUsage } from 'claude-code'
 
 tier('user')
 
@@ -16,7 +16,22 @@ const SIDEBAR: Plugin = {
   },
 }
 
-const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
+/** A conversation of one message; a compaction leaves at least one. */
+const SUMMARY: SessionMessage = { role: 'user', text: 'summary', toolUses: [] }
+
+/** Another plugin that makes its own model calls, as memory-save forks at a turn's end. */
+const CALLER: Plugin = {
+  name: 'caller',
+  register(on) {
+    on('command.run', { command: 'caller' }, async $ => {
+      await $.model.fork({ prompt: 'Reply with the single word ok.' })
+      await $.model.complete({ model: 'claude-haiku-4-5', prompt: 'Reply with the single word ok.' })
+      return { text: 'called' }
+    })
+  },
+}
+
+const withSidebar =(name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
 const run: CommandRunInput = { command: 'session-watch', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } }
 
@@ -80,6 +95,10 @@ function world(on: On, store: Record<string, unknown> = {}): World {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
   })
   on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '', stderr: '', interrupted: false } }) as never)
+  // Measured on 2.1.282: a fork of 16 input tokens and a haiku completion of 14.
+  on('model.fork', () => ({ value: { isAnswered: true, text: 'ok', usage: { input_tokens: 16, output_tokens: 4, cache_read_input_tokens: 74_105, cache_creation_input_tokens: 6845 } } }))
+  on('model.complete', () => ({ value: { isAnswered: true, text: 'ok', usage: { input_tokens: 14, output_tokens: 4, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } } }))
+  on('session.compact', (_, e) => (e.trigger === 'plugin' ? { skip: 'off' } : { messages: [SUMMARY], usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } }))
   return w
 }
 
@@ -170,6 +189,16 @@ describe('session-watch', () => {
     await w.clock.advance(0)
     expect(w.logs).toEqual([`the token totals count from the module's load, because the transcripts were not read: ${MAIN}: head: ${MAIN}: No such file or directory`])
     expect(w.store.totals).toEqual({ [SID]: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } })
+  })
+
+  test('a plugin\'s fork and completion and a compaction\'s summary count, which no transcript records', { plugins: [CALLER] }, async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    await $.command.run({ ...run, command: 'caller' })
+    await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
+    // A skipped compaction made no request.
+    await $.session.compact({ trigger: 'plugin', messages: [SUMMARY] })
+    expect(w.store.totals).toEqual({ [SID]: { input: 130, output: 58, cacheRead: 74_105, cacheWrite: 6845 } })
   })
 
   test('the thinking setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {
