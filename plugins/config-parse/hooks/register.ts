@@ -119,7 +119,7 @@ async function afterEdit($: EngineInterface, state: State, path: string, r: Tool
   }
   state.open.set(shown, { path, kind })
   // The note goes to the model, the line to the person: neither reads the other's channel.
-  await toPerson($, shown, 'config does not parse', sidebarLines(error), logText(kind, shown, error))
+  await toPerson($, shown, 'config does not parse', sidebarLines(shown, error), logText(kind, shown, error))
   return { ...r, context: [...(r.context ?? []), noteText(kind, shown, error)] }
 }
 

@@ -142,7 +142,7 @@ describe('config-parse', () => {
     w.file = 'A=1\nB=2\n'
     await edit($, '.env')
     expect(bar.sections).toEqual([
-      { key: '.env', title: 'config does not parse', lines: ['line 2 is not a setting: this is prose'] },
+      { key: '.env', title: 'config does not parse', lines: ['.env', 'line 2 is not a setting: this is prose'] },
       { key: '.env', title: 'config parses again', lines: ['.env parses again'] },
     ])
     expect(bar.cleared).toEqual(['.env'])

@@ -183,7 +183,14 @@ export function doneLog(kind: Kind, shown: string): string {
   return `${shown} parses as ${label(kind)} again`
 }
 
-export const sidebarLines = (error: string): { text: string; kind: 'error' }[] => [{ text: error.slice(0, 200), kind: 'error' }]
+/**
+ * The finding's sidebar lines: the file first, because the pane draws the section's title and not its
+ * key, then the parse error.
+ */
+export const sidebarLines = (shown: string, error: string): { text: string; kind: 'error' }[] => [
+  { text: shown, kind: 'error' },
+  { text: error.slice(0, 200), kind: 'error' },
+]
 
 export const doneLines = (shown: string): { text: string; kind: 'ok' }[] => [{ text: `${shown} parses again`, kind: 'ok' }]
 

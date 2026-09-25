@@ -75,7 +75,8 @@ describe('parse', () => {
     expect(logText('json', 'package.json', 'Unexpected token }')).toBe('package.json does not parse as JSON: Unexpected token }')
     expect(logText('env', '.env', 'line 2 is not a setting: x')).toBe('.env does not parse as a .env file: line 2 is not a setting: x')
     expect(doneLog('yaml', 'ci.yml')).toBe('ci.yml parses as YAML again')
-    expect(sidebarLines('boom')).toEqual([{ text: 'boom', kind: 'error' }])
+    // The pane draws the title, not the key, so the file is a line of its own.
+    expect(sidebarLines('package.json', 'boom')).toEqual([{ text: 'package.json', kind: 'error' }, { text: 'boom', kind: 'error' }])
   })
 
   test('stops a commit, a push and a merge, and leaves every other command alone', async () => {
