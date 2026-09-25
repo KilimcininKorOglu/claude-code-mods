@@ -18,7 +18,7 @@ const SUBCOMMAND_TOOLS = new Set([
   'aws', 'helm', 'terraform', 'tofu', 'pulumi', 'pip', 'pip3', 'uv', 'poetry', 'ruff', 'sqlfluff', 'dotnet',
   'mvn', 'mvnd', 'gradle', 'gradlew', 'sbt', 'bundle', 'rake', 'rails', 'artisan', 'golangci-lint', 'next',
   'prisma', 'playwright', 'brew', 'composer', 'mix', 'swift', 'systemctl', 'gcloud', 'pio', 'pre-commit',
-  'trunk', 'quarto', 'shopify', 'liquibase', 'ansible-playbook', 'fail2ban-client', 'yarn',
+  'trunk', 'quarto', 'shopify', 'liquibase', 'ansible-playbook', 'fail2ban-client', 'yarn', 'phpstan',
 ])
 
 /** Runners that start another tool: the words they take before it. */
