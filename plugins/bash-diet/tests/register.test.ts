@@ -111,7 +111,7 @@ describe('bash-diet', () => {
     w.stdout = NOISY
     const r = await bash($, './build.sh')
     expect(stdoutOf(r)).toBe('step\nretrying (×40)\ndone')
-    expect(w.statuses.at(-1)).toMatch(/^1 result\(s\) shrunk · ~\d+ tokens saved \(\d+%\)$/)
+    expect(w.statuses.at(-1)).toMatch(/^1 result\(s\) shrunk · \d+ → \d+ chars \(−\d+%\) · ~\d+ tokens estimated$/)
     expect((await $.command.run(run(''))).text).toMatch(/^on · 1 result\(s\) shrunk/)
     expect(w.logs).toEqual([])
     expect(w.registered).toBe(true)
@@ -256,7 +256,7 @@ describe('bash-diet', () => {
     const before = JSON.stringify({ at: w.now - 60_000, project: 'app', family: 'git status', raw: 400, shown: 100 })
     put(w, file, before)
     await started($)
-    expect((await $.command.run(run(''))).text).toBe('on · 1 result(s) shrunk · ~75 tokens saved (75%)')
+    expect((await $.command.run(run(''))).text).toBe('on · 1 result(s) shrunk · 400 → 100 chars (−75%) · ~75 tokens estimated')
     w.stdout = NOISY
     await bash($, './build.sh')
     expect((w.files.get(file) ?? '').split('\n')).toEqual([before, expect.stringContaining('"family":"other"')])

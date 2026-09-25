@@ -33,19 +33,22 @@ export function tokensOf(chars: number): number {
   return Math.ceil(chars / CHARS_PER_TOKEN)
 }
 
-/** A token count as `830`, `12.4k` or `1.2M`. */
+/** A token or character count as `830`, `12.4k` or `1.2M`. */
 export function fmtTokens(n: number): string {
   if (n < 1000) return String(n)
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
-/** The session's gain: how many results shrank and the tokens they saved. */
+/**
+ * The session's gain: how many results shrank, the characters measured before and after, and the
+ * tokens saved as estimated from those characters.
+ */
 export function sessionText(calls: number, rawChars: number, shownChars: number): string {
   if (calls === 0) return 'no Bash result shrunk yet'
   const saved = tokensOf(rawChars - shownChars)
   const pct = rawChars === 0 ? 0 : Math.round(((rawChars - shownChars) / rawChars) * 100)
-  return `${calls} result(s) shrunk · ~${fmtTokens(saved)} tokens saved (${pct}%)`
+  return `${calls} result(s) shrunk · ${fmtTokens(rawChars)} → ${fmtTokens(shownChars)} chars (−${pct}%) · ~${fmtTokens(saved)} tokens estimated`
 }
 
 export function statusText(enabled: boolean, excludes: string[], session: string): string {

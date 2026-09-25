@@ -124,7 +124,7 @@ describe('filter plumbing', () => {
     expect(fmtTokens(12_400)).toBe('12k')
     expect(fmtTokens(1_500)).toBe('1.5k')
     expect(sessionText(0, 0, 0)).toBe('no Bash result shrunk yet')
-    expect(sessionText(2, 4000, 1000)).toBe('2 result(s) shrunk · ~750 tokens saved (75%)')
+    expect(sessionText(2, 4000, 1000)).toBe('2 result(s) shrunk · 4.0k → 1.0k chars (−75%) · ~750 tokens estimated')
     expect(isExcluded(['npm'], ['npm', 'test'])).toBe(true)
     expect(isExcluded(['npm'], ['npmx'])).toBe(false)
     expect(isExcluded(['^git (log|diff)'], ['git', 'diff'])).toBe(true)
