@@ -32,10 +32,10 @@ Every command the mod has a filter of its own for. A command marked `*` gets the
 |---|---|
 | git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`, `git tag` (a list keeps ten tags at each end and the count), `git remote -v`; `yadm status`, `yadm diff`, `yadm log`\* |
 | GitHub, GitLab | `gh pr`, `gh issue`, `gh run`, `gh release`; `glab mr`, `glab issue` |
-| Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install` |
-| Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run` |
-| Python | `pytest`\*; `ruff`, `ruff check`, `ruff format`; `mypy`; `pip` and `pip3`: `list`, `install`, `uninstall`, `sync`, `download` and every other subcommand; `uv pip`, `uv sync`, `uv add`, `uv lock`; `poetry install`, `poetry add`, `poetry update` |
-| JavaScript | `npm install`, `npm i`, `npm ci`, `npm ls`, `npm list`, `npm outdated`, `npm test`, `npm run`, `npm run-script`, `npm exec` and every other `npm` subcommand; `pnpm install`, `pnpm i`, `pnpm add`, `pnpm remove`, `pnpm rm`, `pnpm update`, `pnpm up`, `pnpm list`, `pnpm ls`, `pnpm outdated`, `pnpm why` and every other `pnpm` subcommand; `yarn install`, `yarn add`; `bun install`, `bun add`, `bun remove`, `bun test`; `deno test`, `deno lint`, `deno check`; `jest`, `vitest`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma` |
+| Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install`; `cargo fmt` and `rustfmt` (a check reads as each file with the lines it would add and remove) |
+| Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run`; `gofmt -l` and `-d`, `go fmt` |
+| Python | `pytest`\*; `ruff`, `ruff check`, `ruff format`; `mypy`; `flake8` and `pylint` (grouped by rule); `black`; `pip` and `pip3`: `list`, `install`, `uninstall`, `sync`, `download` and every other subcommand; `uv pip`, `uv sync`, `uv add`, `uv lock`; `poetry install`, `poetry add`, `poetry update` |
+| JavaScript | `npm install`, `npm i`, `npm ci`, `npm ls`, `npm list`, `npm outdated`, `npm test`, `npm run`, `npm run-script`, `npm exec` and every other `npm` subcommand; `pnpm install`, `pnpm i`, `pnpm add`, `pnpm remove`, `pnpm rm`, `pnpm update`, `pnpm up`, `pnpm list`, `pnpm ls`, `pnpm outdated`, `pnpm why` and every other `pnpm` subcommand; `yarn install`, `yarn add`; `bun install`, `bun add`, `bun remove`, `bun test`; `deno test`, `deno lint`, `deno check`; `jest`, `vitest`, `mocha`, `cypress run`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma`; `webpack`, `vite`, `rollup`, `esbuild` (the emitted files as their count and the largest three) |
 | JVM | `mvn`, `mvnd`, `gradle`, `gradlew`, `sbt` |
 | Ruby | `rake test`, `rails test`, `ruby` (a minitest file), `rspec`, `rubocop`, `bundle install`, `bundle update` |
 | PHP | `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`, `phpstan analyze` |
@@ -64,6 +64,7 @@ Measured on Claude Code 2.1.282 with Claude Opus 5.5 and bash-diet 0.1.2. The sa
 
 - A result's tokens are the growth of the context from the request that ran the command to the next one, less that request's output tokens. That count holds about 100 tokens for the call itself, which no filter shrinks.
 - The session's own prompt, tools and instructions are the same in both runs, so the saving on the whole session is smaller than the saving on the results.
+
 The context tokens of the 35 results, by family. Each figure is the sum of the family's per-command medians.
 
 | Family | Commands run | Without the mod | With the mod | Saving |
@@ -85,6 +86,21 @@ The context tokens of the 35 results, by family. Each figure is the sum of the f
 | Total | 35 commands | 38,277 | 20,653 | 46% |
 
 - The least saving is on `env` (the filter only masks credential values), `php -l`, `make` and `go vet`, whose output is already a few lines and whose count is mostly the call's own 100 tokens.
+
+The filters added after that session were measured on one run each in a scratch project, in characters of the result:
+
+| Command | Without the mod | With the mod | Saving |
+|---|---|---|---|
+| `flake8` | 2,091 | 775 | 63% |
+| `pylint` | 2,898 | 1,049 | 64% |
+| `gofmt -d` | 328 | 56 | 83% |
+| `black --check --diff` | 1,104 | 286 | 74% |
+| `webpack` | 779 | 117 | 85% |
+| `vite build` (a parse error) | 1,562 | 291 | 81% |
+| `esbuild` (a parse error) | 1,044 | 109 | 90% |
+| `rollup` (a parse error) | 1,554 | 178 | 89% |
+| `mocha` | 897 | 455 | 49% |
+| `cypress run` | 5,517 | 327 | 94% |
 
 ## Your own rules
 

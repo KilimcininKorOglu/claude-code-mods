@@ -32,10 +32,10 @@ Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki
 |---|---|
 | git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`, `git tag` (liste her uçtan on tag ve toplam sayıyı tutar), `git remote -v`; `yadm status`, `yadm diff`, `yadm log`\* |
 | GitHub, GitLab | `gh pr`, `gh issue`, `gh run`, `gh release`; `glab mr`, `glab issue` |
-| Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install` |
-| Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run` |
-| Python | `pytest`\*; `ruff`, `ruff check`, `ruff format`; `mypy`; `pip` ve `pip3`: `list`, `install`, `uninstall`, `sync`, `download` ve diğer bütün subcommand'lar; `uv pip`, `uv sync`, `uv add`, `uv lock`; `poetry install`, `poetry add`, `poetry update` |
-| JavaScript | `npm install`, `npm i`, `npm ci`, `npm ls`, `npm list`, `npm outdated`, `npm test`, `npm run`, `npm run-script`, `npm exec` ve diğer bütün `npm` subcommand'ları; `pnpm install`, `pnpm i`, `pnpm add`, `pnpm remove`, `pnpm rm`, `pnpm update`, `pnpm up`, `pnpm list`, `pnpm ls`, `pnpm outdated`, `pnpm why` ve diğer bütün `pnpm` subcommand'ları; `yarn install`, `yarn add`; `bun install`, `bun add`, `bun remove`, `bun test`; `deno test`, `deno lint`, `deno check`; `jest`, `vitest`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma` |
+| Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install`; `cargo fmt` ve `rustfmt` (bir check, her dosyayı ekleyeceği ve sileceği satır sayısıyla verir) |
+| Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run`; `gofmt -l` ve `-d`, `go fmt` |
+| Python | `pytest`\*; `ruff`, `ruff check`, `ruff format`; `mypy`; `flake8` ve `pylint` (kurala göre gruplanır); `black`; `pip` ve `pip3`: `list`, `install`, `uninstall`, `sync`, `download` ve diğer bütün subcommand'lar; `uv pip`, `uv sync`, `uv add`, `uv lock`; `poetry install`, `poetry add`, `poetry update` |
+| JavaScript | `npm install`, `npm i`, `npm ci`, `npm ls`, `npm list`, `npm outdated`, `npm test`, `npm run`, `npm run-script`, `npm exec` ve diğer bütün `npm` subcommand'ları; `pnpm install`, `pnpm i`, `pnpm add`, `pnpm remove`, `pnpm rm`, `pnpm update`, `pnpm up`, `pnpm list`, `pnpm ls`, `pnpm outdated`, `pnpm why` ve diğer bütün `pnpm` subcommand'ları; `yarn install`, `yarn add`; `bun install`, `bun add`, `bun remove`, `bun test`; `deno test`, `deno lint`, `deno check`; `jest`, `vitest`, `mocha`, `cypress run`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma`; `webpack`, `vite`, `rollup`, `esbuild` (üretilen dosyalar sayıları ve en büyük üçü olarak) |
 | JVM | `mvn`, `mvnd`, `gradle`, `gradlew`, `sbt` |
 | Ruby | `rake test`, `rails test`, `ruby` (bir minitest dosyası), `rspec`, `rubocop`, `bundle install`, `bundle update` |
 | PHP | `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`, `phpstan analyze` |
@@ -64,6 +64,7 @@ Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki
 
 - Bir sonucun token'ı, komutu çalıştıran request'ten sonrakine bağlamın büyümesidir, o request'in output token'ı çıkarılarak. Bu sayı çağrının kendisi için yaklaşık 100 token içerir, ve hiçbir filtre onu küçültmez.
 - Session'ın kendi prompt'u, tool'ları ve talimatları iki koşuda da aynıdır. Bu yüzden bütün session'daki tasarruf sonuçlardaki tasarruftan küçüktür.
+
 35 sonucun bağlam token'ı, aileye göre. Her sayı, ailedeki komutların medyanlarının toplamıdır.
 
 | Aile | Çalışan komutlar | Mod olmadan | Mod ile | Tasarruf |
@@ -85,6 +86,21 @@ Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki
 | Toplam | 35 komut | 38.277 | 20.653 | %46 |
 
 - En az tasarruf `env` (filtre yalnız credential değerlerini maskeler), `php -l`, `make` ve `go vet` komutlarındadır. Bunların çıktısı zaten birkaç satırdır ve sayılarının çoğu çağrının kendi 100 token'ıdır.
+
+O session'dan sonra eklenen filtreler, bir deneme projesinde her biri bir kez çalıştırılarak, sonucun karakter sayısıyla ölçüldü:
+
+| Komut | Mod olmadan | Mod ile | Tasarruf |
+|---|---|---|---|
+| `flake8` | 2.091 | 775 | %63 |
+| `pylint` | 2.898 | 1.049 | %64 |
+| `gofmt -d` | 328 | 56 | %83 |
+| `black --check --diff` | 1.104 | 286 | %74 |
+| `webpack` | 779 | 117 | %85 |
+| `vite build` (bir parse hatası) | 1.562 | 291 | %81 |
+| `esbuild` (bir parse hatası) | 1.044 | 109 | %90 |
+| `rollup` (bir parse hatası) | 1.554 | 178 | %89 |
+| `mocha` | 897 | 455 | %49 |
+| `cypress run` | 5.517 | 327 | %94 |
 
 ## Kendi kurallarınız
 
