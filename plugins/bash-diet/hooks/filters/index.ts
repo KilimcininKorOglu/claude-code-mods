@@ -1,8 +1,10 @@
 import type { Classified } from '../rules.ts'
 import type { Filter, FilterTable } from './common.ts'
+import { GH } from './gh.ts'
+import { GIT } from './git.ts'
 
 /** Every ecosystem's table; a later table's key wins over an earlier one's. */
-const TABLES: FilterTable[] = []
+const TABLES: FilterTable[] = [GIT, GH]
 
 const FILTERS: FilterTable = Object.assign({}, ...TABLES)
 
