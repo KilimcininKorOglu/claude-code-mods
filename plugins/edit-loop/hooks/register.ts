@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { countEdit, logText, noteText, sectionKey, shownPath, THRESHOLD, WARN_THRESHOLD, type Counts } from './loop.ts'
+import { countEdit, logText, noteText, sectionKey, shownPath, sidebarLines, THRESHOLD, WARN_THRESHOLD, type Counts, type Line } from './loop.ts'
 
 const ENABLED_KEY = 'enabled'
 
@@ -32,13 +32,13 @@ async function shownRootOf($: EngineInterface): Promise<string> {
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, line: string, kind: 'warn' | 'error'): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({
       consumer: 'edit-loop',
       key: sectionKey(key),
       title,
-      lines: [{ text: line, kind }],
+      lines,
       until: 'stream',
     })
     if (taken) return
@@ -59,11 +59,11 @@ async function afterEdit($: EngineInterface, state: State, agentId: string | und
   if (count !== WARN_THRESHOLD && count !== THRESHOLD) return r
   const shown = shownPath(path, state.root ?? (await $.session.cwd()))
   if (count === WARN_THRESHOLD) {
-    await toPerson($, shown, 'edits piling up', logText(shown, count), 'warn')
+    await toPerson($, shown, 'edits piling up', sidebarLines(shown, count), logText(shown, count))
     return r
   }
   // The note goes to the model, the line to the person: neither reads the other's channel.
-  await toPerson($, shown, 'edit loop', logText(shown), 'error')
+  await toPerson($, shown, 'edit loop', sidebarLines(shown), logText(shown))
   return { ...r, context: [...(r.context ?? []), noteText(shown)] }
 }
 

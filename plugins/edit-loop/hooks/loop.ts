@@ -31,7 +31,24 @@ export function noteText(path: string): string {
 
 /** The transcript line: the finding alone, without the instruction the model reads. The engine adds the mod name. */
 export function logText(path: string, count = THRESHOLD): string {
-  return `${count}${count === WARN_THRESHOLD ? 'rd' : 'th'} edit of ${path} in this turn`
+  return sidebarLines(path, count).map(l => l.text).join('\n')
+}
+
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** `logText` as a sidebar line: the ordinal yellow at the warning and red at the note, the path default, the rest faint. */
+export function sidebarLines(path: string, count = THRESHOLD): Line[] {
+  const ordinal = `${count}${count === WARN_THRESHOLD ? 'rd' : 'th'}`
+  return [partsLine([part(ordinal, count === WARN_THRESHOLD ? 'warn' : 'error'), part(` edit of ${path}`, undefined), part(' in this turn', 'dim')])]
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes, so one file keeps one section. */

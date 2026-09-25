@@ -21,7 +21,7 @@ Model bir turn içinde aynı dosyayı beş kere düzenlediğinde bunu modele sö
        edit-loop: 5th edit of hooks/a.ts in this turn
 
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken iki satır da oraya gider, stream'in içinde kayıtlar olarak; transcript temiz kalır. Bir kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
+6. [sidebar](../sidebar) açıkken iki satır da oraya gider, stream'in içinde kayıtlar olarak; transcript temiz kalır. Orada rengi sıra sayısı (`3rd`, `5th`) taşır, sarı ya da kırmızı; path varsayılan renkte kalır, `in this turn` soluk çizilir. Bir kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
 
 Canlı testte model bir turn'de bir dosyayı altı kere düzenledi. Beşinci edit'ten sonra notu okudu, dosyayı yeniden okudu, edit'lerin neden kasıtlı olduğunu söyledi ve notu kelimesi kelimesine aktardı. Diğer beş edit not almadı.
 

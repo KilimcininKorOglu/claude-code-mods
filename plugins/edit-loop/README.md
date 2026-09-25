@@ -21,7 +21,7 @@ A Claude Code Mod that tells the model when it has edited the same file five tim
        edit-loop: 5th edit of hooks/a.ts in this turn
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, both lines go there instead, as entries in its stream, and the transcript stays clean. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, both lines go there instead, as entries in its stream, and the transcript stays clean. There the ordinal (`3rd`, `5th`) carries the colour, yellow or red, the path keeps the default colour, and `in this turn` is faint. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
 In the live check the model edited one file six times in one turn. It read the note after the fifth edit, re-read the file, stated why the edits were intended, and quoted the note word for word. The other five edits had no note.
 

@@ -48,12 +48,13 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }[] }
+type SidebarLine = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+type Bar = { open: boolean; sections: { key: string; title: string; lines: SidebarLine[]; until: string }[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }
-    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })), until: s.until })
+    const s = e as unknown as { key: string; title: string; lines: SidebarLine[]; until: string }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind, parts: l.parts })), until: s.until })
     return { value: bar.open }
   })
 }
@@ -111,15 +112,16 @@ describe('edit-loop', () => {
     expect((await $.tool.call({ tool: 'NotebookEdit', notebook_path: `${ROOT}/n.ipynb`, new_source: 'x' } as never)).context?.[0]).toContain('edited n.ipynb 5 times')
   })
 
-  withSidebar('an open sidebar takes the yellow warning and the red finding, and the transcript stays clean', async ($, on) => {
+  withSidebar('an open sidebar takes the warning with a yellow ordinal and the finding with a red one, and the transcript stays clean', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [] }
     seatSidebar(on, bar)
     await started($)
     for (let i = 0; i < 5; i++) await edit($)
+    const parts = (ordinal: string, kind: string) => [{ text: ordinal, kind }, { text: ' edit of hooks/a.ts' }, { text: ' in this turn', kind: 'dim' }]
     expect(bar.sections).toEqual([
-      { key: 'hooks-a.ts', title: 'edits piling up', lines: [{ text: '3rd edit of hooks/a.ts in this turn', kind: 'warn' }], until: 'stream' },
-      { key: 'hooks-a.ts', title: 'edit loop', lines: [{ text: '5th edit of hooks/a.ts in this turn', kind: 'error' }], until: 'stream' },
+      { key: 'hooks-a.ts', title: 'edits piling up', lines: [{ text: '3rd edit of hooks/a.ts in this turn', parts: parts('3rd', 'warn') }], until: 'stream' },
+      { key: 'hooks-a.ts', title: 'edit loop', lines: [{ text: '5th edit of hooks/a.ts in this turn', parts: parts('5th', 'error') }], until: 'stream' },
     ])
     expect(w.logs).toEqual([])
   })
