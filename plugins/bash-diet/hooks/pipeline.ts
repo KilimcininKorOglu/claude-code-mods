@@ -1,8 +1,10 @@
+import { BUILTIN_RULES } from './builtin-rules.ts'
 import { read, type Target } from './command.ts'
+import { applyRule, ruleFor, type Rule } from './dsl.ts'
 import type { Filter, FilterResult } from './filters/common.ts'
 import { GENERIC } from './filters/generic.ts'
 import { filterFor } from './filters/index.ts'
-import { classify } from './rules.ts'
+import { classify, type Classified } from './rules.ts'
 
 /** What to do with one Bash call: which filter reads its output, and the flags it asks for. */
 export type Plan = {
@@ -20,20 +22,33 @@ const OTHER = (args: string[] = []): Plan => ({ family: 'other', filter: GENERIC
 
 /**
  * The plan for a command: undefined for one that is left alone (raw, opaque), the generic cleanup for a
- * chain or a command no table names, else the command's own filter.
+ * chain, else the first of: the person's rules, the command's own filter, a built-in rule, the cleanup.
  */
-export function planFor(command: string): Plan | undefined {
+export function planFor(command: string, rules: readonly Rule[] = []): Plan | undefined {
   const reading = read(command)
   if (reading.kind === 'raw' || reading.kind === 'opaque') return undefined
   if (reading.kind === 'mixed') return OTHER()
-  return targetPlan(reading.target)
+  return targetPlan(reading.target, rules)
 }
 
-/** The plan for one command: its table's filter and flags, or the generic cleanup. */
-function targetPlan(target: Target): Plan {
+/** A plan that runs a data rule; a rule asks for no flags. */
+function rulePlan(rule: Rule, target: Target): Plan {
+  return { family: `${rule.source} rule ${rule.name}`, filter: { run: input => applyRule(rule, input.text) }, args: target.words.slice(1), flags: [], target, nameEnd: -1 }
+}
+
+/** The plan for one command: the person's rule, its table's filter and flags, a built-in rule, or the cleanup. */
+function targetPlan(target: Target, rules: readonly Rule[]): Plan {
+  const own = ruleFor(rules, target.words)
+  if (own !== undefined) return rulePlan(own, target)
   const c = classify(target.words)
   const filter = c === undefined ? undefined : filterFor(c)
-  if (c === undefined || filter === undefined) return { ...OTHER(target.words.slice(1)), target }
+  if (c !== undefined && filter !== undefined) return tablePlan(c, filter, target)
+  const builtin = ruleFor(BUILTIN_RULES, target.words)
+  return builtin === undefined ? { ...OTHER(target.words.slice(1)), target } : rulePlan(builtin, target)
+}
+
+/** A plan that runs a table's filter, with the flags it asks for when the command may take them. */
+function tablePlan(c: Classified, filter: Filter, target: Target): Plan {
   const flags = target.canAddFlags ? (filter.flags?.(c.args) ?? []) : []
   const family = c.sub === '' ? c.tool : `${c.tool} ${c.sub}`
   const nameEnd = filter.flagsAtEnd === true ? target.words.length - 1 : c.nameEnd

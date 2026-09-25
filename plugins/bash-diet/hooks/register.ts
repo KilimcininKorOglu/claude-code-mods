@@ -1,11 +1,15 @@
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
+import { BUILTIN_RULES } from './builtin-rules.ts'
 import { withFlags } from './command.ts'
+import { rulesOf, type Rule } from './dsl.ts'
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
-import { fullOutputLine, hashOf, needsFile, staleFiles } from './recall.ts'
-import { AWARENESS, USAGE, isExcluded, patternError, sessionText, statusText } from './text.ts'
+import { fullOutputLine, hashOf, needsFile, sha256Of, staleFiles } from './recall.ts'
+import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionText, statusText } from './text.ts'
 
 const ENABLED_KEY = 'enabled'
 const EXCLUDES_KEY = 'excludes'
+/** The SHA-256 each trusted project rule file had when the person trusted it, by path. */
+const TRUSTED_KEY = 'trusted'
 
 /** Keys of a Bash record that point at the engine's own copy of the unfiltered output. */
 const PERSISTED_KEYS = ['persistedOutputPath', 'persistedOutputSize', 'rawOutputPath'] as const
@@ -19,6 +23,21 @@ type State = {
   shownChars: number
   dir?: string
   lastError?: string
+  /** The person's rule files: the project's first, then the global one. */
+  files: RuleFile[]
+  trusted: Record<string, string>
+}
+
+/** One `filters.json` file as last read: its rules, and the hash trust is checked against. */
+type RuleFile = {
+  path: string
+  shown: string
+  source: 'project' | 'global'
+  mtimeMs?: number
+  hash?: string
+  rules: Rule[]
+  /** The hash of the content the untrusted notice was last written for. */
+  told?: string
 }
 
 /** The output of one call as the model would read it, and where the engine kept it whole. */
@@ -162,12 +181,82 @@ async function withPlanFlags($: EngineInterface, command: string, plan: Plan): P
   return before.decision === after.decision ? next : command
 }
 
+/** The two rule files: `<repo>/.bash-diet/filters.json` and `<config>/bash-diet/filters.json`. */
+async function ruleFilesOf($: EngineInterface): Promise<RuleFile[]> {
+  const root = await $.session.root()
+  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: root, timeoutMs: 5_000 })
+  const repo = top.exitCode === 0 ? top.stdout.trim() : root
+  const home = (await $.env.get('HOME')) ?? ''
+  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
+  const global = `${config.replace(/\/+$/, '')}/bash-diet/filters.json`
+  return [
+    { path: `${repo}/.bash-diet/filters.json`, shown: '.bash-diet/filters.json', source: 'project', rules: [] },
+    { path: global, shown: home !== '' && global.startsWith(`${home}/`) ? `~${global.slice(home.length)}` : global, source: 'global', rules: [] },
+  ]
+}
+
+/** Reads a rule file again when it changed; a file with errors keeps its good rules and says what is wrong. */
+async function refreshFile($: EngineInterface, f: RuleFile): Promise<void> {
+  if (!(await $.fs.exists(f.path))) {
+    Object.assign(f, { mtimeMs: undefined, hash: undefined, rules: [] })
+    return
+  }
+  const { mtimeMs } = await $.fs.stat(f.path)
+  if (mtimeMs === f.mtimeMs) return
+  const text = await $.fs.read(f.path)
+  const compiled = rulesOf(text, f.source)
+  Object.assign(f, { mtimeMs, hash: await sha256Of(text), rules: compiled.rules })
+  if (compiled.errors.length > 0) $.ui.log(`${f.shown}: ${compiled.errors.join('; ')}`)
+}
+
+const isTrusted = (state: State, f: RuleFile): boolean => f.source === 'global' || (f.hash !== undefined && state.trusted[f.path] === f.hash)
+
+/** The person's rules that may run: a project file's only while its content is the trusted one. */
+async function activeRules($: EngineInterface, state: State): Promise<Rule[]> {
+  try {
+    for (const f of state.files) await refreshFile($, f)
+  } catch (err) {
+    report($, state, 'the filter rules were not read', err)
+  }
+  for (const f of state.files) {
+    if (isTrusted(state, f) || f.rules.length === 0 || f.told === f.hash) continue
+    f.told = f.hash
+    $.ui.log(`${f.shown}: ${f.rules.length} filter rule(s) are not trusted and do not run; /bash-diet trust runs them`)
+  }
+  return state.files.filter(f => isTrusted(state, f)).flatMap(f => f.rules)
+}
+
+async function setTrusted($: EngineInterface, state: State, trusted: Record<string, string>): Promise<void> {
+  state.trusted = trusted
+  await $.store.set(TRUSTED_KEY, trusted)
+}
+
+/** `/bash-diet trust`, `untrust` and `filters`. */
+async function ruleCommand($: EngineInterface, state: State, word: string): Promise<string> {
+  const project = state.files.find(f => f.source === 'project')
+  if (project === undefined) return 'the rule files are not known yet'
+  await activeRules($, state)
+  if (word === 'filters') {
+    return filtersText(state.files.map(f => ({ shown: f.shown, source: f.source, exists: f.hash !== undefined, trusted: isTrusted(state, f), names: f.rules.map(r => r.name) })), BUILTIN_RULES.map(r => r.name))
+  }
+  const others = Object.fromEntries(Object.entries(state.trusted).filter(([path]) => path !== project.path))
+  if (word === 'untrust') {
+    await setTrusted($, state, others)
+    return `untrusted: ${project.shown} does not run`
+  }
+  if (project.hash === undefined) return `there is no ${project.shown} in this repository`
+  await setTrusted($, state, { ...others, [project.path]: project.hash })
+  return `trusted: ${project.rules.length} rule(s) of ${project.shown} run until the file changes (sha256 ${project.hash.slice(0, 12)})`
+}
+
 async function setExcludes($: EngineInterface, state: State, excludes: string[]): Promise<void> {
   state.excludes = excludes
   await $.store.set(EXCLUDES_KEY, excludes)
 }
 
+/** `/bash-diet exclude <p>`, `include <p>` and `excludes`. */
 async function exclude($: EngineInterface, state: State, word: string, pattern: string): Promise<string> {
+  if (word === 'excludes') return state.excludes.length === 0 ? 'no excludes' : state.excludes.join('\n')
   const error = patternError(pattern)
   if (error !== undefined) return `${word} ${error}`
   if (word === 'exclude') {
@@ -179,23 +268,25 @@ async function exclude($: EngineInterface, state: State, word: string, pattern: 
   return `included: ${pattern} is filtered again`
 }
 
+async function setEnabled($: EngineInterface, state: State, enabled: boolean): Promise<string> {
+  state.enabled = enabled
+  await $.store.set(ENABLED_KEY, enabled)
+  return enabled ? 'on: Bash results are filtered' : 'off: Bash results reach the model as they are'
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const text = args.trim()
   const [word = '', ...rest] = text.split(/\s+/)
-  if (word === 'on' || word === 'off') {
-    state.enabled = word === 'on'
-    await $.store.set(ENABLED_KEY, state.enabled)
-    return state.enabled ? 'on: Bash results are filtered' : 'off: Bash results reach the model as they are'
-  }
-  if (word === 'exclude' || word === 'include') return exclude($, state, word, rest.join(' '))
-  if (word === 'excludes') return state.excludes.length === 0 ? 'no excludes' : state.excludes.join('\n')
+  if (['on', 'off'].includes(word) && rest.length === 0) return setEnabled($, state, word === 'on')
+  if (['exclude', 'include', 'excludes'].includes(word)) return exclude($, state, word, rest.join(' '))
+  if (['trust', 'untrust', 'filters'].includes(word) && rest.length === 0) return ruleCommand($, state, word)
   if (text !== '') return USAGE
   return statusText(state.enabled, state.excludes, sessionText(state.calls, state.rawChars, state.shownChars))
 }
 
 /** Filters one Bash call; everything the plan leaves alone runs as the model wrote it. */
 async function filterCall($: EngineInterface, state: State, e: ToolCallInput & { tool: 'Bash' }, next: (e: ToolCallInput) => Promise<ToolCallResult<'Bash'>>): Promise<ToolCallResult<'Bash'>> {
-  const plan = state.enabled && e.run_in_background !== true ? planFor(e.command) : undefined
+  const plan = state.enabled && e.run_in_background !== true ? planFor(e.command, await activeRules($, state)) : undefined
   if (plan === undefined || (plan.target !== undefined && isExcluded(state.excludes, plan.target.words))) return next(e)
   const command = await withPlanFlags($, e.command, plan)
   const r = await next(command === e.command ? e : { ...e, command })
@@ -203,17 +294,20 @@ async function filterCall($: EngineInterface, state: State, e: ToolCallInput & {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, excludes: [], calls: 0, rawChars: 0, shownChars: 0 }
+  const state: State = { enabled: true, excludes: [], calls: 0, rawChars: 0, shownChars: 0, files: [], trusted: {} }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
     const stored = await $.store.get(EXCLUDES_KEY)
     state.excludes = Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : []
+    const trusted = await $.store.get(TRUSTED_KEY)
+    state.trusted = typeof trusted === 'object' && trusted !== null ? (trusted as Record<string, string>) : {}
+    state.files = await ruleFilesOf($)
     await $.command.register({
       name: 'bash-diet',
-      description: 'Filters Bash results: status, on, off, exclude, include (bash-diet)',
-      argumentHint: '[on | off | exclude <p> | include <p> | excludes]',
+      description: 'Filters Bash results: status, on, off, exclude, include, filters, trust (bash-diet)',
+      argumentHint: '[on | off | exclude <p> | include <p> | excludes | filters | trust | untrust]',
       immediate: true,
     })
     await pruneRecall($, state)

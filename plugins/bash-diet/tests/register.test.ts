@@ -17,19 +17,25 @@ type World = {
   logs: string[]
   statuses: (string | undefined)[]
   decisions: Record<string, 'allow' | 'ask' | 'deny'>
+  /** Each file's modification time; a write moves it on. */
+  mtimes: Map<string, number>
 }
 
 function world(on: On): World {
-  const w: World = { stdout: '', stderr: '', exitCode: 0, files: new Map(), ran: [], logs: [], statuses: [], decisions: {} }
+  const w: World = { stdout: '', stderr: '', exitCode: 0, files: new Map(), ran: [], logs: [], statuses: [], decisions: {}, mtimes: new Map() }
   mock.store(on, {})
   mock.env(on, { TMPDIR: `${TMP}/`, HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
-  on('process.run', () => ({ value: { exitCode: 0, stdout: '', stderr: '' } }))
+  on('session.root', () => ({ value: '/Users/u/app' }))
+  on('clock.now', () => ({ value: 1_000_000 }))
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }))
   on('fs.list', () => ({ value: [] }))
-  on('fs.write', (_, e) => { w.files.set(e.path, e.text); return { value: undefined } })
+  on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
+  on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.files.get(e.path)?.length ?? 0, mtimeMs: w.mtimes.get(e.path) ?? 1, isLink: false } }))
+  on('fs.write', (_, e) => { put(w, e.path, e.text); return { value: undefined } })
   on('fs.read', (_, e) => {
     const text = w.files.get(e.path)
     if (text === undefined) throw new Error(`ENOENT ${e.path}`)
@@ -49,6 +55,18 @@ function world(on: On): World {
   })
   return w
 }
+
+/** Writes a file as the person would, moving its modification time on. */
+function put(w: World, path: string, text: string): void {
+  w.files.set(path, text)
+  w.mtimes.set(path, (w.mtimes.get(path) ?? 1) + 1)
+}
+
+const PROJECT_RULES = '/Users/u/app/.bash-diet/filters.json'
+const GLOBAL_RULES = '/Users/u/.claude/bash-diet/filters.json'
+
+/** A rule file that keeps only the lines holding `keep` from the output of commands starting with `pattern`. */
+const ruleFile = (pattern: string, keep: string) => JSON.stringify({ filters: { mine: { match_command: pattern, keep_lines_matching: [keep] } } })
 
 const run = (args: string): CommandRunInput => ({
   command: 'bash-diet', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
@@ -72,6 +90,7 @@ describe('bash-diet', () => {
     expect(stdoutOf(r)).toBe('step\nretrying (×40)\ndone')
     expect(w.statuses.at(-1)).toMatch(/^1 result\(s\) shrunk · ~\d+ tokens saved \(\d+%\)$/)
     expect((await $.command.run(run(''))).text).toMatch(/^on · 1 result\(s\) shrunk/)
+    expect(w.logs).toEqual([])
   })
 
   test('output a filter cannot shrink comes back as it was', async ($, on) => {
@@ -121,6 +140,37 @@ describe('bash-diet', () => {
     expect(stdoutOf(r)).toBe('head\nsame (×5000)\ntail')
     expect((r.result as Record<string, unknown>).persistedOutputPath).toBe(undefined)
     expect([...w.files.keys()]).toEqual(['/Users/u/.claude/out.txt'])
+  })
+
+  test('a project rule runs only while its file is trusted, and a change takes the trust back', async ($, on) => {
+    const w = world(on)
+    await started($)
+    put(w, PROJECT_RULES, ruleFile('^./build.sh', 'ok'))
+    w.stdout = 'noise 1\nok one\nnoise 2\nok two\n'
+    expect(stdoutOf(await bash($, './build.sh'))).toBe(w.stdout)
+    expect(w.logs).toEqual(['.bash-diet/filters.json: 1 filter rule(s) are not trusted and do not run; /bash-diet trust runs them'])
+    expect((await $.command.run(run('trust'))).text).toMatch(/^trusted: 1 rule\(s\) of \.bash-diet\/filters\.json run until the file changes \(sha256 [0-9a-f]{12}\)$/)
+    expect(stdoutOf(await bash($, './build.sh'))).toBe('ok one\nok two')
+    put(w, PROJECT_RULES, ruleFile('^./build.sh', 'noise'))
+    expect(stdoutOf(await bash($, './build.sh'))).toBe(w.stdout)
+    expect(w.logs).toHaveLength(2)
+    await $.command.run(run('trust'))
+    expect(stdoutOf(await bash($, './build.sh'))).toBe('noise 1\nnoise 2')
+    expect((await $.command.run(run('untrust'))).text).toBe('untrusted: .bash-diet/filters.json does not run')
+    expect(stdoutOf(await bash($, './build.sh'))).toBe(w.stdout)
+  })
+
+  test('a global rule runs untrusted and comes before the mod\'s own filter; a broken file says why', async ($, on) => {
+    const w = world(on)
+    await started($)
+    put(w, GLOBAL_RULES, ruleFile('^git status', 'modified'))
+    w.stdout = 'On branch main\nChanges not staged for commit:\n\tmodified:   a.ts\n\tmodified:   b.ts\n'
+    expect(stdoutOf(await bash($, 'git status'))).toBe('\tmodified:   a.ts\n\tmodified:   b.ts')
+    expect((await $.command.run(run('filters'))).text).toMatch(/^project: \.bash-diet\/filters\.json \(none\)\nglobal: ~\/\.claude\/bash-diet\/filters\.json: mine\nbuilt-in: cc, make, /)
+    put(w, GLOBAL_RULES, '{ "filters": { "bad": { "match_command": "^x", "max_lines": -1, "colour": true } } }')
+    await bash($, 'git status')
+    expect(w.logs).toEqual(['~/.claude/bash-diet/filters.json: bad: max_lines expects a whole number above 0; bad: unknown field colour'])
+    expect((await $.command.run(run('trust'))).text).toBe('there is no .bash-diet/filters.json in this repository')
   })
 
   test('the note on the filter reaches the model at the session start while on', async ($, on) => {

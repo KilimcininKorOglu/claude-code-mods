@@ -10,7 +10,20 @@ export const AWARENESS = [
   `When you need the exact bytes (a patch to apply, output to parse), prefix the command with \`${RAW_VARIABLE}=1\`, and the result comes back unfiltered.`,
 ].join(' ')
 
-export const USAGE = 'expects nothing (the status), on, off, exclude <prefix | ^regex>, include <prefix | ^regex> or excludes'
+export const USAGE = 'expects nothing (the status), on, off, exclude <prefix | ^regex>, include <prefix | ^regex>, excludes, filters, trust or untrust'
+
+/** A rule file as the person reads it, and the names of its rules. */
+export type RuleFileView = { shown: string; source: 'project' | 'global'; exists: boolean; trusted: boolean; names: string[] }
+
+/** `/bash-diet filters`: every rule file with its state and rules, then the built-in rules. */
+export function filtersText(files: RuleFileView[], builtin: string[]): string {
+  const rows = files.map(f => {
+    if (!f.exists) return `${f.source}: ${f.shown} (none)`
+    const state = f.source === 'project' && !f.trusted ? ' (not trusted: /bash-diet trust runs it)' : ''
+    return `${f.source}: ${f.shown}${state}: ${f.names.length === 0 ? 'no rules' : f.names.join(', ')}`
+  })
+  return [...rows, `built-in: ${builtin.join(', ')}`].join('\n')
+}
 
 /** Characters per token, as the gain is estimated: no tokenizer runs here. */
 export const CHARS_PER_TOKEN = 4

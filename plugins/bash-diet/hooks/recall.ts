@@ -15,11 +15,15 @@ export function needsFile(elided: boolean, exitCode: number, rawLength: number):
   return elided || (exitCode !== 0 && rawLength >= MIN_KEPT_BYTES)
 }
 
+/** The SHA-256 of a text in hex. */
+export async function sha256Of(text: string): Promise<string> {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+  return Array.from(digest, b => b.toString(16).padStart(2, '0')).join('')
+}
+
 /** The first 12 hex digits of the SHA-256 of the command and its output, as the file's name. */
 export async function hashOf(command: string, output: string): Promise<string> {
-  const bytes = new TextEncoder().encode(`${command}\0${output}`)
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
-  return Array.from(digest.slice(0, 6), b => b.toString(16).padStart(2, '0')).join('')
+  return (await sha256Of(`${command}\0${output}`)).slice(0, 12)
 }
 
 /** The line the model reads under the filtered text. */
