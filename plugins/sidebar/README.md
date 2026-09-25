@@ -85,7 +85,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
     ❯ ./register.tsx hooks: engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via openPane), $.ui.panes (via closePane), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via showPane), $.ui.panes (via closePane), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: HOME
 

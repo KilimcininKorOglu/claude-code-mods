@@ -65,10 +65,28 @@ async function pressButton($: EngineInterface, state: State, command: string, ar
 }
 
 async function openPane($: EngineInterface, state: State): Promise<void> {
-  await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+  await takeSections($, state)
+  await showPane($, state)
+}
+
+/**
+ * Takes sections from now on, starting with what this project's log last held, because a closed
+ * sidebar keeps nothing.
+ */
+async function takeSections($: EngineInterface, state: State): Promise<void> {
   state.open = true
-  // An open pane starts with what this project's log last held, because a closed sidebar keeps nothing.
   await restoreLog($, state)
+}
+
+/** Draws the pane; one that does not open takes nothing, so every mod goes back to its own line. */
+async function showPane($: EngineInterface, state: State): Promise<void> {
+  try {
+    await $.ui.open({ id: PANE_ID, title: PANE_TITLE })
+  } catch (err) {
+    state.open = false
+    forget(state)
+    throw err
+  }
 }
 
 async function closePane($: EngineInterface, state: State): Promise<void> {
@@ -284,11 +302,18 @@ export const register: Register = on => {
     return { ...below, sidebar: createSidebar(() => below.ui.invalidate('ui.render'), () => below.clock.now(), log, state) }
   })
 
+  /*
+   * A plugin loaded after this one finishes its own session.start first, because the hooks nest. The
+   * stored choice and the log are read before `next`, so a section such a plugin writes there is taken
+   * and sits above the restored entries; the pane itself opens once the session is ready.
+   */
   on('session.start', async ($, e, next) => {
+    await openLog($, state)
+    const open = (await $.store.get(OPEN_KEY)) === true
+    if (open) await takeSections($, state)
     const r = await next(e)
     await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status, log (sidebar)', argumentHint: '[on | off | status | log]' })
-    await openLog($, state)
-    if ((await $.store.get(OPEN_KEY)) === true) await openPane($, state)
+    if (open) await showPane($, state)
     return r
   })
 

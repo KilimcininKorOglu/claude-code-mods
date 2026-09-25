@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type Plugin } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 
 import { EMPTY_TEXT } from '../hooks/board.ts'
@@ -78,6 +78,30 @@ describe('sidebar', () => {
     await started($)
     expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
     expect((await $.command.run(run('status'))).text).toBe('on, 0 section(s), 0 in the stream')
+  })
+
+  /**
+   * A plugin loaded after the sidebar: it logs what the sidebar says at the end of its own session start.
+   * An inline plugin runs apart from the test file, so it answers through a log line.
+   */
+  const LATER: Plugin = {
+    name: 'later',
+    register(on) {
+      on('session.start', async ($, e, next) => {
+        const r = await next(e)
+        $.ui.log(String((await $.command.run({ command: 'sidebar', args: 'status' })).text))
+        return r
+      })
+    },
+  }
+
+  test('a plugin loaded after the sidebar finds it open during its own session start', { plugins: [LATER] }, async ($, on) => {
+    const w = world(on, { open: true })
+    const heard: string[] = []
+    on('ui.log', (_, e) => { heard.push(e.text); return { value: undefined } })
+    await started($)
+    expect(heard).toEqual(['on, 0 section(s), 0 in the stream'])
+    expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
   })
 
   test('a session that runs past midnight reads the new day\'s log', async ($, on) => {
