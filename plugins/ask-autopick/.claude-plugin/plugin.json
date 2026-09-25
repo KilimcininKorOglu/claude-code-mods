@@ -1,0 +1,11 @@
+{
+  "name": "ask-autopick",
+  "version": "0.1.0",
+  "description": "Picks the recommended option of a question that waited unanswered for a set time, so a session you left does not stop. Off until you turn it on. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

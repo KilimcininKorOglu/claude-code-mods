@@ -470,6 +470,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "ask-autopick",
+      "source": "./plugins/ask-autopick",
+      "description": "Picks the recommended option of a question that waited unanswered for a set time, so a session you left does not stop. Off until you turn it on.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
