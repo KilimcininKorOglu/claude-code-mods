@@ -2,9 +2,11 @@ import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'c
 import { BUILTIN_RULES } from './builtin-rules.ts'
 import { withFlags } from './command.ts'
 import { rulesOf, type Rule } from './dsl.ts'
+import { dayOf, gainFileName, gainReport, linesOfRecords, recordsOf, staleGainFiles, type GainRecord } from './gain.ts'
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
+import { costText } from './pricing.ts'
 import { fullOutputLine, hashOf, needsFile, sha256Of, staleFiles } from './recall.ts'
-import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionText, statusText } from './text.ts'
+import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionText, statusText, tokensOf } from './text.ts'
 
 const ENABLED_KEY = 'enabled'
 const EXCLUDES_KEY = 'excludes'
@@ -26,7 +28,13 @@ type State = {
   /** The person's rule files: the project's first, then the global one. */
   files: RuleFile[]
   trusted: Record<string, string>
+  /** Where the saving records go, this session's id and project, and its records so far. */
+  gain?: { dir: string; sessionId: string; project: string; ready: boolean }
+  records: GainRecord[]
 }
+
+/** The places the mod reads and writes: the repository the session runs in, and the config directory. */
+type Places = { repo: string; config: string; home: string }
 
 /** One `filters.json` file as last read: its rules, and the hash trust is checked against. */
 type RuleFile = {
@@ -163,7 +171,7 @@ async function shrink($: EngineInterface, state: State, command: string, plan: P
   state.calls += 1
   state.rawChars += out.text.length
   state.shownChars += text.length
-  await showGain($, state)
+  await Promise.all([showGain($, state), recordGain($, state, plan.family, out.text.length, text.length)])
   return shaped(r, out, text)
 }
 
@@ -181,18 +189,80 @@ async function withPlanFlags($: EngineInterface, command: string, plan: Plan): P
   return before.decision === after.decision ? next : command
 }
 
-/** The two rule files: `<repo>/.bash-diet/filters.json` and `<config>/bash-diet/filters.json`. */
-async function ruleFilesOf($: EngineInterface): Promise<RuleFile[]> {
+/** The repository the session started in (its root where git does not answer) and the config directory. */
+async function locate($: EngineInterface): Promise<Places> {
   const root = await $.session.root()
   const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: root, timeoutMs: 5_000 })
-  const repo = top.exitCode === 0 ? top.stdout.trim() : root
   const home = (await $.env.get('HOME')) ?? ''
-  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`
-  const global = `${config.replace(/\/+$/, '')}/bash-diet/filters.json`
+  const config = ((await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`).replace(/\/+$/, '')
+  return { repo: top.exitCode === 0 ? top.stdout.trim() : root, config, home }
+}
+
+/** The two rule files: `<repo>/.bash-diet/filters.json` and `<config>/bash-diet/filters.json`. */
+function ruleFilesOf(p: Places): RuleFile[] {
+  const global = `${p.config}/bash-diet/filters.json`
   return [
-    { path: `${repo}/.bash-diet/filters.json`, shown: '.bash-diet/filters.json', source: 'project', rules: [] },
-    { path: global, shown: home !== '' && global.startsWith(`${home}/`) ? `~${global.slice(home.length)}` : global, source: 'global', rules: [] },
+    { path: `${p.repo}/.bash-diet/filters.json`, shown: '.bash-diet/filters.json', source: 'project', rules: [] },
+    { path: global, shown: p.home !== '' && global.startsWith(`${p.home}/`) ? `~${global.slice(p.home.length)}` : global, source: 'global', rules: [] },
   ]
+}
+
+/** Writes this session's records of the day to its file; a failure is logged once. */
+async function recordGain($: EngineInterface, state: State, family: string, raw: number, shown: number): Promise<void> {
+  const g = state.gain
+  if (g === undefined) return
+  try {
+    const at = await $.clock.now()
+    state.records.push({ at, project: g.project, family, raw, shown })
+    if (!g.ready) {
+      const made = await $.process.run(['mkdir', '-p', g.dir], { timeoutMs: 5_000 })
+      if (made.exitCode !== 0) throw new Error(`mkdir ${g.dir} failed: ${made.stderr.trim()}`)
+      g.ready = true
+    }
+    await $.fs.write(`${g.dir}/${gainFileName(at, g.sessionId)}`, linesOfRecords(state.records.filter(r => dayOf(r.at) === dayOf(at))))
+  } catch (err) {
+    report($, state, 'the saving was not recorded', err)
+  }
+}
+
+/** The gain files in the directory; none when it does not exist yet. */
+async function gainFiles($: EngineInterface, dir: string): Promise<string[]> {
+  if (!(await $.fs.exists(dir))) return []
+  return (await $.fs.list(dir)).filter(f => f.kind === 'file' && f.name.endsWith('.jsonl')).map(f => f.name)
+}
+
+/** Deletes the gain files past the retention; a failure is logged once. */
+async function pruneGain($: EngineInterface, state: State): Promise<void> {
+  if (state.gain === undefined) return
+  const dir = state.gain.dir
+  try {
+    const stale = staleGainFiles(await gainFiles($, dir), await $.clock.now())
+    if (stale.length > 0) await $.process.run(['rm', '-f', ...stale.map(n => `${dir}/${n}`)], { timeoutMs: 10_000 })
+  } catch (err) {
+    report($, state, 'old saving records were not pruned', err)
+  }
+}
+
+/** `/bash-diet gain [project | daily | graph | history]` over every kept record. */
+async function gainCommand($: EngineInterface, state: State, view: string): Promise<string> {
+  if (state.gain === undefined) return 'the saving records are not known yet'
+  const dir = state.gain.dir
+  let bad = 0
+  const records: GainRecord[] = []
+  for (const name of await gainFiles($, dir)) {
+    const r = recordsOf(await $.fs.read(`${dir}/${name}`))
+    records.push(...r.records)
+    bad += r.bad
+  }
+  const text = gainReport(view, records, await $.clock.now())
+  if (text === undefined) return 'gain expects nothing, project, daily, graph or history'
+  return bad === 0 ? text : `${text}\n(${bad} unreadable line(s) in ${dir} left out)`
+}
+
+/** `/bash-diet cost`: the session's spend and what the tokens kept out would have cost. */
+async function costCommand($: EngineInterface, state: State): Promise<string> {
+  const [model, usage] = await Promise.all([$.session.model(), $.session.usage()])
+  return costText(model, tokensOf(Math.max(0, state.rawChars - state.shownChars)), usage.cost?.usd)
 }
 
 /** Reads a rule file again when it changed; a file with errors keeps its good rules and says what is wrong. */
@@ -274,14 +344,22 @@ async function setEnabled($: EngineInterface, state: State, enabled: boolean): P
   return enabled ? 'on: Bash results are filtered' : 'off: Bash results reach the model as they are'
 }
 
+/** The answer to a subcommand, or undefined for one the command does not know. */
+function subcommand($: EngineInterface, state: State, word: string, rest: string[]): Promise<string> | undefined {
+  const bare = rest.length === 0
+  if (['on', 'off'].includes(word) && bare) return setEnabled($, state, word === 'on')
+  if (['exclude', 'include', 'excludes'].includes(word)) return exclude($, state, word, rest.join(' '))
+  if (['trust', 'untrust', 'filters'].includes(word) && bare) return ruleCommand($, state, word)
+  if (word === 'gain') return gainCommand($, state, rest.join(' '))
+  if (word === 'cost' && bare) return costCommand($, state)
+  return undefined
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const text = args.trim()
+  if (text === '') return statusText(state.enabled, state.excludes, sessionText(state.calls, state.rawChars, state.shownChars))
   const [word = '', ...rest] = text.split(/\s+/)
-  if (['on', 'off'].includes(word) && rest.length === 0) return setEnabled($, state, word === 'on')
-  if (['exclude', 'include', 'excludes'].includes(word)) return exclude($, state, word, rest.join(' '))
-  if (['trust', 'untrust', 'filters'].includes(word) && rest.length === 0) return ruleCommand($, state, word)
-  if (text !== '') return USAGE
-  return statusText(state.enabled, state.excludes, sessionText(state.calls, state.rawChars, state.shownChars))
+  return (await subcommand($, state, word, rest)) ?? USAGE
 }
 
 /** Filters one Bash call; everything the plan leaves alone runs as the model wrote it. */
@@ -294,7 +372,7 @@ async function filterCall($: EngineInterface, state: State, e: ToolCallInput & {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, excludes: [], calls: 0, rawChars: 0, shownChars: 0, files: [], trusted: {} }
+  const state: State = { enabled: true, excludes: [], calls: 0, rawChars: 0, shownChars: 0, files: [], trusted: {}, records: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -303,14 +381,16 @@ export const register: Register = on => {
     state.excludes = Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : []
     const trusted = await $.store.get(TRUSTED_KEY)
     state.trusted = typeof trusted === 'object' && trusted !== null ? (trusted as Record<string, string>) : {}
-    state.files = await ruleFilesOf($)
+    const places = await locate($)
+    state.files = ruleFilesOf(places)
+    state.gain = { dir: `${places.config}/bash-diet/gain`, sessionId: await $.session.id(), project: places.repo.split('/').pop() ?? places.repo, ready: false }
     await $.command.register({
       name: 'bash-diet',
-      description: 'Filters Bash results: status, on, off, exclude, include, filters, trust (bash-diet)',
-      argumentHint: '[on | off | exclude <p> | include <p> | excludes | filters | trust | untrust]',
+      description: 'Filters Bash results: status, on, off, exclude, include, filters, trust, gain, cost (bash-diet)',
+      argumentHint: '[on | off | exclude <p> | include <p> | excludes | filters | trust | untrust | gain [project | daily | graph | history] | cost]',
       immediate: true,
     })
-    await pruneRecall($, state)
+    await Promise.all([pruneRecall($, state), pruneGain($, state)])
     await showGain($, state)
     return r
   })

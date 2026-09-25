@@ -19,21 +19,27 @@ type World = {
   decisions: Record<string, 'allow' | 'ask' | 'deny'>
   /** Each file's modification time; a write moves it on. */
   mtimes: Map<string, number>
+  /** Whether the session start ran to its end and registered the command. */
+  registered: boolean
+  now: number
 }
 
 function world(on: On): World {
-  const w: World = { stdout: '', stderr: '', exitCode: 0, files: new Map(), ran: [], logs: [], statuses: [], decisions: {}, mtimes: new Map() }
+  const w: World = { stdout: '', stderr: '', exitCode: 0, files: new Map(), ran: [], logs: [], statuses: [], decisions: {}, mtimes: new Map(), registered: false, now: new Date(2026, 8, 25, 14, 30).getTime() }
   mock.store(on, {})
   mock.env(on, { TMPDIR: `${TMP}/`, HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('command.register', (_, e) => { w.registered = true; return { value: { command: e.name } } })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
   on('session.root', () => ({ value: '/Users/u/app' }))
-  on('clock.now', () => ({ value: 1_000_000 }))
+  on('clock.now', () => ({ value: w.now }))
+  on('session.id', () => ({ value: 's1' }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: {} as never, rateLimits: [], cost: { usd: 1.5 } } }))
+  on('fs.list', (_, e) => ({ value: [...w.files.keys()].filter(k => k.startsWith(`${e.path}/`)).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file' as const, size: 0, isLink: false })) }))
   on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }))
-  on('fs.list', () => ({ value: [] }))
-  on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
+  on('fs.exists', (_, e) => ({ value: w.files.has(e.path) || [...w.files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.files.get(e.path)?.length ?? 0, mtimeMs: w.mtimes.get(e.path) ?? 1, isLink: false } }))
   on('fs.write', (_, e) => { put(w, e.path, e.text); return { value: undefined } })
   on('fs.read', (_, e) => {
@@ -91,6 +97,7 @@ describe('bash-diet', () => {
     expect(w.statuses.at(-1)).toMatch(/^1 result\(s\) shrunk · ~\d+ tokens saved \(\d+%\)$/)
     expect((await $.command.run(run(''))).text).toMatch(/^on · 1 result\(s\) shrunk/)
     expect(w.logs).toEqual([])
+    expect(w.registered).toBe(true)
   })
 
   test('output a filter cannot shrink comes back as it was', async ($, on) => {
@@ -139,7 +146,7 @@ describe('bash-diet', () => {
     const r = await bash($, './build.sh')
     expect(stdoutOf(r)).toBe('head\nsame (×5000)\ntail')
     expect((r.result as Record<string, unknown>).persistedOutputPath).toBe(undefined)
-    expect([...w.files.keys()]).toEqual(['/Users/u/.claude/out.txt'])
+    expect([...w.files.keys()].filter(k => k.startsWith(DIR))).toEqual([])
   })
 
   test('a project rule runs only while its file is trusted, and a change takes the trust back', async ($, on) => {
@@ -171,6 +178,24 @@ describe('bash-diet', () => {
     await bash($, 'git status')
     expect(w.logs).toEqual(['~/.claude/bash-diet/filters.json: bad: max_lines expects a whole number above 0; bad: unknown field colour'])
     expect((await $.command.run(run('trust'))).text).toBe('there is no .bash-diet/filters.json in this repository')
+  })
+
+  test('each shrunk result is recorded in the day\'s file, and gain and cost report over the records', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const GAIN = '/Users/u/.claude/bash-diet/gain'
+    put(w, `${GAIN}/2026-09-24-s0.jsonl`, `${JSON.stringify({ at: new Date(2026, 8, 24, 9).getTime(), project: 'lib', family: 'cargo test', raw: 40_000, shown: 400 })}\nnot a record\n`)
+    w.stdout = NOISY
+    await bash($, './build.sh')
+    const day = JSON.parse(w.files.get(`${GAIN}/2026-09-25-s1.jsonl`) ?? '{}') as Record<string, unknown>
+    expect(day).toEqual({ at: w.now, project: 'app', family: 'other', raw: NOISY.length, shown: 'step\nretrying (×40)\ndone'.length })
+    const summary = (await $.command.run(run('gain'))).text
+    expect(summary).toMatch(/^since 2026-09-24: 2 results · ~[\d.]+k tokens saved \(\d+%\)\ntop commands:\n  cargo test  1 result · ~9\.9k tokens saved \(99%\)\n  other       1 result/)
+    expect(summary).toMatch(/\(1 unreadable line\(s\) in \/Users\/u\/\.claude\/bash-diet\/gain left out\)$/)
+    expect((await $.command.run(run('gain project'))).text).toMatch(/^lib  1 result · ~9\.9k tokens saved \(99%\)\napp  1 result/)
+    expect(((await $.command.run(run('gain history'))).text ?? '').split('\n')[0] ?? '').toMatch(/^09-25 14:30  other  \d+ → \d+ tokens \(\d+%\)  app$/)
+    expect((await $.command.run(run('gain weekly'))).text).toBe('gain expects nothing, project, daily, graph or history')
+    expect((await $.command.run(run('cost'))).text).toMatch(/^this session \(claude-opus-5-5\): \$1\.50 so far\n~\d+ tokens kept out of the context: \$0\.\d{4} saved on the cache write/)
   })
 
   test('the note on the filter reaches the model at the session start while on', async ($, on) => {

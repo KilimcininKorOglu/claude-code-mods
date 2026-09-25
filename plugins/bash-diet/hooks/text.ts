@@ -10,7 +10,7 @@ export const AWARENESS = [
   `When you need the exact bytes (a patch to apply, output to parse), prefix the command with \`${RAW_VARIABLE}=1\`, and the result comes back unfiltered.`,
 ].join(' ')
 
-export const USAGE = 'expects nothing (the status), on, off, exclude <prefix | ^regex>, include <prefix | ^regex>, excludes, filters, trust or untrust'
+export const USAGE = 'expects nothing (the status), on, off, exclude <prefix | ^regex>, include <prefix | ^regex>, excludes, filters, trust, untrust, gain [project | daily | graph | history] or cost'
 
 /** A rule file as the person reads it, and the names of its rules. */
 export type RuleFileView = { shown: string; source: 'project' | 'global'; exists: boolean; trusted: boolean; names: string[] }
