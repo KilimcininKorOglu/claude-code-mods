@@ -39,7 +39,9 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
 
 `set` answers `true` when the section was kept and drawn, and `false` when the sidebar is closed, so one `if (taken) return` covers both the closed and the missing case. `clear({ consumer, key })` removes your standing section of that key and every stream entry of it, and keeps a later session from taking those entries back from the log; `isOpen()` answers whether the pane is up.
 
-`types/index.d.ts` is the contract: `SidebarSection`, `SidebarLine`, `SidebarButton`, `SidebarUntil` and `Sidebar`. `/plugin-types` copies it into `.claude/types/claude-code-plugins/` for every enabled plugin, so `$.sidebar` is typed in your mod with nothing copied by hand. Develop against it with `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>`.
+A line colours one word when it carries `parts`: `{ text: 'model opus-5-5', parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }] }`. Each part takes its own `kind`, a part without one takes the line's, and the parts' texts joined are the line the pane draws and wraps; a part keeps its colour across a wrapped row. Keep the whole line in `text` as well, because a sidebar older than 0.11.0 draws `text` alone.
+
+`types/index.d.ts` is the contract: `SidebarSection`, `SidebarLine`, `SidebarPart`, `SidebarKind`, `SidebarButton`, `SidebarUntil` and `Sidebar`. `/plugin-types` copies it into `.claude/types/claude-code-plugins/` for every enabled plugin, so `$.sidebar` is typed in your mod with nothing copied by hand. Develop against it with `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>`.
 
 In a `claude plugin test` file the test engine runs no `engine.create`, so stub the noun with an inline plugin and answer its calls in the world:
 

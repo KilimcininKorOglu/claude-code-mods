@@ -39,7 +39,9 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
 
 `set`, section tutulup çizildiğinde `true`, sidebar kapalıyken `false` cevaplar, yani tek bir `if (taken) return` hem kapalı hem eksik durumu kapsar. `clear({ consumer, key })` o key'in duran section'ını ve her stream entry'sini kaldırır ve sonraki bir session'ın o entry'leri log'dan geri almasını önler; `isOpen()` pane'in açık olup olmadığını cevaplar.
 
-`types/index.d.ts` contract'tır: `SidebarSection`, `SidebarLine`, `SidebarButton`, `SidebarUntil` ve `Sidebar`. `/plugin-types` onu etkin her plugin için `.claude/types/claude-code-plugins/` altına kopyalar, yani `$.sidebar` mod'unuzda elle hiçbir şey kopyalamadan type'lanır. Ona karşı geliştirmek için `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>` kullanın.
+Bir satır `parts` taşıdığında tek bir kelimeyi renklendirir: `{ text: 'model opus-5-5', parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }] }`. Her part kendi `kind`'ını alır, `kind`'ı olmayan bir part satırınkini alır, ve part'ların birleşen metinleri pane'in çizdiği ve wrap ettiği satırdır; bir part wrap edilen bir satırda da rengini korur. Bütün satırı `text` içinde de tutun, çünkü 0.11.0'dan eski bir sidebar yalnız `text`'i çizer.
+
+`types/index.d.ts` contract'tır: `SidebarSection`, `SidebarLine`, `SidebarPart`, `SidebarKind`, `SidebarButton`, `SidebarUntil` ve `Sidebar`. `/plugin-types` onu etkin her plugin için `.claude/types/claude-code-plugins/` altına kopyalar, yani `$.sidebar` mod'unuzda elle hiçbir şey kopyalamadan type'lanır. Ona karşı geliştirmek için `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>` kullanın.
 
 Bir `claude plugin test` dosyasında test engine'i `engine.create` çalıştırmaz, bu yüzden noun'u inline bir plugin ile stub'layın ve çağrılarını world'de cevaplayın:
 

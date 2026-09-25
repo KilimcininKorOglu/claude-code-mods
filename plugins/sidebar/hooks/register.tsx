@@ -196,7 +196,13 @@ function sectionTree(els: Elements, one: Drawn, press: (command: string, args?: 
       <Text bold>{one.head}</Text>
       {one.rows.map((row, i) => (
         <Text key={`${one.id}:${i}`} color={toneColor(row.tone)} dimColor={row.tone === 'dim'}>
-          {row.text}
+          {row.parts === undefined
+            ? row.text
+            : row.parts.map((part, j) => (
+                <Text key={`${one.id}:${i}:${j}`} color={toneColor(part.tone)} dimColor={part.tone === 'dim'}>
+                  {part.text}
+                </Text>
+              ))}
         </Text>
       ))}
       {one.buttons.map((b, i) => (

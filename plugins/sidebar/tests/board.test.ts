@@ -124,6 +124,36 @@ describe('board', () => {
     expect(one?.rows).toEqual([{ text: 'aaaaaaaaaaaaaaaaaaaa' }, { text: '  aaaaaaaaaa' }])
   })
 
+  test('a line with parts draws each part in its own tone, and a part without one takes the line\'s', () => {
+    const board = boardOf(section({ lines: [{ text: 'old text', kind: 'dim', parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · thinking ' }, { text: 'high', kind: 'warn' }] }] }))
+    const [one] = drawn(board, [], 80, MAX_BOARD_LINES)
+    // The parts' texts joined are the line, so the stale `text` is not drawn.
+    expect(one?.rows).toEqual([{
+      text: 'model opus-5-5 · thinking high',
+      tone: 'dim',
+      parts: [{ text: 'model ', tone: 'dim' }, { text: 'opus-5-5', tone: 'error' }, { text: ' · thinking ', tone: 'dim' }, { text: 'high', tone: 'warn' }],
+    }])
+  })
+
+  test('a wrapped line with parts keeps each part\'s tone across the break and on the cut mark', () => {
+    const board = boardOf(section({ lines: [{ text: '', parts: [{ text: 'aaaa bbbb ' }, { text: 'cccc dddd', kind: 'ok' }] }] }))
+    const [one] = drawn(board, [], 12, MAX_BOARD_LINES)
+    expect(one?.rows).toEqual([
+      { text: 'aaaa bbbb', parts: [{ text: 'aaaa bbbb' }] },
+      { text: '  cccc dddd', parts: [{ text: '  ' }, { text: 'cccc dddd', tone: 'ok' }] },
+    ])
+    const cutOne = drawn(boardOf(section({ lines: [{ text: '', parts: [{ text: 'x' }, { text: 'y'.repeat(80), kind: 'error' }] }] })), [], 10, MAX_BOARD_LINES)[0]
+    const last = cutOne?.rows.at(-1)
+    expect(last?.text.endsWith('…')).toBe(true)
+    expect(last?.parts?.at(-1)).toEqual({ text: `${'y'.repeat(7)}…`, tone: 'error' })
+  })
+
+  test('a part of another shape is dropped, and a line whose parts are all dropped draws its text', () => {
+    expect(kept(section({ lines: [{ text: 'plain', parts: [{ text: '' }, { text: 3 } as unknown as { text: string }, { text: 'x', kind: 'pink' } as unknown as { text: string }] }] })).lines)
+      .toEqual([{ text: 'x', parts: [{ text: 'x' }] }])
+    expect(kept(section({ lines: [{ text: 'plain', parts: [{ text: '' }] }] })).lines).toEqual([{ text: 'plain' }])
+  })
+
   test('draws the heading, the lines and the count of the lines left out', () => {
     const board = boardOf(section({ lines: Array.from({ length: MAX_SECTION_LINES + 2 }, () => ({ text: 'x' })) }))
     const [one] = drawn(board, [], 80, MAX_BOARD_LINES)

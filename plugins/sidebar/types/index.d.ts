@@ -5,8 +5,18 @@
  * not installed, where the call throws), so the caller keeps its own way of showing the same finding.
  */
 
-/** One line of a section; `kind` colours it: `ok` green, `warn` yellow, `error` red, `dim` faint. */
-export type SidebarLine = { text: string; kind?: 'ok' | 'warn' | 'error' | 'dim' }
+/** How a line or a part of one is coloured: `ok` green, `warn` yellow, `error` red, `dim` faint. */
+export type SidebarKind = 'ok' | 'warn' | 'error' | 'dim'
+
+/** A piece of a line in its own colour; a part without `kind` takes the line's. */
+export type SidebarPart = { text: string; kind?: SidebarKind }
+
+/**
+ * One line of a section; `kind` colours it. `parts`, when given, colour pieces of the line instead, and
+ * their texts joined are the line the pane draws. `text` still holds the whole line, because a sidebar
+ * older than 0.11.0 draws `text` alone.
+ */
+export type SidebarLine = { text: string; kind?: SidebarKind; parts?: readonly SidebarPart[] }
 
 /** A button under a section: pressing it runs the slash command `/<command> <args>`. */
 export type SidebarButton = { label: string; command: string; args?: string }

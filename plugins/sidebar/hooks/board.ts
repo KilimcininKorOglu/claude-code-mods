@@ -3,7 +3,7 @@
  * keep one mod from filling the pane.
  */
 
-import type { SidebarButton, SidebarLine, SidebarSection, SidebarUntil } from '../types/index.d.ts'
+import type { SidebarButton, SidebarKind, SidebarLine, SidebarPart, SidebarSection, SidebarUntil } from '../types/index.d.ts'
 
 /** Lines one section may draw; the rest are counted. */
 export const MAX_SECTION_LINES = 50
@@ -54,13 +54,36 @@ function isName(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 64 && NAME.test(value)
 }
 
+const isKind = (kind: unknown): kind is SidebarKind => kind === 'ok' || kind === 'warn' || kind === 'error' || kind === 'dim'
+
+/** Parts of a line this long at most; the rest joins the last one. */
+const MAX_PARTS = 16
+
+function partOf(value: unknown): SidebarPart | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const { text, kind } = value as { text?: unknown; kind?: unknown }
+  if (typeof text !== 'string' || text === '') return undefined
+  const one = text.replace(/[\n\r\t]+/g, ' ')
+  return isKind(kind) ? { text: one, kind } : { text: one }
+}
+
+/**
+ * The parts of a line, or undefined when it has none worth drawing. Their texts joined become the line's
+ * text, so the rows the pane wraps and the parts it colours are cut from one string.
+ */
+function partsOf(value: unknown): SidebarPart[] | undefined {
+  const parts = listOf(value, partOf, MAX_PARTS)
+  return parts.length === 0 ? undefined : parts
+}
+
 function lineOf(value: unknown): SidebarLine | undefined {
   if (typeof value === 'string') return { text: oneLine(value) }
   if (typeof value !== 'object' || value === null) return undefined
-  const { text, kind } = value as { text?: unknown; kind?: unknown }
+  const { text, kind, parts: raw } = value as { text?: unknown; kind?: unknown; parts?: unknown }
   if (typeof text !== 'string') return undefined
-  const ok = kind === 'ok' || kind === 'warn' || kind === 'error' || kind === 'dim'
-  return ok ? { text: oneLine(text), kind } : { text: oneLine(text) }
+  const parts = partsOf(raw)
+  const line: SidebarLine = { text: parts === undefined ? oneLine(text) : oneLine(parts.map(p => p.text).join('')) }
+  return { ...line, ...(isKind(kind) ? { kind } : {}), ...(parts === undefined ? {} : { parts }) }
 }
 
 function buttonOf(value: unknown): SidebarButton | undefined {
@@ -173,8 +196,60 @@ export function wrapped(text: string, columns: number): string[] {
   return out
 }
 
-/** One drawn line of a section, with the tone it is drawn in. */
-export type Row = { text: string; tone?: SidebarLine['kind'] }
+/** A piece of a drawn row in its own tone. */
+export type RowPart = { text: string; tone?: SidebarKind }
+
+/** One drawn line of a section, with the tone it is drawn in, and its pieces when the line has parts. */
+export type Row = { text: string; tone?: SidebarKind; parts?: RowPart[] }
+
+type Tone = SidebarKind | undefined
+
+const toneOf = (tone: Tone): { tone?: SidebarKind } => (tone === undefined ? {} : { tone })
+
+/** The tone of each character of a line, from its parts. */
+function tonesOf(line: SidebarLine): Tone[] {
+  return (line.parts ?? []).flatMap(p => Array.from({ length: p.text.length }, () => p.kind ?? line.kind))
+}
+
+/**
+ * A row's UTF-16 units grouped into runs of one tone. Both halves of a surrogate pair come from one
+ * part, so they carry one tone and stay in one run.
+ */
+function runsOf(text: string, tones: readonly Tone[]): RowPart[] {
+  const out: RowPart[] = []
+  for (let i = 0; i < text.length; i++) {
+    const last = out[out.length - 1]
+    if (last !== undefined && last.tone === tones[i]) last.text += text[i]
+    else out.push({ text: text[i] ?? '', ...toneOf(tones[i]) })
+  }
+  return out
+}
+
+/**
+ * The rows of a line with parts, each split into runs of one tone. Every row is found again in the
+ * line's text, after the indent a wrapped row carries, so a part keeps its colour across a break; the
+ * `…` of a cut row takes the colour of the character before it.
+ */
+function partRows(line: SidebarLine, rows: readonly string[]): Row[] {
+  const tones = tonesOf(line)
+  let from = 0
+  return rows.map((row, i) => {
+    const lead = i === 0 ? '' : INDENT
+    const body = row.slice(lead.length)
+    const isCut = body.endsWith('…') && !line.text.includes(body, from)
+    const core = isCut ? body.slice(0, -1) : body
+    const at = Math.max(from, line.text.indexOf(core, from))
+    from = at + core.length
+    const own = [...Array.from({ length: lead.length }, () => line.kind), ...tones.slice(at, from), ...(isCut ? [tones[from - 1]] : [])]
+    return { text: row, ...toneOf(line.kind), parts: runsOf(row, own) }
+  })
+}
+
+/** The rows one line draws. */
+function lineRows(line: SidebarLine, columns: number): Row[] {
+  const wrap = wrapped(line.text, columns)
+  return line.parts === undefined ? wrap.map(text => ({ text, ...toneOf(line.kind) })) : partRows(line, wrap)
+}
 
 /**
  * One section as the pane draws it: its heading, its lines cut to the width, and its buttons. The line
@@ -213,9 +288,9 @@ function drawSection(section: Kept, columns: number, left: number): Drawn {
   const rows: Row[] = []
   let drawn = 0
   for (const line of section.lines) {
-    const wrap = wrapped(line.text, columns)
+    const wrap = lineRows(line, columns)
     if (rows.length + wrap.length > Math.max(0, left)) break
-    for (const text of wrap) rows.push({ text, ...(line.kind === undefined ? {} : { tone: line.kind }) })
+    rows.push(...wrap)
     drawn += 1
   }
   const hidden = section.more + (section.lines.length - drawn)
