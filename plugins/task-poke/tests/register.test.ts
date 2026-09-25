@@ -11,6 +11,7 @@ import type {
 } from 'claude-code'
 
 import { DEFAULT_MAX_POKES, MAX_STALLS, limitOf } from '../hooks/register.ts'
+import { countLine, countText, streamLine } from '../hooks/tasks.ts'
 
 tier('user')
 
@@ -121,13 +122,14 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Section = { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }
+type Drawn = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+type Section = { key: string; title: string; lines: Drawn[]; until: string }
 type Bar = { open: boolean; sections: Section[]; cleared: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[]; until: string }
-    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => ({ text: l.text, kind: l.kind })), until: s.until })
+    const s = e as unknown as { key: string; title: string; lines: Drawn[]; until: string }
+    if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines, until: s.until })
     return { value: bar.open }
   })
   on('sidebar.clear', (_, e) => {
@@ -354,7 +356,12 @@ describe('task-poke', () => {
     await $.session.start(session)
     await $.turn.complete(turn())
     await w.clock.settle()
-    expect(bar.sections).toEqual([{ key: 'pokes', title: 'task list', lines: [{ text: '2 unfinished tasks, poke 1/99', kind: 'ok' }], until: 'session' }])
+    expect(bar.sections).toEqual([{
+      key: 'pokes',
+      title: 'task list',
+      lines: [{ text: '2 unfinished tasks, poke 1/99', parts: [{ text: '2 unfinished tasks, ' }, { text: 'poke 1/99', kind: 'ok' }] }],
+      until: 'session',
+    }])
     expect(w.logs).toEqual([])
   })
 
@@ -369,7 +376,7 @@ describe('task-poke', () => {
       await w.clock.settle()
     }
     // One entry per turn, plus the limit entry: green up to the last poke, then yellow, then red.
-    const kinds = bar.sections.map(s => s.lines[0]?.kind)
+    const kinds = bar.sections.map(s => s.lines[0]?.parts?.at(-1)?.kind ?? s.lines[0]?.kind)
     expect(kinds.slice(0, DEFAULT_MAX_POKES - 2)).toEqual(Array.from({ length: DEFAULT_MAX_POKES - 2 }, () => 'ok'))
     expect(kinds.slice(DEFAULT_MAX_POKES - 2)).toEqual(['warn', 'error', 'error', 'error', 'error'])
     const stopped = bar.sections.filter(s => s.key === 'limit')
@@ -377,6 +384,16 @@ describe('task-poke', () => {
     expect(stopped[0]?.until).toBe('stream')
     expect(stopped[0]?.lines[0]).toEqual({ text: 'stopped after 99 pokes with unfinished tasks. Send a prompt to reset the count.', kind: 'error' })
     expect(w.logs).toEqual([])
+  })
+
+  test('a stream entry colours its head phrase and keeps the detail after it in the default colour', () => {
+    expect(streamLine('cannot read the task list, no poke is sent: bad record')).toEqual({
+      text: 'cannot read the task list, no poke is sent: bad record',
+      parts: [{ text: 'cannot read the task list, no poke is sent:', kind: 'error' }, { text: ' bad record' }],
+    })
+    expect(streamLine('stopped after 99 pokes with unfinished tasks.')).toEqual({ text: 'stopped after 99 pokes with unfinished tasks.', kind: 'error' })
+    expect(countText(1, 99, 99)).toBe('1 unfinished task, poke 99/99')
+    expect(countLine(1, 99, 99).parts?.at(-1)).toEqual({ text: 'poke 99/99', kind: 'error' })
   })
 
   withSidebar('a finished list takes the count down', async ($, on) => {

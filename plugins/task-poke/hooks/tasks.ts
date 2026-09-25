@@ -147,6 +147,43 @@ export function tasksOfList(result: unknown): Tasks | null {
   return next
 }
 
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The poke count's colour: red once the pokes stopped, yellow at the last one, green below. */
+export function countTone(pokes: number, max: number): 'ok' | 'warn' | 'error' {
+  if (pokes >= max) return 'error'
+  return pokes >= max - 1 ? 'warn' : 'ok'
+}
+
+/** The count as the transcript reads it: `2 unfinished tasks, poke 1/99`. */
+export function countText(open: number, pokes: number, max: number): string {
+  return countLine(open, pokes, max).text
+}
+
+/** The count as the sidebar draws it: only `poke N/M` coloured, the unfinished tasks in the default colour. */
+export function countLine(open: number, pokes: number, max: number): Line {
+  return partsLine([part(`${open} unfinished task${open === 1 ? '' : 's'}, `, undefined), part(`poke ${pokes}/${max}`, countTone(pokes, max))])
+}
+
+/**
+ * A stream entry: the head phrase before the first `: ` red and the detail after it in the default
+ * colour; a line with no detail is red whole.
+ */
+export function streamLine(text: string): Line {
+  const cut = text.indexOf(': ')
+  if (cut === -1) return { text, kind: 'error' }
+  return partsLine([part(text.slice(0, cut + 1), 'error'), part(text.slice(cut + 1), undefined)])
+}
+
 function parseStatus(value: unknown): TaskStatus {
   if (typeof value === 'string' && STATUSES.includes(value)) return value as TaskStatus
   throw new Error(`task-poke: unknown task status ${JSON.stringify(value)}`)

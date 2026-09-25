@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { readTurn, signatureOf, tasksOfList, workedThisTurn, type Tasks } from './tasks.ts'
+import { countLine, countText, readTurn, signatureOf, streamLine, tasksOfList, workedThisTurn, type Tasks } from './tasks.ts'
 
 /** Pokes sent for one stretch of unfinished tasks, until the person sets another limit. */
 export const DEFAULT_MAX_POKES = 99
@@ -68,29 +68,18 @@ function limitText(limit: number | undefined): string {
   return `limit ${limit}: at most ${limit} poke(s) go out for one stretch of unfinished tasks`
 }
 
-/** The count line's colour: red once the pokes stopped, yellow at the last one, green below. */
-function countTone(pokes: number, max: number): 'ok' | 'warn' | 'error' {
-  if (pokes >= max) return 'error'
-  return pokes >= max - 1 ? 'warn' : 'ok'
-}
-
-function countText(open: number, pokes: number, max: number): string {
-  return `${open} unfinished task${open === 1 ? '' : 's'}, poke ${pokes}/${max}`
-}
-
 /**
  * The count the person watches: a section of the shared sidebar, rewritten at each turn. With the
  * sidebar closed, and without that mod installed, only a turn that sent a poke writes the line, as
  * before, because a line per turn would fill the transcript.
  */
 async function toCount($: EngineInterface, open: number, pokes: number, max: number, log: boolean): Promise<void> {
-  const text = countText(open, pokes, max)
   try {
-    if (await $.sidebar.set({ ...SECTION, title: 'task list', lines: [{ text, kind: countTone(pokes, max) }], until: 'session', order: 20 })) return
+    if (await $.sidebar.set({ ...SECTION, title: 'task list', lines: [countLine(open, pokes, max)], until: 'session', order: 20 })) return
   } catch {
     // The sidebar mod is not installed.
   }
-  if (log) $.ui.log(text)
+  if (log) $.ui.log(countText(open, pokes, max))
 }
 
 /** Takes the count down, because a finished list has nothing to show. */
@@ -105,7 +94,7 @@ async function clearCount($: EngineInterface): Promise<void> {
 /** A finding the next count must not overwrite: an entry in the sidebar's stream, else the transcript line. */
 async function toStream($: EngineInterface, key: string, title: string, text: string): Promise<void> {
   try {
-    if (await $.sidebar.set({ consumer: 'task-poke', key, title, lines: [{ text, kind: 'error' }], until: 'stream' })) return
+    if (await $.sidebar.set({ consumer: 'task-poke', key, title, lines: [streamLine(text)], until: 'stream' })) return
   } catch {
     // The sidebar mod is not installed.
   }

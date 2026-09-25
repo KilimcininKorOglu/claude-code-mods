@@ -40,7 +40,7 @@ Claude Code task takip tool'larını yalnız Claude 3.x, Opus 4.0 ile 4.7, Sonne
     task-poke: task list
     3 unfinished tasks, poke 2/99
 
-Satır son poke'un altında yeşil, onda sarı ve poke'lar durduktan sonra kırmızıdır. Bitmemiş hiçbir şey kalmadığında section iner. Bulgular bunun yerine stream'e gider, kırmızı olarak, böylece sonraki sayım onları pane'den almaz: poke limitinde duruş, hiçbir şeyi ilerletmeyen üç poke sonrası duruş, engine'in düşürdüğü bir poke ve mod'un okuyamadığı bir task listesi.
+Yalnızca `poke N/M` renklidir: son poke'un altında yeşil, onda sarı ve poke'lar durduktan sonra kırmızı; bitmemiş task'lar varsayılan renkte kalır. Bitmemiş hiçbir şey kalmadığında section iner. Bulgular bunun yerine stream'e gider; baştaki ifade kırmızı, `: ` sonrasındaki ayrıntı varsayılan renktedir, böylece sonraki sayım onları pane'den almaz: poke limitinde duruş, hiçbir şeyi ilerletmeyen üç poke sonrası duruş, engine'in düşürdüğü bir poke ve mod'un okuyamadığı bir task listesi.
 
 Sidebar kapalıyken ya da o mod kurulu değilken yalnız poke gönderen bir tur satırını transcript'e yazar ve üç bulgu eskiden olduğu gibi transcript satırıdır.
 

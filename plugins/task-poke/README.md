@@ -40,7 +40,7 @@ While the [sidebar](../sidebar) is open, the count stands there as a `task list`
     task-poke: task list
     3 unfinished tasks, poke 2/99
 
-The line is green below the last poke, yellow at it, and red once the pokes stopped. The section goes down when nothing is unfinished. Findings go into the stream instead, in red, so the next count does not take them off the pane: the stop at the limit of pokes, the stop after three pokes that moved nothing, a poke the engine dropped, and a task list the mod cannot read.
+Only `poke N/M` is coloured: green below the last poke, yellow at it, and red once the pokes stopped; the unfinished tasks stay in the default colour. The section goes down when nothing is unfinished. Findings go into the stream instead, their head phrase red and the detail after its `: ` in the default colour, so the next count does not take them off the pane: the stop at the limit of pokes, the stop after three pokes that moved nothing, a poke the engine dropped, and a task list the mod cannot read.
 
 With the sidebar closed, or without that mod installed, only a turn that sent a poke writes its line to the transcript, and the three findings are transcript lines, as before.
 
