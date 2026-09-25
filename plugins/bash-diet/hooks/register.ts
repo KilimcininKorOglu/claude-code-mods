@@ -233,6 +233,24 @@ async function gainFiles($: EngineInterface, dir: string): Promise<string[]> {
   return (await $.fs.list(dir)).filter(f => f.kind === 'file' && f.name.endsWith('.jsonl')).map(f => f.name)
 }
 
+/**
+ * Takes back this session's records and counts from its gain files, so a reloaded module (an edit, an
+ * update, `/reload-plugins`) neither overwrites the records written before it nor restarts the count.
+ */
+async function seedGain($: EngineInterface, state: State): Promise<void> {
+  const g = state.gain
+  if (g === undefined || state.records.length > 0) return
+  try {
+    const own = (await gainFiles($, g.dir)).filter(n => n.endsWith(`-${g.sessionId}.jsonl`))
+    for (const name of own) state.records.push(...recordsOf(await $.fs.read(`${g.dir}/${name}`)).records)
+    state.calls = state.records.length
+    state.rawChars = state.records.reduce((n, r) => n + r.raw, 0)
+    state.shownChars = state.records.reduce((n, r) => n + r.shown, 0)
+  } catch (err) {
+    report($, state, 'the saving records of this session were not read', err)
+  }
+}
+
 /** Deletes the gain files past the retention; a failure is logged once. */
 async function pruneGain($: EngineInterface, state: State): Promise<void> {
   if (state.gain === undefined) return
@@ -471,7 +489,7 @@ export const register: Register = on => {
       argumentHint: '[on | off | exclude <p> | include <p> | excludes | filters | trust | untrust | gain [project | daily | graph | history] | discover [days] [all] | learn [days] [write] | cost]',
       immediate: true,
     })
-    await Promise.all([pruneRecall($, state), pruneGain($, state)])
+    await Promise.all([pruneRecall($, state), pruneGain($, state), seedGain($, state)])
     await showGain($, state)
     return r
   })

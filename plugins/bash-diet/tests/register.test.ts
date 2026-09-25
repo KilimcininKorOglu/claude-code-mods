@@ -215,6 +215,20 @@ describe('bash-diet', () => {
     expect((await $.command.run(run('cost'))).text).toMatch(/^this session \(claude-opus-5-5\): \$1\.50 so far\n~\d+ tokens kept out of the context: \$0\.\d{4} saved on the cache write/)
   })
 
+  test('a module loaded again keeps the session\'s earlier records and goes on counting from them', async ($, on) => {
+    const w = world(on)
+    const file = '/Users/u/.claude/bash-diet/gain/2026-09-25-s1.jsonl'
+    const before = JSON.stringify({ at: w.now - 60_000, project: 'app', family: 'git status', raw: 400, shown: 100 })
+    put(w, file, before)
+    await started($)
+    expect((await $.command.run(run(''))).text).toBe('on · 1 result(s) shrunk · ~75 tokens saved (75%)')
+    w.stdout = NOISY
+    await bash($, './build.sh')
+    expect((w.files.get(file) ?? '').split('\n')).toEqual([before, expect.stringContaining('"family":"other"')])
+    expect(w.statuses.at(-1)).toMatch(/^2 result\(s\) shrunk/)
+    expect(w.logs).toEqual([])
+  })
+
   test('discover and learn read this project\'s transcripts, and learn write leaves a rules file', async ($, on) => {
     const w = world(on)
     await started($)
