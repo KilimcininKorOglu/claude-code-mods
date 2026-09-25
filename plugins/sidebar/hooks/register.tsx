@@ -16,6 +16,12 @@ const USAGE = 'expects nothing (open or close), on, off, status or log'
 const LOG_DIR = '.claude/sidebar'
 
 /**
+ * The answer of the last button pressed: the command, and its first line of text, or the error of a
+ * command that did not run.
+ */
+type Answer = { command: string; text: string; failed: boolean }
+
+/**
  * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
  * each stream entry's id its own, whether the pane is open, the last button's answer, and the log: the
  * directory of every project's logs and this project's name, read once at the session's start. The file
@@ -27,7 +33,7 @@ export type State = {
   stream: Kept[]
   written: number
   open: boolean
-  message?: string
+  message?: Answer
   dir: string
   project: string
 }
@@ -51,9 +57,9 @@ function errorText(err: unknown): string {
 async function pressButton($: EngineInterface, state: State, command: string, args: string | undefined): Promise<void> {
   try {
     const r = await $.command.run({ command, ...(args === undefined ? {} : { args }) })
-    state.message = `/${command}: ${(r.text ?? 'ran').split('\n')[0] ?? 'ran'}`
+    state.message = { command, text: (r.text ?? 'ran').split('\n')[0] ?? 'ran', failed: false }
   } catch (err) {
-    state.message = `/${command} did not run: ${errorText(err)}`
+    state.message = { command, text: errorText(err), failed: true }
   }
   $.ui.invalidate('ui.render')
 }
@@ -213,6 +219,19 @@ function sectionTree(els: Elements, one: Drawn, press: (command: string, args?: 
   )
 }
 
+/** The last button's answer, faint; `did not run` is red, so a failed press stands out from a run one. */
+function answerTree(els: Elements, answer: Answer) {
+  const { Text } = els
+  if (!answer.failed) return <Text dimColor>{`/${answer.command}: ${answer.text}`}</Text>
+  return (
+    <Text>
+      <Text dimColor>{`/${answer.command} `}</Text>
+      <Text color="red">did not run</Text>
+      <Text dimColor>{`: ${answer.text}`}</Text>
+    </Text>
+  )
+}
+
 function paneTree(els: Elements, state: State, columns: number, rows: number, press: (command: string, args?: string) => void) {
   const { Box, Text } = els
   const sections = drawn(state.board, state.stream, columns, rows)
@@ -232,7 +251,7 @@ function paneTree(els: Elements, state: State, columns: number, rows: number, pr
         buttons += one.buttons.length
         return sectionTree(els, one, press, first)
       })}
-      {state.message === undefined ? null : <Text dimColor>{state.message}</Text>}
+      {state.message === undefined ? null : answerTree(els, state.message)}
     </Box>
   )
 }
