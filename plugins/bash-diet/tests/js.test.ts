@@ -15,6 +15,34 @@ function run(key: string, text: string, args: string[] = [], exitCode = 0): Filt
 // Captured from npm 11, pnpm 10, bun 1.4, tsc 5.9, eslint 9, prettier 3, vitest 3 and jest 29 in a scratch project.
 const NOTICE = 'npm notice run p@1.0.0 npx\n'
 
+// Captured from mocha 11's spec reporter: twelve passing tests, one pending, two failures.
+const MOCHA = `\n\n  math\n${Array.from({ length: 12 }, (_, i) => `    ✔ adds case ${i}\n`).join('')}    1) breaks on purpose\n    - is skipped\nconsole says hi\n\n  strings\n    ✔ trims\n    2) throws\n\n\n  13 passing (5ms)\n  1 pending\n  2 failing\n\n  1) math\n       breaks on purpose:\n\n      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n3000 !== 5\n\n      at Context.<anonymous> (file:///p/test/math.test.js:6:40)\n      at process.processImmediate (node:internal/timers:504:21)\n\n  2) strings\n       throws:\n     TypeError: boom from test\n      at Context.<anonymous> (file:///p/test/math.test.js:12:30)\n      at Runner.run (file:///p/node_modules/mocha/lib/runner.js:9:1)\n\n\n\n`
+
+describe('mocha', () => {
+  test('the passing tests go, the test\'s own output, the counts and each failure with its project frames stay', () => {
+    const plan = planFor('npx mocha test')
+    if (plan === undefined) throw new Error('no plan for mocha')
+    expect(runFilter(plan, MOCHA, 2, false)).toEqual({
+      text: 'console says hi\n  13 passing (5ms)\n  1 pending\n  2 failing\n\n  1) math\n       breaks on purpose:\n\n      AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n3000 !== 5\n\n      at Context.<anonymous> (file:///p/test/math.test.js:6:40)\n\n  2) strings\n       throws:\n     TypeError: boom from test\n      at Context.<anonymous> (file:///p/test/math.test.js:12:30)',
+      elided: true,
+    })
+    expect(run('mocha', '{"stats":{"passes":1}}\n', ['--reporter', 'json']).text).toBe('{"stats":{"passes":1}}')
+  })
+
+  // Captured from cypress 16.1 run headless over two specs, one with a failure; the boxes are cut to two rows.
+  test('cypress run keeps each failed spec with its failures and the failed rows of the closing table', () => {
+    const box = (rows: string[]): string => `  ┌──────┐\n${rows.map(r => `  │ ${r} │\n`).join('')}  └──────┘\n`
+    const text = `It looks like this is your first time using Cypress: 16.1.0\n\n❯  Verifying Cypress can run /c/Cypress.app\n✔  Verified Cypress!       /c/Cypress.app\n\nOpening Cypress...\n\n====\n\n  (Run Starting)\n\n${box(['Cypress:        16.1.0', 'Specs:          2 found (math.cy.js, ok.cy.js)'])}\nWarning: The Electron browser is deprecated as a test browser and will be removed in a future version of Cypress.\n\nSwitch to Chrome or another installed browser to avoid a breaking change when you upgrade.\n\n────\n\n  Running:  math.cy.js                                                                      (1 of 2)\n\n\n  math\n    ✓ adds case 0 (21ms)\n    ✓ adds case 1 (5ms)\n    1) breaks on purpose\n\n\n  2 passing (132ms)\n  1 failing\n\n  1) math\n       breaks on purpose:\n\n      AssertionError: expected 4 to equal 5\n      at Context.eval (webpack://cy/./cypress/e2e/math.cy.js:3:49)\n\n\n  (Results)\n\n${box(['Tests:        3', 'Failing:      1'])}\n────\n\n  Running:  ok.cy.js                                                                        (2 of 2)\n\n\n  ok\n    ✓ passes (19ms)\n\n\n  1 passing (29ms)\n\n\n  (Results)\n\n${box(['Tests:        1', 'Failing:      0'])}\n====\n\n  (Run Finished)\n\n\n       Spec                                              Tests  Passing  Failing  Pending  Skipped  \n  ┌────┐\n  │ ✖  math.cy.js                               134ms        3        2        1        -        - │\n  ├────┤\n  │ ✔  ok.cy.js                                  31ms        1        1        -        -        - │\n  └────┘\n    ✖  1 of 2 failed (50%)                      165ms        4        3        1        -        -  \n`
+    const plan = planFor('npx cypress run')
+    if (plan === undefined) throw new Error('no plan for cypress')
+    expect(runFilter(plan, text, 1, false)).toEqual({
+      text: 'math.cy.js:\n  2 passing (132ms)\n  1 failing\n\n  1) math\n       breaks on purpose:\n\n      AssertionError: expected 4 to equal 5\n      at Context.eval (webpack://cy/./cypress/e2e/math.cy.js:3:49)\n\n✖  math.cy.js  134ms  3  2  1  -  -\n✖  1 of 2 failed (50%)  165ms  4  3  1  -  -',
+      elided: true,
+    })
+    expect(run('cypress', 'Cypress 16.1.0\n', ['open']).text).toBe('Cypress 16.1.0')
+  })
+})
+
 describe('package managers', () => {
   test('npm: notices, the script header and deprecations go', () => {
     expect(run('npm run', 'npm notice run p@1.0.0 hello\nnpm notice run echo hello from script\nhello from script\n').text).toBe('hello from script')

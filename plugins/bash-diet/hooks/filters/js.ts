@@ -1,5 +1,5 @@
 import { byRule, plural, type Issue } from './blocks.ts'
-import { CAP_ERRORS, CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
+import { CAP_ERRORS, CAP_INVENTORY, CAP_LIST, capped, collapseBlanks, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
 import { cleanup } from './generic.ts'
 
 /** npm's own chatter: notices, the `> pkg@1.0.0 script` header, and funding and audit nags. */
@@ -165,6 +165,75 @@ const prisma = (input: { text: string }): FilterResult =>
 /** Deno's download lines go. */
 const deno = (input: { text: string }): FilterResult => whole(linesOf(input.text).filter(l => !/^(Download|Check|Compile) /.test(l) && !/ \.\.\. ok \(/.test(l)))
 
+// ---------------------------------------------------------------------------------------------- mocha
+
+/** mocha's summary head: `  13 passing (5ms)`. */
+const MOCHA_SUMMARY = /^\s*\d+ passing \(/
+
+/** A stack frame in Node itself or a dependency, which says nothing about the project. */
+const FOREIGN_FRAME = /^\s+at .*(\(node:|node:internal|node_modules)/
+
+/**
+ * mocha's spec report: the tests above the summary go, since each failure is written again below it,
+ * while a line at column 0 there is the project's own console output and stays. Below the summary the
+ * counts and every failure stay, without the frames in Node and dependencies. Another reporter is left
+ * to the cleanup.
+ */
+function mocha(input: { args: string[]; text: string }): FilterResult {
+  const lines = linesOf(input.text)
+  const reporter = input.args.findIndex(a => a === '--reporter' || a === '-R')
+  if (!lines.some(l => MOCHA_SUMMARY.test(l)) || (reporter >= 0 && input.args[reporter + 1] !== 'spec')) return cleanup(input.text)
+  return { text: collapseBlanks(specReport(lines)).join('\n').trim(), elided: true }
+}
+
+/** A spec report's lines without the passing tests: the column-0 output above the summary, then the summary and the failures. */
+function specReport(lines: string[]): string[] {
+  const at = lines.findIndex(l => MOCHA_SUMMARY.test(l))
+  const own = lines.slice(0, at).filter(l => l.trim() !== '' && !/^\s/.test(l))
+  return [...own, ...lines.slice(at).filter(l => !FOREIGN_FRAME.test(l))]
+}
+
+// -------------------------------------------------------------------------------------------- cypress
+
+/** cypress's own frame: the first-run check, the banners, the boxes, the header of the closing table, the Electron notice. */
+const CYPRESS_NOISE = /^(\s*[┌├└│]|=+$|─+$|\s*\((Run Starting|Results|Run Finished)\)$|Opening Cypress|It looks like this is your first time|❯ {2}Verifying|✔ {2}Verified|Warning: The Electron browser is deprecated|Switch to Chrome or another|Read more about supported browsers|\s+Spec\s+Tests\s+Passing)/
+
+type CypressScan = { out: string[]; spec: string[]; name: string; inSpec: boolean }
+
+/** A spec with a failure: its name, then its report without the passing tests. A passing spec only counts in the closing line. */
+function closeSpec(s: CypressScan): void {
+  s.inSpec = false
+  if (s.spec.some(l => /^\s*\d+ failing/.test(l))) s.out.push(`${s.name}:`, ...specReport(s.spec))
+}
+
+/** A row of the closing table, `│ ✖  math.cy.js  134ms  9  8  1  -  - │`, or its total line, as columns two spaces apart. */
+function closingRow(line: string): string | undefined {
+  const row = /^\s*│ (✖.*?)\s*│$/.exec(line)?.[1] ?? (/^\s+(✖|✔)\s+(\d+ of \d+ failed|All specs passed)/.test(line) ? line : undefined)
+  return row?.trim().replace(/\s{2,}/g, '  ')
+}
+
+function cypressLine(s: CypressScan, line: string): void {
+  const running = /^\s*Running:\s+(\S+)/.exec(line)
+  if (running !== null) { s.name = running[1] ?? ''; s.spec = []; s.inSpec = true; return }
+  if (s.inSpec && /^\s*\(Results\)$/.test(line)) { closeSpec(s); return }
+  if (s.inSpec) { s.spec.push(line); return }
+  const row = closingRow(line)
+  if (row !== undefined) s.out.push(row)
+  else if (!CYPRESS_NOISE.test(line) && line.trim() !== '') s.out.push(line)
+}
+
+/**
+ * `cypress run`: each failed spec with its failures, the failed rows of the closing table and its total
+ * line. The banners, the result boxes and the passing specs go.
+ */
+function cypress(input: { args: string[]; text: string }): FilterResult {
+  if (input.args[0] !== 'run') return cleanup(input.text)
+  const s: CypressScan = { out: [], spec: [], name: '', inSpec: false }
+  for (const line of linesOf(input.text)) cypressLine(s, line)
+  if (s.inSpec) s.out.push(...s.spec)
+  return { text: collapseBlanks(s.out).join('\n').trim(), elided: true }
+}
+
 export const JS: FilterTable = {
   npm: { run: npm },
   'npm run': { run: npm },
@@ -187,6 +256,8 @@ export const JS: FilterTable = {
   'yarn add': { run: install },
   jest: { run: tests('jest') },
   vitest: { run: tests('vitest') },
+  mocha: { run: mocha },
+  cypress: { run: cypress },
   playwright: { run: ({ text }) => testText({ text }) },
   tsc: { run: tsc },
   eslint: { run: eslint },
