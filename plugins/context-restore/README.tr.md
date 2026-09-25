@@ -10,7 +10,9 @@ Claude Code 2.1.281 üzerinde ölçüldü:
 - Compaction'ın kestiği bir skill yeniden çağrıldığında, yazılarak ya da Skill tool ile, engine onu kendisi bütün olarak yeniden gönderir. Mod bu durumda bir şey yapmaz.
 - İki prompt arasında değişen bir rules dosyası ya da global `~/.claude/CLAUDE.md` dosyası bir compaction'a kadar modele ulaşmaz.
 
-Bu yüzden mod iki şey yapar:
+- Bir skill'in diğer dosyaları (`subcommands/*.md`, `references/*.md`) engine'in kopyasına hiç girmez: model onları Read tool ile okur. Session'da daha önce okunmuş bir kopya, dosya değiştikten sonra da context'te kalır.
+
+Bu yüzden mod üç şey yapar:
 
 1. Bir skill ya da command'ın her çağrısında (`/name` yazılarak, Skill tool ile çağrılarak ya da bir subagent'a önceden yüklenerek) metnin geldiği dosyayı okur. Bir skill dizinini ilk satırında adlandırır (`Base directory for this skill: <dizin>`), yani dosyası `<dizin>/SKILL.md` olur. Bir command'ın dosyası aranır: `<plugin>:<ad>` için plugin'in `commands/<ad>.md` dosyası, değilse projenin ya da sizin `commands/<ad>.md` dosyanız. Built-in bir command'ın dosyası yoktur.
    - Placeholder taşımayan bir dosya engine'in metniyle karşılaştırılır. Farklıysa engine'in kopyasının yerine dosyanın metni konur ve engine'in arkasına eklediği argümanlar (`ARGUMENTS: ...`) kalır. Engine o zaman yeni metni gönderir, bir Skill tool çağrısında da.
@@ -18,11 +20,13 @@ Bu yüzden mod iki şey yapar:
    - Başka bir placeholder (`$1`, `${...}`, `` !`...` ``) taşıyan bir dosya karşılaştırılamaz, çünkü engine onu doldurmuştur. Dosya session başladıktan sonra yazıldıysa aynı not gelir.
    - Yeniden çağrılmayan bir skill ya da command yeniden gönderilmez.
 2. `instructions` attachment'ının taşıdığı her rules dosyasını kaydeder (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yol sayılır), ve global `CLAUDE.md` dosyasını (`~/.claude/CLAUDE.md`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altında). Bir projenin `CLAUDE.md` dosyası sayılmaz. Gönderdiğiniz her prompt'ta, session onu okuduktan sonra metni değişmiş bir rules dosyası (aynı metinle yeniden yazılan bir dosya hiçbir şey göndermez) o prompt ile modele yalnız modelin okuduğu bir not olarak gider: dosya ve öncekinin yerine geçen güncel metni. Her değişiklik bir kere gönderilir.
+3. Main loop'un Read tool'u ile okunan her dosyayı son yazılma zamanıyla kaydeder. Bir subagent'ın okumaları kendi context'inde yaşar ve kaydedilmez. Bir skill'in her çağrısında, skill dizininin okunmuş ve o zamandan beri yazılmış dosyaları, çağrının metninin sonunda tek bir satırla modele gider. Satır dosyaları adıyla sayar ve yeniden okunmalarını ister. Dosyaların metni gönderilmez. Satır, model dosyayı yeniden okuyana kadar her çağrıda gelir. Claude Code 2.1.282 üzerinde, metni her çağrıda `sub/a.md` dosyasının okunmasını isteyen bir skill ile ölçüldü: model değişen dosyayı satırla da satırsız da yeniden okudu. Yani satır, her çağrıda yeniden okuma istemeyen bir skill için önemlidir.
 
 Her olay için [sidebar](../sidebar) stream'inde, sidebar kapalıyken transcript'te tek satır okursunuz:
 
     context-restore: changed on disk, the call got the current text: commit
     context-restore: changed on disk, the new text went to the model: context7.md
+    context-restore: changed on disk since the model read it, the call asks to read again: subcommands/ssrf.md (bug-report)
 
 `/context-restore` ayarı, kaç rules dosyasının izlendiğini ve son olayı yazar.
 
@@ -47,18 +51,18 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, prompt.attachment{type=instructions}, prompt.submit
+    ❯ ./register.ts hooks: session.start, command.run{command=context-restore}, skill.prompt, tool.call{tool=Read}, prompt.attachment{type=instructions}, prompt.submit
     ❯ ./register.ts calls: $.clock.now, $.command.register, $.env.get, $.fs.exists (via commandFileOf, mtimeOf, pluginDirs), $.fs.read (via changedRules, pluginDirs, readBody, recordRules), $.fs.stat (via mtimeOf), $.sidebar.set (via toPerson), $.store.get, $.store.set (via setEnabled), $.ui.log
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L1, dosya okur.
 
-    1. Okur:     session'ın çağırdığı her skill ve command'ın dosyasını ve son yazılma zamanını; session'ın okuduğu rules dosyalarını ve global CLAUDE.md dosyasını, ve son yazılma zamanlarını; bir plugin'in command dosyasını bulmak için host'un installed_plugins.json dosyasını
+    1. Okur:     session'ın çağırdığı her skill ve command'ın dosyasını ve son yazılma zamanını; session'ın okuduğu rules dosyalarını ve global CLAUDE.md dosyasını, ve son yazılma zamanlarını; modelin Read tool ile okuduğu her dosyanın son yazılma zamanını; bir plugin'in command dosyasını bulmak için host'un installed_plugins.json dosyasını
     2. Çalıştırır: hiçbir şey
-    3. Gönderir: modele, dosyası değişmiş çağrılan bir skill ya da command'ın güncel metnini, ve diskte değişen okunmuş bir rules dosyasının ya da global CLAUDE.md dosyasının bütün metnini
-    4. Saklar:   $.store içinde on/off ayarını; rules kayıtları bellekte yaşar ve session ile biter
+    3. Gönderir: modele, dosyası değişmiş çağrılan bir skill ya da command'ın güncel metnini, ve diskte değişen okunmuş bir rules dosyasının ya da global CLAUDE.md dosyasının bütün metnini; çağrılan bir skill'in, model okuduktan sonra değişen dosyalarının adlarını
+    4. Saklar:   $.store içinde on/off ayarını; rules ve okuma kayıtları bellekte yaşar ve session ile biter
     5. Düşman girdi: gönderilen her metin session'ın kendisinin kullandığı bir dosyadır; düşman metin taşıyan bir skill ya da rules dosyası modele engine üzerinden de ulaşır
 
 ## Sınırlar
@@ -70,6 +74,7 @@ Reach L1, dosya okur.
 - Değişen bir rules dosyası modele yazıldığı anda değil, sonraki prompt ile gider. Değişiklik ile sonraki prompt arasına bir compaction girerse dosyayı engine de gönderir.
 - Bir projenin CLAUDE.md dosyası izlenmez; yalnız global olan izlenir.
 - Global CLAUDE.md her değişiklikte modele bütün olarak gider, 21 KB'lık bir dosya için yaklaşık 5k token.
+- Modelin okuduğu ve değişen bir skill dosyası yalnız skill'in sonraki çağrısında adlandırılır, iki çağrı arasında adlandırılmaz. `skill.prompt` skill'i hangi loop'un çağırdığını söylemez. Bu yüzden bir subagent'a önceden yüklenen bir skill, yalnız main loop'un okuduğu bir dosya için de satırı alabilir.
 
 ## Geliştirme
 

@@ -53,6 +53,7 @@ function world(on: On): World {
     return { value: f.text }
   })
   on('skill.prompt', (_, e) => ({ text: e.text }))
+  on('tool.call', { tool: 'Read' }, (_, e) => (w.files.has(e.file_path) ? { result: 'text' } : { result: 'no file', isError: true }) as never)
   on('prompt.attachment', (_, e) => ({ text: e.text }))
   on('prompt.submit', (_, e) => { w.notes.push([...(e.context ?? [])]); return { text: e.text } })
   return w
@@ -69,6 +70,7 @@ function seatSidebar(on: On, w: World): void {
 
 const started = ($: Engine) => $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
 const call = async ($: Engine, skill: string, text: string) => (await $.skill.prompt({ skill, text })).text
+const read = ($: Engine, path: string, agentId?: string) => $.tool.call({ tool: 'Read', file_path: path, ...(agentId === undefined ? {} : { agentId }) } as never)
 const prompt = ($: Engine, text = 'go') => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
 
 describe('context-restore', () => {
@@ -98,6 +100,43 @@ describe('context-restore', () => {
     const text = await call($, 'review', 'Review src/a.ts and report.\n')
     expect(text.startsWith('Review src/a.ts and report.\n\ncontext-restore: /Users/u/.claude/commands/review.md changed on disk after this session loaded it.')).toBe(true)
     expect(text.endsWith('Review $ARGUMENTS and list every risk.\n')).toBe(true)
+  })
+
+  test('a skill call names the files of its directory the model read and that changed since, until they are read again', async ($, on) => {
+    const w = world(on)
+    const ssrf = `${SKILL_DIR}/subcommands/ssrf.md`
+    const sqli = `${SKILL_DIR}/subcommands/sqli.md`
+    w.files.set(ssrf, { text: 'Check fetch calls.', mtimeMs: T0 - 5 })
+    w.files.set(sqli, { text: 'Check queries.', mtimeMs: T0 - 5 })
+    await started($)
+    await read($, ssrf)
+    await read($, sqli)
+    await read($, SKILL_FILE)
+    expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
+    w.files.set(ssrf, { text: 'Check fetch calls and redirects.', mtimeMs: T0 + 10 })
+    const note = `context-restore: these files of this skill's base directory changed on disk after this session read them, so the copies read earlier are out of date; read them again before you use them: subcommands/ssrf.md`
+    expect(await call($, 'rules-skill', SKILL)).toBe(`${SKILL.trimEnd()}\n\n${note}`)
+    expect(w.logs).toEqual(['changed on disk since the model read it, the call asks to read again: subcommands/ssrf.md (rules-skill)'])
+    expect(await call($, 'rules-skill', SKILL)).toBe(`${SKILL.trimEnd()}\n\n${note}`)
+    await read($, ssrf)
+    expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
+  })
+
+  test('a read in a subagent, a failed read and a file of another directory are not named', async ($, on) => {
+    const w = world(on)
+    const fix = `${SKILL_DIR}/subcommands/fix.md`
+    const other = '/Users/u/.claude/skills/other/notes.md'
+    w.files.set(fix, { text: 'Fix it.', mtimeMs: T0 - 5 })
+    w.files.set(other, { text: 'Notes.', mtimeMs: T0 - 5 })
+    await started($)
+    await read($, fix, 'agent-1')
+    await read($, other)
+    await read($, `${SKILL_DIR}/gone.md`)
+    w.files.set(fix, { text: 'Fix it now.', mtimeMs: T0 + 10 })
+    w.files.set(other, { text: 'New notes.', mtimeMs: T0 + 10 })
+    w.files.set(`${SKILL_DIR}/gone.md`, { text: 'Here now.', mtimeMs: T0 + 10 })
+    expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
+    expect(w.logs).toEqual([])
   })
 
   test('a built-in command with no file keeps the engine\'s text', async ($, on) => {

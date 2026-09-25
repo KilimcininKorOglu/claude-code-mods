@@ -1,6 +1,11 @@
 /** How the engine expands a skill or command file for the model, and the texts this mod writes. */
 
 const BASE_DIR = /^Base directory for this skill: ([^\n]+)/
+
+/** The directory a skill's text names in its first line, or undefined for a text that names none. */
+export function skillDirOf(text: string): string | undefined {
+  return BASE_DIR.exec(text)?.[1]
+}
 const FRONTMATTER = /^---\n[\s\S]*?\n---\n+/
 const RULE_HEADER = /^Contents of (.+?) \(/gm
 /** What the engine fills in when it expands a file: its arguments, a `${...}` variable, or a shell command's output. */
@@ -13,7 +18,7 @@ const ARGUMENTS_TAIL = '\n\nARGUMENTS: '
 
 /** The SKILL.md a skill's text names in its first line, or undefined for a text that names none. */
 export function skillFileOf(text: string): string | undefined {
-  const dir = BASE_DIR.exec(text)?.[1]
+  const dir = skillDirOf(text)
   return dir === undefined ? undefined : `${dir}/SKILL.md`
 }
 
@@ -80,6 +85,24 @@ export function rulePathsOf(text: string, globalFile: string): string[] {
   return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => p.includes('/rules/') || p === globalFile)
 }
 
+/** The files a skill's directory holds besides its SKILL.md, out of `paths`, relative to the directory. */
+export function skillFilesIn(paths: Iterable<string>, dir: string): string[] {
+  return [...paths].filter(p => p.startsWith(`${dir}/`) && p !== `${dir}/SKILL.md`).map(p => p.slice(dir.length + 1))
+}
+
+/** The line a skill call ends with when files of its directory the model read changed on disk since. */
+export function rereadNote(files: readonly string[]): string {
+  return `context-restore: these files of this skill's base directory changed on disk after this session read them, so the copies read earlier are out of date; read them again before you use them: ${files.join(', ')}`
+}
+
+/** A line the person reads: what the mod did about files that changed on disk, and which files. */
+const onDisk = (done: string, names: readonly string[]): string => `changed on disk${done}: ${names.join(', ')}`
+
+/** The line the person reads when a skill call asked the model to read changed files again. */
+export function rereadLog(skill: string, files: readonly string[]): string {
+  return `${onDisk(' since the model read it, the call asks to read again', files)} (${skill})`
+}
+
 /** The last part of a path, as the texts name a file. */
 export function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1)
@@ -87,12 +110,12 @@ export function baseName(path: string): string {
 
 /** The line the person reads when a call got the file's current text in place of the engine's older copy. */
 export function currentLog(name: string): string {
-  return `changed on disk, the call got the current text: ${name}`
+  return onDisk(', the call got the current text', [name])
 }
 
 /** The line the person reads when rules files changed on disk: what the model was handed again. */
 export function changedLog(labels: readonly string[]): string {
-  return `changed on disk, the new text went to the model: ${labels.join(', ')}`
+  return onDisk(', the new text went to the model', labels)
 }
 
 /** The note the model reads for one rules file that changed on disk after the session read it. */

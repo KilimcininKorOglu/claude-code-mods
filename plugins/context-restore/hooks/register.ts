@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rulePathsOf, sectionKey, sidebarLines, skillFileOf, statusText } from './restore.ts'
+import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rereadLog, rereadNote, rulePathsOf, sectionKey, sidebarLines, skillDirOf, skillFileOf, skillFilesIn, statusText } from './restore.ts'
 
 const ENABLED_KEY = 'enabled'
 const CONSUMER = 'context-restore'
@@ -7,9 +7,10 @@ const USAGE = 'expects nothing (the status), on or off'
 
 /**
  * The on/off setting, the directory the session started in, the host's config directory, when the session
- * started, every rules file it read with the time it was last written and its text, and the last thing the mod did.
+ * started, every rules file it read with the time it was last written and its text, every file the main
+ * loop's Read tool read with the time it was last written then, and the last thing the mod did.
  */
-type State = { enabled: boolean; root: string; config: string; startedAt: number; rules: Map<string, { at: number; text: string }>; last?: string }
+type State = { enabled: boolean; root: string; config: string; startedAt: number; rules: Map<string, { at: number; text: string }>; reads: Map<string, number>; last?: string }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -73,6 +74,42 @@ async function fresherText($: EngineInterface, state: State, name: string, text:
   return currentText(text, await readBody($, file), file, at > state.startedAt)
 }
 
+/**
+ * The files of a skill's directory the main loop read and that were written since, relative to the directory.
+ * A file read again takes a new time, so it is named until the model reads it again.
+ */
+async function changedSinceRead($: EngineInterface, state: State, dir: string): Promise<string[]> {
+  const out: string[] = []
+  for (const file of skillFilesIn(state.reads.keys(), dir)) {
+    const at = await mtimeOf($, `${dir}/${file}`)
+    if (at !== undefined && at !== state.reads.get(`${dir}/${file}`)) out.push(file)
+  }
+  return out
+}
+
+/** A skill's text with the note to read its changed files again, or the text unchanged when none changed. */
+async function withRereadNote($: EngineInterface, state: State, skill: string, text: string): Promise<string> {
+  const dir = skillDirOf(text)
+  const files = dir === undefined ? [] : await changedSinceRead($, state, dir)
+  if (files.length === 0) return text
+  await toPerson($, state, rereadLog(skill, files))
+  return `${text.trimEnd()}\n\n${rereadNote(files)}`
+}
+
+/** The text one skill or command call should carry: the file's current text, then the note on changed files the model read. */
+async function callText($: EngineInterface, state: State, skill: string, text: string): Promise<string> {
+  const fresher = await fresherText($, state, skill, text)
+  if (fresher !== undefined) await toPerson($, state, currentLog(skill))
+  return withRereadNote($, state, skill, fresher ?? text)
+}
+
+/** Records a file the main loop's Read tool read, with the time it was last written. */
+async function recordRead($: EngineInterface, state: State, path: string): Promise<void> {
+  const at = await mtimeOf($, path)
+  if (at === undefined) state.reads.delete(path)
+  else state.reads.set(path, at)
+}
+
 /** Records the rules files and the global CLAUDE.md the session read, with the time each was last written and its text. */
 async function recordRules($: EngineInterface, state: State, text: string): Promise<void> {
   for (const path of rulePathsOf(text, `${state.config}/CLAUDE.md`)) {
@@ -128,7 +165,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, root: '', config: '', startedAt: 0, rules: new Map() }
+  const state: State = { enabled: true, root: '', config: '', startedAt: 0, rules: new Map(), reads: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -148,14 +185,24 @@ export const register: Register = on => {
     const r = await next(e)
     if (!state.enabled) return r
     try {
-      const text = await fresherText($, state, e.skill, r.text)
-      if (text === undefined) return r
-      await toPerson($, state, currentLog(e.skill))
-      return { ...r, text }
+      const text = await callText($, state, e.skill, r.text)
+      return text === r.text ? r : { ...r, text }
     } catch (err) {
       $.ui.log(`the file of ${e.skill} was not read, so the call keeps the engine's text: ${errorText(err)}`)
       return r
     }
+  })
+
+  // A subagent's reads live in its own context, so only the main loop's count.
+  on('tool.call', { tool: 'Read' }, async ($, e, next) => {
+    const r = await next(e)
+    if (!state.enabled || e.agentId !== undefined || r.deny !== undefined || r.isError === true) return r
+    try {
+      await recordRead($, state, e.file_path)
+    } catch (err) {
+      $.ui.log(`the write time of ${e.file_path} was not read, so a change to it is not noticed: ${errorText(err)}`)
+    }
+    return r
   })
 
   on('prompt.attachment', { type: 'instructions' }, async ($, e, next) => {
