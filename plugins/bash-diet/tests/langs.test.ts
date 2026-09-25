@@ -86,7 +86,7 @@ describe('go', () => {
     expect(planFor('go test ./...')?.flags).toEqual(['-json'])
     expect(GO['go test']?.flags?.(['-json'])).toBe(undefined)
     const r = run('go test', GO_JSON, ['./...', '-json'], 1)
-    expect(r.text).toBe('FAIL example.com/m/b (0.007s): 1 failed, 1 passed\n      b_test.go:4: setup done\n      b_test.go:4: want 3, got 4\n  --- FAIL: TestBad (0.00s)\ngo test: 2 passed, 1 failed in 2 packages')
+    expect(r.text).toBe('FAIL example.com/m/b (0.007s): 1 failed, 1 passed\n  --- FAIL: TestBad (0.00s)\n      b_test.go:4: setup done\n      b_test.go:4: want 3, got 4\ngo test: 2 passed, 1 failed in 2 packages')
     expect(saving(GO_JSON, r.text)).toBeGreaterThanOrEqual(80)
   })
 

@@ -51,10 +51,18 @@ function line(r: Run, text: string): void {
   }
 }
 
+const FAIL_FRAME = /^\s*--- FAIL:/
+
+/** A failed test's lines: its `--- FAIL` line first, which the stream writes after the test's own output. */
+function failedTest(p: Pkg, test: string): string[] {
+  const lines = (p.tests.get(test) ?? []).filter(l => !NOISE.test(l))
+  return [...lines.filter(l => FAIL_FRAME.test(l)), ...lines.filter(l => !FAIL_FRAME.test(l))]
+}
+
 /** A failed package: its failed tests with their output, or its own output when no test failed (a build or a panic). */
 function failedPkg(name: string, p: Pkg): string[] {
   const head = `FAIL ${name}${p.elapsed === undefined ? '' : ` (${p.elapsed}s)`}: ${p.failed} failed, ${p.passed} passed`
-  const tests = p.failedTests.flatMap(t => (p.tests.get(t) ?? []).filter(l => !NOISE.test(l)).map(l => `  ${l.trim() === '' ? '' : l}`))
+  const tests = p.failedTests.flatMap(t => failedTest(p, t).map(l => `  ${l.trim() === '' ? '' : l}`))
   const own = p.failedTests.length === 0 ? p.output.filter(l => !/^(FAIL|ok)\s/.test(l) && !NOISE.test(l)).map(l => `  ${l}`) : []
   return [head, ...tests, ...own]
 }
