@@ -14,7 +14,8 @@ So the mod does two things:
 
 1. At each call of a skill or command (typed as `/name`, called through the Skill tool, or preloaded into a subagent), it reads the file the text came from. A skill names its directory in its first line (`Base directory for this skill: <dir>`), so its file is `<dir>/SKILL.md`. A command's file is looked up: a plugin's `commands/<name>.md` for `<plugin>:<name>`, else the project's or your own `commands/<name>.md`. A built-in command has no file.
    - A file with no placeholder is compared with the engine's text. When they differ, the file's text takes the place of the engine's copy, and the arguments the engine added after it (`ARGUMENTS: ...`) stay. The engine then sends the new text, also on a Skill tool call.
-   - A file with placeholders (`$ARGUMENTS`, `$1`, `${...}`, `` !`...` ``) cannot be compared, because the engine filled them in. When the file was written after the session started, the engine's filled text stays and the file's current text follows it, with a note that it replaces the instructions above and that the arguments above still apply.
+   - A file whose only placeholder is `$ARGUMENTS` is compared as a template: every other part word for word, each `$ARGUMENTS` any text. When the engine's text does not fit it, the engine's filled text stays and the file's current text follows it, with a note that it replaces the instructions above and that the arguments above still apply.
+   - A file with another placeholder (`$1`, `${...}`, `` !`...` ``) cannot be compared, because the engine filled it in. When the file was written after the session started, the same note follows.
    - A skill or command that is not called again is not sent again.
 2. It records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and only a path with `/rules/` in it counts), and the global `CLAUDE.md` (`~/.claude/CLAUDE.md`, under `CLAUDE_CONFIG_DIR` when it is set). A project's `CLAUDE.md` does not count. At each prompt you send, a rules file whose text changed since the session read it reaches the model with that prompt (a file written again with the same text sends nothing), as a note only the model reads: the file, and its current text, which replaces the earlier one. Each change is sent once.
 
@@ -62,7 +63,8 @@ Reach L1, it reads files.
 
 ## Limits
 
-- A file with placeholders counts as changed by its last write time against the session's start. After `/reload-plugins` the mod counts from the reload, so a change made before it is not seen.
+- A file with a placeholder other than `$ARGUMENTS` counts as changed by its last write time against the session's start. `/reload-plugins` keeps an unchanged module and its start time, so a plugin updated and reloaded mid-session reads as changed at each call of such a file.
+- A `$ARGUMENTS` template fits loosely: a file that changed from `Old $ARGUMENTS` to `$ARGUMENTS` fits every engine text, so that change is not seen.
 - A file with placeholders gets its current text after the engine's text, with the placeholders not filled in.
 - A command whose file is in neither place the mod looks (a `--plugin-dir` plugin, a nested command name) keeps the engine's text.
 - A changed rules file reaches the model with the next prompt, not at the moment it is written. When a compaction comes between the change and the next prompt, the engine sends the file too.

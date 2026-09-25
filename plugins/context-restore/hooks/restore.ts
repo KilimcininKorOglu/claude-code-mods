@@ -5,6 +5,9 @@ const FRONTMATTER = /^---\n[\s\S]*?\n---\n+/
 const RULE_HEADER = /^Contents of (.+?) \(/gm
 /** What the engine fills in when it expands a file: its arguments, a `${...}` variable, or a shell command's output. */
 const PLACEHOLDER = /\$ARGUMENTS|\$\d|\$\{|!`/
+/** The placeholders a file cannot be read back from: a positional argument, a variable, a shell command's output. */
+const OPAQUE_PLACEHOLDER = /\$\d|\$\{|!`/
+const ARGUMENTS = '$ARGUMENTS'
 /** What the engine adds after a file with no placeholder when the call carries arguments (measured on 2.1.280). */
 const ARGUMENTS_TAIL = '\n\nARGUMENTS: '
 
@@ -32,14 +35,38 @@ function splitArguments(engineText: string): { head: string; tail: string } {
 }
 
 /**
+ * Whether the engine's text is the file with each `$ARGUMENTS` filled in: every other part word for word,
+ * each `$ARGUMENTS` any text.
+ */
+export function fitsArguments(engineText: string, fileBody: string): boolean {
+  const parts = fileBody.trimEnd().split(ARGUMENTS).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  return new RegExp(`^${parts.join('[\\s\\S]*')}$`).test(engineText.trimEnd())
+}
+
+/** The engine's filled text with the file's current text after it. */
+function withNote(engineText: string, fileBody: string, path: string): string {
+  return `${engineText.trimEnd()}\n\n${appendedNote(path, fileBody)}`
+}
+
+/**
+ * The text the model reads for one call of a skill or command whose file holds placeholders. A file whose only
+ * placeholder is `$ARGUMENTS` is compared as a template, so the note follows exactly when the engine's copy
+ * differs. Any other placeholder cannot be read back, so the note follows once the file was written after
+ * the session started.
+ */
+function placeholderText(engineText: string, fileBody: string, path: string, writtenSinceStart: boolean): string | undefined {
+  if (!OPAQUE_PLACEHOLDER.test(fileBody)) return fitsArguments(engineText, fileBody) ? undefined : withNote(engineText, fileBody, path)
+  return writtenSinceStart ? withNote(engineText, fileBody, path) : undefined
+}
+
+/**
  * The text the model reads for one call of a skill or command, when the engine's copy is older than the file.
  * A file with no placeholder is compared as it is, and its text takes the place of a different engine text,
- * with the call's arguments kept. A file with placeholders cannot be compared, so the engine's text stays
- * with the new file text after it, once the file was written after the session started. Undefined: the
- * engine's text is current.
+ * with the call's arguments kept. A file with placeholders keeps the engine's filled text, with the new file
+ * text after it (`placeholderText`). Undefined: the engine's text is current.
  */
 export function currentText(engineText: string, fileBody: string, path: string, writtenSinceStart: boolean): string | undefined {
-  if (PLACEHOLDER.test(fileBody)) return writtenSinceStart ? `${engineText.trimEnd()}\n\n${appendedNote(path, fileBody)}` : undefined
+  if (PLACEHOLDER.test(fileBody)) return placeholderText(engineText, fileBody, path, writtenSinceStart)
   const { head, tail } = splitArguments(engineText)
   if (fileBody.trimEnd() === head.trimEnd()) return undefined
   return tail === '' ? fileBody : `${fileBody.trimEnd()}\n${tail}`

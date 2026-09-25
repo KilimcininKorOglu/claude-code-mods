@@ -14,7 +14,8 @@ Bu yüzden mod iki şey yapar:
 
 1. Bir skill ya da command'ın her çağrısında (`/name` yazılarak, Skill tool ile çağrılarak ya da bir subagent'a önceden yüklenerek) metnin geldiği dosyayı okur. Bir skill dizinini ilk satırında adlandırır (`Base directory for this skill: <dizin>`), yani dosyası `<dizin>/SKILL.md` olur. Bir command'ın dosyası aranır: `<plugin>:<ad>` için plugin'in `commands/<ad>.md` dosyası, değilse projenin ya da sizin `commands/<ad>.md` dosyanız. Built-in bir command'ın dosyası yoktur.
    - Placeholder taşımayan bir dosya engine'in metniyle karşılaştırılır. Farklıysa engine'in kopyasının yerine dosyanın metni konur ve engine'in arkasına eklediği argümanlar (`ARGUMENTS: ...`) kalır. Engine o zaman yeni metni gönderir, bir Skill tool çağrısında da.
-   - Placeholder taşıyan bir dosya (`$ARGUMENTS`, `$1`, `${...}`, `` !`...` ``) karşılaştırılamaz, çünkü engine onları doldurmuştur. Dosya session başladıktan sonra yazıldıysa engine'in doldurulmuş metni kalır ve dosyanın güncel metni onun ardından gelir, yukarıdaki talimatların yerine geçtiğini ve yukarıdaki argümanların hâlâ geçerli olduğunu söyleyen bir not ile.
+   - Tek placeholder'ı `$ARGUMENTS` olan bir dosya bir şablon olarak karşılaştırılır: diğer her parça birebir, her `$ARGUMENTS` herhangi bir metin. Engine'in metni şablona uymazsa engine'in doldurulmuş metni kalır ve dosyanın güncel metni onun ardından gelir, yukarıdaki talimatların yerine geçtiğini ve yukarıdaki argümanların hâlâ geçerli olduğunu söyleyen bir not ile.
+   - Başka bir placeholder (`$1`, `${...}`, `` !`...` ``) taşıyan bir dosya karşılaştırılamaz, çünkü engine onu doldurmuştur. Dosya session başladıktan sonra yazıldıysa aynı not gelir.
    - Yeniden çağrılmayan bir skill ya da command yeniden gönderilmez.
 2. `instructions` attachment'ının taşıdığı her rules dosyasını kaydeder (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yol sayılır), ve global `CLAUDE.md` dosyasını (`~/.claude/CLAUDE.md`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altında). Bir projenin `CLAUDE.md` dosyası sayılmaz. Gönderdiğiniz her prompt'ta, session onu okuduktan sonra metni değişmiş bir rules dosyası (aynı metinle yeniden yazılan bir dosya hiçbir şey göndermez) o prompt ile modele yalnız modelin okuduğu bir not olarak gider: dosya ve öncekinin yerine geçen güncel metni. Her değişiklik bir kere gönderilir.
 
@@ -62,7 +63,8 @@ Reach L1, dosya okur.
 
 ## Sınırlar
 
-- Placeholder taşıyan bir dosya, son yazılma zamanı session'ın başlangıcıyla karşılaştırılarak değişmiş sayılır. `/reload-plugins` sonrası mod reload anından sayar, yani ondan önce yapılan bir değişiklik görülmez.
+- `$ARGUMENTS` dışında bir placeholder taşıyan bir dosya, son yazılma zamanı session'ın başlangıcıyla karşılaştırılarak değişmiş sayılır. `/reload-plugins` değişmemiş bir modülü ve onun başlangıç zamanını korur, yani session ortasında güncellenip reload edilen bir plugin, böyle bir dosyanın her çağrısında değişmiş okunur.
+- Bir `$ARGUMENTS` şablonu gevşek uyar: `Old $ARGUMENTS` metninden `$ARGUMENTS` metnine değişen bir dosya her engine metnine uyar, yani o değişiklik görülmez.
 - Placeholder taşıyan bir dosyanın güncel metni engine'in metninden sonra, placeholder'ları doldurulmadan gelir.
 - Dosyası mod'un baktığı iki yerde de olmayan bir command (`--plugin-dir` ile yüklenen bir plugin, iç içe bir command adı) engine'in metnini korur.
 - Değişen bir rules dosyası modele yazıldığı anda değil, sonraki prompt ile gider. Değişiklik ile sonraki prompt arasına bir compaction girerse dosyayı engine de gönderir.

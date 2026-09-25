@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { appendedNote, bodyOfFile, currentText, rulePathsOf, skillFileOf } from '../hooks/restore.ts'
+import { appendedNote, bodyOfFile, currentText, fitsArguments, rulePathsOf, skillFileOf } from '../hooks/restore.ts'
 
 tier('user')
 
@@ -37,10 +37,22 @@ describe('restore', () => {
     expect(currentText(called, changed, PATH, false)).toBe(`${changed}\n\nARGUMENTS: the README`)
   })
 
-  test('a file with placeholders keeps the engine\'s filled text and adds its current text after it once written since the start', () => {
+  test('a file with a positional or variable placeholder keeps the engine\'s filled text and adds its current text after it once written since the start', () => {
+    const file = 'Review $1 in ${CLAUDE_PLUGIN_ROOT} and report.\n'
+    expect(currentText('Review src/a.ts in /p and report.\n', file, PATH, false)).toBe(undefined)
+    expect(currentText('Review src/a.ts in /p and report.\n', file, PATH, true)).toBe(`Review src/a.ts in /p and report.\n\n${appendedNote(PATH, file)}`)
+  })
+
+  test('a file whose only placeholder is $ARGUMENTS is read as a template, whatever its time', () => {
     const file = 'Review $ARGUMENTS and report.\n'
-    expect(currentText('Review src/a.ts and report.\n', file, PATH, false)).toBe(undefined)
-    expect(currentText('Review src/a.ts and report.\n', file, PATH, true)).toBe(`Review src/a.ts and report.\n\n${appendedNote(PATH, file)}`)
+    // The engine loaded this very file after the session started (a plugin update, then a reload).
+    expect(currentText('Review src/a.ts and report.\n', file, PATH, true)).toBe(undefined)
+    expect(currentText('Review  and report.', file, PATH, true)).toBe(undefined)
+    expect(currentText('Şimdi bana yeni fikirler üret.\n', '$ARGUMENTS\n', PATH, true)).toBe(undefined)
+    // The file changed after the engine loaded it: the note follows, also with no write since the start.
+    expect(currentText('Check src/a.ts and report.\n', file, PATH, false)).toBe(`Check src/a.ts and report.\n\n${appendedNote(PATH, file)}`)
+    expect(fitsArguments('a (b) c*', 'a (b) $ARGUMENTS')).toBe(true)
+    expect(fitsArguments('a b c', 'a (b) $ARGUMENTS')).toBe(false)
   })
 
   test('the rules files and the global CLAUDE.md of an instructions attachment are read from their Contents lines', () => {
