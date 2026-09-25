@@ -6,14 +6,14 @@ A Claude Code Mod that tells you when an MCP server failed to connect or dropped
 
 1. At session start, at the end of each main-loop turn and after each engine note about deferred tools, the mod reads the engine's own list of servers that are not connected. It asks the built-in `ToolSearch` tool, whose result names each failed server (`failed_mcp_servers`) and each server still connecting (`pending_mcp_servers`). The engine adds that list only to an answer with no match, so the query selects a tool that cannot exist. The call leaves nothing in the model's context.
 2. The engine's `deferred_tools_delta` note to the model is read too: its "configured but failed to connect" block names failed servers, and its "available again (MCP server reconnected)" line names the tool prefixes that came back. The note reaches the model unchanged.
-3. A server that is not connected gets one red section in the [sidebar](../sidebar) that stays for the session, with the engine's reason and a reconnect button:
+3. A server that is not connected gets one section in the [sidebar](../sidebar) that stays for the session, with the engine's reason and a reconnect button. `not connected` is red and the reason faint:
 
        flaky: not connected (CONNECTION_CLOSED: Connection closed)
        [ reconnect flaky ]
 
    While the sidebar is closed, one transcript line says the same and names the command: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`. The section is drawn at the next measure after the sidebar opens.
 4. The button runs `/mcp-doctor reconnect <server>`, which asks the engine to run `/mcp reconnect <server>` and reads the list again. A server still failed afterwards gets one line with the engine's answer.
-5. A server that is back loses its red section and gets one green line: `flaky: connected again`. A server still connecting is left as it is.
+5. A server that is back loses its section and gets one line with `connected again` in green: `flaky: connected again`. A server still connecting is left as it is.
 6. The same failure is written once. A later turn that finds the same server failed writes nothing.
 
 claude.ai connectors (servers named `claude.ai <name>`) are left out, because they belong to the account and not to this machine's config. The model gets no note from this mod, because the engine already tells it.
@@ -36,7 +36,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 ## After installing
 
 1. Restart Claude Code.
-2. Install the [sidebar](../sidebar) mod for the red section and its button. Without it the mod writes one transcript line per server.
+2. Install the [sidebar](../sidebar) mod for the section and its button. Without it the mod writes one transcript line per server.
 
 ## What it can reach
 

@@ -14,7 +14,7 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Section = { key: string; lines: { text: string; kind?: string }[]; buttons?: { label: string; command: string; args?: string }[]; until: string }
+type Section = { key: string; lines: { text: string; kind?: string; parts?: { text: string; kind?: string }[] }[]; buttons?: { label: string; command: string; args?: string }[]; until: string }
 
 /**
  * What ToolSearch answers (`failed`, `pending`, or `missing` for a build where it does not answer), what
@@ -91,7 +91,7 @@ describe('mcp-doctor', () => {
     w.failed = [{ name: 'flaky', errorCode: 'CONNECTION_CLOSED', error: 'Connection closed' }, { name: 'claude.ai Gmail' }]
     await started($)
     await settle(clock)
-    expect(w.bar.sections).toEqual([{ consumer: 'mcp-doctor', key: 'failed-flaky', title: 'MCP server', lines: [{ text: 'flaky: not connected (CONNECTION_CLOSED: Connection closed)', kind: 'error' }], buttons: [{ label: 'reconnect flaky', command: 'mcp-doctor', args: 'reconnect flaky' }], until: 'session', order: 15 } as unknown as Section])
+    expect(w.bar.sections).toEqual([{ consumer: 'mcp-doctor', key: 'failed-flaky', title: 'MCP server', lines: [{ text: 'flaky: not connected (CONNECTION_CLOSED: Connection closed)', parts: [{ text: 'flaky: ' }, { text: 'not connected', kind: 'error' }, { text: ' (CONNECTION_CLOSED: Connection closed)', kind: 'dim' }] }], buttons: [{ label: 'reconnect flaky', command: 'mcp-doctor', args: 'reconnect flaky' }], until: 'session', order: 15 } as unknown as Section])
     // The same failure at the next turn's end is not written again.
     await $.turn.complete(turn())
     await settle(clock)
@@ -101,7 +101,7 @@ describe('mcp-doctor', () => {
     await settle(clock)
     expect(w.reconnects).toEqual(['flaky'])
     expect(w.bar.cleared).toEqual(['failed-flaky'])
-    expect(w.bar.sections.at(-1)?.lines).toEqual([{ text: 'flaky: connected again', kind: 'ok' }])
+    expect(w.bar.sections.at(-1)?.lines).toEqual([{ text: 'flaky: connected again', parts: [{ text: 'flaky: ' }, { text: 'connected again', kind: 'ok' }] }])
     expect(w.logs).toEqual([])
   })
 

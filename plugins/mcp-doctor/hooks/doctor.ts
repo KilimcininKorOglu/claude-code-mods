@@ -71,15 +71,25 @@ export function backText(name: string): string {
   return `${name}: connected again`
 }
 
-/** A sidebar line, as the sidebar mod's contract names it. */
-type Line = { text: string; kind: 'error' | 'ok' }
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line, as the sidebar mod's contract names it; `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
 
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The failed server's line: the name default, `not connected` red, the reason faint. */
 export function failedLines(f: Failure): Line[] {
-  return [{ text: failedText(f), kind: 'error' }]
+  return [partsLine([part(`${f.name}: `, undefined), part('not connected', 'error'), part(` (${f.reason})`, 'dim')])]
 }
 
+/** The reconnected server's line: the name default, `connected again` green. */
 export function backLines(name: string): Line[] {
-  return [{ text: backText(name), kind: 'ok' }]
+  return [partsLine([part(`${name}: `, undefined), part('connected again', 'ok')])]
 }
 
 /** The reconnect button under a failed server: pressing it runs `/mcp-doctor reconnect <name>`. */

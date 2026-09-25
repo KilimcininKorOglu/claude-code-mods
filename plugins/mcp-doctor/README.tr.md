@@ -6,14 +6,14 @@ Bir MCP server bağlanamadığında ya da bağlantısı koptuğunda bunu size s�
 
 1. Session başında, her main-loop turn sonunda ve deferred tool'larla ilgili her engine notundan sonra mod, engine'in bağlı olmayan server listesini okur. Built-in `ToolSearch` tool'una sorar. Sonucu başarısız her server'ı (`failed_mcp_servers`) ve hâlâ bağlanan her server'ı (`pending_mcp_servers`) adlandırır. Engine bu listeyi yalnız eşleşmesi olmayan bir cevaba ekler, bu yüzden sorgu var olamayacak bir tool'u seçer. Çağrı modelin context'inde hiçbir şey bırakmaz.
 2. Engine'in modele giden `deferred_tools_delta` notu da okunur: "configured but failed to connect" bloğu başarısız server'ları, "available again (MCP server reconnected)" satırı geri gelen tool prefix'lerini adlandırır. Not modele değişmeden ulaşır.
-3. Bağlı olmayan bir server, [sidebar](../sidebar) içinde session boyunca duran bir kırmızı section alır. Section engine'in verdiği nedeni ve bir reconnect tuşunu taşır:
+3. Bağlı olmayan bir server, [sidebar](../sidebar) içinde session boyunca duran bir section alır. Section engine'in verdiği nedeni ve bir reconnect tuşunu taşır. `not connected` kırmızı, neden soluk çizilir:
 
        flaky: not connected (CONNECTION_CLOSED: Connection closed)
        [ reconnect flaky ]
 
    Sidebar kapalıyken tek bir transcript satırı aynı şeyi söyler ve komutu adlandırır: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`. Sidebar açıldıktan sonraki ilk ölçümde section çizilir.
 4. Tuş `/mcp-doctor reconnect <server>` komutunu çalıştırır. Bu komut engine'den `/mcp reconnect <server>` çalıştırmasını ister ve listeyi yeniden okur. Sonrasında hâlâ başarısız olan bir server, engine'in cevabını taşıyan tek bir satır alır.
-5. Geri gelen bir server kırmızı section'ını kaybeder ve tek bir yeşil satır alır: `flaky: connected again`. Hâlâ bağlanan bir server olduğu gibi kalır.
+5. Geri gelen bir server section'ını kaybeder ve `connected again` kısmı yeşil olan tek bir satır alır: `flaky: connected again`. Hâlâ bağlanan bir server olduğu gibi kalır.
 6. Aynı hata bir kere yazılır. Aynı server'ı yine başarısız bulan sonraki bir turn hiçbir şey yazmaz.
 
 claude.ai connector'ları (`claude.ai <ad>` adlı server'lar) dışarıda kalır, çünkü onlar bu makinenin config'ine değil hesaba aittir. Model bu mod'dan not almaz, çünkü engine ona zaten bildirir.
@@ -36,7 +36,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 ## Kurulumdan sonra
 
 1. Claude Code'u yeniden başlatın.
-2. Kırmızı section ve tuşu için [sidebar](../sidebar) mod'unu kurun. O olmadan mod her server için tek bir transcript satırı yazar.
+2. Section ve tuşu için [sidebar](../sidebar) mod'unu kurun. O olmadan mod her server için tek bir transcript satırı yazar.
 
 ## Nereye uzanır
 
