@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { distance, lookAlike } from '../hooks/popular.ts'
-import { compareVersions, cratesInfo, goInfo, goOldest, latestInMajor, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl } from '../hooks/registry.ts'
+import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry.ts'
 import { denyText, gateText, isGuarded, modeOf, registryReasons, targetVersion, vulnReason } from '../hooks/rules.ts'
 
 tier('user')
@@ -10,6 +10,18 @@ const NOW = Date.parse('2026-09-19T12:00:00Z')
 const DAY = 24 * 60 * 60 * 1000
 
 describe('registry answers', () => {
+  // Measured: rollup's document is cut at 4,194,304 bytes; npm view prints an array of one object.
+  test('a body at the fetch limit reads as cut, counted in UTF-8 bytes, and npm view reads as the registry', () => {
+    expect(reachedFetchLimit('x'.repeat(FETCH_BODY_LIMIT))).toBe(true)
+    expect(reachedFetchLimit('x'.repeat(FETCH_BODY_LIMIT - 1))).toBe(false)
+    expect(reachedFetchLimit('é'.repeat(FETCH_BODY_LIMIT / 2))).toBe(true)
+    const view = [{ 'time.created': '2015-05-14T22:30:38.015Z', 'dist-tags.latest': '4.63.5', versions: ['0.1.0', '4.63.5'] }]
+    expect(npmViewInfo(view)).toEqual({ latest: '4.63.5', versions: ['0.1.0', '4.63.5'], created: Date.parse('2015-05-14T22:30:38.015Z') })
+    expect(npmViewInfo(view[0])).toEqual(npmViewInfo(view))
+    expect(npmViewInfo([{ 'dist-tags.latest': '1.0.0' }])).toBe(undefined)
+  })
+
+
   test('reads each registry into the latest version, the versions and the first publish time', async () => {
     expect(npmInfo({ 'dist-tags': { latest: '4.17.21' }, versions: { '4.17.15': {}, '4.17.21': {} }, time: { created: '2012-04-23T16:37:11.912Z' } }))
       .toEqual({ latest: '4.17.21', versions: ['4.17.15', '4.17.21'], created: Date.parse('2012-04-23T16:37:11.912Z') })

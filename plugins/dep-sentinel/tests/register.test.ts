@@ -60,7 +60,7 @@ function world(on: On): World {
     w.asked.push(e.url)
     if (w.down || (w.downFor !== undefined && e.url.includes(w.downFor))) throw new Error('network unreachable')
     const hit = e.url === 'https://api.osv.dev/v1/query' ? { status: 200, body: w.osv } : w.answers.get(e.url) ?? { status: 404, body: {} }
-    return { value: { status: hit.status, ok: hit.status < 300, headers: {}, text: JSON.stringify(hit.body) } }
+    return { value: { status: hit.status, ok: hit.status < 300, headers: {}, text: typeof hit.body === 'string' ? hit.body : JSON.stringify(hit.body) } }
   })
   on('tool.call', { tool: 'Bash' }, (_, e) => { w.ran.push(e.command); return { result: 'ok' } as never })
   return w
@@ -81,6 +81,26 @@ describe('dep-sentinel', () => {
     expect(w.asked).toEqual(['https://registry.npmjs.org/lodash', 'https://api.osv.dev/v1/query'])
     const r = await $.tool.call({ tool: 'Bash', command: 'npm i lodash-utilz-x' })
     expect(r.deny).toMatch(/^dep-sentinel stopped this install: lodash-utilz-x \(npm\) does not exist on the registry; check the name\./)
+  })
+
+  // Measured: the engine's fetch cuts rollup's 6 MB document at 4,194,304 bytes and still answers 200.
+  test('an npm document cut at the fetch limit is read through npm view, and a failing npm view leaves the package unchecked', async ($, on) => {
+    const w = world(on)
+    const cut = `{"name":"rollup","versions":{"0.1.0":{"description":"${'x'.repeat(4 * 1024 * 1024)}`
+    w.answers.set('https://registry.npmjs.org/rollup', { status: 200, body: cut })
+    const argvs: string[][] = []
+    let npmFails = false
+    on('process.run', (_, e) => {
+      argvs.push([...e.argv])
+      const view = [{ 'time.created': '2015-05-14T22:30:38.015Z', 'dist-tags.latest': '4.63.5', versions: ['4.63.4', '4.63.5'] }]
+      return { value: npmFails ? { exitCode: 1, stdout: '', stderr: 'npm error code E404\n' } : { exitCode: 0, stdout: JSON.stringify(view), stderr: '' } }
+    })
+    expect(await $.tool.call({ tool: 'Bash', command: 'npm i -D rollup' })).toEqual({ result: 'ok' })
+    expect(argvs).toEqual([['npm', 'view', 'rollup', 'time.created', 'dist-tags.latest', 'versions', '--json']])
+    expect((await $.tool.call({ tool: 'Bash', command: 'npm i rollup@4.63.4' })).deny).toMatch(/rollup@4\.63\.4 \(npm\) is not the latest version: the latest is 4\.63\.5/)
+    npmFails = true
+    const r = await $.tool.call({ tool: 'Bash', command: 'npm i rollup' })
+    expect(r.context?.join('\n')).toMatch(/rollup \(npm view exited 1: npm error code E404\)/)
   })
 
   withSidebar('an open sidebar takes the unchecked and skipped packages, and the transcript stays clean', async ($, on) => {

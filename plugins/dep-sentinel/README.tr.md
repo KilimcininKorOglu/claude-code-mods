@@ -12,7 +12,7 @@ Modelin kurduğu her paketi, kurulum çalışmadan önce kontrol eden bir Claude
    - Packagist: `composer require`.
 
    Local bir path, bir URL, bir git kaynağı, bir requirements dosyası (`-r`) ve editable kurulum (`-e`) kontrol edilmez. Komut başına en fazla 10 paket kontrol edilir.
-2. Her paket için registry'ye sorar: registry.npmjs.org, pypi.org, proxy.golang.org, crates.io ya da repo.packagist.org. Bir Go paket path'i, proxy'nin bildiği en yakın üst path olan module'ü üzerinden aranır.
+2. Her paket için registry'ye sorar: registry.npmjs.org, pypi.org, proxy.golang.org, crates.io ya da repo.packagist.org. Bir Go paket path'i, proxy'nin bildiği en yakın üst path olan module'ü üzerinden aranır. Claude Code bir mod'a bir yanıtın en fazla 4 MiB'ını verir ve kalanını hiçbir işaret vermeden keser. Bir npm dokümanı bundan büyük olabilir (webpack 5 MB, vite 39 MB). Böyle bir paket için mod bunun yerine `npm view <ad> time.created dist-tags.latest versions --json` çalıştırır. PATH'te npm yoksa paket kontrol edilmemiş kalır. Başka bir registry'den gelen daha büyük bir yanıt, adıyla kontrol edilmemiş olarak bildirilir.
 3. OSV.dev'e, kurulacak version'ın bilinen açıklarını sorar: sabitlenmiş version, yoksa en günceli.
 4. Kurulum şu durumlarda durdurulur:
    - hiçbir registry paketi tanımıyorsa;
@@ -74,12 +74,12 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.process.run (via npmView), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
 
 Reach L3, network'e çıkar.
 
     1. Okur:     Bash komut metnini
-    2. Çalıştırır: hiçbir şey
+    2. Çalıştırır: npm view, yalnız registry dokümanı bir fetch'in okuduğu 4 MiB'ı geçen bir npm paketi için
     3. Gönderir: her paket adını ve version'ını kendi açık registry'sine ve api.osv.dev adresine; kurulumda, bulgu açıkken guarded bir git komutunda ve her turn sonunda tekrar; bir kontrol başarısız olduğunda modele bir not ve transcript'e bir satır, bulgu dururken bir sonraki prompt ile bir not daha; makineden başka hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve modu
     5. Düşman girdi: paket adı modelin komutundan gelir; registry'ye yalnız bir URL path'i ya da bir JSON gövdesi içinde ulaşır ve registry cevabı veri olarak okunur

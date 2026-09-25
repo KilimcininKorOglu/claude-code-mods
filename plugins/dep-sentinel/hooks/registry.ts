@@ -55,6 +55,38 @@ export function registryUrl(p: Pick<Install, 'ecosystem' | 'name'>): string {
   return urls[p.ecosystem]
 }
 
+/**
+ * The most of a body `$.http.fetch` hands back: it cuts the rest and still answers 200 with no sign of
+ * the cut (measured on 2.1.282). npm documents pass it (webpack 5 MB, vite 39 MB).
+ */
+export const FETCH_BODY_LIMIT = 4 * 1024 * 1024
+
+/** The UTF-8 length of a text: the unit the fetch limit counts in. */
+function utf8Length(text: string): number {
+  let n = 0
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0
+    n += c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4
+  }
+  return n
+}
+
+/** Whether a body reached the fetch limit, and so may have been cut. */
+export const reachedFetchLimit = (text: string): boolean => text.length >= FETCH_BODY_LIMIT / 4 && utf8Length(text) >= FETCH_BODY_LIMIT
+
+/**
+ * `npm view <name> time.created dist-tags.latest versions --json`: npm prints an array of one object; an
+ * object is read the same way.
+ */
+export function npmViewInfo(json: unknown): Info | undefined {
+  const row = obj(Array.isArray(json) ? json[0] : json)
+  const latest = str(row['dist-tags.latest'])
+  const versions = row['versions']
+  if (latest === undefined || !Array.isArray(versions)) return undefined
+  const created = time(row['time.created'])
+  return { latest, versions: versions.filter((v): v is string => typeof v === 'string'), ...(created === undefined ? {} : { created }) }
+}
+
 export function npmInfo(json: unknown): Info | undefined {
   const doc = obj(json)
   const latest = str(obj(doc['dist-tags'])['latest'])

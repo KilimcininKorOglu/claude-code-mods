@@ -12,7 +12,7 @@ A Claude Code Mod that checks each package the model installs before the install
    - Packagist: `composer require`.
 
    A local path, a URL, a git source, a requirements file (`-r`) and an editable install (`-e`) are not checked. At most 10 packages per command are checked.
-2. For each package it asks the registry: registry.npmjs.org, pypi.org, proxy.golang.org, crates.io or repo.packagist.org. A Go package path is looked up at its module, the nearest parent path the proxy knows.
+2. For each package it asks the registry: registry.npmjs.org, pypi.org, proxy.golang.org, crates.io or repo.packagist.org. A Go package path is looked up at its module, the nearest parent path the proxy knows. Claude Code hands a mod at most 4 MiB of an answer and cuts the rest without a sign, and an npm document can be larger (webpack 5 MB, vite 39 MB). For such a package the mod runs `npm view <name> time.created dist-tags.latest versions --json` instead; without npm on the PATH the package stays unchecked. A larger answer from another registry is reported as unchecked by name.
 3. It asks OSV.dev for known vulnerabilities of the version that would be installed: the pinned version, else the latest.
 4. The install is stopped when:
    - no registry knows the package;
@@ -74,12 +74,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
     ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.process.run (via npmView), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
 
 Reach L3, reaches the network.
 
     1. Reads:    the Bash command text
-    2. Runs:     nothing
+    2. Runs:     npm view, only for an npm package whose registry document passes the 4 MiB a fetch reads
     3. Sends:    each package name, and its version, to its public registry and to api.osv.dev, at an install and again at a guarded git command and at each turn's end while a finding is open; a note to the model and one line to the transcript when a check failed, and one more note with the next prompt while a finding stands; nothing else leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a package name comes from the model's command; it reaches a registry only inside a URL path or a JSON body, and a registry answer is read as data

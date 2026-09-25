@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse.ts'
-import { cratesInfo, goInfo, goOldest, npmInfo, osvVulns, packagistInfo, pypiInfo, registryUrl, type Info } from './registry.ts'
+import { cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl, type Info } from './registry.ts'
 import { checkedLog, denyText, doneLines, gateCheckedLog, gateText, isGuarded, lateReasonLog, missingReason, modeOf, openNote, registryReasons, sidebarLines, targetVersion, uncheckedLog, uncheckedNote, vulnReason, type Mode } from './rules.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -67,11 +67,30 @@ async function goModule($: EngineInterface, p: Install): Promise<Info | undefine
   return undefined
 }
 
-/** The registry's answer for a package, or undefined when the registry does not know it. */
+/** How long `npm view` may take; it answers in about a second for next's 24 MiB document (measured). */
+const NPM_VIEW_MS = 60_000
+
+/** npm's own reading of a package whose registry document passed the fetch limit. */
+async function npmView($: EngineInterface, p: Install): Promise<Info> {
+  const r = await $.process.run(['npm', 'view', p.name, 'time.created', 'dist-tags.latest', 'versions', '--json'], { timeoutMs: NPM_VIEW_MS })
+  if (r.exitCode !== 0) throw new Error(`npm view exited ${r.exitCode}: ${r.stderr.split('\n')[0] ?? ''}`)
+  const info = npmViewInfo(JSON.parse(r.stdout))
+  if (info === undefined) throw new Error(`npm view answered for ${p.name} in a shape dep-sentinel does not read`)
+  return info
+}
+
+/**
+ * The registry's answer for a package, or undefined when the registry does not know it. An npm document
+ * cut at the fetch limit is read through `npm view`; another registry's cut document is named as such.
+ */
 async function lookUp($: EngineInterface, p: Install): Promise<Info | undefined> {
   if (p.ecosystem === 'Go') return goModule($, p)
   const r = await fetchText($, registryUrl(p))
   if (r.status !== 200) return undefined
+  if (reachedFetchLimit(r.text)) {
+    if (p.ecosystem === 'npm') return npmView($, p)
+    throw new Error(`the ${p.ecosystem} document of ${p.name} passed the ${FETCH_BODY_LIMIT} bytes a fetch reads`)
+  }
   const json = JSON.parse(r.text) as unknown
   const read = { npm: npmInfo, PyPI: pypiInfo, 'crates.io': cratesInfo, Packagist: (j: unknown) => packagistInfo(j, p.name) }[p.ecosystem]
   const info = read(json)
