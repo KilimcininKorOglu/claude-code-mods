@@ -481,6 +481,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "bash-diet",
+      "source": "./plugins/bash-diet",
+      "description": "Shrinks each Bash result before the model reads it: per-command filters for git, test runners, linters, package managers, containers and file tools, the full output kept in a file. Needs function hooks (early access).",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
