@@ -10,7 +10,7 @@ A Claude Code Mod that picks the recommended option of a question that waited un
 
    The tool tells the model to put the option it recommends first and to end its label with `(Recommended)`, and in a question written in another language the model writes that word in the language. So the recommended option is the first one, when its label ends with that word in parentheses in one of these languages and no other option carries it: English, Turkish, German, Spanish, Portuguese, French, Italian, Dutch, Polish, Russian, Chinese, Japanese and Korean. Full-width parentheses count too.
 4. The model gets one note with the answer: you did not answer within the wait, so the pick is a default and not your decision, and its next reply names it. In the live check the model wrote that you did not choose it.
-5. One yellow entry says what was picked, in the sidebar's stream while the [sidebar](../sidebar) is open, else as a transcript line:
+5. One entry says what was picked, in the sidebar's stream while the [sidebar](../sidebar) is open, else as a transcript line. In the sidebar the picked answer is yellow and the question and the rest are faint:
 
        ask-autopick: no answer in 10 min, picked the recommended option: Renk? → Mavi (Önerilen)
 

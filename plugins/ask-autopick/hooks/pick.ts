@@ -60,15 +60,41 @@ export function minutesOf(arg: string): number | undefined {
   return n >= MIN_MINUTES && n <= MAX_MINUTES ? n : undefined
 }
 
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/**
+ * The pick as a sidebar line: each picked answer yellow, the questions and the rest faint. The line is
+ * yellow as a whole for a sidebar that draws no parts.
+ */
+export function pickedLine(minutes: number, answers: Record<string, string>): Line {
+  const each = Object.entries(answers).flatMap(([q, a], i): Part[] => [
+    ...(i === 0 ? [] : [{ text: '; ', kind: 'dim' as const }]),
+    { text: `${q} → `, kind: 'dim' },
+    { text: a, kind: 'warn' },
+  ])
+  return { ...partsLine([{ text: `no answer in ${minutes} min, picked the recommended option: `, kind: 'dim' }, ...each]), kind: 'warn' }
+}
+
 /** The pick as the person reads it: each question with the option it got. */
 export function pickedLog(minutes: number, answers: Record<string, string>): string {
-  const each = Object.entries(answers).map(([q, a]) => `${q} → ${a}`).join('; ')
-  return `no answer in ${minutes} min, picked the recommended option: ${each}`
+  return pickedLine(minutes, answers).text
 }
 
 /** The line the person reads when a question has nothing to pick. */
 export function waitsLog(minutes: number): string {
   return `a question has no recommended first option or takes several answers, so it waits for you past ${minutes} min`
+}
+
+/** The waiting question as a sidebar line: yellow, because nothing failed and the person is asked. */
+export function waitsLine(minutes: number): Line {
+  return { text: waitsLog(minutes), kind: 'warn' }
 }
 
 /** The note the model reads after a picked answer, so it does not read the pick as the person's choice. */

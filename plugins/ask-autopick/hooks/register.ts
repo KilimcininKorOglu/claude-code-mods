@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { DEFAULT_MINUTES, minutesOf, pickedLog, pickedNote, picksOf, statusText, USAGE, waitsLog, type Question } from './pick.ts'
+import { DEFAULT_MINUTES, minutesOf, pickedLine, pickedNote, picksOf, statusText, USAGE, waitsLine, type Line, type Question } from './pick.ts'
 
 const ENABLED_KEY = 'enabled'
 const MINUTES_KEY = 'minutes'
@@ -8,13 +8,13 @@ const MINUTES_KEY = 'minutes'
 type State = { enabled: boolean; minutes: number }
 
 /** What the person reads: an entry in the shared sidebar's stream while it is open, else one transcript line. */
-async function toPerson($: EngineInterface, key: string, text: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, line: Line): Promise<void> {
   try {
-    if (await $.sidebar.set({ consumer: 'ask-autopick', key, title: 'question answered for you', lines: [{ text, kind: 'warn' }], until: 'stream' })) return
+    if (await $.sidebar.set({ consumer: 'ask-autopick', key, title: 'question answered for you', lines: [line], until: 'stream' })) return
   } catch {
     // The sidebar mod is not installed.
   }
-  $.ui.log(text)
+  $.ui.log(line.text)
 }
 
 /**
@@ -35,7 +35,7 @@ async function answerOrPick($: EngineInterface, state: State, questions: Questio
   }
   // The abandoned dialog settles on its own; its result is not the call's any more.
   pending.catch(() => undefined)
-  await toPerson($, 'picked', pickedLog(minutes, answers))
+  await toPerson($, 'picked', pickedLine(minutes, answers))
   return { result: { questions, answers, annotations: {} }, context: [pickedNote(minutes)] } as never
 }
 
@@ -80,7 +80,7 @@ export const register: Register = on => {
     const questions = (e as unknown as { questions?: Question[] }).questions ?? []
     const answers = picksOf(questions)
     if (answers === undefined) {
-      await toPerson($, 'waits', waitsLog(state.minutes))
+      await toPerson($, 'waits', waitsLine(state.minutes))
       return next(e)
     }
     return answerOrPick($, state, questions, answers, next(e))

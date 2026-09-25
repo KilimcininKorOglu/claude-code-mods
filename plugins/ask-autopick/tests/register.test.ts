@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { minutesOf, picksOf } from '../hooks/pick.ts'
+import { minutesOf, pickedLine, pickedLog, picksOf, waitsLine, waitsLog } from '../hooks/pick.ts'
 
 tier('user')
 
@@ -112,5 +112,22 @@ describe('picks', () => {
     for (const options of [[{ label: 'a' }, { label: 'b (Recommended)' }], [{ label: '(Recommended) a' }, { label: 'b' }], [{ label: 'Mavi (koyu)' }, { label: 'b' }]]) {
       expect(picksOf([{ question: 'q', options }]), JSON.stringify(options)).toBe(undefined)
     }
+  })
+
+  test('the sidebar draws each picked answer yellow and the rest faint, and a waiting question yellow', () => {
+    const answers = { 'Renk?': 'Mavi (Recommended)', 'Boyut?': 'Büyük (Önerilen)' }
+    expect(pickedLine(10, answers)).toEqual({
+      text: pickedLog(10, answers),
+      kind: 'warn',
+      parts: [
+        { text: 'no answer in 10 min, picked the recommended option: ', kind: 'dim' },
+        { text: 'Renk? → ', kind: 'dim' },
+        { text: 'Mavi (Recommended)', kind: 'warn' },
+        { text: '; ', kind: 'dim' },
+        { text: 'Boyut? → ', kind: 'dim' },
+        { text: 'Büyük (Önerilen)', kind: 'warn' },
+      ],
+    })
+    expect(waitsLine(10)).toEqual({ text: waitsLog(10), kind: 'warn' })
   })
 })
