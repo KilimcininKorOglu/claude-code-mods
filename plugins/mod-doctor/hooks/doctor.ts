@@ -131,15 +131,37 @@ export function fixText(mods: readonly Mod[]): string {
   return `claude plugin update ${mods.map(m => `${m.name}@${m.marketplace}`).join(' ')}`
 }
 
-/** A sidebar line, as the sidebar mod's contract names it. */
-type Line = { text: string; kind: 'error' | 'dim' }
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The colour of a jump by the first part that differs: a major red, a minor yellow, a patch or later green. */
+export function jumpTone(installed: string, offered: string): Tone {
+  const a = parts(offered)
+  const b = parts(installed)
+  const at = Array.from({ length: Math.max(a.length, b.length) }, (_, i) => i).find(i => (a[i] ?? 0) !== (b[i] ?? 0))
+  if (at === 0) return 'error'
+  return at === 1 ? 'warn' : 'ok'
+}
+
+/** One row in parts: the name, the version installed faint, and the version offered coloured by the jump. */
+function rowLine(mod: Mod): Line {
+  return partsLine([part(`${mod.name} `, undefined), part(mod.installed, 'dim'), part(' → ', undefined), part(mod.offered, jumpTone(mod.installed, mod.offered))])
+}
 
 /**
- * The pane's lines: one red row per plugin that is behind, the update command faint under them. The rows
+ * The pane's lines: one row per plugin that is behind, the update command faint under them. The rows
  * past the eighth are one faint line, so forty installed plugins still hold nine rows.
  */
 export function sidebarLines(mods: readonly Mod[]): Line[] {
-  const lines: Line[] = mods.slice(0, ROWS).map(mod => ({ text: rowText(mod), kind: 'error' }))
+  const lines: Line[] = mods.slice(0, ROWS).map(rowLine)
   const rest = mods.length - ROWS
   if (rest > 0) lines.push({ text: `${rest} more plugin(s) behind`, kind: 'dim' })
   lines.push({ text: fixText(mods.slice(0, ROWS)), kind: 'dim' })

@@ -13,7 +13,7 @@ Yerel clone'u zaten daha yeni bir sürüm sunan her kurulu plugin'i, her marketp
        turkish-native 1.0.0 → 1.2.0
        claude plugin update sidebar@kilimcininkoroglu-mods turkish-native@turkish-native
 
-   Sekizinciden sonraki satırlar tek bir soluk satırda sayılır. Sidebar kapalıyken ya da o mod kurulu değilken aynı bulgu tek bir transcript satırıdır.
+   Her satırda kurulu sürüm soluktur, sunulan sürüm ise atlamaya göre renklenir: yeni bir major sürüm kırmızı, yeni bir minor sürüm sarı, yeni bir patch yeşil. Sekizinciden sonraki satırlar tek bir soluk satırda sayılır. Sidebar kapalıyken ya da o mod kurulu değilken aynı bulgu tek bir transcript satırıdır.
 4. Her kurulu plugin clone'unun sürümündeyken hiçbir şey çizilmez ve bu doğru olur olmaz section kaldırılır.
 5. İkinci ölçüm, ilkinin çözemediği iki durumu çözer: bu session açıkken başka bir pencerede güncellediğiniz bir plugin, ve bu mod ilk ölçtüğünde kendi plugin'i pane'ini henüz açmamış bir sidebar. Bulgu transcript'e bir kere ulaşır; aynı bulgunun ikinci ölçümü hiçbir şey söylemez.
 6. `/mod-doctor` anında yeniden ölçer ve ayarı, kapsamı, kaç plugin tuttuğunu ve hangilerinin geride olduğunu yazar. `/mod-doctor marketplace <name>` bunu tek bir marketplace'e daraltır, `marketplace all` yeniden genişletir.

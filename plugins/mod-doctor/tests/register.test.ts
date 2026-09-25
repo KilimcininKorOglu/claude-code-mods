@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
 
-import { installedOf, isNewer, marketplaceOf, rowText, sidebarLines, sourcesOf, statusText, versionOf } from '../hooks/doctor.ts'
+import { installedOf, isNewer, jumpTone, marketplaceOf, rowText, sidebarLines, sourcesOf, statusText, versionOf } from '../hooks/doctor.ts'
 
 tier('user')
 
@@ -113,9 +113,13 @@ describe('mod-doctor', () => {
     const mods = Array.from({ length: 10 }, (_, i) => ({ name: `m${i}`, marketplace: 'my-mods', installed: '0.1.0', offered: '0.2.0' }))
     const lines = sidebarLines(mods)
     expect(lines).toHaveLength(10)
-    expect(lines[0]).toEqual({ text: 'm0 0.1.0 → 0.2.0', kind: 'error' })
+    expect(lines[0]).toEqual({ text: 'm0 0.1.0 → 0.2.0', parts: [{ text: 'm0 ' }, { text: '0.1.0', kind: 'dim' }, { text: ' → ' }, { text: '0.2.0', kind: 'warn' }] })
     expect(lines[8]).toEqual({ text: '2 more plugin(s) behind', kind: 'dim' })
     expect(lines[9]?.text).toContain('claude plugin update m0@my-mods')
+  })
+
+  test('the offered version is red for a major jump, yellow for a minor one and green for a patch', () => {
+    expect([jumpTone('1.4.2', '2.0.0'), jumpTone('0.4.1', '0.5.0'), jumpTone('0.4.1', '0.4.2'), jumpTone('0.4', '0.4.0.1')]).toEqual(['error', 'warn', 'ok', 'ok'])
   })
 
   test('every marketplace is read, each plugin against its own clone', async ($, on) => {

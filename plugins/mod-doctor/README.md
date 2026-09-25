@@ -13,7 +13,7 @@ A Claude Code Mod that names each installed plugin, of every marketplace, whose 
        turkish-native 1.0.0 → 1.2.0
        claude plugin update sidebar@kilimcininkoroglu-mods turkish-native@turkish-native
 
-   The rows past the eighth are counted in one faint line. With the sidebar closed, or without that mod installed, the same finding is one transcript line.
+   In each row the installed version is faint and the offered version is coloured by the jump: a new major version red, a new minor version yellow, a new patch green. The rows past the eighth are counted in one faint line. With the sidebar closed, or without that mod installed, the same finding is one transcript line.
 4. Nothing is drawn while every installed plugin is at its clone's version, and the section is taken down as soon as that is true.
 5. The second measure settles two cases the first cannot: a plugin you updated in another window while this session was open, and a sidebar whose own plugin had not opened its pane yet when this mod first measured. The finding reaches the transcript once; a second measure of the same finding says nothing.
 6. `/mod-doctor` measures again on the spot and prints the setting, the scope, how many plugins it holds and which are behind. `/mod-doctor marketplace <name>` narrows it to one marketplace, and `marketplace all` widens it back.
