@@ -459,6 +459,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "desk-notify",
+      "source": "./plugins/desk-notify",
+      "description": "Sends a desktop notification when a question or a plan waits for your answer, and when a turn ends or fails.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
