@@ -83,7 +83,7 @@ function fromReport(tool: string, r: Report): FilterResult {
 /** A test runner's text report: passing lines go; failure blocks and the summary stay. */
 function testText(input: { text: string }): FilterResult {
   const lines = linesOf(input.text).filter(l => !NPM_NOISE.test(l))
-  const kept = lines.filter(l => !/^\s*(✓|√|\(pass\)|ok \d+|PASS\s)/.test(l) && !/^\s*(RUN|Start at|Snapshots:|Ran all test suites|Duration)\b/.test(l.trim()) && !/^bun test v/.test(l))
+  const kept = lines.filter(l => !/^\s*(✓|√|\(pass\)|ok \d+|PASS\s)/.test(l) && !/^\s*(RUN\b|Start at\b|Snapshots:|Ran all test suites|Duration\b|Time:)/.test(l.trim()) && !/^bun test v/.test(l))
   return whole(kept.filter((l, i) => l.trim() !== '' || (kept[i - 1] ?? '').trim() !== ''))
 }
 

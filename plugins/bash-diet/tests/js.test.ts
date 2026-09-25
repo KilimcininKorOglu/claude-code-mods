@@ -61,6 +61,7 @@ describe('test runners', () => {
     expect(r.text).toContain('× breaks 5ms')
     expect(r.text).toContain('Tests  1 failed | 2 passed (3)')
     expect(r.text).not.toContain('Duration')
+    expect(run('jest', 'Tests:       1 failed, 15 passed, 16 total\nSnapshots:   0 total\nTime:        0.235 s\n', [], 1).text).toBe('Tests:       1 failed, 15 passed, 16 total')
     expect(run('bun test', 'bun test v1.4.0 (34cbb9a40)\n\nx.test.ts:\nerror: expect(received).toBe(expected)\n\nExpected: 2\nReceived: 1\n\n(pass) ok [0.20ms]\n(fail) bad [4.14ms]\n\n 1 pass\n 1 fail\n', [], 1).text)
       .toBe('x.test.ts:\nerror: expect(received).toBe(expected)\n\nExpected: 2\nReceived: 1\n\n(fail) bad [4.14ms]\n\n 1 pass\n 1 fail')
   })
