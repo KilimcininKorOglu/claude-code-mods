@@ -45,7 +45,7 @@ describe('rule language', () => {
     const rules = [rule({ match_command: '(?i)^MAKE( |$)' })]
     expect(ruleFor(rules, ['make', 'all'])?.name).toBe('t')
     expect(ruleFor(rules, ['maker'])).toBe(undefined)
-    expect(planFor('FOO=1 timeout 60 make all')?.family).toBe('builtin rule make')
+    expect(planFor('FOO=1 timeout 60 rsync -a a b')?.family).toBe('builtin rule rsync')
   })
 
   test('a file with mistakes keeps its good rules and names every mistake', () => {

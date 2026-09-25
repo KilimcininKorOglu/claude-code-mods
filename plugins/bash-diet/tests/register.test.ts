@@ -225,7 +225,7 @@ describe('bash-diet', () => {
     put(w, GLOBAL_RULES, ruleFile('^git status', 'modified'))
     w.stdout = 'On branch main\nChanges not staged for commit:\n\tmodified:   a.ts\n\tmodified:   b.ts\n'
     expect(stdoutOf(await bash($, 'git status'))).toBe('\tmodified:   a.ts\n\tmodified:   b.ts')
-    expect((await $.command.run(run('filters'))).text).toMatch(/^project: \.bash-diet\/filters\.json \(none\)\nglobal: ~\/\.claude\/bash-diet\/filters\.json: mine\nbuilt-in: cc, make, /)
+    expect((await $.command.run(run('filters'))).text).toMatch(/^project: \.bash-diet\/filters\.json \(none\)\nglobal: ~\/\.claude\/bash-diet\/filters\.json: mine\nbuilt-in: cc, cmake-build, /)
     put(w, GLOBAL_RULES, '{ "filters": { "bad": { "match_command": "^x", "max_lines": -1, "colour": true } } }')
     await bash($, 'git status')
     expect(w.logs).toEqual(['~/.claude/bash-diet/filters.json: bad: max_lines expects a whole number above 0; bad: unknown field colour'])

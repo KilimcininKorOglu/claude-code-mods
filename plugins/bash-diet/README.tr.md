@@ -44,7 +44,8 @@ Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki
 | Dosyalar ve sistem | `ls`, ve dizin başına bir satır olarak `ls -R`; `-v` ile `cp`, `mv`, `rm`, `ln` (her hata, ilk beş yol ve toplam sayı), `gcp`, `gmv`, `grm`, `gln` adlarıyla da; `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` ve `printenv` (credential değerleri maskelenir), `ps` |
 | Container'lar | `docker ps`, `docker images`, `docker image ls`, `docker logs`, `docker build`, `docker pull`, `docker inspect`, `docker compose` (`ps`, `logs` ve diğerleri); `kubectl get`, `kubectl logs`, `kubectl describe`; `oc get`, `oc logs`; `helm list` |
 | Cloud'lar ve ağ | `aws` (`aws s3 ls` sınırlı bir liste olarak, diğerleri JSON olarak), `gcloud`; `terraform plan`, `terraform apply`, `tofu plan`, `tofu apply`; `pulumi`; `curl`, `wget` |
-| Built-in kurallar | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (`gcc-14` gibi bir sürüm ekiyle de); `make`, `gmake`; `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
+| make | `make`, `gmake`: make'in dizin satırları ve derleyici kaynak alıntıları atılır, her runner'ın geçen bir test için yazdığı satır (`go test -v`, `cargo test`, `pytest -v`, `vitest --reporter=verbose`, `claude plugin test`) tek bir sayıya iner; her hata, özet ve diğer satırlar kalır |
+| Built-in kurallar | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (`gcc-14` gibi bir sürüm ekiyle de); `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
 
 - Bir runner ile başlatılan komut, başlattığı komut olarak okunur: `npx`, `bunx`, `pnpx`, `pnpm exec` ve `dlx`, `npm exec` ve `x`, `uv run`, `poetry run`, `pipenv run`, `bundle exec`, `python -m`, `python3 -m`, `php artisan`. Mutlak bir yol (`/usr/bin/git`) base name'i olarak, `git -C <dizin>` ise `git` olarak okunur.
 - Diğer her komut genel temizliği alır: renk kodları, carriage-return ile yeniden çizimler ve tekrarlanan satırlar gider.
@@ -101,6 +102,9 @@ O session'dan sonra eklenen filtreler, bir deneme projesinde her biri bir kez ç
 | `rollup` (bir parse hatası) | 1.554 | 178 | %89 |
 | `mocha` | 897 | 455 | %49 |
 | `cypress run` | 5.517 | 327 | %94 |
+| Bu modun `make check`'i (lint, typecheck, validate, 129 test) | 15.131 | 1.684 | %89 |
+| `go test -v` çalıştıran `make test` | 563 | 307 | %45 |
+| `pytest -v` çalıştıran `make test` | 1.382 | 928 | %33 |
 
 ## Kendi kurallarınız
 

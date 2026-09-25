@@ -44,7 +44,8 @@ Every command the mod has a filter of its own for. A command marked `*` gets the
 | Files and system | `ls`, and `ls -R` as one line per directory; `cp`, `mv`, `rm`, `ln` with `-v` (every error, the first five paths and the count), also as `gcp`, `gmv`, `grm`, `gln`; `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` and `printenv` (credential values masked), `ps` |
 | Containers | `docker ps`, `docker images`, `docker image ls`, `docker logs`, `docker build`, `docker pull`, `docker inspect`, `docker compose` (`ps`, `logs` and the rest); `kubectl get`, `kubectl logs`, `kubectl describe`; `oc get`, `oc logs`; `helm list` |
 | Clouds and network | `aws` (`aws s3 ls` as a capped list, the rest as JSON), `gcloud`; `terraform plan`, `terraform apply`, `tofu plan`, `tofu apply`; `pulumi`; `curl`, `wget` |
-| Built-in rules | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (also with a version suffix such as `gcc-14`); `make`, `gmake`; `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
+| make | `make`, `gmake`: make's directory lines and the compiler source excerpts go, and the line each runner writes for a passing test (`go test -v`, `cargo test`, `pytest -v`, `vitest --reporter=verbose`, `claude plugin test`) reads as one count; every failure, summary and other line stays |
+| Built-in rules | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (also with a version suffix such as `gcc-14`); `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
 
 - A command started through a runner reads as the command it starts: `npx`, `bunx`, `pnpx`, `pnpm exec` and `dlx`, `npm exec` and `x`, `uv run`, `poetry run`, `pipenv run`, `bundle exec`, `python -m`, `python3 -m`, `php artisan`. An absolute path (`/usr/bin/git`) reads as its base name, and `git -C <dir>` as `git`.
 - Every other command gets the generic cleanup: colour codes, carriage-return redraws and repeated lines go.
@@ -101,6 +102,9 @@ The filters added after that session were measured on one run each in a scratch 
 | `rollup` (a parse error) | 1,554 | 178 | 89% |
 | `mocha` | 897 | 455 | 49% |
 | `cypress run` | 5,517 | 327 | 94% |
+| `make check` of this mod (lint, typecheck, validate, 129 tests) | 15,131 | 1,684 | 89% |
+| `make test` running `go test -v` | 563 | 307 | 45% |
+| `make test` running `pytest -v` | 1,382 | 928 | 33% |
 
 ## Your own rules
 

@@ -15,12 +15,6 @@ export const BUILTIN_SPECS: Record<string, RuleSpec> = {
     strip_ansi: true,
     strip_lines_matching: EXCERPT,
   },
-  make: {
-    description: 'make: directory changes, nothing-to-do lines and compiler source excerpts go',
-    match_command: '^(make|gmake)( |$)',
-    strip_ansi: true,
-    strip_lines_matching: ['^make(\\[\\d+\\])?: (Entering|Leaving) directory', '^make(\\[\\d+\\])?: Nothing to be done for', ...EXCERPT],
-  },
   'cmake-build': {
     description: 'cmake --build: progress, compile and link steps go; errors stay',
     match_command: '^cmake --build( |$)',

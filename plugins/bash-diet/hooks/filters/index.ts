@@ -10,6 +10,7 @@ import { GIT } from './git.ts'
 import { GO } from './go.ts'
 import { JS } from './js.ts'
 import { JVM } from './jvm.ts'
+import { MAKE } from './make.ts'
 import { PHP } from './php.ts'
 import { PYTHON } from './python.ts'
 import { RUBY } from './ruby.ts'
@@ -17,7 +18,7 @@ import { RUST } from './rust.ts'
 import { SYSTEM } from './system.ts'
 
 /** Every ecosystem's table; a later table's key wins over an earlier one's. */
-const TABLES: FilterTable[] = [GIT, GH, RUST, GO, PYTHON, JS, SYSTEM, CLOUD, JVM, RUBY, PHP, DOTNET, APPLE, FORMAT, BUNDLE]
+const TABLES: FilterTable[] = [GIT, GH, RUST, GO, PYTHON, JS, SYSTEM, CLOUD, JVM, RUBY, PHP, DOTNET, APPLE, FORMAT, BUNDLE, MAKE]
 
 const FILTERS: FilterTable = Object.assign({}, ...TABLES)
 
