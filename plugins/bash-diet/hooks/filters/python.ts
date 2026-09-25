@@ -133,21 +133,37 @@ const INSTALL_NOISE = /^\s*(Requirement already satisfied|Collecting|Downloading
 
 const install = (input: { text: string }): FilterResult => whole(linesOf(input.text).filter(l => !INSTALL_NOISE.test(l) && !/^\s*[━╸─]+/.test(l)))
 
-function pip(input: { args: string[]; text: string; exitCode: number }): FilterResult {
-  if (input.args.includes('list') && hasArg(input.args, '--outdated', '-o')) return pipOutdated(input)
-  if (input.args.includes('list') && !hasArg(input.args, '--format')) return pipList(input)
-  return input.args.some(a => ['install', 'uninstall', 'sync', 'download'].includes(a)) ? install(input) : cleanup(input.text)
+/** `pip list` with the arguments after `list`: outdated packages, the list, or a format of its own. */
+function listing(input: { args: string[]; text: string }): FilterResult {
+  if (hasArg(input.args, '--outdated', '-o')) return pipOutdated(input)
+  return hasArg(input.args, '--format') ? cleanup(input.text) : pipList(input)
 }
 
+const INSTALLS = ['install', 'uninstall', 'sync', 'download']
+
+/** `uv pip <sub>`: the subcommand is the first argument here, because `pip` is uv's own subcommand. */
+function uvPip(input: { args: string[]; text: string; exitCode: number }): FilterResult {
+  const [sub = '', ...rest] = input.args
+  if (sub === 'list') return listing({ ...input, args: rest })
+  return INSTALLS.includes(sub) ? install(input) : cleanup(input.text)
+}
+
+/** `pip` and `pip3`: the subcommand is classified apart from the arguments, so each has its own entry. */
+const PIP: FilterTable = Object.fromEntries(['pip', 'pip3'].flatMap(tool => [
+  [`${tool} list`, { run: listing }],
+  ...INSTALLS.map(sub => [`${tool} ${sub}`, { run: install }]),
+]))
+
 export const PYTHON: FilterTable = {
+  ...PIP,
   pytest: { run: pytest, flags: pytestFlags },
   'ruff check': { run: ruff },
   'ruff format': { run: ({ text }) => cleanup(text) },
   ruff: { run: ruff },
   mypy: { run: mypy },
-  pip: { run: pip },
-  pip3: { run: pip },
-  'uv pip': { run: pip },
+  pip: { run: ({ text }) => cleanup(text) },
+  pip3: { run: ({ text }) => cleanup(text) },
+  'uv pip': { run: uvPip },
   'uv sync': { run: install },
   'uv add': { run: install },
   'uv lock': { run: install },

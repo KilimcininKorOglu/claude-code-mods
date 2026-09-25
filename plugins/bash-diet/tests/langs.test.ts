@@ -4,7 +4,7 @@ import type { FilterResult, FilterTable } from '../hooks/filters/common.ts'
 import { GO } from '../hooks/filters/go.ts'
 import { PYTHON } from '../hooks/filters/python.ts'
 import { RUST } from '../hooks/filters/rust.ts'
-import { planFor } from '../hooks/pipeline.ts'
+import { planFor, runFilter } from '../hooks/pipeline.ts'
 
 tier('user')
 
@@ -137,8 +137,14 @@ describe('python', () => {
   test('mypy groups by error code; pip list and install drop the noise', () => {
     expect(run('mypy', 'typed.py:2: error: Incompatible return value type (got "int", expected "str")  [return-value]\ntyped.py:3: error: Incompatible types in assignment (expression has type "str", variable has type "int")  [assignment]\nFound 2 errors in 1 file (checked 1 source file)\n', [], 1).text)
       .toBe('return-value (1): Incompatible return value type (got "int", expected "str")\n  typed.py\nassignment (1): Incompatible types in assignment (expression has type "str", variable has type "int")\n  typed.py\nmypy: 2 issues in 2 rules')
-    expect(run('pip', 'Package            Version\n------------------ -------\nanyio              4.12.1\npytest             9.0.2\n', ['list']).text).toBe('2 packages:\nanyio 4.12.1\npytest 9.0.2')
-    expect(run('pip', 'Collecting rich\n  Downloading rich-15.0.0-py3-none-any.whl (240 kB)\n     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 240.0/240.0 kB 2.1 MB/s eta 0:00:00\nRequirement already satisfied: pygments in ./venv (2.19.2)\nInstalling collected packages: rich\nSuccessfully installed rich-15.0.0\n', ['install', 'rich']).text)
+    // Through the plan, as the hook runs it: the subcommand is classified apart from the arguments.
+    const list = 'Package            Version     Editable project location\n------------------ ----------- -------------------------\nanyio              4.12.1\npytest             9.0.2\n'
+    for (const cmd of ['pip list', 'python3 -m pip list', 'uv pip list']) {
+      const plan = planFor(cmd)
+      if (plan === undefined) throw new Error(`no plan for ${cmd}`)
+      expect(runFilter(plan, list, 0, false).text, cmd).toBe('2 packages:\nanyio 4.12.1\npytest 9.0.2')
+    }
+    expect(run('pip install', 'Collecting rich\n  Downloading rich-15.0.0-py3-none-any.whl (240 kB)\n     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 240.0/240.0 kB 2.1 MB/s eta 0:00:00\nRequirement already satisfied: pygments in ./venv (2.19.2)\nInstalling collected packages: rich\nSuccessfully installed rich-15.0.0\n', ['install', 'rich']).text)
       .toBe('Successfully installed rich-15.0.0')
   })
 })
