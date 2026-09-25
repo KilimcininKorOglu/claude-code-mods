@@ -76,7 +76,7 @@ Restart Claude Code. The mod needs no key and no setting. It records from the fi
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=flaky}, tool.call{tool=Bash}
+    ❯ ./register.ts hooks: session.start, command.run{command=flaky-memory}, tool.call{tool=Bash}
     ❯ ./register.ts calls: $.clock.now (via learn, runCommand), $.command.register, $.process.run (via git), $.session.cwd, $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.delete (via forget), $.store.get (via isEnabled, loadHistory), $.store.set (via forget, learn, runCommand), $.ui.log
 
 Reach L2, runs git.
