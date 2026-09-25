@@ -176,6 +176,20 @@ describe('bash-diet', () => {
     expect([...w.files.keys()].filter(k => k.startsWith(DIR))).toEqual([])
   })
 
+  test('a result the engine kept in a file stays its preview when the filtered text is not shorter than it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // The cleanup drops the colour codes, so the filter shrinks the file, yet leaves far more than the preview.
+    const full = Array.from({ length: 3000 }, (_, i) => `\u001b[32mrow ${i}\u001b[0m`).join('\n')
+    w.files.set('/Users/u/.claude/out.txt', full)
+    w.stdout = '<persisted-output>\nOutput too large. Full output saved to: /Users/u/.claude/out.txt\n\nPreview (first 2KB):\nrow 0\n...\n</persisted-output>'
+    w.persisted = '/Users/u/.claude/out.txt'
+    const r = await bash($, './build.sh')
+    expect(stdoutOf(r)).toBe(w.stdout)
+    expect((r.result as Record<string, unknown>).persistedOutputPath).toBe('/Users/u/.claude/out.txt')
+    expect((await $.command.run(run(''))).text).toBe('on · no Bash result shrunk yet')
+  })
+
   test('a project rule runs only while its file is trusted, and a change takes the trust back', async ($, on) => {
     const w = world(on)
     await started($)

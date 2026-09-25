@@ -162,6 +162,14 @@ function shaped(r: ToolCallResult<'Bash'>, out: Output, text: string): ToolCallR
   return { result: { ...rec, stdout: text, stderr: '' } as never, context: r.context }
 }
 
+/**
+ * What the model reads without the mod: the engine's preview and path when it kept the output in a file,
+ * else the output itself.
+ */
+function unfiltered(r: ToolCallResult<'Bash'>, out: Output): string {
+  return out.persisted !== undefined && r.text !== undefined ? r.text : out.text
+}
+
 /** Filters one call's result, keeps its full output when something was left out, and counts the gain. */
 async function shrink($: EngineInterface, state: State, command: string, plan: Plan, flagged: boolean, r: ToolCallResult<'Bash'>): Promise<ToolCallResult<'Bash'>> {
   const out = await outputOf($, r)
@@ -170,10 +178,12 @@ async function shrink($: EngineInterface, state: State, command: string, plan: P
   if (!replaces(out.text, filtered.text, flagged)) return r
   const full = needsFile(filtered.elided, out.exitCode, out.text.length) ? await keepFull($, state, command, out) : undefined
   const text = full === undefined ? filtered.text : `${filtered.text}\n${fullOutputLine(full, out.isError && isCut(out.text))}`
+  const before = unfiltered(r, out)
+  if (out.persisted !== undefined && text.length >= before.length) return r
   state.calls += 1
-  state.rawChars += out.text.length
+  state.rawChars += before.length
   state.shownChars += text.length
-  await Promise.all([showGain($, state), recordGain($, state, plan.family, out.text.length, text.length)])
+  await Promise.all([showGain($, state), recordGain($, state, plan.family, before.length, text.length)])
   return shaped(r, out, text)
 }
 
