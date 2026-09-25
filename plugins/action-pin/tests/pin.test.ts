@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitUrl, denyText, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, shownPath, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
+import { commitUrl, denyText, doneLines, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, shownPath, sidebarLines, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
 
 tier('user')
 
@@ -49,6 +49,18 @@ describe('pin', () => {
     expect(shownPath('/tmp/ci.yml', '/Users/u/app')).toBe('/tmp/ci.yml')
     expect(shownPath('/tmp/ci.yml', undefined)).toBe('/tmp/ci.yml')
     expect(noteText([{ action: 'actions/checkout', ref: 'v4' }])).toContain('Pin each to the commit SHA of that tag')
+  })
+
+  test('the sidebar colours the moving ref red and the commit faint, the file red and the action default', () => {
+    const lines = sidebarLines('.github/workflows/ci.yml', [{ action: 'actions/checkout', ref: 'v4', sha: SHA }, { action: 'actions/cache', ref: 'main' }])
+    expect(lines).toEqual([
+      { text: '.github/workflows/ci.yml', kind: 'error' },
+      { text: `actions/checkout@v4 → ${SHA}`, parts: [{ text: 'actions/checkout' }, { text: '@v4', kind: 'error' }, { text: ` → ${SHA}`, kind: 'dim' }] },
+      { text: 'actions/cache@main', parts: [{ text: 'actions/cache' }, { text: '@main', kind: 'error' }] },
+    ])
+    const many = Array.from({ length: 12 }, (_, i) => ({ action: `a/b${i}`, ref: 'v1' }))
+    expect(sidebarLines('ci.yml', many).at(-1)).toEqual({ text: '2 more', kind: 'dim' })
+    expect(doneLines('ci.yml', ['a/b@v1'])).toEqual([{ text: 'ci.yml', kind: 'ok' }, { text: 'a/b@v1', kind: 'ok' }])
   })
 
   test('the gate stops a commit, a push and a merge, and says why', () => {

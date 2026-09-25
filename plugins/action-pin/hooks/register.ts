@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, shownPath, sidebarLines, unpinnedUses, type Mode, type Unpinned } from './pin.ts'
+import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, shownPath, sidebarLines, unpinnedUses, type Line, type Mode, type Unpinned } from './pin.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -74,7 +74,7 @@ async function withShas($: EngineInterface, state: State, uses: readonly Unpinne
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, path: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, path: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'action-pin', key: sectionKey(path), title, lines, until: 'stream' })
     if (taken) return

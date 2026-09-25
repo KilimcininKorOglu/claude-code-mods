@@ -88,9 +88,28 @@ export function logText(file: string, uses: readonly Unpinned[]): string {
   return `${file} uses actions by a moving ref: ${named(uses)}`
 }
 
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** One action's row: the action in the default colour, the moving ref red, the commit it points at faint. */
+function useLine(u: Unpinned): Line {
+  const sha = u.sha === undefined ? [] : [part(` → ${u.sha}`, 'dim')]
+  return partsLine([part(u.action, undefined), part(`@${u.ref}`, 'error'), ...sha])
+}
+
 /** The sidebar lines of a finding: the workflow, then one line per action, as the closing lines read. */
-export function sidebarLines(file: string, uses: readonly Unpinned[]): { text: string; kind: 'error' }[] {
-  return [{ text: file, kind: 'error' }, ...named(uses).split(' · ').map(text => ({ text, kind: 'error' as const }))]
+export function sidebarLines(file: string, uses: readonly Unpinned[]): Line[] {
+  const rows = uses.slice(0, MAX_NAMED).map(useLine)
+  if (uses.length > MAX_NAMED) rows.push({ text: `${uses.length - MAX_NAMED} more`, kind: 'dim' })
+  return [{ text: file, kind: 'error' }, ...rows]
 }
 
 /**
@@ -116,7 +135,7 @@ export function doneTitle(gone: boolean): string {
 }
 
 /** The sidebar lines of a closed finding: the file, then the refs that are gone. */
-export function doneLines(file: string, refs: readonly string[]): { text: string; kind: 'ok' }[] {
+export function doneLines(file: string, refs: readonly string[]): Line[] {
   return [{ text: file, kind: 'ok' }, ...refs.map(text => ({ text, kind: 'ok' as const }))]
 }
 
