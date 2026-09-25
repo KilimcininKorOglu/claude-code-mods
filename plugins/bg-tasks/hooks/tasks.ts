@@ -1,7 +1,20 @@
 /** The background shell tasks the session started, and their texts on the status line and in the pane. */
 
-/** One background shell: its task id, what it runs, when it started and whether the person backgrounded it. */
-export type Task = { id: string; label: string; startedAt: number; byUser: boolean }
+/**
+ * One background shell: its task id, what it runs, when it started and whether the person backgrounded
+ * it; for a subagent's, the agent's id, and whether the engine ends it with the agent's final answer.
+ */
+export type Task = { id: string; label: string; startedAt: number; byUser: boolean; agentId?: string; endsWithAgent?: boolean }
+
+/** The tasks an agent started that the engine ends with that agent's final answer. */
+export function endingWith(tasks: Iterable<Task>, agentId: string): Task[] {
+  return [...tasks].filter(t => t.agentId === agentId && t.endsWithAgent === true)
+}
+
+/** Whether any task was started in that agent's loop. */
+export function hasAgentTask(tasks: Iterable<Task>, agentId: string): boolean {
+  return [...tasks].some(t => t.agentId === agentId)
+}
 
 const MINUTE = 60_000
 

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { byAge, doneLine, doneTitle, endedTasks, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
+import { byAge, doneLine, doneTitle, endedTasks, endingWith, hasAgentTask, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -15,11 +15,14 @@ const TICK_MS = 30_000
 /** The running tasks by id, the on/off setting, and the last stop's result for the pane. */
 type State = { tasks: Map<string, Task>; enabled: boolean; message?: string }
 
-/** The background task a Bash call started, by the model's `run_in_background` or the person's Ctrl+B. */
-function startedTask(r: ToolCallResult<'Bash'>): { id: string; byUser: boolean } | undefined {
+/**
+ * The background task a Bash call started, by the model's `run_in_background` or the person's Ctrl+B,
+ * and whether the engine ends it with the final answer of the subagent that started it.
+ */
+function startedTask(r: ToolCallResult<'Bash'>): { id: string; byUser: boolean; endsWithAgent: boolean } | undefined {
   if (r.deny !== undefined || r.isError === true) return undefined
   const id = r.result.backgroundTaskId
-  return id === undefined ? undefined : { id, byUser: r.result.backgroundedByUser === true }
+  return id === undefined ? undefined : { id, byUser: r.result.backgroundedByUser === true, endsWithAgent: r.result.backgroundEndsWithFinalResponse === true }
 }
 
 function errorText(err: unknown): string {
@@ -102,6 +105,40 @@ async function stopTask($: EngineInterface, state: State, task: Task): Promise<v
   await changed($, state)
 }
 
+/**
+ * Drops the tasks a notification reports as ended and writes each into the stream. A task already
+ * dropped is not found again, so a notification read on two paths writes one entry.
+ */
+async function closeEnded($: EngineInterface, state: State, text: string): Promise<void> {
+  await closeTasks($, state, endedTasks(text).flatMap(({ id, status }) => {
+    const task = state.tasks.get(id)
+    return task === undefined ? [] : [{ task, status }]
+  }))
+}
+
+/** Drops the tasks that ended and writes each into the stream by the status it ended in. */
+async function closeTasks($: EngineInterface, state: State, ended: { task: Task; status: string }[]): Promise<void> {
+  if (ended.length === 0) return
+  const now = await $.clock.now()
+  for (const { task, status } of ended) {
+    state.tasks.delete(task.id)
+    await toFinished($, task, status, now)
+  }
+  await changed($, state)
+}
+
+/**
+ * The end of a subagent's turn. A subagent the engine resumed with the notification of its own task
+ * reads it as a message no hook sees, so its messages are read for the notifications of its tasks. A
+ * task the engine ends with the agent's final answer sends no notification, so it closes as killed.
+ */
+async function afterAgentTurn($: EngineInterface, state: State, agentId: string): Promise<void> {
+  if (!hasAgentTask(state.tasks.values(), agentId)) return
+  const messages = await $.session.messages({ agentId })
+  if (!('deny' in messages)) await closeEnded($, state, messages.filter(m => m.role === 'user').map(m => m.text).join('\n'))
+  await closeTasks($, state, endingWith(state.tasks.values(), agentId).map(task => ({ task, status: 'killed' })))
+}
+
 async function togglePane($: EngineInterface, state: State): Promise<string> {
   if ((await $.ui.panes()).some(p => p.id === PANE_ID)) {
     await $.ui.close({ id: PANE_ID })
@@ -167,7 +204,8 @@ export const register: Register = on => {
     const r = await next(e)
     const started = startedTask(r)
     if (!state.enabled || started === undefined) return r
-    state.tasks.set(started.id, { ...started, label: labelOf(e.command), startedAt: await $.clock.now() })
+    const agentId = (e as { agentId?: string }).agentId
+    state.tasks.set(started.id, { ...started, label: labelOf(e.command), startedAt: await $.clock.now(), ...(agentId === undefined ? {} : { agentId }) })
     await changed($, state)
     return r
   })
@@ -180,18 +218,20 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', { origin: { kind: 'task-notification' } }, async ($, e, next) => {
-    const ended = endedTasks(e.text).flatMap(({ id, status }) => {
-      const task = state.tasks.get(id)
-      return task === undefined ? [] : [{ task, status }]
-    })
-    if (ended.length === 0) return next(e)
-    const now = await $.clock.now()
-    for (const { task, status } of ended) {
-      state.tasks.delete(task.id)
-      await toFinished($, task, status, now)
-    }
-    await changed($, state)
+    await closeEnded($, state, e.text)
     return next(e)
+  })
+
+  // A subagent reads the notification of its own task inside its loop, never as a main-loop prompt.
+  on('prompt.attachment', { type: 'queued_command' }, async ($, e, next) => {
+    await closeEnded($, state, e.text)
+    return next(e)
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined) await afterAgentTurn($, state, e.agentId)
+    return r
   })
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {

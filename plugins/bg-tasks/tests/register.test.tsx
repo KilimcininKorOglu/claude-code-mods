@@ -14,14 +14,29 @@ const run = (args: string): CommandRunInput => ({
 
 const PANE = { title: 'Background tasks', isFocused: true, bodyColumns: 80, placement: 'inline', scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['Pane']
 
+const TURN = { answer: 'done', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' }
+
 const notification = (id: string, status: string): string =>
   `<task-notification>\n<task-id>${id}</task-id>\n<tool-use-id>toolu_1</tool-use-id>\n<status>${status}</status>\n<summary>done</summary>\n</task-notification>`
 
 /** `stopped` are the ids TaskStop was called with; `stopFails` makes TaskStop fail. */
-type World = { clock: MockClock; statuses: (string | undefined)[]; panes: UiPane[]; stopped: string[]; consents: string[]; stopFails: boolean; next: number }
+type World = {
+  clock: MockClock
+  statuses: (string | undefined)[]
+  panes: UiPane[]
+  stopped: string[]
+  consents: string[]
+  stopFails: boolean
+  next: number
+  /** Whether a background Bash call reads as one the engine ends with its subagent's final answer. */
+  endsWithAgent: boolean
+  /** What `$.session.messages({ agentId })` answers. */
+  agentMessages: { role: string; text: string }[]
+}
 
 function world(on: On): World {
-  const w: World = { clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }), statuses: [], panes: [], stopped: [], consents: [], stopFails: false, next: 0 }
+  const w: World = { clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }), statuses: [], panes: [], stopped: [], consents: [], stopFails: false, next: 0, endsWithAgent: false, agentMessages: [] }
+  on('session.messages', () => ({ value: w.agentMessages }) as never)
   mock.store(on, {})
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -32,7 +47,8 @@ function world(on: On): World {
   on('prompt.submit', (_, e) => ({ text: e.text }) as never)
   on('tool.call', { tool: 'Bash' }, (_, e) => {
     const bg = (e as { run_in_background?: boolean }).run_in_background === true
-    const result = { stdout: '', stderr: '', interrupted: false, ...(bg ? { backgroundTaskId: `b${++w.next}` } : {}) }
+    const ends = bg && w.endsWithAgent ? { backgroundEndsWithFinalResponse: true } : {}
+    const result = { stdout: '', stderr: '', interrupted: false, ...(bg ? { backgroundTaskId: `b${++w.next}` } : {}), ...ends }
     return { result, text: 'ok' } as never
   })
   on('tool.call', { tool: 'TaskStop' }, (_, e) => {
@@ -197,7 +213,55 @@ describe('bg-tasks', () => {
     expect(failed?.lines[0]?.text).toBe('npm test · failed after 12m')
   })
 
-  withSidebar('a closed sidebar leaves the status line as it was', async ($, on) => {
+  withSidebar('a subagent task closes on the notification its own loop reads, once', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], clears: 0 }
+    seatSidebar(on, bar)
+    on('prompt.attachment', (_, e) => ({ text: e.text }) as never)
+    await started($)
+    await background($, 'make check')
+    await w.clock.advance(3 * MINUTE)
+    await $.prompt.attachment({ type: 'queued_command', text: notification('b1', 'completed'), origin: { kind: 'engine' }, agentId: 'a1' } as never)
+    expect((await $.command.run(run('list'))).text).toBe('on\nno background shell task is running')
+    expect(bar.sections.filter(s => s.title.startsWith('task ')).map(s => s.lines[0]?.text)).toEqual(['make check · finished after 3m'])
+    // The same notification read again writes no second entry.
+    await $.prompt.submit({ text: notification('b1', 'completed'), origin: { kind: 'task-notification' } } as never)
+    expect(bar.sections.filter(s => s.title.startsWith('task '))).toHaveLength(1)
+  })
+
+  withSidebar('a subagent resumed with its task notification closes the task at the end of its turn', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], clears: 0 }
+    seatSidebar(on, bar)
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await started($)
+    await $.tool.call({ tool: 'Bash', command: 'sleep 15', run_in_background: true, agentId: 'a1' } as never)
+    await background($, 'npm run dev')
+    await w.clock.advance(MINUTE)
+    // Another agent's turn reads nothing of this one.
+    await $.turn.complete({ ...TURN, agentId: 'a2' } as never)
+    w.agentMessages = [{ role: 'user', text: 'start it' }, { role: 'assistant', text: 'started' }, { role: 'user', text: notification('b1', 'completed') }]
+    await $.turn.complete({ ...TURN, agentId: 'a1' } as never)
+    expect((await $.command.run(run('list'))).text).toBe('on\nb2      1m  model  npm run dev')
+    expect(bar.sections.filter(s => s.title.startsWith('task ')).map(s => s.lines[0]?.text)).toEqual(['sleep 15 · finished after 1m'])
+  })
+
+  withSidebar('a task the engine ends with its subagent closes as killed when the agent answers', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], clears: 0 }
+    seatSidebar(on, bar)
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await started($)
+    w.endsWithAgent = true
+    await $.tool.call({ tool: 'Bash', command: 'sleep 120', run_in_background: true, agentId: 'a1' } as never)
+    await w.clock.advance(MINUTE)
+    await $.turn.complete({ ...TURN, agentId: 'a1' } as never)
+    expect((await $.command.run(run('list'))).text).toBe('on\nno background shell task is running')
+    const killed = bar.sections.filter(s => s.title.startsWith('task '))
+    expect(killed.map(s => [s.title, s.lines[0]?.text])).toEqual([['task killed', 'sleep 120 · killed after 1m']])
+  })
+
+  withSidebar('a closed sidebar leaves the status line as it was',async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: false, sections: [], clears: 0 }
     seatSidebar(on, bar)

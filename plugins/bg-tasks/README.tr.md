@@ -6,7 +6,8 @@ Session'ın arka plandaki shell task'larını status line'da gösteren ve `/bg-t
 
 1. Mod Bash tool'unu hook'lar. `backgroundTaskId` dönen bir çağrı listeye girer: modelin `run_in_background` ile başlattığı ya da sizin Ctrl+B ile arka plana aldığınız bir task.
 2. Bir task şu durumlarda listeden çıkar:
-   - bildirimi geldiğinde (`<task-notification>`, bir `<task-id>` ve `running` dışında bir status ile),
+   - bildirimi geldiğinde (`<task-notification>`, bir `<task-id>` ve `running` dışında bir status ile). Main loop onu bir prompt olarak okur. Hâlâ çalışan bir subagent onu kendi loop'u içinde kuyruktaki bir mesaj olarak okur. Cevabını çoktan vermiş bir subagent onunla yeniden başlatılır ve mod o agent'ın mesajlarını turn sonunda okur,
+   - ön planda çalışan bir subagent cevap verdiğinde: engine o agent'ın arka plan task'larını cevabıyla birlikte sonlandırır ve bildirim göndermez, bu yüzden mod onları `killed` olarak kapatır,
    - model onu TaskStop tool'u ile durdurduğunda,
    - siz pane'de durdurduğunuzda.
 3. Status line sayıyı, en eski task'ın yaşını ve komutunu gösterir, 30 saniyede bir yeniden çizilir:
@@ -34,7 +35,9 @@ Session'ın arka plandaki shell task'larını status line'da gösteren ve `/bg-t
 
    Sizin durdurduğunuz bir task böyle bir kayıt yazmaz; pane zaten `stopped: <task>` demiştir. Sidebar kapalıyken hiçbir şey yazılmaz, çünkü engine'in kendi task bildirimi bitişi zaten haber verir.
 
-Canlı testte model arka planda `sleep 900` başlattı. Status line `1 running · oldest <1m (sleep 900)` gösterdi. Pane'de satırına basmak process'i durdurdu, status line ve engine'in `1 shell` alt bilgisi kayboldu.
+2.1.282 üzerindeki canlı testte üç subagent yolunun her biri kendi task'ını kapattı: ön plandaki bir subagent'ın sonunu beklediği `sleep 5`, ön plandaki bir subagent'ın cevap verirken çalışır bıraktığı `sleep 120` ve arka plandaki bir subagent'ın, agent bittikten sonra biten `sleep 15`'i.
+
+Daha önceki bir canlı testte model arka planda `sleep 900` başlattı. Status line `1 running · oldest <1m (sleep 900)` gösterdi. Pane'de satırına basmak process'i durdurdu, status line ve engine'in `1 shell` alt bilgisi kayboldu.
 
 ## Komut
 
@@ -60,14 +63,14 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, command.run{command=bg-tasks}, tool.call{tool=Bash}, tool.call{tool=TaskStop}, prompt.submit{origin has {kind=task-notification}}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.sidebar.clear (via offSidebar), $.sidebar.set (via toFinished, toSidebar), $.store.get, $.store.set (via runCommand), $.tool.call (via stopTask), $.ui.close (via togglePane), $.ui.invalidate (via changed), $.ui.open (via togglePane), $.ui.panes (via togglePane), $.ui.resolve, $.ui.status (via showStatus)
+    ❯ ./register.tsx hooks: session.start, command.run{command=bg-tasks}, tool.call{tool=Bash}, tool.call{tool=TaskStop}, prompt.submit{origin has {kind=task-notification}}, prompt.attachment{type=queued_command}, turn.complete, ui.render{component=Pane}
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.messages (via afterAgentTurn), $.sidebar.clear (via offSidebar), $.sidebar.set (via toFinished, toSidebar), $.store.get, $.store.set (via runCommand), $.tool.call (via stopTask), $.ui.close (via togglePane), $.ui.invalidate (via changed), $.ui.open (via togglePane), $.ui.panes (via togglePane), $.ui.resolve, $.ui.status (via showStatus)
 
 Reach L2, bir tool çağırır.
 
-    1. Okur:     her Bash çağrısının komutunu ve sonucunu; task bildirimlerinin metnini; her TaskStop çağrısının task id'sini
+    1. Okur:     her Bash çağrısının komutunu ve sonucunu; task bildirimlerinin metnini; her TaskStop çağrısının task id'sini; bir subagent'ın turn sonunda, listedeki bir task'ı başlatan subagent'ın mesajlarını
     2. Çalıştırır: engine'in TaskStop tool'unu, yalnız pane'deki tuşunuzla ya da sidebar butonuna basışınızla
     3. Gönderir: modele hiçbir şey; status line ve pane yalnız sizin için çizilir
     4. Saklar:   $.store içinde on/off ayarını; task listesi session boyunca bellekte kalır
