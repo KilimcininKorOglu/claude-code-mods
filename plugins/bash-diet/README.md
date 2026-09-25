@@ -30,7 +30,7 @@ Every command the mod has a filter of its own for. A command marked `*` gets the
 
 | Family | Commands |
 |---|---|
-| git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`; `yadm status`, `yadm diff`, `yadm log`\* |
+| git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`, `git tag` (a list keeps ten tags at each end and the count), `git remote -v`; `yadm status`, `yadm diff`, `yadm log`\* |
 | GitHub, GitLab | `gh pr`, `gh issue`, `gh run`, `gh release`; `glab mr`, `glab issue` |
 | Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install` |
 | Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run` |
@@ -41,7 +41,7 @@ Every command the mod has a filter of its own for. A command marked `*` gets the
 | PHP | `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`, `phpstan analyze` |
 | .NET | `dotnet build`, `dotnet test`, `dotnet format`, `dotnet publish`, `dotnet pack`, `dotnet restore` |
 | Apple | `swift build`, `swift test`, `xcodebuild` |
-| Files and system | `ls`, `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` and `printenv` (credential values masked), `ps` |
+| Files and system | `ls`, and `ls -R` as one line per directory; `cp`, `mv`, `rm`, `ln` with `-v` (every error, the first five paths and the count), also as `gcp`, `gmv`, `grm`, `gln`; `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` and `printenv` (credential values masked), `ps` |
 | Containers | `docker ps`, `docker images`, `docker image ls`, `docker logs`, `docker build`, `docker pull`, `docker inspect`, `docker compose` (`ps`, `logs` and the rest); `kubectl get`, `kubectl logs`, `kubectl describe`; `oc get`, `oc logs`; `helm list` |
 | Clouds and network | `aws` (`aws s3 ls` as a capped list, the rest as JSON), `gcloud`; `terraform plan`, `terraform apply`, `tofu plan`, `tofu apply`; `pulumi`; `curl`, `wget` |
 | Built-in rules | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (also with a version suffix such as `gcc-14`); `make`, `gmake`; `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |

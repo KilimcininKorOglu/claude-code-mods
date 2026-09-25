@@ -30,7 +30,7 @@ Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki
 
 | Aile | Komutlar |
 |---|---|
-| git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`; `yadm status`, `yadm diff`, `yadm log`\* |
+| git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`, `git tag` (liste her uçtan on tag ve toplam sayıyı tutar), `git remote -v`; `yadm status`, `yadm diff`, `yadm log`\* |
 | GitHub, GitLab | `gh pr`, `gh issue`, `gh run`, `gh release`; `glab mr`, `glab issue` |
 | Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install` |
 | Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run` |
@@ -41,7 +41,7 @@ Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki
 | PHP | `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`, `phpstan analyze` |
 | .NET | `dotnet build`, `dotnet test`, `dotnet format`, `dotnet publish`, `dotnet pack`, `dotnet restore` |
 | Apple | `swift build`, `swift test`, `xcodebuild` |
-| Dosyalar ve sistem | `ls`, `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` ve `printenv` (credential değerleri maskelenir), `ps` |
+| Dosyalar ve sistem | `ls`, ve dizin başına bir satır olarak `ls -R`; `-v` ile `cp`, `mv`, `rm`, `ln` (her hata, ilk beş yol ve toplam sayı), `gcp`, `gmv`, `grm`, `gln` adlarıyla da; `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` ve `printenv` (credential değerleri maskelenir), `ps` |
 | Container'lar | `docker ps`, `docker images`, `docker image ls`, `docker logs`, `docker build`, `docker pull`, `docker inspect`, `docker compose` (`ps`, `logs` ve diğerleri); `kubectl get`, `kubectl logs`, `kubectl describe`; `oc get`, `oc logs`; `helm list` |
 | Cloud'lar ve ağ | `aws` (`aws s3 ls` sınırlı bir liste olarak, diğerleri JSON olarak), `gcloud`; `terraform plan`, `terraform apply`, `tofu plan`, `tofu apply`; `pulumi`; `curl`, `wget` |
 | Built-in kurallar | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (`gcc-14` gibi bir sürüm ekiyle de); `make`, `gmake`; `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
