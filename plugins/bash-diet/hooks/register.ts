@@ -2,6 +2,7 @@ import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'c
 import { BUILTIN_RULES } from './builtin-rules.ts'
 import { withFlags } from './command.ts'
 import { rulesOf, type Rule } from './dsl.ts'
+import { correctionsOf, discoverText, finish, learnFile, learnText, scan, scannerOf, type BashCall } from './history.ts'
 import { dayOf, gainFileName, gainReport, linesOfRecords, recordsOf, staleGainFiles, type GainRecord } from './gain.ts'
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
 import { costText } from './pricing.ts'
@@ -31,6 +32,7 @@ type State = {
   /** Where the saving records go, this session's id and project, and its records so far. */
   gain?: { dir: string; sessionId: string; project: string; ready: boolean }
   records: GainRecord[]
+  places?: Places
 }
 
 /** The places the mod reads and writes: the repository the session runs in, and the config directory. */
@@ -259,6 +261,84 @@ async function gainCommand($: EngineInterface, state: State, view: string): Prom
   return bad === 0 ? text : `${text}\n(${bad} unreadable line(s) in ${dir} left out)`
 }
 
+/** The transcript directories: the one holding this session's transcript, or every project's. */
+async function transcriptDirs($: EngineInterface, state: State, all: boolean): Promise<string[]> {
+  const root = `${state.places?.config ?? ''}/projects`
+  if (!(await $.fs.exists(root))) return []
+  const dirs = (await $.fs.list(root)).filter(f => f.kind === 'dir').map(f => `${root}/${f.name}`)
+  if (all) return dirs
+  for (const dir of dirs) if (await $.fs.exists(`${dir}/${state.gain?.sessionId ?? ''}.jsonl`)) return [dir]
+  return []
+}
+
+/** The transcripts in the directories written in the last `days` days. */
+async function transcriptsOf($: EngineInterface, dirs: string[], days: number): Promise<string[]> {
+  const since = (await $.clock.now()) - days * 24 * 60 * 60 * 1000
+  const files: string[] = []
+  for (const dir of dirs) {
+    for (const f of await $.fs.list(dir)) {
+      if (f.kind === 'file' && f.name.endsWith('.jsonl') && (await $.fs.stat(`${dir}/${f.name}`)).mtimeMs >= since) files.push(`${dir}/${f.name}`)
+    }
+  }
+  return files
+}
+
+/** Every Bash call of the transcripts, streamed, because a transcript can pass the file read limit. */
+async function callsIn($: EngineInterface, files: string[]): Promise<BashCall[]> {
+  const calls: BashCall[] = []
+  for (const path of files) {
+    const s = scannerOf(path)
+    for await (const chunk of $.process.spawn({ argv: ['cat', path] })) if (chunk.stream === 'stdout') scan(s, chunk.text)
+    calls.push(...finish(s))
+  }
+  return calls
+}
+
+/** `/bash-diet learn write`: the corrections as a rules file the model reads in later sessions. */
+async function writeLearned($: EngineInterface, state: State, calls: BashCall[]): Promise<string> {
+  const corrections = correctionsOf(calls)
+  if (corrections.length === 0) return 'no corrected command to write'
+  const dir = `${state.places?.repo ?? ''}/.claude/rules`
+  const made = await $.process.run(['mkdir', '-p', dir], { timeoutMs: 5_000 })
+  if (made.exitCode !== 0) return `mkdir ${dir} failed: ${made.stderr.trim()}`
+  await $.fs.write(`${dir}/cli-corrections.md`, learnFile(corrections))
+  return `wrote ${corrections.length} correction(s) to .claude/rules/cli-corrections.md`
+}
+
+/** `/bash-diet discover [days] [all]` and `learn [days] [write]` over the transcripts. */
+async function historyCommand($: EngineInterface, state: State, word: string, rest: string[]): Promise<string> {
+  const days = Number(rest.find(w => /^\d+$/.test(w)) ?? 30)
+  if (days < 1 || days > 365) return `${word} expects a number of days from 1 to 365`
+  if (word === 'discover' && rest.includes('all')) return discoverAll($, state, days)
+  const files = await transcriptsOf($, await transcriptDirs($, state, false), days)
+  const calls = await callsIn($, files)
+  if (word === 'discover') return discoverText(calls, files.length, days)
+  if (rest.includes('write')) return writeLearned($, state, calls)
+  return learnText(correctionsOf(calls), files.length, days)
+}
+
+/**
+ * `/bash-diet discover all`: every project's transcripts are more than a command's own time allows (6.6 s
+ * of parsing for 110k calls, measured), so the reading runs on after the command answers, and its report
+ * comes as a log line.
+ */
+async function discoverAll($: EngineInterface, state: State, days: number): Promise<string> {
+  const files = await transcriptsOf($, await transcriptDirs($, state, true), days)
+  void (async () => {
+    try {
+      $.ui.log(discoverText(await callsIn($, files), files.length, days))
+    } catch (err) {
+      report($, state, 'discover all did not finish', err)
+    }
+  })()
+  return `reading ${files.length} transcript(s) of every project from the last ${days} days; the report follows as a log line`
+}
+
+/** `/bash-diet gain`, `discover` and `learn`: the reports over what earlier sessions left. */
+function reportCommand($: EngineInterface, state: State, word: string, rest: string[]): Promise<string> {
+  return word === 'gain' ? gainCommand($, state, rest.join(' ')) : historyCommand($, state, word, rest)
+}
+
 /** `/bash-diet cost`: the session's spend and what the tokens kept out would have cost. */
 async function costCommand($: EngineInterface, state: State): Promise<string> {
   const [model, usage] = await Promise.all([$.session.model(), $.session.usage()])
@@ -350,7 +430,7 @@ function subcommand($: EngineInterface, state: State, word: string, rest: string
   if (['on', 'off'].includes(word) && bare) return setEnabled($, state, word === 'on')
   if (['exclude', 'include', 'excludes'].includes(word)) return exclude($, state, word, rest.join(' '))
   if (['trust', 'untrust', 'filters'].includes(word) && bare) return ruleCommand($, state, word)
-  if (word === 'gain') return gainCommand($, state, rest.join(' '))
+  if (['gain', 'discover', 'learn'].includes(word)) return reportCommand($, state, word, rest)
   if (word === 'cost' && bare) return costCommand($, state)
   return undefined
 }
@@ -382,12 +462,13 @@ export const register: Register = on => {
     const trusted = await $.store.get(TRUSTED_KEY)
     state.trusted = typeof trusted === 'object' && trusted !== null ? (trusted as Record<string, string>) : {}
     const places = await locate($)
+    state.places = places
     state.files = ruleFilesOf(places)
     state.gain = { dir: `${places.config}/bash-diet/gain`, sessionId: await $.session.id(), project: places.repo.split('/').pop() ?? places.repo, ready: false }
     await $.command.register({
       name: 'bash-diet',
-      description: 'Filters Bash results: status, on, off, exclude, include, filters, trust, gain, cost (bash-diet)',
-      argumentHint: '[on | off | exclude <p> | include <p> | excludes | filters | trust | untrust | gain [project | daily | graph | history] | cost]',
+      description: 'Filters Bash results: status, on, off, exclude, include, filters, trust, gain, discover, learn, cost (bash-diet)',
+      argumentHint: '[on | off | exclude <p> | include <p> | excludes | filters | trust | untrust | gain [project | daily | graph | history] | discover [days] [all] | learn [days] [write] | cost]',
       immediate: true,
     })
     await Promise.all([pruneRecall($, state), pruneGain($, state)])

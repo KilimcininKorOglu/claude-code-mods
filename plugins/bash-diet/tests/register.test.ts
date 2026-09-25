@@ -1,5 +1,6 @@
 import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
+import { callRows } from './transcript.ts'
 
 tier('user')
 
@@ -37,7 +38,12 @@ function world(on: On): World {
   on('session.id', () => ({ value: 's1' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.usage', () => ({ value: { startedAt: 0, context: {} as never, rateLimits: [], cost: { usd: 1.5 } } }))
-  on('fs.list', (_, e) => ({ value: [...w.files.keys()].filter(k => k.startsWith(`${e.path}/`)).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file' as const, size: 0, isLink: false })) }))
+  on('fs.list', (_, e) => ({ value: childrenOf(w, e.path) }))
+  on('process.spawn', async function* (_, e) {
+    const text = w.files.get(e.argv[1] ?? '')
+    if (e.argv[0] === 'cat' && text !== undefined && text !== '') yield { stream: 'stdout' as const, text }
+    return { value: { code: text === undefined ? 1 : 0, signal: null } }
+  })
   on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) || [...w.files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.files.get(e.path)?.length ?? 0, mtimeMs: w.mtimes.get(e.path) ?? 1, isLink: false } }))
@@ -60,6 +66,17 @@ function world(on: On): World {
     return { result, text: w.stdout } as never
   })
   return w
+}
+
+/** The entries right under a directory of the world's files: a file, or a directory holding more. */
+function childrenOf(w: World, dir: string): { name: string; kind: 'file' | 'dir'; size: number; mtimeMs: number; isLink: boolean }[] {
+  const names = new Map<string, 'file' | 'dir'>()
+  for (const k of w.files.keys()) {
+    if (!k.startsWith(`${dir}/`)) continue
+    const rest = k.slice(dir.length + 1)
+    names.set(rest.split('/')[0] ?? rest, rest.includes('/') ? 'dir' : 'file')
+  }
+  return [...names].map(([name, kind]) => ({ name, kind, size: 0, mtimeMs: w.mtimes.get(`${dir}/${name}`) ?? 1, isLink: false }))
 }
 
 /** Writes a file as the person would, moving its modification time on. */
@@ -196,6 +213,29 @@ describe('bash-diet', () => {
     expect(((await $.command.run(run('gain history'))).text ?? '').split('\n')[0] ?? '').toMatch(/^09-25 14:30  other  \d+ → \d+ tokens \(\d+%\)  app$/)
     expect((await $.command.run(run('gain weekly'))).text).toBe('gain expects nothing, project, daily, graph or history')
     expect((await $.command.run(run('cost'))).text).toMatch(/^this session \(claude-opus-5-5\): \$1\.50 so far\n~\d+ tokens kept out of the context: \$0\.\d{4} saved on the cache write/)
+  })
+
+  test('discover and learn read this project\'s transcripts, and learn write leaves a rules file', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const dir = '/Users/u/.claude/projects/-Users-u-app'
+    w.now = 40 * 24 * 60 * 60 * 1000
+    put(w, `${dir}/s1.jsonl`, '')
+    w.mtimes.set(`${dir}/s1.jsonl`, w.now)
+    put(w, `${dir}/s0.jsonl`, [
+      ...callRows('a', 'git log --onelin -5', 'Exit code 128\nfatal: unrecognized argument: --onelin', true),
+      ...callRows('b', 'git log --oneline -5', 'abc fix'),
+      ...callRows('c', 'node -e 1', 'x'.repeat(400)),
+    ].join('\n'))
+    w.mtimes.set(`${dir}/s0.jsonl`, w.now - 60_000)
+    put(w, '/Users/u/.claude/projects/-Users-u-other/s9.jsonl', callRows('d', 'ls', 'a').join('\n'))
+    w.mtimes.set('/Users/u/.claude/projects/-Users-u-other/s9.jsonl', w.now)
+    expect((await $.command.run(run('discover'))).text).toMatch(/^3 Bash calls in 2 session\(s\) of the last 30 days; .*\nno filter reads these .*\n  node  1 call  ~100 tokens/)
+    expect((await $.command.run(run('learn'))).text).toBe('1 corrected command(s) in 2 session(s) of the last 30 days:\n- `git log --onelin -5` failed (unknown flag); `git log --oneline -5` worked.')
+    expect((await $.command.run(run('learn write'))).text).toBe('wrote 1 correction(s) to .claude/rules/cli-corrections.md')
+    expect(w.files.get('/Users/u/app/.claude/rules/cli-corrections.md')).toContain('`git log --oneline -5` worked.')
+    expect((await $.command.run(run('learn 0'))).text).toBe('learn expects a number of days from 1 to 365')
+    expect((await $.command.run(run('discover all'))).text).toBe('reading 3 transcript(s) of every project from the last 30 days; the report follows as a log line')
   })
 
   test('the note on the filter reaches the model at the session start while on', async ($, on) => {
