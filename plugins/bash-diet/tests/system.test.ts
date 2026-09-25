@@ -50,6 +50,18 @@ describe('files', () => {
     expect(run('env', 'PATH=/usr/bin\nGITHUB_TOKEN=ghp_abc\nHOME=/Users/u\nEMPTY_SECRET=\n').text).toBe('EMPTY_SECRET=\nGITHUB_TOKEN=***\nHOME=/Users/u\nPATH=/usr/bin')
   })
 
+  test('a bare env is the command, not a wrapper, and its secrets are masked through the plan', () => {
+    // env alone, with options, or with variables alone prints the environment; with a command it wraps it.
+    for (const cmd of ['env', 'env -0', 'env FOO=1', 'FOO=1 env']) expect(planFor(cmd)?.family, cmd).toBe('env')
+    expect(planFor('env FOO=1 git status')?.family).toBe('git status')
+    expect(planFor('env -i PATH=/bin ls')?.family).toBe('ls')
+    const plan = planFor('env')
+    if (plan === undefined) throw new Error('no plan for env')
+    const r = runFilter(plan, 'B=1\nGEMINI_API_KEY=AIzaSyExample\nA=2\n', 0, false)
+    expect(r).toEqual({ text: 'A=2\nB=1\nGEMINI_API_KEY=***', elided: true, redacted: true })
+    expect(run('env', 'A=1\nB=2\n').redacted).toBe(undefined)
+  })
+
   test('a grep at the end of a pipeline is what the filter reads', () => {
     expect(planFor('git log | grep fix')?.family).toBe('grep')
   })

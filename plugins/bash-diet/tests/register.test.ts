@@ -176,6 +176,15 @@ describe('bash-diet', () => {
     expect([...w.files.keys()].filter(k => k.startsWith(DIR))).toEqual([])
   })
 
+  test('a masked env stands whatever it saves, and keeps no file of the values it masked', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Masking saves 8 characters here, under the least a filter must save; the masked text still stands.
+    w.stdout = 'A=1\nGEMINI_API_KEY=AIzaSyExample\n'
+    expect(stdoutOf(await bash($, 'env'))).toBe('A=1\nGEMINI_API_KEY=***')
+    expect([...w.files.keys()].filter(k => k.startsWith(DIR))).toEqual([])
+  })
+
   test('a result the engine kept in a file stays its preview when the filtered text is not shorter than it', async ($, on) => {
     const w = world(on)
     await started($)

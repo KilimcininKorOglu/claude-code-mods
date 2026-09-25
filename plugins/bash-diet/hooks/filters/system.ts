@@ -101,17 +101,25 @@ function grep(input: { args: string[]; text: string }): FilterResult {
 /** A variable whose value may be a credential. */
 const SECRET_NAME = /(TOKEN|SECRET|PASSWORD|PASSWD|PRIVATE|CREDENTIAL|API_?KEY|ACCESS_?KEY|AUTH|SESSION|COOKIE)/i
 
-/** `env` and `printenv`: sorted, credentials masked, long values cut. */
+/** A `NAME=value` word or line. */
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+/** A `NAME=value` row with a credential's value masked, else cut to one line. */
+function envRow(row: string): string {
+  const at = row.indexOf('=')
+  return SECRET_NAME.test(row.slice(0, at)) && row.slice(at + 1) !== '' ? `${row.slice(0, at)}=***` : cutLine(row, 160)
+}
+
+/**
+ * `env` and `printenv`: sorted, credentials masked, long values cut. `env FOO=1` lists the whole
+ * environment too; a name (`printenv HOME`) prints one value, which is left to the cleanup.
+ */
 function env(input: { args: string[]; text: string }): FilterResult {
-  if (input.args.some(a => !a.startsWith('-'))) return cleanup(input.text)
-  const rows = linesOf(input.text).filter(l => /^[A-Za-z_][A-Za-z0-9_]*=/.test(l)).sort()
-  const shown = rows.map(r => {
-    const at = r.indexOf('=')
-    const name = r.slice(0, at)
-    const value = r.slice(at + 1)
-    return SECRET_NAME.test(name) && value !== '' ? `${name}=***` : cutLine(r, 160)
-  })
-  return { text: shown.join('\n'), elided: shown.some((s, i) => s !== rows[i]) }
+  if (input.args.some(a => !a.startsWith('-') && !ASSIGNMENT.test(a))) return cleanup(input.text)
+  const rows = linesOf(input.text).filter(l => ASSIGNMENT.test(l)).sort()
+  const shown = rows.map(envRow)
+  const masked = shown.some(s => s.endsWith('=***'))
+  return { text: shown.join('\n'), elided: shown.some((s, i) => s !== rows[i]), ...(masked ? { redacted: true as const } : {}) }
 }
 
 /** `ps` rows cut to one line each and capped. */

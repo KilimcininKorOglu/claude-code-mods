@@ -48,11 +48,17 @@ function asksRaw(segments: Segment[]): boolean {
   }))
 }
 
-/** How many words `timeout`, `nice` or `env` take before the command they wrap. */
+/**
+ * How many words `timeout`, `nice` or `env` take before the command they wrap. `env` wraps only when a
+ * command follows its options and variables; alone it is the command, and it prints the environment.
+ */
 function wrapperLength(words: Token[], at: number): number {
   const name = words[at]?.text ?? ''
   if (PLAIN_WRAPPERS.has(name)) return 1
-  if (name === 'env') return optionsLength(words, at + 1, /^-/) + 1
+  if (name === 'env') {
+    const n = optionsLength(words, at + 1, /^-/) + 1
+    return words.slice(at + n).some(w => !isAssignment(w.text)) ? n : 0
+  }
   if (name === 'nice') return optionsLength(words, at + 1, /^-(n)?\d*$|^--adjustment=/) + 1
   if (name === 'timeout') return optionsLength(words, at + 1, /^-/) + 2
   return 0

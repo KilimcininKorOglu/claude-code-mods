@@ -11,8 +11,12 @@ export type FilterInput = {
   exitCode: number
 }
 
-/** The filtered text, and whether it left out something the full output file still holds. */
-export type FilterResult = { text: string; elided: boolean }
+/**
+ * The filtered text, and whether it left out something the full output file still holds. `redacted`
+ * marks a text with credential values masked: it always replaces the output, whatever it saves, and no
+ * full output file is kept for it, because that file would hold the values the filter masked.
+ */
+export type FilterResult = { text: string; elided: boolean; redacted?: true }
 
 /**
  * One entry of a filter table: the filter, and the flags it asks for (`--tb=short -q` for `pytest`), or

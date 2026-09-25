@@ -3,6 +3,7 @@ import { BUILTIN_RULES } from './builtin-rules.ts'
 import { withFlags } from './command.ts'
 import { rulesOf, type Rule } from './dsl.ts'
 import { correctionsOf, discoverText, finish, learnFile, learnText, scan, scannerOf, type BashCall } from './history.ts'
+import type { FilterResult } from './filters/common.ts'
 import { dayOf, gainFileName, gainReport, linesOfRecords, recordsOf, staleGainFiles, type GainRecord } from './gain.ts'
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
 import { costText } from './pricing.ts'
@@ -170,16 +171,32 @@ function unfiltered(r: ToolCallResult<'Bash'>, out: Output): string {
   return out.persisted !== undefined && r.text !== undefined ? r.text : out.text
 }
 
+/**
+ * The path of the call's full output when the filter left something out, else undefined. A masked
+ * result gets none, because that file would hold the credential values the filter masked.
+ */
+async function fullPathOf($: EngineInterface, state: State, command: string, out: Output, filtered: FilterResult): Promise<string | undefined> {
+  if (filtered.redacted === true || !needsFile(filtered.elided, out.exitCode, out.text.length)) return undefined
+  return keepFull($, state, command, out)
+}
+
+/**
+ * Whether the engine's preview stays: it kept the output in a file, and the filtered text is no shorter
+ * than that preview. A masked result stands anyway, because the preview holds the values it masked.
+ */
+const previewStays = (out: Output, filtered: FilterResult, text: string, before: string): boolean =>
+  out.persisted !== undefined && filtered.redacted !== true && text.length >= before.length
+
 /** Filters one call's result, keeps its full output when something was left out, and counts the gain. */
 async function shrink($: EngineInterface, state: State, command: string, plan: Plan, flagged: boolean, r: ToolCallResult<'Bash'>): Promise<ToolCallResult<'Bash'>> {
   const out = await outputOf($, r)
   if (out === undefined) return r
   const filtered = runFilter(plan, out.text, out.exitCode, flagged)
-  if (!replaces(out.text, filtered.text, flagged)) return r
-  const full = needsFile(filtered.elided, out.exitCode, out.text.length) ? await keepFull($, state, command, out) : undefined
+  if (!replaces(out.text, filtered.text, flagged || filtered.redacted === true)) return r
+  const full = await fullPathOf($, state, command, out, filtered)
   const text = full === undefined ? filtered.text : `${filtered.text}\n${fullOutputLine(full, out.isError && isCut(out.text))}`
   const before = unfiltered(r, out)
-  if (out.persisted !== undefined && text.length >= before.length) return r
+  if (previewStays(out, filtered, text, before)) return r
   state.calls += 1
   state.rawChars += before.length
   state.shownChars += text.length
