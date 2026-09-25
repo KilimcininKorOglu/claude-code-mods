@@ -1,8 +1,9 @@
+import { defineConfig } from 'eslint/config'
 import tseslint from 'typescript-eslint'
 
-export default tseslint.config(
+export default defineConfig(
   { ignores: ['.claude/', '.claude-plugin/types/', 'node_modules/'] },
-  ...tseslint.configs.recommended,
+  tseslint.configs.recommended,
   {
     files: ['hooks/**/*.ts', 'tests/**/*.ts'],
     rules: {
