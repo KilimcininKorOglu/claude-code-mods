@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, contextTone, endFile, failedGit, fmtTok, gitLine, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -52,10 +52,23 @@ describe('reading', () => {
       { text: 'context 25% · 245k / 1.0M', kind: 'ok' },
       { text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k' },
       { text: 'cost $1.23' },
-      { text: 'model opus-5-5 · thinking high' },
+      {
+        text: 'model opus-5-5 · thinking high',
+        parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'thinking ' }, { text: 'high', kind: 'warn' }],
+      },
       { text: 'Claude Code 2.1.282' },
       { text: 'main · clean · ↑2 ↓1', kind: 'ok' },
     ])
+  })
+
+  test('the model is coloured by family, the dearest the warmest, and a model of no known family has no colour', () => {
+    expect(['claude-opus-5-5', 'claude-fable-5-1', 'claude-sonnet-5', 'claude-haiku-4-5-20251001', 'gpt-x'].map(modelTone)).toEqual(['error', 'warn', 'ok', 'dim', undefined])
+  })
+
+  test('the thinking level is coloured by how hard it asks, and only the level itself', () => {
+    expect(['low', 'medium', 'high', 'xhigh', 'max', 'turbo', 12_000, null, undefined].map(effortTone)).toEqual(['dim', 'ok', 'warn', 'error', 'error', undefined, undefined, undefined, undefined])
+    expect(sidebarLines(reading({ effort: 'low' }))[3]?.parts?.at(-1)).toEqual({ text: 'low', kind: 'dim' })
+    expect(sidebarLines(reading({ effort: null }))[3]?.parts?.at(-1)).toEqual({ text: 'no thinking setting', kind: 'dim' })
   })
 
   test('while the transcripts are read, the tokens line says so instead of a partial count', () => {

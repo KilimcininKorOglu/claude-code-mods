@@ -125,7 +125,10 @@ describe('session-watch', () => {
       { text: 'context 12% · 120k / 1.0M', kind: 'ok' },
       { text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500' },
       { text: 'cost $0.50' },
-      { text: 'model opus-5-5 · thinking high' },
+      {
+        text: 'model opus-5-5 · thinking high',
+        parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'thinking ' }, { text: 'high', kind: 'warn' }],
+      },
       { text: 'Claude Code 2.1.282' },
       { text: 'main · clean · ↑0 ↓0', kind: 'ok' },
     ])

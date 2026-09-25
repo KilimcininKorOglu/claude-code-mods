@@ -205,9 +205,16 @@ export type Reading = {
   git?: GitState
 }
 
-/** How the sidebar colours a line. */
+/** How the sidebar colours a line or a part of one. */
 type Tone = 'ok' | 'warn' | 'error' | 'dim'
-export type Line = { text: string; kind?: Tone }
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
 
 /** The context's colour: green under 50%, yellow from 50% to 80%, red above 80%. */
 export function contextTone(percent: number): Tone {
@@ -234,14 +241,28 @@ export function shortModel(model: string): string {
   return model.replace(/^claude-/, '').replace(/-\d{8}$/, '')
 }
 
-function effortText(effort: Effort): string {
-  if (effort === undefined) return 'thinking: not read yet'
-  if (effort === null) return 'no thinking setting'
-  return typeof effort === 'number' ? `thinking budget ${effort}` : `thinking ${effort}`
+/** The model's colour by family, the dearest the warmest: opus red, fable yellow, sonnet green, haiku faint. */
+export function modelTone(model: string): Tone | undefined {
+  const families: [RegExp, Tone][] = [[/opus/i, 'error'], [/fable/i, 'warn'], [/sonnet/i, 'ok'], [/haiku/i, 'dim']]
+  return families.find(([family]) => family.test(model))?.[1]
+}
+
+/** The thinking level's colour: low faint, medium green, high yellow, xhigh and max red; a budget has none. */
+export function effortTone(effort: Effort): Tone | undefined {
+  const tones: Record<string, Tone> = { low: 'dim', medium: 'ok', high: 'warn', xhigh: 'error', max: 'error' }
+  return typeof effort === 'string' ? tones[effort] : undefined
+}
+
+/** The thinking part: the label and the value, only the value coloured. */
+function effortParts(effort: Effort): Part[] {
+  if (effort === undefined) return [part('thinking: not read yet', 'dim')]
+  if (effort === null) return [part('no thinking setting', 'dim')]
+  if (typeof effort === 'number') return [part(`thinking budget ${effort}`, undefined)]
+  return [part('thinking ', undefined), part(effort, effortTone(effort))]
 }
 
 function modelLine(model: string, effort: Effort): Line {
-  return { text: `model ${shortModel(model)} · ${effortText(effort)}` }
+  return partsLine([part('model ', undefined), part(shortModel(model), modelTone(model)), part(' · ', undefined), ...effortParts(effort)])
 }
 
 /** The git line: branch, changes and upstream, yellow while the tree has changes and green when clean. */
