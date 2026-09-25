@@ -26,18 +26,29 @@ A Claude Code Mod that shrinks each Bash result before the model reads it. Known
 
 ## Filters
 
+Every command the mod has a filter of its own for. A command marked `*` gets the flag of item 4.
+
 | Family | Commands |
 |---|---|
-| git | `git status`, `diff`, `show`, `log`, `push`, `fetch`, `pull`, `commit`, `branch`, `stash`, `checkout`, `switch`, `restore`, `add`, `worktree`; `yadm`; `gh pr`, `issue`, `run`, `release`; `glab mr`, `issue` |
-| Rust, Go, Python | `cargo build`, `check`, `clippy`, `doc`, `test`, `nextest`, `install`, `run`; `go test`, `build`, `vet`, `get`, `mod`, `install`; `golangci-lint`; `pytest`, `ruff`, `mypy`, `pip`, `uv`, `poetry` |
-| JavaScript | `npm`, `pnpm`, `yarn`, `bun` installs and tests, `jest`, `vitest`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma`, `deno` |
-| JVM, Ruby, PHP, .NET | `mvn`, `mvnd`, `gradle`, `gradlew`, `sbt`; `rake test`, `rails test`, `rspec`, `rubocop`, `bundle install`; `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`; `dotnet build`, `test`, `format`, `publish`, `pack`, `restore` |
+| git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`; `yadm status`, `yadm diff`, `yadm log`\* |
+| GitHub, GitLab | `gh pr`, `gh issue`, `gh run`, `gh release`; `glab mr`, `glab issue` |
+| Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install` |
+| Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run` |
+| Python | `pytest`\*; `ruff`, `ruff check`, `ruff format`; `mypy`; `pip` and `pip3`: `list`, `install`, `uninstall`, `sync`, `download` and every other subcommand; `uv pip`, `uv sync`, `uv add`, `uv lock`; `poetry install`, `poetry add`, `poetry update` |
+| JavaScript | `npm install`, `npm i`, `npm ci`, `npm ls`, `npm list`, `npm outdated`, `npm test`, `npm run`, `npm run-script`, `npm exec` and every other `npm` subcommand; `pnpm install`, `pnpm i`, `pnpm add`, `pnpm remove`, `pnpm rm`, `pnpm update`, `pnpm up`, `pnpm list`, `pnpm ls`, `pnpm outdated`, `pnpm why` and every other `pnpm` subcommand; `yarn install`, `yarn add`; `bun install`, `bun add`, `bun remove`, `bun test`; `deno test`, `deno lint`, `deno check`; `jest`, `vitest`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma` |
+| JVM | `mvn`, `mvnd`, `gradle`, `gradlew`, `sbt` |
+| Ruby | `rake test`, `rails test`, `ruby` (a minitest file), `rspec`, `rubocop`, `bundle install`, `bundle update` |
+| PHP | `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`, `phpstan analyze` |
+| .NET | `dotnet build`, `dotnet test`, `dotnet format`, `dotnet publish`, `dotnet pack`, `dotnet restore` |
 | Apple | `swift build`, `swift test`, `xcodebuild` |
-| Files and system | `ls`, `find`, `grep`, `rg`, `tree`, `env` (credential values masked), `ps` |
-| Containers and clouds | `docker ps`, `images`, `logs`, `build`, `pull`, `inspect`, `compose`; `kubectl` and `oc` get and logs; `helm list`; `aws`, `gcloud`; `terraform` and `tofu` plan and apply; `pulumi`; `curl`, `wget` |
-| Built-in rules | `gcc`, `clang` and `cc`, `make`, `cmake`, `brew`, `rsync`, `df`, `du`, `ping`, `shellcheck` |
+| Files and system | `ls`, `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` and `printenv` (credential values masked), `ps` |
+| Containers | `docker ps`, `docker images`, `docker image ls`, `docker logs`, `docker build`, `docker pull`, `docker inspect`, `docker compose` (`ps`, `logs` and the rest); `kubectl get`, `kubectl logs`, `kubectl describe`; `oc get`, `oc logs`; `helm list` |
+| Clouds and network | `aws` (`aws s3 ls` as a capped list, the rest as JSON), `gcloud`; `terraform plan`, `terraform apply`, `tofu plan`, `tofu apply`; `pulumi`; `curl`, `wget` |
+| Built-in rules | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (also with a version suffix such as `gcc-14`); `make`, `gmake`; `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
 
-`cat`, `head` and `tail` of a file are never filtered: the model asked for those exact lines.
+- A command started through a runner reads as the command it starts: `npx`, `bunx`, `pnpx`, `pnpm exec` and `dlx`, `npm exec` and `x`, `uv run`, `poetry run`, `pipenv run`, `bundle exec`, `python -m`, `python3 -m`, `php artisan`. An absolute path (`/usr/bin/git`) reads as its base name, and `git -C <dir>` as `git`.
+- Every other command gets the generic cleanup: colour codes, carriage-return redraws and repeated lines go.
+- `cat`, `head` and `tail` of a file are never filtered: the model asked for those exact lines.
 
 ## Measured saving
 
@@ -53,7 +64,27 @@ Measured on Claude Code 2.1.282 with Claude Opus 5.5 and bash-diet 0.1.2. The sa
 
 - A result's tokens are the growth of the context from the request that ran the command to the next one, less that request's output tokens. That count holds about 100 tokens for the call itself, which no filter shrinks.
 - The session's own prompt, tools and instructions are the same in both runs, so the saving on the whole session is smaller than the saving on the results.
-- The families that shrink most are container lists (78%), `rake test` (81%), and file listings and searches (66%). The least are `env` (the filter only masks credential values), `php -l` and `make`, whose output is already a few lines.
+The context tokens of the 35 results, by family. Each figure is the sum of the family's per-command medians.
+
+| Family | Commands run | Without the mod | With the mod | Saving |
+|---|---|---|---|---|
+| git | `git status`, `git diff`, `git log`, `git branch -a`, `git show --stat` | 1,598 | 890 | 44% |
+| Go | `go build`, `go vet`, `go test` | 308 | 226 | 27% |
+| Rust | `cargo build`, `cargo clippy`, `cargo test` | 1,682 | 923 | 45% |
+| Node | `npm install`, `npx tsc`, `npx vitest run`, `npm ls` | 1,191 | 1,012 | 15% |
+| Python | `pytest`, `python3 -m pip list` | 1,635 | 1,287 | 21% |
+| Gradle | `gradle build`, `gradle test` | 757 | 540 | 29% |
+| .NET | `dotnet build`, `dotnet test` | 1,221 | 697 | 43% |
+| Swift | `swift build`, `swift test` | 1,443 | 915 | 37% |
+| Ruby | `rake test` | 1,092 | 206 | 81% |
+| PHP | `php -l` | 112 | 103 | 8% |
+| C | `make` | 281 | 273 | 3% |
+| Files | `ls -la`, `find -name`, `grep -rn` | 6,974 | 2,384 | 66% |
+| Containers | `docker ps -a`, `docker images` | 10,423 | 2,270 | 78% |
+| System | `env`, `ps aux`, `df -h`, `du -sh` | 9,560 | 8,927 | 7% |
+| Total | 35 commands | 38,277 | 20,653 | 46% |
+
+- The least saving is on `env` (the filter only masks credential values), `php -l`, `make` and `go vet`, whose output is already a few lines and whose count is mostly the call's own 100 tokens.
 
 ## Your own rules
 

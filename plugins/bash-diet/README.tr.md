@@ -26,18 +26,29 @@ Her Bash sonucunu model okumadan önce küçülten bir Claude Code Mod'u. Biline
 
 ## Filtreler
 
+Modun kendi filtresi olan bütün komutlar. `*` ile işaretli komut 4. maddedeki flag'i alır.
+
 | Aile | Komutlar |
 |---|---|
-| git | `git status`, `diff`, `show`, `log`, `push`, `fetch`, `pull`, `commit`, `branch`, `stash`, `checkout`, `switch`, `restore`, `add`, `worktree`; `yadm`; `gh pr`, `issue`, `run`, `release`; `glab mr`, `issue` |
-| Rust, Go, Python | `cargo build`, `check`, `clippy`, `doc`, `test`, `nextest`, `install`, `run`; `go test`, `build`, `vet`, `get`, `mod`, `install`; `golangci-lint`; `pytest`, `ruff`, `mypy`, `pip`, `uv`, `poetry` |
-| JavaScript | `npm`, `pnpm`, `yarn`, `bun` install'ları ve testleri, `jest`, `vitest`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma`, `deno` |
-| JVM, Ruby, PHP, .NET | `mvn`, `mvnd`, `gradle`, `gradlew`, `sbt`; `rake test`, `rails test`, `rspec`, `rubocop`, `bundle install`; `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`; `dotnet build`, `test`, `format`, `publish`, `pack`, `restore` |
+| git | `git status`, `git diff`, `git show`, `git log`\*, `git push`, `git fetch`, `git pull`, `git commit`, `git branch`, `git stash`, `git checkout`, `git switch`, `git restore`, `git add`, `git worktree`; `yadm status`, `yadm diff`, `yadm log`\* |
+| GitHub, GitLab | `gh pr`, `gh issue`, `gh run`, `gh release`; `glab mr`, `glab issue` |
+| Rust | `cargo build`, `cargo check`, `cargo clippy`, `cargo doc`, `cargo run`, `cargo test`, `cargo nextest`, `cargo install` |
+| Go | `go test`, `go build`, `go vet`, `go get`, `go mod`, `go install`; `golangci-lint`, `golangci-lint run` |
+| Python | `pytest`\*; `ruff`, `ruff check`, `ruff format`; `mypy`; `pip` ve `pip3`: `list`, `install`, `uninstall`, `sync`, `download` ve diğer bütün subcommand'lar; `uv pip`, `uv sync`, `uv add`, `uv lock`; `poetry install`, `poetry add`, `poetry update` |
+| JavaScript | `npm install`, `npm i`, `npm ci`, `npm ls`, `npm list`, `npm outdated`, `npm test`, `npm run`, `npm run-script`, `npm exec` ve diğer bütün `npm` subcommand'ları; `pnpm install`, `pnpm i`, `pnpm add`, `pnpm remove`, `pnpm rm`, `pnpm update`, `pnpm up`, `pnpm list`, `pnpm ls`, `pnpm outdated`, `pnpm why` ve diğer bütün `pnpm` subcommand'ları; `yarn install`, `yarn add`; `bun install`, `bun add`, `bun remove`, `bun test`; `deno test`, `deno lint`, `deno check`; `jest`, `vitest`, `playwright`, `tsc`, `eslint`, `prettier`, `next build`, `prisma` |
+| JVM | `mvn`, `mvnd`, `gradle`, `gradlew`, `sbt` |
+| Ruby | `rake test`, `rails test`, `ruby` (bir minitest dosyası), `rspec`, `rubocop`, `bundle install`, `bundle update` |
+| PHP | `php -l`, `phpunit`, `pest`, `paratest`, `artisan test`, `phpstan analyse`, `phpstan analyze` |
+| .NET | `dotnet build`, `dotnet test`, `dotnet format`, `dotnet publish`, `dotnet pack`, `dotnet restore` |
 | Apple | `swift build`, `swift test`, `xcodebuild` |
-| Dosyalar ve sistem | `ls`, `find`, `grep`, `rg`, `tree`, `env` (credential değerleri maskelenir), `ps` |
-| Container'lar ve cloud'lar | `docker ps`, `images`, `logs`, `build`, `pull`, `inspect`, `compose`; `kubectl` ve `oc` get ve logs; `helm list`; `aws`, `gcloud`; `terraform` ve `tofu` plan ve apply; `pulumi`; `curl`, `wget` |
-| Built-in kurallar | `gcc`, `clang` ve `cc`, `make`, `cmake`, `brew`, `rsync`, `df`, `du`, `ping`, `shellcheck` |
+| Dosyalar ve sistem | `ls`, `find`, `grep`, `egrep`, `rg`, `ast-grep`, `tree`, `env` ve `printenv` (credential değerleri maskelenir), `ps` |
+| Container'lar | `docker ps`, `docker images`, `docker image ls`, `docker logs`, `docker build`, `docker pull`, `docker inspect`, `docker compose` (`ps`, `logs` ve diğerleri); `kubectl get`, `kubectl logs`, `kubectl describe`; `oc get`, `oc logs`; `helm list` |
+| Cloud'lar ve ağ | `aws` (`aws s3 ls` sınırlı bir liste olarak, diğerleri JSON olarak), `gcloud`; `terraform plan`, `terraform apply`, `tofu plan`, `tofu apply`; `pulumi`; `curl`, `wget` |
+| Built-in kurallar | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (`gcc-14` gibi bir sürüm ekiyle de); `make`, `gmake`; `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
 
-Bir dosyanın `cat`, `head` ve `tail`'i hiçbir zaman filtrelenmez: model tam o satırları istedi.
+- Bir runner ile başlatılan komut, başlattığı komut olarak okunur: `npx`, `bunx`, `pnpx`, `pnpm exec` ve `dlx`, `npm exec` ve `x`, `uv run`, `poetry run`, `pipenv run`, `bundle exec`, `python -m`, `python3 -m`, `php artisan`. Mutlak bir yol (`/usr/bin/git`) base name'i olarak, `git -C <dizin>` ise `git` olarak okunur.
+- Diğer her komut genel temizliği alır: renk kodları, carriage-return ile yeniden çizimler ve tekrarlanan satırlar gider.
+- Bir dosyanın `cat`, `head` ve `tail`'i hiçbir zaman filtrelenmez: model tam o satırları istedi.
 
 ## Ölçülen tasarruf
 
@@ -53,7 +64,27 @@ Bir dosyanın `cat`, `head` ve `tail`'i hiçbir zaman filtrelenmez: model tam o 
 
 - Bir sonucun token'ı, komutu çalıştıran request'ten sonrakine bağlamın büyümesidir, o request'in output token'ı çıkarılarak. Bu sayı çağrının kendisi için yaklaşık 100 token içerir, ve hiçbir filtre onu küçültmez.
 - Session'ın kendi prompt'u, tool'ları ve talimatları iki koşuda da aynıdır. Bu yüzden bütün session'daki tasarruf sonuçlardaki tasarruftan küçüktür.
-- En çok küçülen aileler container listeleri (%78), `rake test` (%81) ve dosya listeleri ile aramalar (%66). En az küçülenler `env` (filtre yalnız credential değerlerini maskeler), `php -l` ve `make`, çünkü çıktıları zaten birkaç satırdır.
+35 sonucun bağlam token'ı, aileye göre. Her sayı, ailedeki komutların medyanlarının toplamıdır.
+
+| Aile | Çalışan komutlar | Mod olmadan | Mod ile | Tasarruf |
+|---|---|---|---|---|
+| git | `git status`, `git diff`, `git log`, `git branch -a`, `git show --stat` | 1.598 | 890 | %44 |
+| Go | `go build`, `go vet`, `go test` | 308 | 226 | %27 |
+| Rust | `cargo build`, `cargo clippy`, `cargo test` | 1.682 | 923 | %45 |
+| Node | `npm install`, `npx tsc`, `npx vitest run`, `npm ls` | 1.191 | 1.012 | %15 |
+| Python | `pytest`, `python3 -m pip list` | 1.635 | 1.287 | %21 |
+| Gradle | `gradle build`, `gradle test` | 757 | 540 | %29 |
+| .NET | `dotnet build`, `dotnet test` | 1.221 | 697 | %43 |
+| Swift | `swift build`, `swift test` | 1.443 | 915 | %37 |
+| Ruby | `rake test` | 1.092 | 206 | %81 |
+| PHP | `php -l` | 112 | 103 | %8 |
+| C | `make` | 281 | 273 | %3 |
+| Dosyalar | `ls -la`, `find -name`, `grep -rn` | 6.974 | 2.384 | %66 |
+| Container'lar | `docker ps -a`, `docker images` | 10.423 | 2.270 | %78 |
+| Sistem | `env`, `ps aux`, `df -h`, `du -sh` | 9.560 | 8.927 | %7 |
+| Toplam | 35 komut | 38.277 | 20.653 | %46 |
+
+- En az tasarruf `env` (filtre yalnız credential değerlerini maskeler), `php -l`, `make` ve `go vet` komutlarındadır. Bunların çıktısı zaten birkaç satırdır ve sayılarının çoğu çağrının kendi 100 token'ıdır.
 
 ## Kendi kurallarınız
 
