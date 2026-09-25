@@ -56,7 +56,7 @@ export interface State {
   lastPing: PingRecord | null
   stopped: string | null
   /** The short form of the last transcript line, drawn faint under the window line in the sidebar. */
-  event?: string
+  event?: Line
 }
 
 /** The rates the session bills now: its model, at fast mode rates while the setting says so. */
@@ -172,28 +172,60 @@ export function clockText(at: number, now: number): string {
   return date.toDateString() === new Date(now).toDateString() ? time : `${date.getDate()} ${MONTHS[date.getMonth()]} ${time}`
 }
 
-/** The status line; undefined clears it. The engine puts the mod name in front. */
-export function statusText(s: State, now: number): string | undefined {
-  if (s.stopped) return `stopped: ${s.stopped}`
+/** How the sidebar colours a line or a part of one. */
+export type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+const joined = (parts: Part[]): string => parts.map(p => p.text).join('')
+
+/** A line made of parts, its `text` their texts joined. */
+export const partsLine = (parts: Part[]): Line => ({ text: joined(parts), parts })
+
+/**
+ * The window's state in parts; undefined while no window runs. Only the time left (or `always`) takes
+ * the window's colour, the ping details are faint, and a stop shows its `stopped:` front red.
+ */
+export function statusParts(s: State, now: number): Part[] | undefined {
+  if (s.stopped) return [part('stopped:', 'error'), part(` ${s.stopped}`, undefined)]
   if (!hasWindow(s)) return undefined
   const next = s.lastRequestAt && !s.compacted ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
-  const ping = s.lastPing ? ` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)} (${clockText(s.lastPing.at, now)})` : ''
+  const ping = s.lastPing ? [part(` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)} (${clockText(s.lastPing.at, now)})`, 'dim')] : []
   const left = s.endless ? 'always' : `${fmtDuration(s.deadline - now)} left`
-  return `${left}${next}${ping}`
+  return [part(left, statusTone(s, now)), part(next, 'dim'), ...ping]
+}
+
+/** The status line; undefined clears it. The engine puts the mod name in front. */
+export function statusText(s: State, now: number): string | undefined {
+  const parts = statusParts(s, now)
+  return parts === undefined ? undefined : joined(parts)
 }
 
 /**
- * The sidebar line while no window runs: what this session paid for cold writes and how large the
- * context is. It replaces the stop reason at the next turn, so the pane holds a measurement of now
- * instead of one sentence of the window that ended. The transcript keeps the reason.
+ * The sidebar line while no window runs, in parts: what this session paid for cold writes and how large
+ * the context is. It replaces the stop reason at the next turn, so the pane holds a measurement of now
+ * instead of one sentence of the window that ended. The transcript keeps the reason. The line is faint
+ * but for a paid cold write, which is yellow.
  */
-export function idleText(s: State): string {
+export function idleParts(s: State): Part[] {
   const count = s.coldWrites.length
   const paid = s.coldWrites.reduce((sum, w) => sum + (w.usd ?? 0), 0)
-  const writes = count === 0 ? 'no cold write' : `${count} cold write${count === 1 ? '' : 's'} paid ${fmtUsd(paid)}`
-  const context = s.ctx > 0 ? ` · context ${fmtTok(s.ctx)} tokens` : ''
+  const writes = count === 0 ? part('no cold write', 'dim') : part(`${count} cold write${count === 1 ? '' : 's'} paid ${fmtUsd(paid)}`, 'warn')
+  const context = s.ctx > 0 ? [part(` · context ${fmtTok(s.ctx)} tokens`, 'dim')] : []
   const again = s.renew ? ` · ${fmtDuration(s.renew.window)} again at your next message` : ''
-  return `off${again} · ${writes}${context}`
+  return [part(`off${again} · `, 'dim'), writes, ...context]
+}
+
+export function idleText(s: State): string {
+  return joined(idleParts(s))
+}
+
+/** The sidebar's first line: the window's state, or the idle line while none runs. */
+export function windowLine(s: State, now: number): Line {
+  return partsLine(statusParts(s, now) ?? idleParts(s))
 }
 
 /**
@@ -211,14 +243,14 @@ export function statusTone(s: State, now: number): 'ok' | 'warn' | 'error' | 'di
 /** How many characters of the last event the sidebar's second line holds. */
 const MAX_EVENT = 120
 
-/** A transcript line as the sidebar's second line: cut, because the pane holds one row for it. */
-export function eventShort(text: string): string {
-  return text.length > MAX_EVENT ? `${text.slice(0, MAX_EVENT - 1)}…` : text
+/** A transcript line as the sidebar's second line: faint, and cut, because the pane holds one row for it. */
+export function eventShort(text: string): Line {
+  return { text: text.length > MAX_EVENT ? `${text.slice(0, MAX_EVENT - 1)}…` : text, kind: 'dim' }
 }
 
-/** The cold write as the sidebar's second line: what it cost, without the instruction the line carries. */
-export function coldWriteShort(tokens: number, usd: number | null): string {
-  return `cold write ${fmtTok(tokens)} tokens paid (${fmtUsd(usd)})`
+/** The cold write as the sidebar's second line: what it cost, without the instruction the line carries; the cost yellow. */
+export function coldWriteShort(tokens: number, usd: number | null): Line {
+  return partsLine([part(`cold write ${fmtTok(tokens)} tokens paid `, 'dim'), part(`(${fmtUsd(usd)})`, 'warn')])
 }
 
 export type ResumeFields = {

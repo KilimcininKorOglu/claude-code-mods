@@ -37,9 +37,9 @@ Soğuk bir cache'e giden mesaj durdurulmaz ve geciktirilmez. Cache'i düşmüş,
 
 Parantezdeki zaman, son ping'in cevabının geldiği yerel saattir; önceki bir günün ping'i gününü ve ayını da taşır, `(22 Sep 23:10)` gibi.
 
-[sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran ve her değişimde yeniden yazılan bir `cache window` section'ı olarak; status line temiz kalır. Orada satır renklidir: durmuş pencere kırmızı, sonu bir ping periyodundan yakın olan pencere sarı, tutan pencere yeşil, ilk turn beklenirken soluk. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi çizilir.
+[sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran ve her değişimde yeniden yazılan bir `cache window` section'ı olarak; status line temiz kalır. Orada yalnızca kalan süre (ya da `always`) renklidir: sonu bir ping periyodundan yakın olan pencerede sarı, tutan pencerede yeşil, ilk turn beklenirken soluk. Ardındaki ping bilgileri soluktur; durmuş bir pencerede `stopped:` başı kırmızı, sebep varsayılan renktedir. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi çizilir.
 
-Duruş sebebi bir turn boyunca durur. Sonraki turn'de section onun yerine soluk idle satırını taşır, böylece pane biten pencerenin bir cümlesini değil, şimdinin ölçümünü tutar. Sebep transcript'te kalır ve pencere çalışmıyorken status line boştur:
+Duruş sebebi bir turn boyunca durur. Sonraki turn'de section onun yerine idle satırını taşır; satır soluktur, yalnızca ödenmiş bir `N cold writes paid $X` sarıdır. Böylece pane biten pencerenin bir cümlesini değil, şimdinin ölçümünü tutar. Sebep transcript'te kalır ve pencere çalışmıyorken status line boştur:
 
     cache window
     off · 2 cold writes paid $6.30 · context 315k tokens
@@ -53,7 +53,7 @@ Süresi dolan bir pencere sonraki mesajınızla tekrar kurulur, biten pencere ka
 
 Yalnız süresi dolan pencere geri gelir. Bir ping'in durdurduğu pencere gelmez: orada cache zaten gitmiştir ve sonraki mesajınızın soğuk write'ı kendi 6h penceresini kurar. `/cache-warm off` geri gelmeyi bekleyen bir pencereyi unutur.
 
-Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satırı, kısaltılmış. Pencere satırı cache'in ne kadar tutulacağını söyler, ikinci satır mod'un en son ne yaptığını:
+Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satırı, kısaltılmış; bir cold write'ın maliyeti sarıdır. Pencere satırı cache'in ne kadar tutulacağını söyler, ikinci satır mod'un en son ne yaptığını:
 
     cache window
     6h left · ping in 50m

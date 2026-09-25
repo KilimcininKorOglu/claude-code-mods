@@ -22,10 +22,11 @@ import {
   resetForClear,
   seedFromResume,
   statusText,
-  statusTone,
   transcriptPath,
   TTL_MS,
   unsentText,
+  windowLine,
+  type Line,
   type State,
 } from './warm.ts'
 
@@ -64,7 +65,7 @@ function disarm(s: State): void {
 const SECTION = { consumer: 'cache-warm', key: 'window' }
 
 /** Writes one transcript line and keeps a short form of it for the sidebar's second line. */
-function logEvent($: EngineInterface, s: State, text: string, short: string): void {
+function logEvent($: EngineInterface, s: State, text: string, short: Line): void {
   $.ui.log(text)
   s.event = short
 }
@@ -75,9 +76,9 @@ function logEvent($: EngineInterface, s: State, text: string, short: string): vo
  * holds, the second what the mod last did. A closed sidebar, and a sidebar mod that is not installed,
  * both answer false, so the status line is drawn instead.
  */
-async function toSidebar($: EngineInterface, s: State, text: string, kind: 'ok' | 'warn' | 'error' | 'dim'): Promise<boolean> {
+async function toSidebar($: EngineInterface, s: State, line: Line): Promise<boolean> {
   try {
-    const lines = [{ text, kind }, ...(s.event === undefined ? [] : [{ text: s.event, kind: 'dim' as const }])]
+    const lines = [line, ...(s.event === undefined ? [] : [s.event])]
     return await $.sidebar.set({ ...SECTION, title: 'cache window', lines, until: 'session', order: 20 })
   } catch {
     // The sidebar mod is not installed.
@@ -91,9 +92,8 @@ async function toSidebar($: EngineInterface, s: State, text: string, kind: 'ok' 
  * is unchanged: with no window and no stop reason it carries nothing.
  */
 async function showStatusAt($: EngineInterface, s: State, now: number): Promise<void> {
-  const text = statusText(s, now)
-  const taken = await toSidebar($, s, text ?? idleText(s), text === undefined ? 'dim' : statusTone(s, now))
-  $.ui.status(taken ? undefined : text)
+  const taken = await toSidebar($, s, windowLine(s, now))
+  $.ui.status(taken ? undefined : statusText(s, now))
 }
 
 async function showStatus($: EngineInterface, s: State): Promise<void> {
@@ -302,7 +302,7 @@ async function renewWindow($: EngineInterface, s: State, kind: string | undefine
   if (again === null || s.deadline || kind === undefined || !USER_ORIGINS.includes(kind)) return
   // The line is written before the window starts, so the sidebar's redraw already carries it.
   const text = `the ${fmtDuration(again.window)} window ran out; this message arms another one. /cache-warm off stops it.`
-  logEvent($, s, text, `window armed again for ${fmtDuration(again.window)}`)
+  logEvent($, s, text, eventShort(`window armed again for ${fmtDuration(again.window)}`))
   await startWindow($, s, again.window, again.every)
 }
 

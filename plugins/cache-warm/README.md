@@ -37,9 +37,9 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
 The time in brackets is when the last ping's answer came, in local time; a ping of an earlier day carries its day and month, as `(22 Sep 23:10)`.
 
-While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. There the line is coloured: a stopped window red, a window whose end is nearer than one ping period yellow, a window that holds green, and the wait for the first turn faint. With the sidebar closed, or without that mod installed, the status line is drawn as above.
+While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. There only the time left (or `always`) is coloured: yellow for a window whose end is nearer than one ping period, green for a window that holds, faint while it waits for the first turn. The ping details after it are faint, and a stopped window shows its `stopped:` front red with the reason in the default colour. With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
-A stop reason stands for one turn. At the next turn the section carries the idle line instead, faint, so the pane holds a measurement of now and not one sentence of the window that ended. The reason stays in the transcript, and the status line is empty while no window runs:
+A stop reason stands for one turn. At the next turn the section carries the idle line instead, faint but for a paid `N cold writes paid $X`, which is yellow, so the pane holds a measurement of now and not one sentence of the window that ended. The reason stays in the transcript, and the status line is empty while no window runs:
 
     cache window
     off · 2 cold writes paid $6.30 · context 315k tokens
@@ -53,7 +53,7 @@ A window that runs out of time is armed again by your next message, as long as t
 
 Only a window that ran out of time comes back. A window a ping stopped does not: the cache is already gone there, and the cold write of your next message arms its own 6h window. `/cache-warm off` forgets a window waiting to come back.
 
-The section holds a second, faint line under the window: the last transcript line, shortened. The window line says how long the cache is kept, the second line says what the mod last did:
+The section holds a second, faint line under the window: the last transcript line, shortened, with the cost of a cold write yellow. The window line says how long the cache is kept, the second line says what the mod last did:
 
     cache window
     6h left · ping in 50m

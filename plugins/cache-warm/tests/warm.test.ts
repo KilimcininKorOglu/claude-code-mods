@@ -13,8 +13,10 @@ import {
   parseWarmArgs,
   resetForClear,
   seedFromResume,
+  coldWriteShort,
   statusText,
   statusTone,
+  windowLine,
 } from '../hooks/warm.ts'
 
 tier('user')
@@ -140,6 +142,24 @@ describe('text', () => {
     expect(statusTone(s, NOW)).toBe('warn')
     s.stopped = 'the cache was already gone'
     expect(statusTone(s, NOW)).toBe('error')
+  })
+
+  test('the sidebar line colours only the time left, the stop front and a paid cold write', async () => {
+    const s = freshState()
+    expect(windowLine(s, NOW)).toEqual({ text: 'off · no cold write', parts: [{ text: 'off · ', kind: 'dim' }, { text: 'no cold write', kind: 'dim' }] })
+    s.coldWrites = [{ tokens: 200_000, usd: 4 }]
+    s.ctx = 315_000
+    expect(windowLine(s, NOW).parts).toEqual([
+      { text: 'off · ', kind: 'dim' },
+      { text: '1 cold write paid $4.00', kind: 'warn' },
+      { text: ' · context 315k tokens', kind: 'dim' },
+    ])
+    s.deadline = NOW + 6 * HOUR
+    s.lastRequestAt = NOW
+    expect(windowLine(s, NOW)).toEqual({ text: '6h left · ping in 50m', parts: [{ text: '6h left', kind: 'ok' }, { text: ' · ping in 50m', kind: 'dim' }] })
+    s.stopped = 'the cache was already gone'
+    expect(windowLine(s, NOW).parts).toEqual([{ text: 'stopped:', kind: 'error' }, { text: ' the cache was already gone' }])
+    expect(coldWriteShort(200_502, 4.01).parts).toEqual([{ text: 'cold write 201k tokens paid ', kind: 'dim' }, { text: '($4.01)', kind: 'warn' }])
   })
 
   test('the card names the always switch while off', async () => {
