@@ -63,9 +63,14 @@ export function addSplit(split: Split, usage: Usage | undefined): Split {
   }
 }
 
+/** The row's token part after the total: the input, the output, the cache reads and the cache writes. */
+function kindsText(split: Split): string {
+  return ` · I ${fmtTok(split.input)} · O ${fmtTok(split.output)} · CR ${fmtTok(split.cacheRead)} · CW ${fmtTok(split.cacheWrite)}`
+}
+
 /** The row's token part: the total, then the input, the output, the cache reads and the cache writes. */
 export function splitText(tokens: number, split: Split): string {
-  return `T ${fmtTok(tokens)} · I ${fmtTok(split.input)} · O ${fmtTok(split.output)} · CR ${fmtTok(split.cacheRead)} · CW ${fmtTok(split.cacheWrite)}`
+  return `T ${fmtTok(tokens)}${kindsText(split)}`
 }
 
 export function fmtTok(n: number): string {
@@ -101,24 +106,56 @@ export function ranked(runs: readonly Run[]): Run[] {
   return [...runs].sort((a, b) => b.tokens - a.tokens || b.ms - a.ms)
 }
 
-/** A sidebar line, as the sidebar mod's contract names it. */
+/** A sidebar line and a part of one, as the sidebar mod's contract names them. */
 type Kind = 'ok' | 'warn' | 'error' | 'dim'
-type Line = { text: string; kind: Kind }
+export type Part = { text: string; kind?: Kind }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Kind; parts?: Part[] }
 
-/** A row's colour: red past the limit whatever the status, else faint when stopped, yellow while running, green when done. */
-export function kindOf(run: Run, limitK: number): Kind {
-  if (run.tokens >= limitK * 1000) return 'error'
-  if (run.status === 'stopped') return 'dim'
-  return run.status === 'running' ? 'warn' : 'ok'
+const part = (text: string, kind: Kind | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The model's colour by family, the dearest the warmest: opus red, fable yellow, sonnet green, haiku faint. */
+export function modelTone(model: string): Kind | undefined {
+  const families: [RegExp, Kind][] = [[/opus/i, 'error'], [/fable/i, 'warn'], [/sonnet/i, 'ok'], [/haiku/i, 'dim']]
+  return families.find(([family]) => family.test(model))?.[1]
+}
+
+/** The total's colour: red at or past the limit, yellow from 80% of it, the default under that. */
+export function tokensTone(tokens: number, limitK: number): Kind | undefined {
+  if (tokens >= limitK * 1000) return 'error'
+  return tokens >= limitK * 800 ? 'warn' : undefined
+}
+
+/** The status word's colour: yellow while running, green when done, faint when stopped. */
+const STATUS_TONE: Record<Status, Kind> = { running: 'warn', done: 'ok', stopped: 'dim' }
+
+/**
+ * One row of the pane in parts: the model coloured by its family, the total by the limit and the status
+ * word by the status; the label, the turns, the time and the tokens by kind stay in the default colour.
+ */
+export function rowLine(run: Run, limitK: number): Line {
+  const model = run.model === '' ? [] : [part(shortModel(run.model), modelTone(run.model)), part(' · ', undefined)]
+  return partsLine([
+    part(`${labelOf(run)} · `, undefined),
+    ...model,
+    part(`${run.turns} turn · ${fmtDuration(run.ms)} · `, undefined),
+    part(`T ${fmtTok(run.tokens)}`, tokensTone(run.tokens, limitK)),
+    part(kindsText(run.split), undefined),
+    part(' · ', undefined),
+    part(run.status, STATUS_TONE[run.status]),
+  ])
 }
 
 /**
- * The pane's lines: one row per subagent, the costliest first, coloured by `kindOf`. The rows past the
- * fifth are one faint line, so a fan-out of twenty agents still holds six rows.
+ * The pane's lines: one row per subagent, the costliest first, each drawn by `rowLine`. The rows past
+ * the fifth are one faint line, so a fan-out of twenty agents still holds six rows.
  */
 export function sidebarLines(runs: readonly Run[], limitK: number): Line[] {
   const order = ranked(runs)
-  const lines: Line[] = order.slice(0, ROWS).map(run => ({ text: rowText(run), kind: kindOf(run, limitK) }))
+  const lines: Line[] = order.slice(0, ROWS).map(run => rowLine(run, limitK))
   const rest = order.length - ROWS
   if (rest > 0) lines.push({ text: `${rest} more · ${fmtTok(order.slice(ROWS).reduce((sum, r) => sum + r.tokens, 0))}`, kind: 'dim' })
   return lines

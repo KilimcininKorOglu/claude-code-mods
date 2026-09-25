@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput, TurnUsage } from 'claude-code'
 
-import { addSplit, fmtDuration, fmtTok, limitOf, NO_SPLIT, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
+import { addSplit, fmtDuration, fmtTok, limitOf, modelTone, NO_SPLIT, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
 
 tier('user')
 
@@ -16,11 +16,11 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { lines: { text: string; kind?: string }[] }[]; cleared: number }
+type Bar = { open: boolean; sections: { lines: Drawn[] }[]; cleared: number }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { lines: { text: string; kind?: string }[] }
+    const s = e as unknown as { lines: Drawn[] }
     if (bar.open) bar.sections.push({ lines: s.lines })
     return { value: bar.open }
   })
@@ -52,6 +52,14 @@ async function step($: Engine, agentId: string): Promise<void> {
 }
 
 const runAt = (tokens: number, status: Run['status']): Run => ({ type: 'Explore', description: '', model: '', turns: 1, ms: 1000, tokens, split: NO_SPLIT, status })
+
+type Drawn = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+
+/** The colour of a row's `T <total>` part. */
+const totalKind = (line: Drawn | undefined): string | undefined => line?.parts?.find(p => p.text.startsWith('T '))?.kind
+
+/** A row's status word, the last part. */
+const statusWord = (line: Drawn | undefined): { text: string; kind?: string } | undefined => line?.parts?.at(-1)
 
 /** The status lines the mod wrote, newest last. */
 type World = { statuses: (string | undefined)[] }
@@ -118,21 +126,36 @@ describe('subagent-ledger', () => {
     expect(limitOf('200')).toBe(200)
   })
 
-  test('the pane draws five rows and counts the rest, red past the limit', () => {
+  test('the pane draws five rows and counts the rest, the total red at the limit and yellow from 80% of it', () => {
     const runs = Array.from({ length: 7 }, (_, i): Run => ({ type: 'Explore', description: `${i}`, model: '', turns: 1, ms: 1000, tokens: (i + 1) * 50_000, split: NO_SPLIT, status: 'done' }))
     const lines = sidebarLines(runs, 200)
     expect(lines).toHaveLength(6)
-    expect(lines[0]?.kind).toBe('error')
-    // The fourth row spent exactly the limit, so it is red too; the fifth is under it.
-    expect(lines[3]?.kind).toBe('error')
-    expect(lines[4]?.kind).toBe('ok')
+    expect(totalKind(lines[0])).toBe('error')
+    // The fourth row spent exactly the limit, so its total is red too; the fifth is at 75%, under the yellow step.
+    expect(totalKind(lines[3])).toBe('error')
+    expect(totalKind(lines[4])).toBe(undefined)
+    expect(totalKind(sidebarLines([runAt(160_000, 'done')], 200)[0])).toBe('warn')
     expect(lines[5]).toEqual({ text: '2 more · 150k', kind: 'dim' })
   })
 
-  test('a row is yellow while it runs, green when done, faint when stopped, and red past the limit in every status', () => {
-    const kinds = (tokens: number) => (['running', 'done', 'stopped'] as const).map(s => sidebarLines([runAt(tokens, s)], 200)[0]?.kind)
-    expect(kinds(10_000)).toEqual(['warn', 'ok', 'dim'])
-    expect(kinds(200_000)).toEqual(['error', 'error', 'error'])
+  test('a row colours its status word, its model by family and nothing else', () => {
+    const words = (['running', 'done', 'stopped'] as const).map(s => sidebarLines([runAt(10_000, s)], 200)[0]?.parts?.at(-1))
+    expect(words).toEqual([{ text: 'running', kind: 'warn' }, { text: 'done', kind: 'ok' }, { text: 'stopped', kind: 'dim' }])
+    const row: Run = { type: 'Explore', description: 'find the parser', model: 'claude-opus-5', turns: 3, ms: 42_000, tokens: 81_000, split: { input: 2000, output: 1000, cacheRead: 70_000, cacheWrite: 8000 }, status: 'done' }
+    expect(sidebarLines([row], 200)[0]).toEqual({
+      text: 'find the parser · opus-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k · done',
+      parts: [
+        { text: 'find the parser · ' },
+        { text: 'opus-5', kind: 'error' },
+        { text: ' · ' },
+        { text: '3 turn · 42s · ' },
+        { text: 'T 81k' },
+        { text: ' · I 2k · O 1k · CR 70k · CW 8k' },
+        { text: ' · ' },
+        { text: 'done', kind: 'ok' },
+      ],
+    })
+    expect([modelTone('claude-fable-5-1'), modelTone('claude-sonnet-5'), modelTone('claude-haiku-4-5'), modelTone('gpt-x')]).toEqual(['warn', 'ok', 'dim', undefined])
   })
 
   test('a subagent turn is counted, a main-loop turn is not', async ($, on) => {
@@ -168,7 +191,8 @@ describe('subagent-ledger', () => {
     await started($)
     await spawn($, 'Explore', 'find the parser')
     await $.turn.complete(turn({ agentId: 'a-Explore' }))
-    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'find the parser · fable-5-1 · 1 turn · 1s · T 10k · I 1k · O 500 · CR 8k · CW 500', kind: 'ok' }])
+    expect(bar.sections.at(-1)?.lines.map(l => l.text)).toEqual(['find the parser · fable-5-1 · 1 turn · 1s · T 10k · I 1k · O 500 · CR 8k · CW 500 · done'])
+    expect(statusWord(bar.sections.at(-1)?.lines[0])).toEqual({ text: 'done', kind: 'ok' })
     expect(w.statuses.at(-1)).toBe(undefined)
     await $.command.run(run('off'))
     expect(bar.cleared).toBe(1)
@@ -180,10 +204,11 @@ describe('subagent-ledger', () => {
     seatSidebar(on, bar)
     await started($)
     await spawn($, 'Explore', 'find the parser')
-    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'find the parser · fable-5-1 · 0 turn · 0s · T 0 · I 0 · O 0 · CR 0 · CW 0', kind: 'warn' }])
+    expect(bar.sections.at(-1)?.lines.map(l => l.text)).toEqual(['find the parser · fable-5-1 · 0 turn · 0s · T 0 · I 0 · O 0 · CR 0 · CW 0 · running'])
+    expect(statusWord(bar.sections.at(-1)?.lines[0])).toEqual({ text: 'running', kind: 'warn' })
     await step($, 'a-Explore')
     await $.turn.complete(turn({ agentId: 'a-Explore' }))
-    expect(bar.sections.at(-1)?.lines[0]?.kind).toBe('ok')
+    expect(statusWord(bar.sections.at(-1)?.lines[0])?.kind).toBe('ok')
   })
 
   withSidebar('an interrupted subagent is drawn faint and stopped, and a resumed one yellow again', async ($, on) => {
@@ -193,15 +218,17 @@ describe('subagent-ledger', () => {
     await started($)
     await spawn($, 'Explore', 'x')
     await $.turn.complete(aborted('a-Explore'))
-    expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'x · fable-5-1 · 1 turn · 1s · T 10k · I 1k · O 500 · CR 8k · CW 500 · stopped', kind: 'dim' }])
+    expect(bar.sections.at(-1)?.lines.map(l => l.text)).toEqual(['x · fable-5-1 · 1 turn · 1s · T 10k · I 1k · O 500 · CR 8k · CW 500 · stopped'])
+    expect(statusWord(bar.sections.at(-1)?.lines[0])).toEqual({ text: 'stopped', kind: 'dim' })
     const drawn = bar.sections.length
     await step($, 'a-Explore')
-    expect(bar.sections.at(-1)?.lines[0]?.kind).toBe('warn')
+    expect(statusWord(bar.sections.at(-1)?.lines[0])?.kind).toBe('warn')
     // A second step of the same run draws nothing new, because the row already reads running.
     await step($, 'a-Explore')
     expect(bar.sections.length).toBe(drawn + 1)
     await $.turn.complete(turn({ agentId: 'a-Explore' }))
-    expect(bar.sections.at(-1)?.lines[0]).toEqual({ text: 'x · fable-5-1 · 2 turn · 2s · T 20k · I 2k · O 1k · CR 16k · CW 1k', kind: 'ok' })
+    expect(bar.sections.at(-1)?.lines[0]?.text).toBe('x · fable-5-1 · 2 turn · 2s · T 20k · I 2k · O 1k · CR 16k · CW 1k · done')
+    expect(statusWord(bar.sections.at(-1)?.lines[0])?.kind).toBe('ok')
   })
 
   withSidebar('a main-loop step draws nothing', async ($, on) => {

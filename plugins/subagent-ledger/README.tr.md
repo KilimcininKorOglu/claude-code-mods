@@ -10,12 +10,12 @@ Session'ın her subagent'ının ne harcadığını gösteren bir Claude Code Mod
 4. [sidebar](../sidebar) açıkken defter, session boyunca duran ve her spawn'da, her subagent turunda ve bir subagent yeniden çalıştığında yeniden yazılan tek bir `subagents` section'ıdır:
 
        subagents
-       find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k
-       port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · T 260k · I 5k · O 9k · CR 210k · CW 36k
+       find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k · done
+       port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · T 260k · I 5k · O 9k · CR 210k · CW 36k · running
        read the tests · haiku-4-5 · 1 turn · 9s · T 30k · I 1k · O 500 · CR 24k · CW 5k · stopped
        2 more · 150k
 
-   Bir satırın adı görevinin açıklamasıdır ve 40 karakterde kesilir; açıklama vermeyen bir spawn'ın satırında onun yerine agent type'ı yazar. Token'ları şöyle okunur: `T` toplam, `I` cache'in karşılamadığı input, `O` output, `CR` cache read, `CW` cache write; son dördünün toplamı `T`'dir. Bir satır, subagent'ı çalışırken sarı, cevap verince yeşildir. Çalışması cevapsız biten bir subagent'ın satırı soluktur ve sonunda `stopped` yazar. Limiti geçen bir subagent'ın satırı (varsayılan 200k token) bu durumların hepsinde kırmızıdır. Beşinciden sonraki satırlar token'ları toplanmış tek bir soluk satırdır, yani yirmi agent'lık bir dağılım yine altı satır tutar.
+   Bir satırın adı görevinin açıklamasıdır ve 40 karakterde kesilir; açıklama vermeyen bir spawn'ın satırında onun yerine agent type'ı yazar. Token'ları şöyle okunur: `T` toplam, `I` cache'in karşılamadığı input, `O` output, `CR` cache read, `CW` cache write; son dördünün toplamı `T`'dir. Satır, durum kelimesiyle biter: subagent çalışırken sarı `running`, cevap verince yeşil `done`, çalışması cevapsız bittiğinde soluk `stopped`. Model ailesine göre renklidir (opus kırmızı, fable sarı, sonnet yeşil, haiku soluk). `T` toplamı limitin (varsayılan 200k token) %80'inden itibaren sarı, subagent limite ulaştığında ise her durumda kırmızıdır. Ad, turlar, süre ve türüne göre token'lar varsayılan renkte kalır. Beşinciden sonraki satırlar token'ları toplanmış tek bir soluk satırdır, yani yirmi agent'lık bir dağılım yine altı satır tutar.
 5. Sidebar kapalıyken ya da o mod kurulu değilken toplamlar status line'a gider:
 
        subagent-ledger: 4 subagent · 12 turn · 3m 10s · 210k

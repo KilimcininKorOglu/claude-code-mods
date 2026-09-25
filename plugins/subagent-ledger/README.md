@@ -10,12 +10,12 @@ A Claude Code Mod that shows what each subagent of the session spent: its turns,
 4. While the [sidebar](../sidebar) is open, the ledger is one `subagents` section that stays for the session and is rewritten at each spawn, at each subagent turn and when a subagent runs again:
 
        subagents
-       find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k
-       port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · T 260k · I 5k · O 9k · CR 210k · CW 36k
+       find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k · done
+       port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · T 260k · I 5k · O 9k · CR 210k · CW 36k · running
        read the tests · haiku-4-5 · 1 turn · 9s · T 30k · I 1k · O 500 · CR 24k · CW 5k · stopped
        2 more · 150k
 
-   A row's name is the description of its task, cut at 40 characters; a spawn that named no description shows its agent type there instead. Its tokens read as `T` the total, `I` the input the cache did not serve, `O` the output, `CR` the cache reads and `CW` the cache writes; the last four add up to `T`. A row is yellow while its subagent runs, green once it answered, and faint with `stopped` at its end when its run ended without an answer. A row whose subagent passed the limit (200k tokens by default) is red in every one of those states. The rows past the fifth are one faint line with their tokens added up, so a fan-out of twenty agents still holds six rows.
+   A row's name is the description of its task, cut at 40 characters; a spawn that named no description shows its agent type there instead. Its tokens read as `T` the total, `I` the input the cache did not serve, `O` the output, `CR` the cache reads and `CW` the cache writes; the last four add up to `T`. A row ends with its status word: `running` yellow while its subagent runs, `done` green once it answered, and `stopped` faint when its run ended without an answer. The model is coloured by family (opus red, fable yellow, sonnet green, haiku faint). The `T` total is yellow from 80% of the limit (200k tokens by default) and red once the subagent reached it, in every status. The label, the turns, the time and the tokens by kind stay in the default colour. The rows past the fifth are one faint line with their tokens added up, so a fan-out of twenty agents still holds six rows.
 5. With the sidebar closed, or without that mod installed, the totals go to the status line instead:
 
        subagent-ledger: 4 subagent · 12 turn · 3m 10s · 210k
