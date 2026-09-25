@@ -153,7 +153,10 @@ describe('python', () => {
     const one = (f: string): string => `${f}:1:1: F401 'os' imported but unused\n${f}:1:1: F401 'sys' imported but unused\n${f}:3:1: E302 expected 2 blank lines, found 0\n${f}:4:5: F841 local variable 'x' is assigned to but never used\n${f}:14:12: F821 undefined name 'undefined_name'\n`
     const plan = planFor('python3 -m flake8 pkg')
     if (plan === undefined) throw new Error('no plan for flake8')
-    expect(runFilter(plan, one('pkg/app.py') + one('pkg/util.py'), 1, false).text).toBe([
+    const grouped = runFilter(plan, one('pkg/app.py') + one('pkg/util.py'), 1, false)
+    // The grouping drops each finding's line, so the full output must be kept for the model to find it.
+    expect(grouped.elided).toBe(true)
+    expect(grouped.text).toBe([
       "F401 (4): 'os' imported but unused", '  pkg/app.py, pkg/util.py',
       'E302 (2): expected 2 blank lines, found 0', '  pkg/app.py, pkg/util.py',
       "F841 (2): local variable 'x' is assigned to but never used", '  pkg/app.py, pkg/util.py',

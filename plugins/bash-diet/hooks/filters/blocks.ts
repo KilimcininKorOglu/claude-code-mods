@@ -42,7 +42,11 @@ export type Issue = { file: string; code: string; text: string }
 /** How many rule lines a grouped report shows. */
 const MAX_RULE_LINES = 40
 
-/** Linter findings grouped by rule, the most frequent first, each rule's files listed. */
+/**
+ * Linter findings grouped by rule, the most frequent first, each rule's files listed. The grouping drops
+ * every finding's line and column, and every message after a rule's first, so it always elides and the
+ * full output is kept.
+ */
 export function byRule(issues: Issue[], tool: string): { text: string; elided: boolean } {
   const groups = new Map<string, Issue[]>()
   for (const i of issues) groups.set(i.code, [...(groups.get(i.code) ?? []), i])
@@ -53,5 +57,5 @@ export function byRule(issues: Issue[], tool: string): { text: string; elided: b
   })
   const cut = lines.length > MAX_RULE_LINES
   const shown = cut ? [...lines.slice(0, MAX_RULE_LINES), `… +${lines.length - MAX_RULE_LINES} more lines`] : lines
-  return { text: [...shown, `${tool}: ${plural(issues.length, 'issue')} in ${plural(groups.size, 'rule')}`].join('\n'), elided: cut }
+  return { text: [...shown, `${tool}: ${plural(issues.length, 'issue')} in ${plural(groups.size, 'rule')}`].join('\n'), elided: true }
 }
