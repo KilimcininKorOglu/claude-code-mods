@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitDir, denyText, diffReads, isCommit, isGuarded, lineReads, listedNames, modeOf, noteText } from '../hooks/env.ts'
+import { commitDir, denyText, diffReads, doneLines, isCommit, isGuarded, lineReads, listedNames, modeOf, noteText, sidebarLines } from '../hooks/env.ts'
 
 tier('user')
 
@@ -64,6 +64,18 @@ describe('env reads', () => {
     )
     const many = Array.from({ length: 13 }, (_, i) => ({ name: `V${i}`, file: 'a.ts', line: i }))
     expect(noteText(many, '.env.sample')).toContain('V9 (a.ts:9) · 3 more. Add them to .env.sample')
+  })
+
+  test('the sidebar colours the variable red and where it is read faint', () => {
+    expect(sidebarLines([{ name: 'STRIPE_KEY', file: 'src/pay.ts', line: 12 }])).toEqual([
+      { text: 'STRIPE_KEY (src/pay.ts:12)', parts: [{ text: 'STRIPE_KEY', kind: 'error' }, { text: ' (src/pay.ts:12)', kind: 'dim' }] },
+    ])
+    const many = Array.from({ length: 13 }, (_, i) => ({ name: `V${i}`, file: 'a.ts', line: i }))
+    expect(sidebarLines(many).at(-1)).toEqual({ text: '3 more', kind: 'dim' })
+    expect(doneLines(['A'], ['B'])).toEqual([
+      { text: 'A', kind: 'ok' },
+      { text: 'B (no longer read)', parts: [{ text: 'B', kind: 'ok' }, { text: ' (no longer read)', kind: 'dim' }] },
+    ])
   })
 })
 

@@ -146,9 +146,22 @@ export function logText(missing: readonly EnvRead[], reference: string): string 
   return `env variables ${reference} lacks: ${namedReads(missing)}`
 }
 
-/** One sidebar line per variable, so the section reads as a list. */
-export function sidebarLines(missing: readonly EnvRead[]): { text: string; kind: 'error' }[] {
-  return namedReads(missing).split(' · ').map(text => ({ text, kind: 'error' }))
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** One sidebar line per variable, so the section reads as a list: the name red, where it is read faint. */
+export function sidebarLines(missing: readonly EnvRead[]): Line[] {
+  const rows = missing.slice(0, MAX_NAMED).map(r => partsLine([part(r.name, 'error'), part(` (${r.file}:${r.line})`, 'dim')]))
+  if (missing.length > MAX_NAMED) rows.push({ text: `${missing.length - MAX_NAMED} more`, kind: 'dim' })
+  return rows
 }
 
 /** Every variable a whole file reads, so a finding is measured against the file it came from. */
@@ -187,9 +200,10 @@ export function doneLog(added: readonly string[], gone: readonly string[], refer
 }
 
 /** One sidebar line per variable, the ones the file gained and the ones nothing reads any more. */
-export function doneLines(added: readonly string[], gone: readonly string[]): { text: string; kind: 'ok' }[] {
-  const names = [...added.slice(0, MAX_NAMED), ...gone.slice(0, MAX_NAMED).map(n => `${n} (no longer read)`)]
-  return names.map(text => ({ text, kind: 'ok' as const }))
+export function doneLines(added: readonly string[], gone: readonly string[]): Line[] {
+  const addedRows = added.slice(0, MAX_NAMED).map((text): Line => ({ text, kind: 'ok' }))
+  const goneRows = gone.slice(0, MAX_NAMED).map(n => partsLine([part(n, 'ok'), part(' (no longer read)', 'dim')]))
+  return [...addedRows, ...goneRows]
 }
 
 /**

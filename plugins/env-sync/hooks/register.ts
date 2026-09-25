@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, isNarrowable, listedNames, logText, modeOf, noteText, openNote, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Mode, type Open } from './env.ts'
+import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, isNarrowable, listedNames, logText, modeOf, noteText, openNote, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Line, type Mode, type Open } from './env.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -62,7 +62,7 @@ async function referenceFile($: EngineInterface, root: string): Promise<string |
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, reference: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'warn' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, reference: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'env-sync', key: sectionKey(reference), title, lines, until: 'stream' })
     if (taken) return
