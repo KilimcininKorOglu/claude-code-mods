@@ -95,12 +95,28 @@ export function rereadNote(files: readonly string[]): string {
   return `context-restore: these files of this skill's base directory changed on disk after this session read them, so the copies read earlier are out of date; read them again before you use them: ${files.join(', ')}`
 }
 
-/** A line the person reads: what the mod did about files that changed on disk, and which files. */
-const onDisk = (done: string, names: readonly string[]): string => `changed on disk${done}: ${names.join(', ')}`
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line, as the sidebar mod's contract names it; `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
 
-/** The line the person reads when a skill call asked the model to read changed files again. */
-export function rereadLog(skill: string, files: readonly string[]): string {
-  return `${onDisk(' since the model read it, the call asks to read again', files)} (${skill})`
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/**
+ * A line the person reads: what the mod did about files that changed on disk, faint, and which files, in
+ * `tone`. Its `text` is the transcript line.
+ */
+function onDisk(done: string, names: readonly string[], tone?: Tone, tail: Part[] = []): Line {
+  return partsLine([part(`changed on disk${done}: `, 'dim'), part(names.join(', '), tone), ...tail])
+}
+
+/** The line the person reads when a skill call asked the model to read changed files again; the files are yellow. */
+export function rereadLog(skill: string, files: readonly string[]): Line {
+  return onDisk(' since the model read it, the call asks to read again', files, 'warn', [part(` (${skill})`, 'dim')])
 }
 
 /** The last part of a path, as the texts name a file. */
@@ -109,25 +125,18 @@ export function baseName(path: string): string {
 }
 
 /** The line the person reads when a call got the file's current text in place of the engine's older copy. */
-export function currentLog(name: string): string {
+export function currentLog(name: string): Line {
   return onDisk(', the call got the current text', [name])
 }
 
 /** The line the person reads when rules files changed on disk: what the model was handed again. */
-export function changedLog(labels: readonly string[]): string {
+export function changedLog(labels: readonly string[]): Line {
   return onDisk(', the new text went to the model', labels)
 }
 
 /** The note the model reads for one rules file that changed on disk after the session read it. */
 export function changedNote(label: string, path: string, text: string): string {
   return `context-restore: ${label} (${path}) changed on disk after this session read it. Its current text follows and replaces the earlier one; follow it from now on.\n\n${text}`
-}
-
-/** A sidebar line, as the sidebar mod's contract names it. */
-type Line = { text: string; kind: 'ok' }
-
-export function sidebarLines(text: string): Line[] {
-  return [{ text, kind: 'ok' }]
 }
 
 /** A sidebar section key: the subject cut to what the sidebar takes. */

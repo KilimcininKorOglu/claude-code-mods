@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rereadLog, rereadNote, rulePathsOf, sectionKey, sidebarLines, skillDirOf, skillFileOf, skillFilesIn, statusText } from './restore.ts'
+import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rereadLog, rereadNote, rulePathsOf, sectionKey, skillDirOf, skillFileOf, skillFilesIn, statusText, type Line } from './restore.ts'
 
 const ENABLED_KEY = 'enabled'
 const CONSUMER = 'context-restore'
@@ -17,14 +17,14 @@ function errorText(err: unknown): string {
 }
 
 /** What the mod did, told to the person: the sidebar while it is open, else one transcript line. */
-async function toPerson($: EngineInterface, state: State, line: string): Promise<void> {
-  state.last = line
+async function toPerson($: EngineInterface, state: State, line: Line): Promise<void> {
+  state.last = line.text
   try {
-    if (await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(line), title: 'context restored', lines: sidebarLines(line), until: 'stream' })) return
+    if (await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(line.text), title: 'context restored', lines: [line], until: 'stream' })) return
   } catch {
     // The sidebar mod is not installed.
   }
-  $.ui.log(line)
+  $.ui.log(line.text)
 }
 
 /** The last write of a file, or undefined when it is not there. */

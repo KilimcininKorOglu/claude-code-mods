@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { appendedNote, bodyOfFile, currentText, fitsArguments, rulePathsOf, skillFileOf } from '../hooks/restore.ts'
+import { appendedNote, bodyOfFile, changedLog, currentLog, currentText, fitsArguments, rereadLog, rulePathsOf, skillFileOf } from '../hooks/restore.ts'
 
 tier('user')
 
@@ -58,5 +58,17 @@ describe('restore', () => {
   test('the rules files and the global CLAUDE.md of an instructions attachment are read from their Contents lines', () => {
     const text = 'Contents of /Users/u/.claude/CLAUDE.md (user\'s private global instructions for all projects):\n\nx\n\nContents of /Users/u/.claude/rules/context7.md (user\'s private global instructions for all projects):\n\ny\n\nContents of /work/CLAUDE.md (project instructions, checked into the codebase):\n\nw\n\nContents of /work/.claude/rules/db.md (project instructions, checked into the codebase):\n\nz'
     expect(rulePathsOf(text, '/Users/u/.claude/CLAUDE.md')).toEqual(['/Users/u/.claude/CLAUDE.md', '/Users/u/.claude/rules/context7.md', '/work/.claude/rules/db.md'])
+  })
+
+  test('the person\'s lines draw the explanation faint and the names default, the files to read again yellow', () => {
+    expect(currentLog('review')).toEqual({
+      text: 'changed on disk, the call got the current text: review',
+      parts: [{ text: 'changed on disk, the call got the current text: ', kind: 'dim' }, { text: 'review' }],
+    })
+    expect(changedLog(['db.md', 'CLAUDE.md']).parts).toEqual([{ text: 'changed on disk, the new text went to the model: ', kind: 'dim' }, { text: 'db.md, CLAUDE.md' }])
+    expect(rereadLog('rules-skill', ['a.md', 'b.md'])).toEqual({
+      text: 'changed on disk since the model read it, the call asks to read again: a.md, b.md (rules-skill)',
+      parts: [{ text: 'changed on disk since the model read it, the call asks to read again: ', kind: 'dim' }, { text: 'a.md, b.md', kind: 'warn' }, { text: ' (rules-skill)', kind: 'dim' }],
+    })
   })
 })
