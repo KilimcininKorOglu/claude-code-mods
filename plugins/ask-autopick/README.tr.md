@@ -6,13 +6,15 @@ Belirli bir süre cevapsız bekleyen bir sorunun önerilen seçeneğini seçen b
 
 1. Açıkken mod her `AskUserQuestion` çağrısını hook'lar. Soru her zamanki gibi görünür ve sizi bekler.
 2. Bekleme süresi içinde (varsayılan 10 dakika) cevap verirseniz çağrının cevabı sizinkidir ve mod hiçbir şey yapmaz.
-3. Süre içinde cevap gelmezse mod sizin yerinize her sorunun önerilen seçeneğiyle cevap verir: etiketi `(Recommended)` ya da `(Önerilen)` taşıyan tek seçenek. Engine soruyu kapatır ve transcript cevabı sizinkini gösterdiği gibi gösterir.
+3. Süre içinde cevap gelmezse mod sizin yerinize her sorunun önerilen seçeneğiyle cevap verir. Engine soruyu kapatır ve transcript cevabı sizinkini gösterdiği gibi gösterir.
+
+   Tool, model'e önerdiği seçeneği ilk sıraya koymasını ve etiketini `(Recommended)` ile bitirmesini söyler. Başka bir dilde yazılan bir soruda model bu kelimeyi o dilde yazar. Bu yüzden önerilen seçenek ilk seçenektir: etiketi bu dillerden birinde o kelimeyle, parantez içinde bitiyorsa ve başka hiçbir seçenek bu işareti taşımıyorsa. Diller: İngilizce, Türkçe, Almanca, İspanyolca, Portekizce, Fransızca, İtalyanca, Hollandaca, Lehçe, Rusça, Çince, Japonca ve Korece. Tam genişlikli parantezler de sayılır.
 4. Model cevapla birlikte bir not alır: süre içinde cevap vermediniz, yani seçim bir varsayılandır, sizin kararınız değildir, ve sonraki cevabı bunu söyler. Canlı kontrolde model bunu sizin seçmediğinizi yazdı.
 5. Neyin seçildiğini kırmızı bir kayıt söyler, [sidebar](../sidebar) açıkken onun stream'inde, değilse bir transcript satırı olarak:
 
        ask-autopick: no answer in 10 min, picked the recommended option: Renk? → Mavi (Önerilen)
 
-6. Önerilen seçeneği olmayan, iki önerilen seçeneği olan ya da birden çok cevap alan (`multiSelect`) bir soru hiçbir zaman seçilmez. Sizi bekler ve bir kayıt bunu söyler.
+6. İlk seçeneği işaretli olmayan, ikinci bir işaretli seçeneği olan ya da birden çok cevap alan (`multiSelect`) bir soru hiçbir zaman seçilmez. Sizi bekler ve bir kayıt bunu söyler.
 
 2.1.282 üzerindeki canlı kontrolde açık bırakılan bir soru 1 dakika ve 5 dakika sonra `Mavi (Önerilen)` aldı ve model onunla devam etti.
 
@@ -54,6 +56,7 @@ Reach L2, Claude'u sürer: bir seçim sizin yerinize bir soruyu cevaplar.
 ## Sınırlar
 
 - Mod modelin işaretine güvenir: önerilen işaretli bir seçenek, ne yaparsa yapsın seçilir.
+- Kelimesi listede olmayan bir dildeki soru sizi bekler.
 - 10 dakika ve üstü bir bekleme canlı ölçülmedi; 1 ve 5 dakika ölçüldü.
 
 ## Geliştirme

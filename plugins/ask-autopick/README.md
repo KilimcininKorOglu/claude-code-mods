@@ -6,13 +6,15 @@ A Claude Code Mod that picks the recommended option of a question that waited un
 
 1. While on, the mod hooks every `AskUserQuestion` call. The question shows as always and waits for you.
 2. When you answer within the wait (10 minutes by default), your answer is the call's, and the mod does nothing.
-3. When no answer comes in time, the mod answers in your place with each question's recommended option: the one option whose label holds `(Recommended)` or `(Önerilen)`. The engine closes the question, and the transcript shows the answer as it shows yours.
+3. When no answer comes in time, the mod answers in your place with each question's recommended option. The engine closes the question, and the transcript shows the answer as it shows yours.
+
+   The tool tells the model to put the option it recommends first and to end its label with `(Recommended)`, and in a question written in another language the model writes that word in the language. So the recommended option is the first one, when its label ends with that word in parentheses in one of these languages and no other option carries it: English, Turkish, German, Spanish, Portuguese, French, Italian, Dutch, Polish, Russian, Chinese, Japanese and Korean. Full-width parentheses count too.
 4. The model gets one note with the answer: you did not answer within the wait, so the pick is a default and not your decision, and its next reply names it. In the live check the model wrote that you did not choose it.
 5. One red entry says what was picked, in the sidebar's stream while the [sidebar](../sidebar) is open, else as a transcript line:
 
        ask-autopick: no answer in 10 min, picked the recommended option: Renk? → Mavi (Önerilen)
 
-6. A question with no recommended option, with two of them, or one that takes several answers (`multiSelect`) is never picked. It waits for you, and one entry says so.
+6. A question whose first option is not marked, with a second marked option, or one that takes several answers (`multiSelect`) is never picked. It waits for you, and one entry says so.
 
 In the live check on 2.1.282 a question left open got `Mavi (Önerilen)` after 1 minute and after 5 minutes, and the model went on with it.
 
@@ -54,6 +56,7 @@ Reach L2, drives Claude: a pick answers a question for you.
 ## Limits
 
 - The mod trusts the model's mark: an option marked recommended is picked whatever it does.
+- A question in a language whose word is not in the list waits for you.
 - A wait of 10 minutes or more is not measured live; 1 and 5 minutes are.
 
 ## Development

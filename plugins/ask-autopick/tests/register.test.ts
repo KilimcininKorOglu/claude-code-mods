@@ -10,7 +10,7 @@ const run = (args: string): CommandRunInput => ({
 })
 
 const COLOR = { question: 'Renk?', options: [{ label: 'Mavi (Recommended)' }, { label: 'Kırmızı' }] }
-const SIZE = { question: 'Boyut?', options: [{ label: 'Küçük' }, { label: 'Büyük (Önerilen)' }] }
+const SIZE = { question: 'Boyut?', options: [{ label: 'Büyük (Önerilen)' }, { label: 'Küçük' }] }
 
 /**
  * The dialog beneath the mod: it stays open until the test answers it with `answer`, and records whether
@@ -79,7 +79,7 @@ describe('ask-autopick', () => {
     await started($)
     const call = ask($, [COLOR, { question: 'Ad?', options: [{ label: 'a' }, { label: 'b' }] }])
     await w.clock.advance(30 * 60_000)
-    expect(w.logs).toEqual(['a question has no single recommended option or takes several answers, so it waits for you past 10 min'])
+    expect(w.logs).toEqual(['a question has no recommended first option or takes several answers, so it waits for you past 10 min'])
     w.answer?.('Mavi (Recommended)')
     expect(((await call) as Answered).context).toBe(undefined)
   })
@@ -102,5 +102,15 @@ describe('picks', () => {
     expect(picksOf([{ ...COLOR, multiSelect: true }])).toBe(undefined)
     expect(picksOf([{ question: 'x', options: [{ label: 'a (Recommended)' }, { label: 'b (Önerilen)' }] }])).toBe(undefined)
     expect(picksOf([{ question: 'x' }])).toBe(undefined)
+  })
+
+  test('the recommended option is the first one, marked at its end in any known language', () => {
+    for (const label of ['Blau (Empfohlen)', 'Azul (recomendado)', 'Bleu (Recommandé)', '青（推荐）', 'Синий (Рекомендуется)', 'Mavi ( Önerilen ) ']) {
+      expect(picksOf([{ question: 'q', options: [{ label }, { label: 'b' }] }]), label).toEqual({ q: label })
+    }
+    // A marked option that is not the first, a mark inside the label, and a parenthesis of another word are not picked.
+    for (const options of [[{ label: 'a' }, { label: 'b (Recommended)' }], [{ label: '(Recommended) a' }, { label: 'b' }], [{ label: 'Mavi (koyu)' }, { label: 'b' }]]) {
+      expect(picksOf([{ question: 'q', options }]), JSON.stringify(options)).toBe(undefined)
+    }
   })
 })

@@ -10,25 +10,45 @@ export const DEFAULT_MINUTES = 10
 const MIN_MINUTES = 1
 const MAX_MINUTES = 120
 
-/** The marks a model writes after the option it recommends, in English and in Turkish. */
-const RECOMMENDED = ['(Recommended)', '(Önerilen)']
+/**
+ * The words a model writes in parentheses after the option it recommends. The tool tells it to write
+ * `(Recommended)`, and in a question written in another language it writes that word in the language.
+ */
+const RECOMMENDED_WORDS = [
+  'recommended', 'önerilen', 'empfohlen', 'recomendado', 'recomendada', 'recommandé', 'recommandée',
+  'consigliato', 'consigliata', 'aanbevolen', 'zalecane', 'рекомендуется', '推荐', '推薦', '推奨', 'おすすめ', '권장', '추천',
+]
+
+/** A label that ends with one of those words in parentheses, ASCII or full-width. */
+const RECOMMENDED_END = new RegExp(`[(（]\\s*(?:${RECOMMENDED_WORDS.join('|')})\\s*[)）]\\s*$`, 'iu')
 
 export const USAGE = 'expects nothing (the status), on, off, or a number of minutes from 1 to 120'
 
-function isRecommended(label: string): boolean {
-  return RECOMMENDED.some(mark => label.includes(mark))
+export function isRecommended(label: string): boolean {
+  return RECOMMENDED_END.test(label)
 }
 
 /**
- * The answers a pick gives, one recommended label per question, or undefined when a question has no single
- * recommended option or takes several answers: such a question keeps waiting on the person.
+ * The recommended label of one question: the first option, marked at the end of its label, with no other
+ * option marked, because the tool tells the model to put the option it recommends first. Undefined for a
+ * question that takes several answers or has no such option.
+ */
+function pickOf(q: Question): string | undefined {
+  const [first, ...rest] = q.options ?? []
+  if (q.multiSelect === true || first === undefined || !isRecommended(first.label)) return undefined
+  return rest.some(o => isRecommended(o.label)) ? undefined : first.label
+}
+
+/**
+ * The answers a pick gives, one recommended label per question, or undefined when a question has none:
+ * such a question keeps waiting on the person.
  */
 export function picksOf(questions: readonly Question[]): Record<string, string> | undefined {
   const answers: Record<string, string> = {}
   for (const q of questions) {
-    const marked = (q.options ?? []).filter(o => isRecommended(o.label))
-    if (q.multiSelect === true || marked.length !== 1) return undefined
-    answers[q.question] = marked[0]?.label ?? ''
+    const label = pickOf(q)
+    if (label === undefined) return undefined
+    answers[q.question] = label
   }
   return answers
 }
@@ -48,7 +68,7 @@ export function pickedLog(minutes: number, answers: Record<string, string>): str
 
 /** The line the person reads when a question has nothing to pick. */
 export function waitsLog(minutes: number): string {
-  return `a question has no single recommended option or takes several answers, so it waits for you past ${minutes} min`
+  return `a question has no recommended first option or takes several answers, so it waits for you past ${minutes} min`
 }
 
 /** The note the model reads after a picked answer, so it does not read the pick as the person's choice. */
