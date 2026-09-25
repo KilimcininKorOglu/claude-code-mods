@@ -3,7 +3,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 import { CLOUD, logs } from '../hooks/filters/cloud.ts'
 import type { FilterResult, FilterTable } from '../hooks/filters/common.ts'
 import { SYSTEM } from '../hooks/filters/system.ts'
-import { planFor } from '../hooks/pipeline.ts'
+import { planFor, runFilter } from '../hooks/pipeline.ts'
 
 tier('user')
 
@@ -82,6 +82,16 @@ describe('containers and clouds', () => {
     expect(run('kubectl get', 'NAME   READY\nweb    1/1\n', ['pods', '-o', 'wide']).text).toBe('NAME   READY\nweb    1/1')
     expect(run('curl', '  % Total    % Received % Xferd  Average Speed   Time\n                                 Dload  Upload   Total\n100    20  100    20    0     0    100      0 --:--:--\n{\n  "ok": true\n}\n', ['-s', 'https://x']).text).toBe('{"ok":true}')
     expect(run('curl', '<html>hi</html>\n').text).toBe('<html>hi</html>')
+  })
+
+  test('aws s3 ls rows are capped through the plan, where s3 is the subcommand and ls its first argument', () => {
+    const plan = planFor('aws s3 ls s3://bucket/')
+    if (plan === undefined) throw new Error('no plan for aws s3 ls')
+    const rows = Array.from({ length: 300 }, (_, i) => `2026-09-25 10:00:00       1024 file-${i}.txt`).join('\n')
+    const r = runFilter(plan, rows, 0, false)
+    expect(r.elided).toBe(true)
+    expect(r.text.split('\n').length).toBeLessThan(300)
+    expect(r.text).toContain('file-0.txt')
   })
 
   test('terraform plan drops the refresh lines', () => {

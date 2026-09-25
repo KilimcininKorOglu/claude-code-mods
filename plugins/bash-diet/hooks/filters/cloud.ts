@@ -87,13 +87,11 @@ function download(input: { text: string }): FilterResult {
   return json({ text: lines.join('\n') })
 }
 
-/** `aws`: JSON without indentation; `aws s3 ls` rows capped. */
-function aws(input: { args: string[]; text: string }): FilterResult {
-  if (input.args[0] === 's3' && input.args[1] === 'ls') {
-    const c = capped(linesOf(input.text), CAP_INVENTORY, 'objects')
-    return { text: c.lines.join('\n'), elided: c.elided }
-  }
-  return json(input)
+/** `aws s3`: the subcommand is classified apart from the arguments, so `ls` is the first argument; its rows are capped. */
+function awsS3(input: { args: string[]; text: string }): FilterResult {
+  if (input.args[0] !== 'ls') return json(input)
+  const c = capped(linesOf(input.text), CAP_INVENTORY, 'objects')
+  return { text: c.lines.join('\n'), elided: c.elided }
 }
 
 /** The value of `-o json`, `-ojson`, `--output=json` or `--output json`, or undefined. */
@@ -129,7 +127,8 @@ export const CLOUD: FilterTable = {
   'kubectl describe': { run: ({ text }) => cleanup(text) },
   'oc get': { run: kubectlGet },
   'oc logs': { run: logs },
-  aws: { run: aws },
+  'aws s3': { run: awsS3 },
+  aws: { run: json },
   gcloud: { run: json },
   'terraform plan': { run: plan },
   'terraform apply': { run: plan },
