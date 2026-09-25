@@ -176,8 +176,21 @@ export function wrapped(text: string, columns: number): string[] {
 /** One drawn line of a section, with the tone it is drawn in. */
 export type Row = { text: string; tone?: SidebarLine['kind'] }
 
-/** One section as the pane draws it: its heading, its lines cut to the width, and its buttons. */
-export type Drawn = { id: string; head: string; rows: Row[]; buttons: SidebarButton[] }
+/**
+ * One section as the pane draws it: its heading, its lines cut to the width, and its buttons. The line
+ * between the standing sections and the stream is one too, marked `divider`, its text in `head`.
+ */
+export type Drawn = { id: string; head: string; rows: Row[]; buttons: SidebarButton[]; divider?: true }
+
+/** The divider's id; a section's id always holds a `:`, so the two never meet. */
+export const DIVIDER_ID = 'sidebar-divider'
+
+/** The line between the standing sections and the stream: dashes across the body, `o` in the middle. */
+export function dividerText(columns: number): string {
+  const width = Math.max(8, columns)
+  const left = Math.floor((width - 1) / 2)
+  return `${'-'.repeat(left)}o${'-'.repeat(width - 1 - left)}`
+}
 
 const pad = (n: number): string => String(n).padStart(2, '0')
 
@@ -253,11 +266,24 @@ export function picked(stream: readonly Kept[], rows: number): Kept[] {
   return stream.filter(e => keep.has(e))
 }
 
+/** The stream entries that fit in `rows`, in the stream's own order. */
+function drawStream(stream: readonly Kept[], columns: number, rows: number): Drawn[] {
+  const out: Drawn[] = []
+  let left = rows
+  for (const entry of picked(stream, left)) {
+    const spent = addSection(out, entry, columns, left)
+    if (spent === 0) break
+    left -= spent
+  }
+  return out
+}
+
 /**
  * The pane's content: the standing sections first, then the stream newest first, cut to `columns` and
  * to `rows`, the pane's own height. The stream's oldest entries are the ones the rows run out on, so
  * a new entry pushes the oldest off the pane. A section the room left over is too small for is left
- * out, and what it left out is counted in its own last row.
+ * out, and what it left out is counted in its own last row. While both are drawn, a divider row sits
+ * between the standing sections and the stream.
  */
 export function drawn(board: Board, stream: readonly Kept[], columns: number, rows: number): Drawn[] {
   const out: Drawn[] = []
@@ -267,12 +293,10 @@ export function drawn(board: Board, stream: readonly Kept[], columns: number, ro
     if (spent === 0) return out
     left -= spent
   }
-  for (const entry of picked(stream, left)) {
-    const spent = addSection(out, entry, columns, left)
-    if (spent === 0) break
-    left -= spent
-  }
-  return out
+  const divided = out.length > 0
+  const entries = drawStream(stream, columns, divided ? left - 1 : left)
+  if (!divided || entries.length === 0) return [...out, ...entries]
+  return [...out, { id: DIVIDER_ID, head: dividerText(columns), rows: [], buttons: [], divider: true }, ...entries]
 }
 
 /**

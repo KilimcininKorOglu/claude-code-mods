@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { appendLog, type LogFs, clearLineOf, cut, dayOf, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -141,12 +141,28 @@ describe('board', () => {
 describe('stream', () => {
   const entry = (n: number, consumer = 'edit-loop'): Kept => kept(section({ consumer, key: `k${n}`, title: `t${n}`, until: 'stream' }))
 
-  test('the stream draws under the standing sections, newest first', () => {
+  test('the stream draws under the standing sections, newest first, past a divider', () => {
     const board = boardOf(section({ consumer: 'cache-warm', key: 'window', until: 'session' }))
     const stream = [entry(3), entry(2), entry(1)]
-    expect(drawn(board, stream, 80, MAX_BOARD_LINES).map(d => d.head)).toEqual([
-      'cache-warm: the 5th edit', 'edit-loop: t3', 'edit-loop: t2', 'edit-loop: t1',
+    expect(drawn(board, stream, 20, MAX_BOARD_LINES).map(d => d.head)).toEqual([
+      'cache-warm: the 5th…', '---------o----------', 'edit-loop: t3', 'edit-loop: t2', 'edit-loop: t1',
     ])
+  })
+
+  test('the divider spans the body with its o in the middle', () => {
+    expect(dividerText(11)).toBe('-----o-----')
+    expect(dividerText(12)).toBe('-----o------')
+    expect(dividerText(20)).toHaveLength(20)
+  })
+
+  test('the divider draws only while standing sections and stream entries both draw', () => {
+    const board = boardOf(section({ consumer: 'cache-warm', key: 'window', until: 'session' }))
+    const ids = (d: ReturnType<typeof drawn>) => d.map(one => one.id)
+    expect(ids(drawn(board, [], 80, MAX_BOARD_LINES))).not.toContain(DIVIDER_ID)
+    expect(ids(drawn(new Map(), [entry(1)], 80, MAX_BOARD_LINES))).not.toContain(DIVIDER_ID)
+    // The section takes two rows and the divider one, so a two-row entry fits five rows and not four.
+    expect(ids(drawn(board, [entry(1)], 80, 5))).toEqual(['cache-warm:window', DIVIDER_ID, 'edit-loop:k1'])
+    expect(ids(drawn(board, [entry(1)], 80, 4))).toEqual(['cache-warm:window'])
   })
 
   test("the pane's rows cut the oldest entries off the end", () => {

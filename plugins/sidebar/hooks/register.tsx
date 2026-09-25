@@ -215,6 +215,13 @@ function paneTree(els: Elements, state: State, columns: number, rows: number, pr
     <Box flexDirection="column">
       {sections.length === 0 ? <Text dimColor>{EMPTY_TEXT}</Text> : null}
       {sections.map(one => {
+        if (one.divider === true) {
+          return (
+            <Box key={one.id} marginBottom={1}>
+              <Text dimColor>{one.head}</Text>
+            </Box>
+          )
+        }
         const first = buttons
         buttons += one.buttons.length
         return sectionTree(els, one, press, first)
