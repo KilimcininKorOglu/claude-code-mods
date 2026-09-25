@@ -39,6 +39,22 @@ Her Bash sonucunu model okumadan önce küçülten bir Claude Code Mod'u. Biline
 
 Bir dosyanın `cat`, `head` ve `tail`'i hiçbir zaman filtrelenmez: model tam o satırları istedi.
 
+## Ölçülen tasarruf
+
+Ölçüm Claude Code 2.1.282, Claude Opus 5.5 ve bash-diet 0.1.2 ile yapıldı. Örnek repository Go, Rust, Node, Python, Gradle, .NET, Swift, Ruby, PHP ve C projeleri tutar. Her projede bir başarısız test ya da build hatası vardır. Headless bir session aynı 35 komutu sırayla çalıştırdı: git, build'ler, testler, linter'lar, paket listeleri, dosya listeleri ve aramaları, `docker ps` ve `images`, `env`, `ps`, `df`, `du`. Session üç kez mod ile, üç kez mod olmadan koştu. Sayılar üç koşunun medyanıdır.
+
+| | Mod olmadan | Mod ile | Tasarruf |
+|---|---|---|---|
+| 35 Bash sonucunun karakteri | 79.555 | 33.366 | %58 |
+| 35 sonucun bağlama eklediği token | 38.277 | 20.653 | %46 |
+| Session sonunda bağlam | 107.946 | 90.557 | %16 |
+| Bütün request'lerin input token'ı | 2.856.172 | 2.512.370 | %12 |
+| Session maliyeti | $1,00 | $0,78 | %21 |
+
+- Bir sonucun token'ı, komutu çalıştıran request'ten sonrakine bağlamın büyümesidir, o request'in output token'ı çıkarılarak. Bu sayı çağrının kendisi için yaklaşık 100 token içerir, ve hiçbir filtre onu küçültmez.
+- Session'ın kendi prompt'u, tool'ları ve talimatları iki koşuda da aynıdır. Bu yüzden bütün session'daki tasarruf sonuçlardaki tasarruftan küçüktür.
+- En çok küçülen aileler container listeleri (%78), `rake test` (%81) ve dosya listeleri ile aramalar (%66). En az küçülenler `env` (filtre yalnız credential değerlerini maskeler), `php -l` ve `make`, çünkü çıktıları zaten birkaç satırdır.
+
 ## Kendi kurallarınız
 
 Hiçbir filtrenin tanımadığı bir komut bir kural alabilir. Kurallar iki dosyada durur:

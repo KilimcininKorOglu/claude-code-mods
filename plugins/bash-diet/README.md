@@ -39,6 +39,22 @@ A Claude Code Mod that shrinks each Bash result before the model reads it. Known
 
 `cat`, `head` and `tail` of a file are never filtered: the model asked for those exact lines.
 
+## Measured saving
+
+Measured on Claude Code 2.1.282 with Claude Opus 5.5 and bash-diet 0.1.2. The sample repository holds Go, Rust, Node, Python, Gradle, .NET, Swift, Ruby, PHP and C projects, each with one failing test or build error. A headless session ran the same 35 commands in order: git, builds, tests, linters, package lists, file listings and searches, `docker ps` and `images`, `env`, `ps`, `df`, `du`. The session ran three times with the mod and three times without it. The figures are the medians of the three runs.
+
+| | Without the mod | With the mod | Saving |
+|---|---|---|---|
+| Characters of the 35 Bash results | 79,555 | 33,366 | 58% |
+| Context tokens the 35 results added | 38,277 | 20,653 | 46% |
+| Context at the session's end | 107,946 | 90,557 | 16% |
+| Input tokens over all requests | 2,856,172 | 2,512,370 | 12% |
+| Session cost | $1.00 | $0.78 | 21% |
+
+- A result's tokens are the growth of the context from the request that ran the command to the next one, less that request's output tokens. That count holds about 100 tokens for the call itself, which no filter shrinks.
+- The session's own prompt, tools and instructions are the same in both runs, so the saving on the whole session is smaller than the saving on the results.
+- The families that shrink most are container lists (78%), `rake test` (81%), and file listings and searches (66%). The least are `env` (the filter only masks credential values), `php -l` and `make`, whose output is already a few lines.
+
 ## Your own rules
 
 A command no filter knows can get a rule. Rules live in two files:
