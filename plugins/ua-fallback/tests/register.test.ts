@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { hasUserAgent, hostOf, isFetch, statusIn, statusText, urlOf } from '../hooks/fetch.ts'
+import { hasUserAgent, hostOf, isFetch, logText, sidebarLines, statusIn, statusText, urlOf } from '../hooks/fetch.ts'
 
 tier('user')
 
@@ -69,6 +69,17 @@ describe('ua-fallback', () => {
     expect(statusIn('<title>429 Too Many Requests</title>')).toBe('429')
     expect(statusIn('HTTP/1.1 200 OK')).toBe(undefined)
     expect(statusText(false, [])).toBe('off · no filtered request yet')
+  })
+
+  test('the sidebar colours the status, yellow for a rate limit and red for a refusal, and the retry faint', () => {
+    const [head, limit] = sidebarLines('https://example.com/a', '429')
+    expect(head).toEqual({
+      text: 'example.com answered 429; a browser User-Agent may pass',
+      parts: [{ text: 'example.com answered ' }, { text: '429', kind: 'warn' }, { text: '; a browser User-Agent may pass', kind: 'dim' }],
+    })
+    expect(head?.text).toBe(logText('https://example.com/a', '429'))
+    expect(limit?.kind).toBe('dim')
+    expect(sidebarLines('https://example.com/a', '403')[0]?.parts?.[1]).toEqual({ text: '403', kind: 'error' })
   })
 
   test('a filtered request brings the retry and its limits to the model', async ($, on) => {

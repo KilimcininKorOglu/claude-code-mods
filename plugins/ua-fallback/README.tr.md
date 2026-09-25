@@ -15,7 +15,7 @@ Retrieval fallback için bir Claude Code Mod'u: bir `curl` ya da `wget` çağrı
 
        ua-fallback: example.com answered 403; a browser User-Agent may pass
 
-5. [sidebar](../sidebar) açıkken bu bulgu oraya gider, ilk satırda host ve status ve altında soluk `not while testing your own app, auth flow or client` ile, stream'inde bir entry halinde, ve transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
+5. [sidebar](../sidebar) açıkken bu bulgu oraya gider, ilk satırda host ve status (`429` sarı, `403` kırmızı, retry ipucu soluk) ve altında soluk `not while testing your own app, auth flow or client` ile, stream'inde bir entry halinde, ve transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
 6. Bir host session başına bir kere konuşur. Aynı host'tan gelen ikinci reddedilen request sessizdir, yani bir tekrar deneme döngüsü context'i doldurmaz.
 
 ## Komut

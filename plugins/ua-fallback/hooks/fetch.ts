@@ -71,10 +71,24 @@ export function logText(url: string, status: string): string {
   return `${hostOf(url)} answered ${status}; a browser User-Agent may pass`
 }
 
-/** The sidebar lines of one finding: the host and status, the retry faint under it. */
-export function sidebarLines(url: string, status: string): { text: string; kind: 'error' | 'dim' }[] {
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/**
+ * The sidebar lines of one finding: the host and status, the status yellow for a rate limit and red for
+ * a refusal, and the retry faint; the limit of the retry faint under it.
+ */
+export function sidebarLines(url: string, status: string): Line[] {
   return [
-    { text: logText(url, status), kind: 'error' },
+    partsLine([part(`${hostOf(url)} answered `, undefined), part(status, status === '429' ? 'warn' : 'error'), part('; a browser User-Agent may pass', 'dim')]),
     { text: 'not while testing your own app, auth flow or client', kind: 'dim' },
   ]
 }

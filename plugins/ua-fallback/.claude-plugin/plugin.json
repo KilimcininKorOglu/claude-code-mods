@@ -1,6 +1,6 @@
 {
   "name": "ua-fallback",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Notes the fallback User-Agent after a curl or wget that answered 403 or 429, with its limits. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

@@ -15,7 +15,7 @@ A Claude Code Mod for the retrieval fallback: when a `curl` or `wget` is refused
 
        ua-fallback: example.com answered 403; a browser User-Agent may pass
 
-5. While the [sidebar](../sidebar) is open, that finding goes there instead, the host and status on the first line and `not while testing your own app, auth flow or client` faint under it, as an entry in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+5. While the [sidebar](../sidebar) is open, that finding goes there instead, the host and status on the first line (a `429` yellow, a `403` red, the retry hint faint) and `not while testing your own app, auth flow or client` faint under it, as an entry in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 6. One host speaks once per session. The second refused request from the same host is quiet, so a loop of retries does not fill the context.
 
 ## Command
