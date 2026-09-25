@@ -121,9 +121,21 @@ export function logText(places: string[]): string {
   return `SQL built from strings: ${namedPlaces(places)}`
 }
 
+/** A sidebar line of a finding or its closing; the count of the places left unnamed is faint. */
+export type Line = { text: string; kind: 'error' | 'ok' | 'dim' }
+
+/**
+ * One line per named place in the finding's colour, and the places past `MAX_NAMED` as one faint count,
+ * so the count does not read as one more place.
+ */
+function placeLines(places: string[], kind: 'error' | 'ok'): Line[] {
+  const named: Line[] = places.slice(0, MAX_NAMED).map(text => ({ text, kind }))
+  return places.length > MAX_NAMED ? [...named, { text: `${places.length - MAX_NAMED} more`, kind: 'dim' }] : named
+}
+
 /** One sidebar line per place, so the section reads as a list. */
-export function sidebarLines(places: string[]): { text: string; kind: 'error' }[] {
-  return namedPlaces(places).split(' · ').map(text => ({ text, kind: 'error' }))
+export function sidebarLines(places: string[]): Line[] {
+  return placeLines(places, 'error')
 }
 
 /** The transcript line of a finding a later edit closed. */
@@ -132,8 +144,8 @@ export function doneLog(file: string, places: string[]): string {
 }
 
 /** The sidebar lines of a closed finding: the file, then the places the strings left. */
-export function doneLines(file: string, places: string[]): { text: string; kind: 'ok' }[] {
-  return [{ text: file, kind: 'ok' }, ...namedPlaces(places).split(' · ').map(text => ({ text, kind: 'ok' as const }))]
+export function doneLines(file: string, places: string[]): Line[] {
+  return [{ text: file, kind: 'ok' }, ...placeLines(places, 'ok')]
 }
 
 /** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, isCommit, isGuarded, isNarrowable, isSource, logText, modeOf, noteText, openNote, placesOf, sectionKey, shownPath, sidebarLines, sqlLines, stillBuilt, type Mode } from './sql.ts'
+import { denyText, doneLines, doneLog, isCommit, isGuarded, isNarrowable, isSource, logText, modeOf, noteText, openNote, placesOf, sectionKey, shownPath, sidebarLines, sqlLines, stillBuilt, type Line, type Mode } from './sql.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -57,7 +57,7 @@ async function fileText($: EngineInterface, state: State, path: string): Promise
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'sql-concat-watch', key: sectionKey(key), title, lines, until: 'stream' })
     if (taken) return

@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, isGuarded, lineOf, modeOf, noteText, placesOf, sqlLines, stillBuilt } from '../hooks/sql.ts'
+import { denyText, doneLines, isGuarded, lineOf, modeOf, noteText, placesOf, sidebarLines, sqlLines, stillBuilt } from '../hooks/sql.ts'
 
 tier('user')
 
@@ -62,6 +62,13 @@ describe('sql', () => {
       'sql-concat-watch: this edit builds SQL from strings: src/db.ts:14 · src/db.ts:22. Pass values as query parameters (?, $1, :name) instead of joining them into the SQL text.',
     )
     expect(noteText(Array.from({ length: 10 }, (_, i) => `a.ts:${i}`))).toContain('a.ts:7 · 2 more.')
+  })
+
+  test('the places past eight are one faint count in the sidebar, not one more red place', () => {
+    const places = Array.from({ length: 10 }, (_, i) => `a.ts:${i}`)
+    expect(sidebarLines(places).slice(-2)).toEqual([{ text: 'a.ts:7', kind: 'error' }, { text: '2 more', kind: 'dim' }])
+    expect(doneLines('a.ts', places).slice(-2)).toEqual([{ text: 'a.ts:7', kind: 'ok' }, { text: '2 more', kind: 'dim' }])
+    expect(sidebarLines(['a.ts:1'])).toEqual([{ text: 'a.ts:1', kind: 'error' }])
   })
 
   test('the gate stops a commit, a push and a merge, and says why', () => {
