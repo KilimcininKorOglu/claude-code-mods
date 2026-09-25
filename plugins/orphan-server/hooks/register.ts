@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
   byAge, callsOf, changedText, configDirOf, cwdsOf, isInside, isSame, listenersOf, listText, logText, matchOf, patternsOf, procsOf,
-  sectionKey, sidebarButtons, sidebarLines, SLACK, stillText, stoppedText, transcriptDir, type Listener, type Orphan, type Proc,
+  sectionKey, sidebarButtons, sidebarLines, SLACK, stillLine, stoppedLine, transcriptDir, type Listener, type Orphan, type Proc,
 } from './orphans.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -145,15 +145,15 @@ async function readProc($: EngineInterface, pid: number): Promise<Proc | undefin
   return procs.find(p => p.pid === pid)
 }
 
-/** One stream entry: green for a server that ended, red for one that did not. */
+/** One stream entry: `stopped` green for a server that ended, `still runs after SIGKILL` red for one that did not. */
 async function toStream($: EngineInterface, o: Orphan, isGone: boolean): Promise<void> {
-  const text = isGone ? stoppedText(o) : stillText(o)
+  const line = isGone ? stoppedLine(o) : stillLine(o)
   try {
-    if (await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(`stop-${o.pid}`), title: 'orphan server', lines: [{ text, kind: isGone ? 'ok' : 'error' }], until: 'stream' })) return
+    if (await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(`stop-${o.pid}`), title: 'orphan server', lines: [line], until: 'stream' })) return
   } catch {
     // The sidebar mod is not installed.
   }
-  $.ui.log(text)
+  $.ui.log(line.text)
 }
 
 /** After the grace time: SIGKILL for a server still running, then what became of it, then a new scan. */

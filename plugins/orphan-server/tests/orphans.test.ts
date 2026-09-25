@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { callsOf, etimeMs, isSame, labelOf, listenersOf, matchOf, patternsOf, procsOf, tailOf, type Proc } from '../hooks/orphans.ts'
+import { callsOf, etimeMs, isSame, labelOf, listenersOf, matchOf, patternsOf, procsOf, sidebarLines, stillLine, tailOf, type Proc } from '../hooks/orphans.ts'
 
 tier('user')
 
@@ -62,5 +62,21 @@ describe('orphans', () => {
     expect(isSame(server, { ...server, startedAt: STARTED + 60_000 })).toBe(false)
     expect(isSame(server, { ...server, ppid: 400 })).toBe(false)
     expect(isSame(server, undefined)).toBe(false)
+  })
+
+  test('a row turns its age red past a day and keeps this session in the default colour; SIGKILL that fails is red', () => {
+    const orphan = { ...server, ports: [8787], sessionId: 'current' }
+    const [row] = sidebarLines([orphan], STARTED + 25 * 3_600_000, 'current')
+    expect(row?.parts).toEqual([
+      { text: ':8787', kind: 'warn' },
+      { text: ' Python -m http.server 8787 · ' },
+      { text: '1d 1h', kind: 'error' },
+      { text: ' · ' },
+      { text: 'this session' },
+    ])
+    expect(stillLine(orphan)).toEqual({
+      text: ':8787 Python -m http.server 8787 still runs after SIGKILL',
+      parts: [{ text: ':8787 Python -m http.server 8787 ' }, { text: 'still runs after SIGKILL', kind: 'error' }],
+    })
   })
 })

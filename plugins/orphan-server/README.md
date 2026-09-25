@@ -7,13 +7,13 @@ A Claude Code Mod that lists the servers a Bash call of the model started in thi
 1. At session start, at the end of each main-loop turn and at `/orphan-server`, the mod reads the processes that listen on a TCP port (`lsof -nP -iTCP -sTCP:LISTEN`).
 2. It keeps only a process whose parent is 1 (it outlived the shell that started it) and whose working directory is the session's git repository or a directory under it.
 3. It reads this repository's transcripts for the Bash call that started each one: a call that ran while the process started (after the model wrote it, before its result) and whose command holds the process's arguments. Only the transcript lines of the minutes that call can sit in are read, and each process is looked up once.
-4. The servers found stand in one yellow [sidebar](../sidebar) section, oldest first, with a stop button each:
+4. The servers found stand in one [sidebar](../sidebar) section, oldest first, with a stop button each. In each row the ports are yellow, the age yellow and red past one day, and another session's id faint; `this session` stays in the default colour:
 
        :8787 Python -m http.server 8787 · 3h · session 450600b2
        [ stop :8787 ]
 
    While the sidebar is closed, one transcript line names them with their pids, once per set of servers, and the section is drawn at the next scan after the sidebar opens.
-5. The button runs `/orphan-server stop <pid>`. The mod reads the process again first; a pid that no longer belongs to the listed server (another parent, other arguments, another start time) gets no signal. Otherwise it sends SIGTERM, and SIGKILL after 5 seconds if the server still runs. A green line says `stopped :8787 ...`, or a red line says it still runs after SIGKILL.
+5. The button runs `/orphan-server stop <pid>`. The mod reads the process again first; a pid that no longer belongs to the listed server (another parent, other arguments, another start time) gets no signal. Otherwise it sends SIGTERM, and SIGKILL after 5 seconds if the server still runs. A line says `stopped :8787 ...` with `stopped` green, or says the server `still runs after SIGKILL`, those words red.
 
 ## Command
 

@@ -219,8 +219,37 @@ export function byAge(orphans: Iterable<Orphan>): Orphan[] {
   return [...orphans].sort((a, b) => a.startedAt - b.startedAt)
 }
 
-export function sidebarLines(orphans: readonly Orphan[], now: number, current: string): { text: string; kind: 'warn' }[] {
-  return byAge(orphans).map(o => ({ text: rowText(o, now, current), kind: 'warn' }))
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** A server older than this has its age drawn red. */
+const OLD_AGE = 24 * 60 * MINUTE
+
+/**
+ * One row in parts: the ports yellow, the age yellow and red past a day, another session's id faint;
+ * what runs and `this session` stay in the default colour.
+ */
+function rowLine(o: Orphan, now: number, current: string): Line {
+  const age = now - o.startedAt
+  return partsLine([
+    part(portsText(o.ports), 'warn'),
+    part(` ${labelOf(o.args)} · `, undefined),
+    part(durationText(age), age >= OLD_AGE ? 'error' : 'warn'),
+    part(' · ', undefined),
+    part(sessionText(o.sessionId, current), o.sessionId === current ? undefined : 'dim'),
+  ])
+}
+
+export function sidebarLines(orphans: readonly Orphan[], now: number, current: string): Line[] {
+  return byAge(orphans).map(o => rowLine(o, now, current))
 }
 
 /** One stop button per server, run as `/orphan-server stop <pid>`. */
@@ -240,12 +269,14 @@ export function listText(orphans: readonly Orphan[], now: number, current: strin
   return byAge(orphans).map(o => `${o.pid}  ${rowText(o, now, current)}`).join('\n')
 }
 
-export function stoppedText(o: Orphan): string {
-  return `stopped ${portsText(o.ports)} ${labelOf(o.args)}`
+/** The stream line of a server that ended: `stopped` green, what it was in the default colour. */
+export function stoppedLine(o: Orphan): Line {
+  return partsLine([part('stopped', 'ok'), part(` ${portsText(o.ports)} ${labelOf(o.args)}`, undefined)])
 }
 
-export function stillText(o: Orphan): string {
-  return `${portsText(o.ports)} ${labelOf(o.args)} still runs after SIGKILL`
+/** The stream line of a server SIGKILL did not end: `still runs after SIGKILL` red. */
+export function stillLine(o: Orphan): Line {
+  return partsLine([part(`${portsText(o.ports)} ${labelOf(o.args)} `, undefined), part('still runs after SIGKILL', 'error')])
 }
 
 export function changedText(pid: number): string {

@@ -109,7 +109,11 @@ describe('orphan-server', () => {
     w.procs = [server()]
     await started($)
     await clock.settle()
-    expect(w.bar.sections).toEqual([{ consumer: 'orphan-server', key: 'orphans', title: 'orphan servers', lines: [{ text: ':8787 Python -m http.server 8787 · 3h · session 450600b2', kind: 'warn' }], buttons: [{ label: 'stop :8787', command: 'orphan-server', args: 'stop 3214' }], until: 'session', order: 16 } as unknown as Section])
+    const row = {
+      text: ':8787 Python -m http.server 8787 · 3h · session 450600b2',
+      parts: [{ text: ':8787', kind: 'warn' }, { text: ' Python -m http.server 8787 · ' }, { text: '3h', kind: 'warn' }, { text: ' · ' }, { text: 'session 450600b2', kind: 'dim' }],
+    }
+    expect(w.bar.sections).toEqual([{ consumer: 'orphan-server', key: 'orphans', title: 'orphan servers', lines: [row], buttons: [{ label: 'stop :8787', command: 'orphan-server', args: 'stop 3214' }], until: 'session', order: 16 } as unknown as Section])
     // The transcripts of the repository root are read, only for the minutes around the start.
     expect(w.greps[0]).toContain('/Users/u/.claude/projects/-work')
     expect(w.greps[0]).toContain('"timestamp":"2026-09-22T10:16')
@@ -121,7 +125,7 @@ describe('orphan-server', () => {
     expect((await $.command.run(run('stop 3214'))).text).toBe('sent SIGTERM to 3214; SIGKILL follows in 5 s if it still runs')
     await clock.advance(5000)
     expect(w.signals).toEqual(['kill -TERM 3214'])
-    expect(w.bar.sections.at(-1)?.lines).toEqual([{ text: 'stopped :8787 Python -m http.server 8787', kind: 'ok' }])
+    expect(w.bar.sections.at(-1)?.lines).toEqual([{ text: 'stopped :8787 Python -m http.server 8787', parts: [{ text: 'stopped', kind: 'ok' }, { text: ' :8787 Python -m http.server 8787' }] }])
     expect(w.bar.cleared).toEqual(['orphans'])
   })
 

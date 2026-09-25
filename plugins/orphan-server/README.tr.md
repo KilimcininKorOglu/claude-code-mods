@@ -7,13 +7,13 @@ Modelin bir Bash çağrısıyla bu repository'de başlattığı ve bir port'u di
 1. Session başında, her main-loop turn sonunda ve `/orphan-server` komutunda mod, bir TCP port'unu dinleyen process'leri okur (`lsof -nP -iTCP -sTCP:LISTEN`).
 2. Yalnız parent'ı 1 olan (onu başlatan shell'den sonra yaşayan) ve working directory'si session'ın git repository'si ya da onun altındaki bir dizin olan process'i tutar.
 3. Her biri için bu repository'nin transcript'lerinde onu başlatan Bash çağrısını okur: process başladığında çalışan (model onu yazdıktan sonra, sonucundan önce) ve komutu process'in argümanlarını içeren bir çağrı. Transcript'lerin yalnız o çağrının düşebileceği dakikalardaki satırları okunur ve her process bir kere aranır.
-4. Bulunan sunucular tek bir sarı [sidebar](../sidebar) section'ında, en eskisi önce, her biri bir stop tuşuyla durur:
+4. Bulunan sunucular tek bir [sidebar](../sidebar) section'ında, en eskisi önce, her biri bir stop tuşuyla durur. Her satırda portlar sarı, yaş sarı ve bir günü geçince kırmızı, başka bir session'ın id'si soluktur; `this session` varsayılan renkte kalır:
 
        :8787 Python -m http.server 8787 · 3h · session 450600b2
        [ stop :8787 ]
 
    Sidebar kapalıyken tek bir transcript satırı onları pid'leriyle adlandırır, sunucu kümesi başına bir kere; sidebar açıldıktan sonraki ilk taramada section çizilir.
-5. Tuş `/orphan-server stop <pid>` komutunu çalıştırır. Mod önce process'i yeniden okur; artık listelenen sunucuya ait olmayan bir pid (başka parent, başka argümanlar, başka başlama zamanı) sinyal almaz. Aksi halde SIGTERM gönderir ve sunucu 5 saniye sonra hâlâ çalışıyorsa SIGKILL gönderir. Yeşil bir satır `stopped :8787 ...` der, ya da kırmızı bir satır SIGKILL'den sonra hâlâ çalıştığını söyler.
+5. Tuş `/orphan-server stop <pid>` komutunu çalıştırır. Mod önce process'i yeniden okur; artık listelenen sunucuya ait olmayan bir pid (başka parent, başka argümanlar, başka başlama zamanı) sinyal almaz. Aksi halde SIGTERM gönderir ve sunucu 5 saniye sonra hâlâ çalışıyorsa SIGKILL gönderir. Bir satır `stopped :8787 ...` der ve `stopped` yeşildir, ya da sunucunun `still runs after SIGKILL` olduğunu söyler ve bu kelimeler kırmızıdır.
 
 ## Komut
 
