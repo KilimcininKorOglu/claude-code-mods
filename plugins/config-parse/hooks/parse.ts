@@ -183,14 +183,30 @@ export function doneLog(kind: Kind, shown: string): string {
   return `${shown} parses as ${label(kind)} again`
 }
 
+/** A piece of a sidebar line in its own colour. */
+type Part = { text: string; kind: 'error' | 'warn' }
+
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind: 'error' | 'ok'; parts?: Part[] }
+
+/** Where a parser says the error is: `line 2`, `(line 3, column 5)`, `(at line 1, column 5)`. */
+const POSITION = /\(?(?:at )?line \d+(?:,? column \d+)?\)?/
+
+/** The parse error, its position in yellow inside the red, so where to look stands out. */
+function errorLine(error: string): Line {
+  const text = error.slice(0, 200)
+  const at = POSITION.exec(text)
+  if (at === null) return { text, kind: 'error' }
+  const end = at.index + at[0].length
+  const parts: Part[] = [{ text: text.slice(0, at.index), kind: 'error' }, { text: at[0], kind: 'warn' }, { text: text.slice(end), kind: 'error' }]
+  return { text, kind: 'error', parts: parts.filter(p => p.text !== '') }
+}
+
 /**
  * The finding's sidebar lines: the file first, because the pane draws the section's title and not its
  * key, then the parse error.
  */
-export const sidebarLines = (shown: string, error: string): { text: string; kind: 'error' }[] => [
-  { text: shown, kind: 'error' },
-  { text: error.slice(0, 200), kind: 'error' },
-]
+export const sidebarLines = (shown: string, error: string): Line[] => [{ text: shown, kind: 'error' }, errorLine(error)]
 
 export const doneLines = (shown: string): { text: string; kind: 'ok' }[] => [{ text: `${shown} parses again`, kind: 'ok' }]
 

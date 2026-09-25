@@ -79,6 +79,18 @@ describe('parse', () => {
     expect(sidebarLines('package.json', 'boom')).toEqual([{ text: 'package.json', kind: 'error' }, { text: 'boom', kind: 'error' }])
   })
 
+  test('the position a parser names is yellow inside the red error', () => {
+    expect(sidebarLines('.env', 'line 2 is not a setting: x')[1]).toEqual({
+      text: 'line 2 is not a setting: x',
+      kind: 'error',
+      parts: [{ text: 'line 2', kind: 'warn' }, { text: ' is not a setting: x', kind: 'error' }],
+    })
+    expect(sidebarLines('a.toml', 'tomllib.TOMLDecodeError: Invalid value (at line 1, column 5)')[1]?.parts).toEqual([
+      { text: 'tomllib.TOMLDecodeError: Invalid value ', kind: 'error' },
+      { text: '(at line 1, column 5)', kind: 'warn' },
+    ])
+  })
+
   test('stops a commit, a push and a merge, and leaves every other command alone', async () => {
     for (const command of ['git commit -m "x"', 'cd app && git commit', 'git -c user.name=x push', 'git merge main', 'npm t && git push origin main']) {
       expect(isGuarded(command), command).toBe(true)
