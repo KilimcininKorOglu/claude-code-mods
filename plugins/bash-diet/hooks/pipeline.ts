@@ -64,13 +64,20 @@ export function runFilter(plan: Plan, text: string, exitCode: number, flagged: b
   }
 }
 
+/** The least a filter must save for its text to replace the output: a share of it, and characters. */
+export const MIN_SAVED_SHARE = 0.05
+export const MIN_SAVED_CHARS = 40
+
 /**
- * Whether the filtered text replaces the output: only when it is smaller than the output without its
- * trailing whitespace, unless flags changed the command's format, because then the raw output is JSON
- * the model did not ask for.
+ * Whether the filtered text replaces the output: only when it saves at least `MIN_SAVED_SHARE` of the
+ * output and `MIN_SAVED_CHARS` characters, trailing whitespace left out, because a smaller saving only
+ * changes what the model reads and counts a shrink nobody gains from. Flags that changed the command's
+ * format always replace it, because then the raw output is a format the model did not ask for.
  */
 export function replaces(raw: string, filtered: string, flagged: boolean): boolean {
-  return flagged || filtered.trimEnd().length < raw.trimEnd().length
+  const before = raw.trimEnd().length
+  const saved = before - filtered.trimEnd().length
+  return flagged || (saved >= MIN_SAVED_CHARS && saved >= before * MIN_SAVED_SHARE)
 }
 
 /** A failed call's error text split into its exit code and output: `Exit code 3\n...`; else undefined. */

@@ -96,6 +96,15 @@ describe('filter plumbing', () => {
     expect(joined('', 'err')).toBe('err')
     expect(replaces('abc', 'abcd', false)).toBe(false)
     expect(replaces('abc', 'abcd', true)).toBe(true)
+    // The recorded case: one character of 3626 left out is no saving worth a changed result.
+    const raw = 'x'.repeat(3626)
+    expect(replaces(raw, raw.slice(1), false)).toBe(false)
+    // Both bars must hold: 40 characters of 3626 is under 5%, 180 of 3626 is over it.
+    expect(replaces(raw, raw.slice(40), false)).toBe(false)
+    expect(replaces(raw, raw.slice(182), false)).toBe(true)
+    // 39 characters of 100 is over 5% and under 40 characters.
+    expect(replaces('y'.repeat(100), 'y'.repeat(61), false)).toBe(false)
+    expect(replaces('y'.repeat(100), 'y'.repeat(60), false)).toBe(true)
   })
 
   test('keeps a file for a cut or long failed output, named by a stable hash', async () => {

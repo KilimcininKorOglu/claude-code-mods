@@ -194,16 +194,18 @@ describe('bash-diet', () => {
     const w = world(on)
     await started($)
     put(w, PROJECT_RULES, ruleFile('^./build.sh', 'ok'))
-    w.stdout = 'noise 1\nok one\nnoise 2\nok two\n'
+    // Each kind of line is long enough that keeping one kind saves more than the least a filter must save.
+    const [n1, o1, n2, o2] = ['noise 1', 'ok one', 'noise 2', 'ok two'].map(l => `${l} ${'.'.repeat(40)}`)
+    w.stdout = `${n1}\n${o1}\n${n2}\n${o2}\n`
     expect(stdoutOf(await bash($, './build.sh'))).toBe(w.stdout)
     expect(w.logs).toEqual(['.bash-diet/filters.json: 1 filter rule(s) are not trusted and do not run; /bash-diet trust runs them'])
     expect((await $.command.run(run('trust'))).text).toMatch(/^trusted: 1 rule\(s\) of \.bash-diet\/filters\.json run until the file changes \(sha256 [0-9a-f]{12}\)$/)
-    expect(stdoutOf(await bash($, './build.sh'))).toBe('ok one\nok two')
+    expect(stdoutOf(await bash($, './build.sh'))).toBe(`${o1}\n${o2}`)
     put(w, PROJECT_RULES, ruleFile('^./build.sh', 'noise'))
     expect(stdoutOf(await bash($, './build.sh'))).toBe(w.stdout)
     expect(w.logs).toHaveLength(2)
     await $.command.run(run('trust'))
-    expect(stdoutOf(await bash($, './build.sh'))).toBe('noise 1\nnoise 2')
+    expect(stdoutOf(await bash($, './build.sh'))).toBe(`${n1}\n${n2}`)
     expect((await $.command.run(run('untrust'))).text).toBe('untrusted: .bash-diet/filters.json does not run')
     expect(stdoutOf(await bash($, './build.sh'))).toBe(w.stdout)
   })
