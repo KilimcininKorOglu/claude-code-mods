@@ -7,7 +7,7 @@ import { failureOf, joined, persistedPathOf, planFor, replaces } from '../hooks/
 import { hashOf, needsFile, staleFiles } from '../hooks/recall.ts'
 import { classify } from '../hooks/rules.ts'
 import { lex, parse } from '../hooks/shell.ts'
-import { fmtTokens, isExcluded, patternError, sessionText } from '../hooks/text.ts'
+import { fmtTokens, isExcluded, patternError, sessionLine, sessionText } from '../hooks/text.ts'
 
 tier('user')
 
@@ -125,6 +125,12 @@ describe('filter plumbing', () => {
     expect(fmtTokens(1_500)).toBe('1.5k')
     expect(sessionText(0, 0, 0)).toBe('no Bash result shrunk yet')
     expect(sessionText(2, 4000, 1000)).toBe('2 result(s) shrunk · 4.0k → 1.0k chars (−75%) · ~750 tokens estimated')
+    // The sidebar line colours the share taken out green and the estimate faint, and reads as the status text.
+    expect(sessionLine(0, 0, 0)).toEqual({ text: 'no Bash result shrunk yet', kind: 'dim' })
+    expect(sessionLine(2, 4000, 1000)).toEqual({
+      text: sessionText(2, 4000, 1000),
+      parts: [{ text: '2 result(s) shrunk · 4.0k → 1.0k chars ' }, { text: '(−75%)', kind: 'ok' }, { text: ' · ' }, { text: '~750 tokens estimated', kind: 'dim' }],
+    })
     expect(isExcluded(['npm'], ['npm', 'test'])).toBe(true)
     expect(isExcluded(['npm'], ['npmx'])).toBe(false)
     expect(isExcluded(['^git (log|diff)'], ['git', 'diff'])).toBe(true)

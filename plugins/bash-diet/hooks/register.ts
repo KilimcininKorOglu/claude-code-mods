@@ -8,7 +8,7 @@ import { dayOf, gainFileName, gainReport, linesOfRecords, recordsOf, staleGainFi
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
 import { costText } from './pricing.ts'
 import { fullOutputLine, hashOf, isCut, needsFile, sha256Of, staleFiles } from './recall.ts'
-import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionText, statusText, tokensOf } from './text.ts'
+import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionLine, sessionText, statusText, tokensOf } from './text.ts'
 
 const ENABLED_KEY = 'enabled'
 const EXCLUDES_KEY = 'excludes'
@@ -75,7 +75,7 @@ async function showGain($: EngineInterface, state: State): Promise<void> {
       consumer: 'bash-diet',
       key: 'session',
       title: 'Bash output',
-      lines: [{ text, kind: state.calls === 0 ? 'dim' : 'ok' }],
+      lines: [sessionLine(state.calls, state.rawChars, state.shownChars)],
       until: 'session',
       order: 22,
     })

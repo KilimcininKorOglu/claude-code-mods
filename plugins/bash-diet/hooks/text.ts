@@ -40,21 +40,56 @@ export function fmtTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1)}M`
 }
 
+/** The share of the characters the filter took out, as `(−57%)`. */
+function pctText(rawChars: number, shownChars: number): string {
+  const pct = rawChars === 0 ? 0 : Math.round(((rawChars - shownChars) / rawChars) * 100)
+  return `(−${pct}%)`
+}
+
+/** The tokens saved as estimated from the characters: `~23k tokens estimated`. */
+function estimateText(rawChars: number, shownChars: number): string {
+  return `~${fmtTokens(tokensOf(rawChars - shownChars))} tokens estimated`
+}
+
 /** The measured characters before and after: `164k → 71k chars (−57%)`. */
 export function charsText(rawChars: number, shownChars: number): string {
-  const pct = rawChars === 0 ? 0 : Math.round(((rawChars - shownChars) / rawChars) * 100)
-  return `${fmtTokens(rawChars)} → ${fmtTokens(shownChars)} chars (−${pct}%)`
+  return `${fmtTokens(rawChars)} → ${fmtTokens(shownChars)} chars ${pctText(rawChars, shownChars)}`
 }
 
 /** The measured characters, then the tokens saved as estimated from them. */
 export function savingText(rawChars: number, shownChars: number): string {
-  return `${charsText(rawChars, shownChars)} · ~${fmtTokens(tokensOf(rawChars - shownChars))} tokens estimated`
+  return `${charsText(rawChars, shownChars)} · ${estimateText(rawChars, shownChars)}`
 }
 
 /** The session's gain: how many results shrank and what they saved. */
 export function sessionText(calls: number, rawChars: number, shownChars: number): string {
   if (calls === 0) return 'no Bash result shrunk yet'
   return `${calls} result(s) shrunk · ${savingText(rawChars, shownChars)}`
+}
+
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/**
+ * `sessionText` as the sidebar line: faint before any result shrank, then the share taken out green and
+ * the token estimate faint, the counts in the default colour.
+ */
+export function sessionLine(calls: number, rawChars: number, shownChars: number): Line {
+  if (calls === 0) return { text: sessionText(calls, rawChars, shownChars), kind: 'dim' }
+  return partsLine([
+    part(`${calls} result(s) shrunk · ${fmtTokens(rawChars)} → ${fmtTokens(shownChars)} chars `, undefined),
+    part(pctText(rawChars, shownChars), 'ok'),
+    part(' · ', undefined),
+    part(estimateText(rawChars, shownChars), 'dim'),
+  ])
 }
 
 export function statusText(enabled: boolean, excludes: string[], session: string): string {
