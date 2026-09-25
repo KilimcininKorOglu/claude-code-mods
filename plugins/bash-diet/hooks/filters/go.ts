@@ -112,7 +112,7 @@ function lint(input: { text: string }): FilterResult {
 const modOp = (input: { text: string }): FilterResult => whole(linesOf(input.text).filter(l => !/^go: (downloading|finding|extracting) /.test(l)))
 
 export const GO: FilterTable = {
-  'go test': { run: test, flags: args => (hasArg(args, '-json') ? undefined : ['-json']) },
+  'go test': { run: test },
   'go build': { run: modOp },
   'go vet': { run: modOp },
   'go get': { run: modOp },

@@ -1,5 +1,5 @@
 import { byRule, plural, type Issue } from './blocks.ts'
-import { CAP_WARNINGS, collapseBlanks, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
+import { CAP_WARNINGS, collapseBlanks, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
 import { cleanup } from './generic.ts'
 
 /** A backtrace line inside an installed gem: it names none of the project's code. */
@@ -24,21 +24,24 @@ const MINITEST_NOISE = /^(Run options:|# Running:|Finished in [\d.]+s|You have s
 /** `  1) Failure:` or `  2) Error:`, the start of one failed test. */
 const MINITEST_BLOCK = /^\s+\d+\) (Failure|Error):/
 
-/** The failed-test blocks up to the cap, and a count of the rest. */
-function cappedBlocks(lines: string[]): { lines: string[]; over: number } {
-  const starts = lines.map((l, i) => (MINITEST_BLOCK.test(l) ? i : -1)).filter(i => i >= 0)
+/** The failed-test blocks up to the cap, then the report from its summary line on, and a count of the rest. */
+function cappedBlocks(lines: string[], block: RegExp, summary: RegExp): { lines: string[]; over: number } {
+  const starts = lines.map((l, i) => (block.test(l) ? i : -1)).filter(i => i >= 0)
   if (starts.length <= CAP_WARNINGS) return { lines, over: 0 }
   const cut = starts[CAP_WARNINGS] ?? lines.length
-  const rest = lines.slice(cut).findIndex(l => /^\d+ (runs|tests), /.test(l))
+  const rest = lines.slice(cut).findIndex(l => summary.test(l))
   return { lines: [...lines.slice(0, cut), ...(rest < 0 ? [] : lines.slice(cut + rest))], over: starts.length - CAP_WARNINGS }
 }
+
+/** The report's lines without the noise and the gem frames, blank runs folded, a leading blank gone. */
+const reportLines = (lines: string[], noise: RegExp): string[] =>
+  collapseBlanks(lines.filter(l => !noise.test(l.trim()) && !GEM_FRAME.test(l))).filter((l, i) => i > 0 || l.trim() !== '')
 
 /** `rake test`, `rails test`: the failed tests with their project frames, and the count line. */
 function minitest(input: { text: string }): FilterResult {
   const lines = linesOf(input.text)
   if (!lines.some(l => /^\d+ (runs|tests), \d+ assertions/.test(l))) return cleanup(input.text)
-  const kept = collapseBlanks(lines.filter(l => !MINITEST_NOISE.test(l.trim()) && !GEM_FRAME.test(l))).filter((l, i) => i > 0 || l.trim() !== '')
-  const c = cappedBlocks(kept)
+  const c = cappedBlocks(reportLines(lines, MINITEST_NOISE), MINITEST_BLOCK, /^\d+ (runs|tests), /)
   return { text: [...c.lines, ...(c.over > 0 ? [`… +${c.over} more failed tests`] : [])].join('\n'), elided: c.over > 0 }
 }
 
@@ -67,10 +70,28 @@ function failedExample(e: RspecExample, n: number): string[] {
   return [head, ...(e.exception == null ? [] : exceptionLines(e.exception))]
 }
 
-/** An rspec JSON report: the failed examples, what failed outside them, and the summary line. */
+/** rspec's progress dots and timing. */
+const RSPEC_NOISE = /^([.F*]+|Finished in .*|Randomized with seed \d+)$/
+
+/** `22 examples, 2 failures`, the summary line of the text report. */
+const RSPEC_SUMMARY = /^\d+ examples?, \d+ failures?/
+
+/** rspec's text report: the failures with their project frames, the summary, and the rerun lines. */
+function rspecText(lines: string[]): FilterResult {
+  const c = cappedBlocks(reportLines(lines, RSPEC_NOISE), /^\s+\d+\) /, RSPEC_SUMMARY)
+  return { text: [...c.lines, ...(c.over > 0 ? [`… +${c.over} more failed examples`] : [])].join('\n'), elided: c.over > 0 }
+}
+
+/** An rspec run: its JSON report when the arguments asked for one, else its text report. */
 function rspec(input: { text: string }): FilterResult {
   const report = jsonAfter<RspecReport>(input.text, '{"version"')
-  if (report === undefined) return cleanup(input.text)
+  if (report !== undefined) return rspecJson(report)
+  const lines = linesOf(input.text)
+  return lines.some(l => RSPEC_SUMMARY.test(l)) ? rspecText(lines) : cleanup(input.text)
+}
+
+/** An rspec JSON report: the failed examples, what failed outside them, and the summary line. */
+function rspecJson(report: RspecReport): FilterResult {
   const failed = (report.examples ?? []).filter(e => e.status === 'failed')
   const shown = failed.slice(0, CAP_WARNINGS).flatMap((e, i) => failedExample(e, i + 1))
   const over = failed.length - CAP_WARNINGS
@@ -81,9 +102,6 @@ function rspec(input: { text: string }): FilterResult {
   }
 }
 
-/** Options that choose rspec's output themselves. */
-const RSPEC_OWN = ['--format', '-f', '--out', '-o', '--dry-run', '--init', '--help', '-h', '--version', '-v']
-
 // -------------------------------------------------------------------------------------------- rubocop
 
 type RubocopReport = {
@@ -92,15 +110,29 @@ type RubocopReport = {
 }
 
 /** A rubocop JSON report, grouped by cop. */
-function rubocop(input: { text: string }): FilterResult {
-  const report = jsonAfter<RubocopReport>(input.text, '{"metadata"')
-  if (report === undefined) return cleanup(input.text)
+function rubocopJson(report: RubocopReport): FilterResult {
   const issues: Issue[] = (report.files ?? []).flatMap(f => (f.offenses ?? []).map(o => ({ file: f.path ?? '', code: o.cop_name ?? '', text: o.message ?? '' })))
   if (issues.length === 0) return whole([`rubocop: no offenses in ${plural(report.summary?.inspected_file_count ?? 0, 'file')}`])
   return byRule(issues, 'rubocop')
 }
 
-const RUBOCOP_OWN = ['--format', '-f', '--out', '-o', '--version', '-V', '--help', '-h', '--show-cops', '--list-target-files', '-L', '--auto-gen-config']
+/** `lib/cart.rb:1:1: C: [Correctable] Style/Documentation: message`, one offense of the text report. */
+const RUBOCOP_LINE = /^(.+?):\d+:\d+: [CWEFR]: (?:\[Correctable\] )?([\w/]+): (.*)$/
+
+/** rubocop's text report grouped by cop: the new-cops notice, the source lines and the carets go. */
+function rubocopText(text: string): FilterResult {
+  const lines = linesOf(text)
+  const issues = lines.map(l => RUBOCOP_LINE.exec(l)).filter(m => m !== null).map(m => ({ file: m[1] ?? '', code: m[2] ?? '', text: m[3] ?? '' }))
+  if (issues.length > 0) return byRule(issues, 'rubocop')
+  const clean = lines.find(l => /^\d+ files? inspected, no offenses detected/.test(l))
+  return clean === undefined ? cleanup(text) : whole([`rubocop: ${clean}`])
+}
+
+/** A rubocop run: its JSON report when the arguments asked for one, else its text report. */
+function rubocop(input: { text: string }): FilterResult {
+  const report = jsonAfter<RubocopReport>(input.text, '{"metadata"')
+  return report === undefined ? rubocopText(input.text) : rubocopJson(report)
+}
 
 // ------------------------------------------------------------------------------------------- bundler
 
@@ -112,8 +144,8 @@ export const RUBY: FilterTable = {
   'rake test': { run: minitest },
   'rails test': { run: minitest },
   ruby: { run: minitest },
-  rspec: { run: rspec, flags: args => (hasArg(args, ...RSPEC_OWN) ? undefined : ['--format', 'json']) },
-  rubocop: { run: rubocop, flags: args => (hasArg(args, ...RUBOCOP_OWN) ? undefined : ['--format', 'json']) },
+  rspec: { run: rspec },
+  rubocop: { run: rubocop },
   'bundle install': { run: bundle },
   'bundle update': { run: bundle },
 }

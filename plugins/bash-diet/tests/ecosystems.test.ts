@@ -131,9 +131,18 @@ describe('ruby', () => {
     expect(run('ruby', 'hello\n').text).toBe('hello')
   })
 
-  test('rspec asks for JSON and reports the failed examples with their first project frame', () => {
-    expect(flagged('bundle exec rspec spec/models')).toBe('bundle exec rspec --format json spec/models')
-    expect(flagged('rspec -f d')).toBe('rspec -f d')
+  test('rspec runs as written; its text report keeps the failures, the summary and the rerun lines', () => {
+    expect(flagged('bundle exec rspec spec/models')).toBe('bundle exec rspec spec/models')
+    // rspec 3.13 with Ruby 4.0: twenty passing examples and two failing ones.
+    const text = "....................FF\n\nFailures:\n\n  1) Cart sums two prices\n     Failure/Error: expect(c.total).to eq(5)\n\n       expected: 5\n            got: 4\n\n       (compared using ==)\n     # ./spec/cart_spec.rb:16:in 'block (2 levels) in <top (required)>'\n\n  2) Cart raises on nil\n     Failure/Error: Cart.new.add(nil).total + nil\n\n     NoMethodError:\n       undefined method 'total' for an instance of Array\n     # ./spec/cart_spec.rb:20:in 'block (2 levels) in <top (required)>'\n\nFinished in 0.02311 seconds (files took 0.20085 seconds to load)\n22 examples, 2 failures\n\nFailed examples:\n\nrspec ./spec/cart_spec.rb:12 # Cart sums two prices\nrspec ./spec/cart_spec.rb:19 # Cart raises on nil\n\n"
+    const r = run('rspec', text, [], 1)
+    expect(r.text.startsWith('Failures:\n\n  1) Cart sums two prices')).toBe(true)
+    expect(r.text).toContain("undefined method 'total' for an instance of Array")
+    expect(r.text).toContain('22 examples, 2 failures\n\nFailed examples:')
+    expect(r.text).not.toMatch(/^\.+F+$|Finished in/m)
+  })
+
+  test('an rspec JSON report the model asked for reads as the failed examples with their first project frame', () => {
     const report = JSON.stringify({
       version: '3.13.0',
       examples: [
@@ -151,6 +160,14 @@ describe('ruby', () => {
     const report = { metadata: {}, files: [{ path: 'app/a.rb', offenses: [offense('Layout/TrailingWhitespace', 'Trailing whitespace detected.'), offense('Style/StringLiterals', 'Prefer single quotes.')] }, { path: 'app/b.rb', offenses: [offense('Layout/TrailingWhitespace', 'Trailing whitespace detected.')] }], summary: { offense_count: 3, inspected_file_count: 2 } }
     expect(run('rubocop', JSON.stringify(report)).text).toBe('Layout/TrailingWhitespace (2): Trailing whitespace detected.\n  app/a.rb, app/b.rb\nStyle/StringLiterals (1): Prefer single quotes.\n  app/a.rb\nrubocop: 3 issues in 2 rules')
     expect(run('rubocop', JSON.stringify({ metadata: {}, files: [], summary: { offense_count: 0, inspected_file_count: 15 } })).text).toBe('rubocop: no offenses in 15 files')
+  })
+
+  test('rubocop runs as written; its text report is grouped by cop without the new-cops notice and the carets', () => {
+    expect(flagged('rubocop app')).toBe('rubocop app')
+    // rubocop 1.9x, after its list of cops a project has not configured yet.
+    const text = "The following cops were added to RuboCop, but are not configured.\nGemspec/AddRuntimeDependency: # new in 1.65\n  Enabled: true\nFor more information: https://docs.rubocop.org/rubocop/versioning.html\nInspecting 2 files\nCC\n\nOffenses:\n\nlib/cart.rb:1:1: C: Style/Documentation: Missing top-level documentation comment for class Cart.\nclass Cart\n^^^^^^^^^^\nlib/cart.rb:1:1: C: [Correctable] Style/FrozenStringLiteralComment: Missing frozen string literal comment.\nclass Cart\n^\nspec/cart_spec.rb:1:1: C: [Correctable] Style/FrozenStringLiteralComment: Missing frozen string literal comment.\nrequire_relative '../lib/cart'\n^\n\n2 files inspected, 3 offenses detected, 2 offenses autocorrectable\n"
+    expect(run('rubocop', text, [], 1).text).toBe('Style/FrozenStringLiteralComment (2): Missing frozen string literal comment.\n  lib/cart.rb, spec/cart_spec.rb\nStyle/Documentation (1): Missing top-level documentation comment for class Cart.\n  lib/cart.rb\nrubocop: 3 issues in 2 rules')
+    expect(run('rubocop', 'Inspecting 4 files\n....\n\n4 files inspected, no offenses detected\n').text).toBe('rubocop: 4 files inspected, no offenses detected')
   })
 
   test('bundle install keeps what it installed', () => {
@@ -173,8 +190,24 @@ describe('php', () => {
     expect(run('pest', '\n  PASS  Tests\\Unit\\ExampleTest\n  ✓ that true is true  0.01s\n\n  Tests:    1 passed (1 assertions)\n  Duration: 0.12s\n').text).toBe('  Tests:    1 passed (1 assertions)')
   })
 
-  test('phpstan asks for JSON and groups the errors by file with their lines', () => {
-    expect(flagged('vendor/bin/phpstan analyse src')).toBe('vendor/bin/phpstan analyse --error-format=json --no-progress src')
+  test('phpstan runs as written; its table report is grouped by file with the line and identifier of each error', () => {
+    expect(flagged('vendor/bin/phpstan analyse src')).toBe('vendor/bin/phpstan analyse src')
+    // PHPStan 2.2 at level 9: the progress bars, a note it writes for agents, and one table.
+    const text = ' 0/1 [░░░░░░░░░░░░░░░░░░░░░░░░░░░░]   0%\n 1/1 [▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓] 100%\n\nInstructions for interpreting errors\n---------\n\nEach error has an associated identifier, like `argument.type`\nor `return.missing`.\n ------ ----------------------------------------------------------------------- \n  Line   Cart.php                                                               \n ------ ----------------------------------------------------------------------- \n  :3     Property Cart::$items type has no value type specified in iterable     \n         type array.                                                            \n         🪪  missingType.iterableValue                                          \n         💡  See:                                                               \n         https://phpstan.org/blog/solving-phpstan-no-value-type-specified-in-i  \n         terable-type                                                           \n  :5     Method Cart::total() should return string but returns (float|int).     \n         🪪  return.type                                                        \n  :6     Call to an undefined method Cart::missing().                           \n         🪪  method.notFound                                                    \n ------ ----------------------------------------------------------------------- \n\n\n [ERROR] Found 3 errors                                                         \n\n'
+    expect(run('phpstan analyse', text, ['--level=9', 'src'], 1).text).toBe([
+      'Instructions for interpreting errors',
+      'Each error has an associated identifier, like `argument.type`',
+      'or `return.missing`.',
+      'Cart.php (3):',
+      '  3 Property Cart::$items type has no value type specified in iterable type array. [missingType.iterableValue]',
+      '  5 Method Cart::total() should return string but returns (float|int). [return.type]',
+      '  6 Call to an undefined method Cart::missing(). [method.notFound]',
+      'phpstan: 3 errors in 1 file',
+    ].join('\n'))
+    expect(run('phpstan analyse', ' [OK] No errors                                                                \n\n').text).toBe('phpstan: no errors')
+  })
+
+  test('a phpstan JSON report the model asked for groups the errors by file with their lines', () => {
     const report = { totals: { errors: 0, file_errors: 3 }, files: { '/var/www/app/Models/User.php': { errors: 2, messages: [{ message: 'Property User::$id (int) does not accept null.', line: 15, identifier: 'property.nonObject' }, { message: 'Method User::find() has no return type specified.', line: 45, identifier: 'missingType.return' }] }, '/var/www/app/Http/Kernel.php': { errors: 1, messages: [{ message: 'Variable $user might not be defined.', line: 56, identifier: 'variable.undefined' }] } }, errors: [] }
     expect(run('phpstan analyse', JSON.stringify(report, null, 2)).text).toBe('Models/User.php (2):\n  15 Property User::$id (int) does not accept null. [property.nonObject]\n  45 Method User::find() has no return type specified. [missingType.return]\nHttp/Kernel.php (1):\n  56 Variable $user might not be defined. [variable.undefined]\nphpstan: 3 errors in 2 files under /var/www/app/')
     expect(run('phpstan analyse', JSON.stringify({ totals: { errors: 0, file_errors: 0 }, files: {}, errors: [] })).text).toBe('phpstan: no errors')

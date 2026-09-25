@@ -11,7 +11,7 @@ A Claude Code Mod that shrinks each Bash result before the model reads it. Known
    - A build keeps its diagnostics, each once, errors first, and the verdict.
    - A listing, a search or a table keeps its rows up to a cap, and ends with a count of the rest.
    - Progress bars, download lines, spinners and colour codes go everywhere.
-4. Some filters read a structured format better than the text one. For those, the mod adds a flag to the command: `go test -json`, `git log -10` when neither a count, a range nor a format is given, `pytest --tb=short -q`, `ruff check --output-format=json`, `jest --json`, `vitest --reporter=json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json --no-progress`. The flag is added only when the permission check reads the new command the same way as the one the model wrote, and never when the arguments already choose a format, in a pipeline, a chain, after `sudo` or with a redirect.
+4. For two commands the mod adds a flag that makes the output smaller: `git log -10` when neither a count, a range nor a format is given, and `pytest --tb=short -q`. It never switches a tool to a larger format such as JSON: a failed command's text reaches the hook cut at 10,000 characters, and a JSON report passes that limit long before the text one does. When the model asks for JSON itself (`go test -json`, `jest --json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json`, `ruff check --output-format=json`), the filter reads that report. The flag is added only when the permission check reads the new command the same way as the one the model wrote, and never when the arguments already choose a format, in a pipeline, a chain, after `sudo` or with a redirect.
 5. A filtered result that is not shorter than the output is dropped, and the model reads the output as it was. After an added flag the filtered result always stands, because the raw output is then a format the model did not ask for.
 6. When a filter left lines out, or a failed run printed 500 characters or more, the full output is kept and the result ends with its path:
 
@@ -116,7 +116,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.282:
 Reach L2, writes files and runs processes.
 
     1. Reads:    each Bash command and its output; the two filters.json files; this session's model, spend and id; the transcripts under ~/.claude/projects for discover and learn
-    2. Runs:     the model's own Bash command, with a format flag added when the permission check allows it; git rev-parse, mkdir, rm (of its own files only) and cat (of transcripts)
+    2. Runs:     the model's own Bash command, with a flag that shortens its output added when the permission check allows it; git rev-parse, mkdir, rm (of its own files only) and cat (of transcripts)
     3. Sends:    the filtered result to the model in place of the output; nothing leaves the machine
     4. Persists: full outputs in $TMPDIR/bash-diet (200 files, 30 days); saving records in ~/.claude/bash-diet/gain (90 days); .claude/rules/cli-corrections.md on learn write; in $.store, on/off, the excludes and the trusted rule file hashes
     5. Hostile input: a command's output only passes through regexes and JSON.parse, and is never run; a project rule file runs only after /bash-diet trust and only while its SHA-256 matches; env values of credential-like names are masked

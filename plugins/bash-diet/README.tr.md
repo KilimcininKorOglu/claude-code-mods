@@ -11,7 +11,7 @@ Her Bash sonucunu model okumadan önce küçülten bir Claude Code Mod'u. Biline
    - Bir build diagnostic'lerini her birini bir kez, önce hataları, ve sonucu tutar.
    - Bir liste, bir arama ya da bir tablo satırlarını bir sınıra kadar tutar ve geri kalanın sayısıyla biter.
    - Progress bar'lar, download satırları, spinner'lar ve renk kodları her yerde gider.
-4. Bazı filtreler yapılandırılmış bir formatı metinden daha iyi okur. Onlar için mod komuta bir flag ekler: `go test -json`, ne bir sayı, ne bir aralık, ne de bir format verildiğinde `git log -10`, `pytest --tb=short -q`, `ruff check --output-format=json`, `jest --json`, `vitest --reporter=json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json --no-progress`. Flag yalnız permission kontrolü yeni komutu modelin yazdığı komutla aynı okuduğunda eklenir. Argümanlar zaten bir format seçtiğinde, bir pipeline'da, bir zincirde, `sudo`'dan sonra ya da bir redirect ile hiçbir zaman eklenmez.
+4. İki komutta mod çıktıyı küçülten bir flag ekler: ne bir sayı, ne bir aralık, ne de bir format verildiğinde `git log -10`, ve `pytest --tb=short -q`. Hiçbir aracı daha büyük bir formata (JSON) geçirmez. Başarısız bir komutun metni hook'a 10.000 karakterde kesilmiş gelir, ve bir JSON raporu bu sınırı düz metinden çok daha erken aşar. Model JSON'u kendisi istediğinde (`go test -json`, `jest --json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json`, `ruff check --output-format=json`), filtre o raporu okur. Flag yalnız permission kontrolü yeni komutu modelin yazdığı komutla aynı okuduğunda eklenir. Argümanlar zaten bir format seçtiğinde, bir pipeline'da, bir zincirde, `sudo`'dan sonra ya da bir redirect ile hiçbir zaman eklenmez.
 5. Çıktıdan kısa olmayan filtrelenmiş bir sonuç atılır ve model çıktıyı olduğu gibi okur. Eklenmiş bir flag'den sonra filtrelenmiş sonuç her zaman kalır, çünkü ham çıktı o zaman modelin istemediği bir formattadır.
 6. Bir filtre satır bıraktığında ya da başarısız bir koşu 500 veya daha fazla karakter bastığında tam çıktı saklanır ve sonuç yoluyla biter:
 
@@ -116,7 +116,7 @@ Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 Reach L2, dosya yazar ve process çalıştırır.
 
     1. Okur:     her Bash komutunu ve çıktısını; iki filters.json dosyasını; bu session'ın modelini, harcamasını ve id'sini; discover ve learn için ~/.claude/projects altındaki transcript'leri
-    2. Çalıştırır: modelin kendi Bash komutunu, permission kontrolü izin verdiğinde eklenmiş bir format flag'i ile; git rev-parse, mkdir, rm (yalnız kendi dosyalarını) ve cat (transcript'leri)
+    2. Çalıştırır: modelin kendi Bash komutunu, permission kontrolü izin verdiğinde eklenmiş, çıktıyı kısaltan bir flag ile; git rev-parse, mkdir, rm (yalnız kendi dosyalarını) ve cat (transcript'leri)
     3. Gönderir: çıktının yerine filtrelenmiş sonucu modele; makineden hiçbir şey çıkmaz
     4. Saklar:   $TMPDIR/bash-diet içinde tam çıktıları (200 dosya, 30 gün); ~/.claude/bash-diet/gain içinde tasarruf kayıtlarını (90 gün); learn write ile .claude/rules/cli-corrections.md; $.store içinde on/off, exclude'lar ve trust edilen kural dosyalarının hash'leri
     5. Düşman girdi: bir komutun çıktısı yalnız regex'lerden ve JSON.parse'tan geçer ve hiçbir zaman çalıştırılmaz; bir proje kural dosyası yalnız /bash-diet trust'tan sonra ve SHA-256'sı tuttuğu sürece çalışır; credential benzeri adların env değerleri maskelenir

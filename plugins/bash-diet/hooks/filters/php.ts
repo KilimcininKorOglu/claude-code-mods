@@ -79,10 +79,92 @@ function reportOf(text: string): PhpstanReport | undefined {
   }
 }
 
-/** A phpstan JSON report, grouped by file with the line of each error. */
+/** One error of the table report: its line, its message over the rows it wraps to, and its identifier. */
+type TableError = { line: string; message: string[]; identifier?: string }
+
+/** What the table report holds: errors by file in order, lines no rule reads, and the final verdict. */
+type Table = { files: Map<string, TableError[]>; file: string; tip: boolean; other: string[]; verdict?: string }
+
+/** `  :6     Call to an undefined method Cart::missing().`: phpstan 2 puts a colon before the line. */
+const TABLE_ROW = /^\s{2}:?(\d+)\s{2,}(\S.*?)\s*$/
+
+/** A table row that goes on under the message column. */
+const TABLE_MORE = /^\s{9}(\S.*?)\s*$/
+
+/** A continuation row: the identifier, a tip and the tip's own rows, or more of the message. */
+function tableMore(t: Table, text: string): void {
+  const last = t.files.get(t.file)?.at(-1)
+  if (text.startsWith('🪪')) { if (last !== undefined) last.identifier = text.replace(/^🪪\s*/, ''); t.tip = false; return }
+  if (text.startsWith('💡')) { t.tip = true; return }
+  if (!t.tip && last !== undefined) last.message.push(text)
+}
+
+/** A table rule, a blank line or a progress bar: nothing to read. */
+const isFrame = (line: string): boolean => /^\s*-[-\s]*$/.test(line) || line.trim() === '' || /^\s*\d+\/\d+ \[/.test(line)
+
+/** `  Line   Cart.php`: the table of one file starts. */
+function tableHeader(t: Table, line: string): boolean {
+  const header = /^\s{2}Line\s{2,}(\S.*?)\s*$/.exec(line)
+  if (header === null) return false
+  t.file = header[1] ?? ''
+  t.files.set(t.file, t.files.get(t.file) ?? [])
+  return true
+}
+
+/** One error's first row. */
+function tableRow(t: Table, line: string): boolean {
+  const row = TABLE_ROW.exec(line)
+  if (row === null) return false
+  t.files.get(t.file)?.push({ line: row[1] ?? '', message: [row[2] ?? ''] })
+  t.tip = false
+  return true
+}
+
+/** A row under the message column of the current file's table. */
+function tableContinues(t: Table, line: string): boolean {
+  const more = TABLE_MORE.exec(line)
+  if (more === null || !t.files.has(t.file)) return false
+  tableMore(t, more[1] ?? '')
+  return true
+}
+
+/** `[ERROR] Found 3 errors` or `[OK] No errors`. */
+function tableVerdict(t: Table, line: string): boolean {
+  if (!/^\s*\[(ERROR|OK)\] /.test(line)) return false
+  t.verdict = line.trim()
+  return true
+}
+
+function tableLine(t: Table, line: string): void {
+  if (isFrame(line) || tableHeader(t, line) || tableRow(t, line) || tableContinues(t, line) || tableVerdict(t, line)) return
+  t.other.push(line.trimEnd())
+}
+
+/**
+ * phpstan's default table report grouped by file, one line per error with its identifier. The progress
+ * bars and the table rules go; every line no rule reads, such as the notes phpstan writes before the
+ * table, stays as it was.
+ */
+function phpstanTable(text: string): FilterResult {
+  const t: Table = { files: new Map(), file: '', tip: false, other: [] }
+  for (const line of linesOf(text)) tableLine(t, line)
+  if (t.verdict === undefined) return cleanup(text)
+  const rows = [...t.files].flatMap(([file, errors]) => fileErrors(file, errors.map(e => ({ line: Number(e.line), message: e.message.join(' '), identifier: e.identifier }))))
+  const c = capped(rows, CAP_INVENTORY, 'lines')
+  const total = [...t.files.values()].reduce((n, e) => n + e.length, 0)
+  const head = total === 0 ? 'phpstan: no errors' : `phpstan: ${plural(total, 'error')} in ${plural(t.files.size, 'file')}`
+  const cut = [...t.files.values()].some(e => e.length > CAP_WARNINGS)
+  return { text: [...t.other, ...c.lines, head].join('\n'), elided: c.elided || cut }
+}
+
+/** A phpstan run: its JSON report when the arguments asked for one, else its table report. */
 function phpstan(input: { text: string }): FilterResult {
-  const report = reportOf(input.text)
-  if (report === undefined) return cleanup(input.text)
+  const report = input.text.includes('"totals"') ? reportOf(input.text) : undefined
+  return report === undefined ? phpstanTable(input.text) : phpstanJson(report)
+}
+
+/** A phpstan JSON report, grouped by file with the line of each error. */
+function phpstanJson(report: PhpstanReport): FilterResult {
   const files = Object.entries(report.files ?? {})
   const base = sharedDir(files.map(([path]) => path))
   const rows = files.flatMap(([path, f]) => fileErrors(path.slice(base.length), f.messages ?? []))
@@ -98,15 +180,12 @@ function headOf(total: number, files: number, base: string): string {
   return `phpstan: ${plural(total, 'error')} in ${plural(files, 'file')}${base === '' ? '' : ` under ${base}`}`
 }
 
-/** Options that choose phpstan's output or its mode themselves. */
-const PHPSTAN_OWN = ['--error-format', '--generate-baseline', '--help', '-h', '--version', '-V', '--debug', '-vvv']
-
 export const PHP: FilterTable = {
   php: { run: php },
   phpunit: { run: phpTests },
   pest: { run: phpTests },
   paratest: { run: phpTests },
   'artisan test': { run: phpTests },
-  'phpstan analyse': { run: phpstan, flags: args => (hasArg(args, ...PHPSTAN_OWN) ? undefined : ['--error-format=json', '--no-progress']) },
-  'phpstan analyze': { run: phpstan, flags: args => (hasArg(args, ...PHPSTAN_OWN) ? undefined : ['--error-format=json', '--no-progress']) },
+  'phpstan analyse': { run: phpstan },
+  'phpstan analyze': { run: phpstan },
 }

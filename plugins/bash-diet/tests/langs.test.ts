@@ -82,9 +82,8 @@ const GO_JSON = [
 ].join('\n')
 
 describe('go', () => {
-  test('go test asks for -json and reads it as the failed tests and one count', () => {
-    expect(planFor('go test ./...')?.flags).toEqual(['-json'])
-    expect(GO['go test']?.flags?.(['-json'])).toBe(undefined)
+  test('go test runs as written, and a -json run the model asked for reads as the failed tests and one count', () => {
+    expect(planFor('go test ./...')?.flags).toEqual([])
     const r = run('go test', GO_JSON, ['./...', '-json'], 1)
     expect(r.text).toBe('FAIL example.com/m/b (0.007s): 1 failed, 1 passed\n  --- FAIL: TestBad (0.00s)\n      b_test.go:4: setup done\n      b_test.go:4: want 3, got 4\ngo test: 2 passed, 1 failed in 2 packages')
     expect(saving(GO_JSON, r.text)).toBeGreaterThanOrEqual(80)
@@ -95,6 +94,9 @@ describe('go', () => {
       .toBe('# example.com/m/c\nc/c.go:3:1: syntax error\nFAIL example.com/m/c (0s): 0 failed, 0 passed\ngo test: 0 passed, 0 failed in 1 package')
     expect(run('go test', 'ok  \texample.com/m/a\t0.007s\n--- FAIL: TestBad (0.00s)\n    b_test.go:4: want 3, got 4\nFAIL\nFAIL\texample.com/m/b\t0.006s\nFAIL\n').text)
       .toBe('--- FAIL: TestBad (0.00s)\n    b_test.go:4: want 3, got 4\nFAIL\nFAIL\texample.com/m/b\t0.006s\nFAIL\n1 package ok')
+    // go 1.26, five passing packages and one failing: the text format the model's own command prints.
+    const text = '--- FAIL: TestDiv (0.00s)\n    calc_test.go:17: Div(7, 2) = 3, want 4\nFAIL\nFAIL\texample.com/bench/calc\t0.200s\nok  \texample.com/bench/pkga\t0.349s\nok  \texample.com/bench/pkgb\t0.528s\nok  \texample.com/bench/pkgc\t0.683s\nok  \texample.com/bench/pkgd\t0.010s\nok  \texample.com/bench/pkge\t0.011s\nFAIL\n'
+    expect(run('go test', text, ['-count=1', './...'], 1).text).toBe('--- FAIL: TestDiv (0.00s)\n    calc_test.go:17: Div(7, 2) = 3, want 4\nFAIL\nFAIL\texample.com/bench/calc\t0.200s\nFAIL\n5 packages ok')
   })
 
   test('golangci-lint issues without their source frames, counted per linter', () => {

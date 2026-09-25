@@ -51,8 +51,7 @@ function targetPlan(target: Target, rules: readonly Rule[]): Plan {
 function tablePlan(c: Classified, filter: Filter, target: Target): Plan {
   const flags = target.canAddFlags ? (filter.flags?.(c.args) ?? []) : []
   const family = c.sub === '' ? c.tool : `${c.tool} ${c.sub}`
-  const nameEnd = filter.flagsAtEnd === true ? target.words.length - 1 : c.nameEnd
-  return { family, filter, args: c.args, flags, target, nameEnd }
+  return { family, filter, args: c.args, flags, target, nameEnd: c.nameEnd }
 }
 
 /** Runs a plan's filter; a filter that throws leaves the output to the generic cleanup. */

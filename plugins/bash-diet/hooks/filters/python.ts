@@ -141,7 +141,7 @@ function pip(input: { args: string[]; text: string; exitCode: number }): FilterR
 
 export const PYTHON: FilterTable = {
   pytest: { run: pytest, flags: pytestFlags },
-  'ruff check': { run: ruff, flags: args => (hasArg(args, '--output-format', '--format', '--fix', '--watch', '--statistics') ? undefined : ['--output-format=json']) },
+  'ruff check': { run: ruff },
   'ruff format': { run: ({ text }) => cleanup(text) },
   ruff: { run: ruff },
   mypy: { run: mypy },

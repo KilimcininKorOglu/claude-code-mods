@@ -94,15 +94,6 @@ function tests(tool: string) {
   }
 }
 
-const OWN_TEST_FORMAT = ['--json', '--reporter', '--outputFile', '--watch', '--coverage', '--listTests', '--showConfig', '--help', '--ui']
-
-/** jest's `--json`, unless the arguments choose their own format or a watch mode. */
-const jestFlags = (args: string[]): string[] | undefined => (hasArg(args, ...OWN_TEST_FORMAT, '--watchAll', '-w') ? undefined : ['--json'])
-
-/** vitest's JSON reporter, for a `vitest run` only: a bare `vitest` watches. */
-const vitestFlags = (args: string[]): string[] | undefined =>
-  args[0] === 'run' && !hasArg(args, ...OWN_TEST_FORMAT) ? ['--reporter=json'] : undefined
-
 // ---------------------------------------------------------------------------------------- compilers
 
 /** `src/a.ts(1,14): error TS2322: Type ...` grouped by file, continuation lines kept. */
@@ -194,11 +185,11 @@ export const JS: FilterTable = {
   'bun test': { run: tests('bun test') },
   'yarn install': { run: install },
   'yarn add': { run: install },
-  jest: { run: tests('jest'), flags: jestFlags },
-  vitest: { run: tests('vitest'), flags: vitestFlags, flagsAtEnd: true },
+  jest: { run: tests('jest') },
+  vitest: { run: tests('vitest') },
   playwright: { run: ({ text }) => testText({ text }) },
   tsc: { run: tsc },
-  eslint: { run: eslint, flags: args => (hasArg(args, '-f', '--format', '--fix', '--print-config', '--init') ? undefined : ['-f', 'json']) },
+  eslint: { run: eslint },
   prettier: { run: prettier },
   'next build': { run: nextBuild },
   prisma: { run: prisma },

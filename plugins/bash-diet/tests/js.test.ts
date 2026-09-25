@@ -1,6 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { withFlags, read } from '../hooks/command.ts'
 import type { FilterResult } from '../hooks/filters/common.ts'
 import { JS } from '../hooks/filters/js.ts'
 import { planFor } from '../hooks/pipeline.ts'
@@ -66,15 +65,17 @@ describe('test runners', () => {
       .toBe('x.test.ts:\nerror: expect(received).toBe(expected)\n\nExpected: 2\nReceived: 1\n\n(fail) bad [4.14ms]\n\n 1 pass\n 1 fail')
   })
 
-  test('vitest gets its reporter after `run`, jest gets --json, and neither in watch mode', () => {
-    const cmd = 'npx vitest run test/v.test.ts'
-    const plan = planFor(cmd)
-    const r = read(cmd)
-    if (plan === undefined || r.kind !== 'target') throw new Error('no plan')
-    expect(withFlags(cmd, r.target, plan.nameEnd, plan.flags)).toBe('npx vitest run test/v.test.ts --reporter=json')
-    expect(planFor('npx vitest')?.flags).toEqual([])
-    expect(planFor('npx jest')?.flags).toEqual(['--json'])
-    expect(planFor('npx jest --watch')?.flags).toEqual([])
+  test('vitest, jest and eslint run as written: a JSON report is larger, and a failed run is cut at 10,000 characters', () => {
+    for (const cmd of ['npx vitest run test/v.test.ts', 'npx jest', 'npx eslint src']) expect(planFor(cmd)?.flags, cmd).toEqual([])
+  })
+
+  test('the default reports of jest 30 and vitest 2 keep the failure with its code frame and the counts', () => {
+    const jest = `${NOTICE}npm notice run 'jest'\nFAIL src/math.test.js\n  ● add › adds wrong\n\n    expect(received).toBe(expected) // Object.is equality\n\n    Expected: 5\n    Received: 4\n\n      2 | describe('add', () => {\n    > 4 |   test('adds wrong', () => expect(add(2, 2)).toBe(5))\n        |                                              ^\n\n      at Object.toBe (src/math.test.js:4:46)\n\nTest Suites: 1 failed, 1 total\nTests:       1 failed, 15 passed, 16 total\nSnapshots:   0 total\nTime:        0.235 s\nRan all test suites.\n`
+    expect(run('jest', jest, [], 1).text).toBe("FAIL src/math.test.js\n  ● add › adds wrong\n\n    expect(received).toBe(expected) // Object.is equality\n\n    Expected: 5\n    Received: 4\n\n      2 | describe('add', () => {\n    > 4 |   test('adds wrong', () => expect(add(2, 2)).toBe(5))\n        |                                              ^\n\n      at Object.toBe (src/math.test.js:4:46)\n\nTest Suites: 1 failed, 1 total\nTests:       1 failed, 15 passed, 16 total")
+    const vitest = `${NOTICE}\n RUN  v2.1.9 /w/node\n\n ❯ src/math.test.ts (16 tests | 1 failed) 6ms\n   × add > adds negatives 4ms\n     → expected -5 to be -6 // Object.is equality\n\n⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯\n\n FAIL  src/math.test.ts > add > adds negatives\nAssertionError: expected -5 to be -6 // Object.is equality\n\n Test Files  1 failed (1)\n      Tests  1 failed | 15 passed (16)\n   Start at  16:43:21\n   Duration  432ms (transform 51ms, setup 0ms)\n`
+    const v = run('vitest', vitest, ['run'], 1).text
+    expect(v).toContain(' FAIL  src/math.test.ts > add > adds negatives\nAssertionError: expected -5 to be -6')
+    expect(v).not.toMatch(/RUN|Start at|Duration/)
   })
 })
 

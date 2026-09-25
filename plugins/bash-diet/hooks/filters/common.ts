@@ -15,14 +15,13 @@ export type FilterInput = {
 export type FilterResult = { text: string; elided: boolean }
 
 /**
- * One entry of a filter table: the filter, and the flags it asks for (`-json` for `go test`), or
- * undefined when the arguments already choose a format the filter cannot read.
+ * One entry of a filter table: the filter, and the flags it asks for (`--tb=short -q` for `pytest`), or
+ * undefined when the arguments already choose a format the filter cannot read. A flag never switches a
+ * tool to a larger format: a failed command's text reaches the hook cut at 10,000 characters.
  */
 export type Filter = {
   run: (input: FilterInput) => FilterResult
   flags?: (args: string[]) => string[] | undefined
-  /** Puts the flags after the command's last word instead of after its name (`vitest run --reporter=json`). */
-  flagsAtEnd?: boolean
 }
 
 /** A table keyed by `tool sub` (`git status`) or by `tool` alone for every subcommand. */
