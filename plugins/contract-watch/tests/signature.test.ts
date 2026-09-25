@@ -58,11 +58,22 @@ describe('edit-check', () => {
     )
     expect(logText(marked)).toBe('parse changed from 1 to 2 parameter(s); do not match: main (main.go:5); same name: other (lib.go:9)')
     expect(sidebarLines(marked)).toEqual([
-      { text: 'parse changed from 1 to 2 parameter(s)', kind: 'error' },
-      { text: 'main (main.go:5)', kind: 'error' },
+      {
+        text: 'parse changed from 1 to 2 parameter(s)',
+        parts: [{ text: 'parse ' }, { text: 'changed from ' }, { text: '1', kind: 'dim' }, { text: ' to ' }, { text: '2', kind: 'warn' }, { text: ' parameter(s)' }],
+      },
+      { text: 'main (main.go:5)', parts: [{ text: 'main', kind: 'error' }, { text: ' (main.go:5)', kind: 'dim' }] },
       { text: 'same name, may be another type', kind: 'dim' },
-      { text: 'other (lib.go:9)', kind: 'dim' },
+      { text: 'other (lib.go:9)', parts: [{ text: 'other', kind: 'dim' }, { text: ' (lib.go:9)', kind: 'dim' }] },
     ])
+  })
+
+  test('a change of another kind is yellow whole, and the callers past the tenth are one faint count', async () => {
+    const many = { sym: 'a', status: 'contract-change', paramsWas: 2, paramsNow: 2, incompatible: 12, callers: Array.from({ length: 12 }, (_, i) => ({ name: `c${i}`, at: `f:${i}`, mismatch: true })) }
+    const lines = sidebarLines(many)
+    expect(lines[0]).toEqual({ text: 'a changed its parameters', parts: [{ text: 'a ' }, { text: 'changed its parameters', kind: 'warn' }] })
+    expect(lines).toHaveLength(12)
+    expect(lines.at(-1)).toEqual({ text: '2 more', kind: 'dim' })
   })
 
   test('says nothing for an unchanged contract, no callers, or no edit-check element', async () => {

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isCommit, isGuarded, isNarrowable, isReported, logText, modeOf, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Mode } from './signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isCommit, isGuarded, isNarrowable, isReported, logText, modeOf, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Line, type Mode } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -43,7 +43,7 @@ async function locate($: EngineInterface, file: string): Promise<{ root: string;
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'dim' | 'warn' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: readonly Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(key), title, lines, until: 'stream' })
     if (taken) return

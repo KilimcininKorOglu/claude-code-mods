@@ -21,7 +21,7 @@ Model bir fonksiyon signature'ını değiştirdiğinde hangi caller'ların kontr
        contract-watch: parse changed from 1 to 2 parameter(s); do not match: main (main.go:5); same name: other (lib.go:9)
 
    Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken bulgu oraya gider: ilk satırda değişim, altında kırmızı ile işaretli caller'lar ve bir `same name, may be another type` satırından sonra soluk renkte aynı adlı olanlar, stream'in içinde bir kayıt olarak; transcript temiz kalır. Kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
+6. [sidebar](../sidebar) açıkken bulgu oraya gider: ilk satırda değişim (eski parametre sayısı soluk, yenisi sarı), altında işaretli caller'ların adları kırmızı ve bir `same name, may be another type` satırından sonra aynı adlı olanlar soluk, her birinin `(file:line)` kısmı soluk, stream'in içinde bir kayıt olarak; transcript temiz kalır. Kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
 
 Not, yalnız ripwire'ın uyumsuz kanıtladıklarını değil, her caller'ı listeler: Go üzerindeki canlı bir testte iki caller da hâlâ tek argüman geçerken ripwire `incompatible="0"` raporladı (ripwire ile 2.1.278 üzerinde ölçüldü).
 

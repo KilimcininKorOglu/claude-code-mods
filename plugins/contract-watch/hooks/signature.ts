@@ -126,22 +126,37 @@ export function logText(c: Check): string | undefined {
   return `${c.sym} ${paramsText(c)}; do not match: ${listed(bad)}${rest}`
 }
 
-/** A sidebar line, as the sidebar mod's contract names it. */
-type Line = { text: string; kind: 'error' | 'dim' }
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
 
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The change in parts: the old parameter count faint, the new one yellow; a change of another kind yellow whole. */
+function paramsParts(c: Check): Part[] {
+  if (c.paramsWas === undefined || c.paramsNow === undefined || c.paramsWas === c.paramsNow) return [part(paramsText(c), 'warn')]
+  return [part('changed from ', undefined), part(String(c.paramsWas), 'dim'), part(' to ', undefined), part(String(c.paramsNow), 'warn'), part(' parameter(s)', undefined)]
+}
+
+/** One caller per line, its name in the row's colour and where it is faint; the rest past the tenth counted, faint. */
 function rowsOf(callers: readonly Caller[], kind: 'error' | 'dim'): Line[] {
-  const out: Line[] = callers.slice(0, MAX_CALLERS).map(x => ({ text: `${x.name} (${x.at})`, kind }))
+  const out: Line[] = callers.slice(0, MAX_CALLERS).map(x => partsLine([part(x.name, kind), part(` (${x.at})`, 'dim')]))
   const rest = callers.length - MAX_CALLERS
-  if (rest > 0) out.push({ text: `${rest} more`, kind })
+  if (rest > 0) out.push({ text: `${rest} more`, kind: 'dim' })
   return out
 }
 
 /** The change on the first line, then the marked callers in red and the same-named ones faint under them. */
 export function sidebarLines(c: Check): Line[] {
   const { bad, same } = split(c)
-  const head: Line = { text: `${c.sym} ${paramsText(c)}`, kind: 'error' }
+  const head = partsLine([part(`${c.sym} `, undefined), ...paramsParts(c)])
   if (bad.length === 0) return [head, ...rowsOf(same, 'dim')]
-  const tail = same.length === 0 ? [] : [{ text: 'same name, may be another type', kind: 'dim' as const }, ...rowsOf(same, 'dim')]
+  const tail: Line[] = same.length === 0 ? [] : [{ text: 'same name, may be another type', kind: 'dim' }, ...rowsOf(same, 'dim')]
   return [head, ...rowsOf(bad, 'error'), ...tail]
 }
 
@@ -174,7 +189,7 @@ export function doneLog(sym: string, matched: boolean): string {
 }
 
 /** The sidebar lines of a closed finding. */
-export function doneLines(sym: string, matched: boolean): { text: string; kind: 'ok' }[] {
+export function doneLines(sym: string, matched: boolean): Line[] {
   return [{ text: doneLog(sym, matched), kind: 'ok' }]
 }
 

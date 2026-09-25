@@ -1,6 +1,6 @@
 {
   "name": "contract-watch",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "After the model changes a function signature with Edit, lists the callers ripwire finds, so the model fixes them before the build does. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
