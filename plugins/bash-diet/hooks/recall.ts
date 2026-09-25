@@ -26,9 +26,15 @@ export async function hashOf(command: string, output: string): Promise<string> {
   return (await sha256Of(`${command}\0${output}`)).slice(0, 12)
 }
 
-/** The line the model reads under the filtered text. */
-export function fullOutputLine(path: string): string {
-  return `[full output: ${path}]`
+/**
+ * Whether the engine cut a failed call's text before the hook read it: it keeps 10,000 characters around
+ * `... [N characters truncated] ...` and writes the middle nowhere.
+ */
+export const isCut = (text: string): boolean => /\.\.\. \[\d+ characters truncated\] \.\.\./.test(text)
+
+/** The line the model reads under the filtered text; a cut output's file holds only what reached the hook. */
+export function fullOutputLine(path: string, cut: boolean): string {
+  return cut ? `[output cut by Claude Code at 10000 characters; the middle is lost: ${path}]` : `[full output: ${path}]`
 }
 
 /** The files to delete from a listing: over the age limit, then the oldest past the count limit. */

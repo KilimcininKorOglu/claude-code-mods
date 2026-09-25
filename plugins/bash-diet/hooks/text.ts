@@ -7,6 +7,7 @@ import { RAW_VARIABLE } from './command.ts'
 export const AWARENESS = [
   'Bash results in this session pass through a filter that condenses known commands (git, test runners, linters, compilers, package managers, containers, file listings and searches): passing tests collapse to a count, progress and noise lines drop, long lists end with a count of the rest.',
   'Treat a condensed result as complete. A result that left something out ends with `[full output: <path>]`; open that file with the Read tool when you need what was left out.',
+  'Claude Code cuts a failed command\'s output at 10000 characters before any filter reads it; such a result ends with `[output cut by Claude Code ...]`, and its middle exists nowhere, so run the command again with narrower output when you need it.',
   `When you need the exact bytes (a patch to apply, output to parse), prefix the command with \`${RAW_VARIABLE}=1\`, and the result comes back unfiltered.`,
 ].join(' ')
 

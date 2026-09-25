@@ -17,7 +17,9 @@ A Claude Code Mod that shrinks each Bash result before the model reads it. Known
 
        [full output: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 
-   The file is the engine's own copy when the engine already cut the result, else one under `$TMPDIR/bash-diet/`. That directory keeps at most 200 files for 30 days.
+   The file is the engine's own copy when the engine already cut the result, else one under `$TMPDIR/bash-diet/`. That directory keeps at most 200 files for 30 days. A failed command's text reaches the hook cut by Claude Code at 10,000 characters, and its middle is written nowhere. The file then holds only what arrived, and the line says so:
+
+       [output cut by Claude Code at 10000 characters; the middle is lost: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 7. A failed command stays an error with its exit code: the model reads `Exit code 1` and the filtered text as a tool error.
 8. At the session's start, after `/clear` and after a compaction, the model reads one note: a condensed result is complete, the full output is at the named path, and `BASH_DIET_RAW=1 <command>` returns the exact bytes.
 9. While the [sidebar](../sidebar) is open, the session's saving stands there under "Bash output". Without it, the status line carries it.
@@ -124,6 +126,7 @@ Reach L2, writes files and runs processes.
 ## Limits
 
 - A filter reads the output's known shape. A tool that changes its output format can make a filter keep less than it should; the full output file and `BASH_DIET_RAW=1` are the ways back.
+- The middle of a failed command's output over 10,000 characters is dropped by Claude Code before the mod reads it. The mod cannot bring it back; it only says it was cut.
 - A backgrounded command (`run_in_background`) is not filtered: its result is a task id.
 - A command inside `$(...)`, a heredoc, a process substitution, or with its output redirected to a file is not filtered.
 - A chain of several printing commands gets only the generic cleanup (colour codes, carriage-return redraws, repeated lines).

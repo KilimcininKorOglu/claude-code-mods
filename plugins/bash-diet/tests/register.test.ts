@@ -153,6 +153,16 @@ describe('bash-diet', () => {
     expect(w.files.get(path)).toBe(w.stdout)
   })
 
+  test('a failed run the engine cut at 10000 characters says the middle is lost, and names the file of what arrived', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.exitCode = 1
+    w.stdout = `${'again\n'.repeat(900)}\n... [9554 characters truncated] ...\n\n${'again\n'.repeat(700)}FAIL\n`
+    const r = await bash($, './build.sh')
+    expect(r.deny).toMatch(new RegExp(`\\n\\[output cut by Claude Code at 10000 characters; the middle is lost: ${DIR}/[0-9a-f]{12}\\.log\\]$`))
+    expect(r.deny).not.toContain('[full output:')
+  })
+
   test('a result the engine cut is read whole from its file, and that file is the one named', async ($, on) => {
     const w = world(on)
     await started($)

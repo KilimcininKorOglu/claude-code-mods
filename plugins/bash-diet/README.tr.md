@@ -17,7 +17,9 @@ Her Bash sonucunu model okumadan önce küçülten bir Claude Code Mod'u. Biline
 
        [full output: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 
-   Engine sonucu zaten kestiyse dosya engine'in kendi kopyasıdır, değilse `$TMPDIR/bash-diet/` altında yeni bir dosyadır. O dizin en fazla 200 dosyayı 30 gün tutar.
+   Engine sonucu zaten kestiyse dosya engine'in kendi kopyasıdır, değilse `$TMPDIR/bash-diet/` altında yeni bir dosyadır. O dizin en fazla 200 dosyayı 30 gün tutar. Başarısız bir komutun metni hook'a Claude Code tarafından 10.000 karakterde kesilmiş gelir ve ortası hiçbir yere yazılmaz. O durumda dosya yalnız gelen kısmı tutar ve satır bunu söyler:
+
+       [output cut by Claude Code at 10000 characters; the middle is lost: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 7. Başarısız bir komut exit kodu ile bir hata olarak kalır: model `Exit code 1` ve filtrelenmiş metni bir tool hatası olarak okur.
 8. Session başında, `/clear`'dan sonra ve bir compaction'dan sonra model bir not okur: kısaltılmış bir sonuç eksiksizdir, tam çıktı adı verilen yoldadır ve `BASH_DIET_RAW=1 <komut>` birebir byte'ları döndürür.
 9. [sidebar](../sidebar) açıkken session'ın tasarrufu orada "Bash output" başlığı altında durur. Sidebar yokken status line taşır.
@@ -124,6 +126,7 @@ Reach L2, dosya yazar ve process çalıştırır.
 ## Sınırlar
 
 - Bir filtre çıktının bilinen şeklini okur. Çıktı formatını değiştiren bir araç, bir filtrenin olması gerekenden azını tutmasına yol açabilir; tam çıktı dosyası ve `BASH_DIET_RAW=1` geri dönüş yollarıdır.
+- Başarısız bir komutun 10.000 karakteri aşan çıktısının ortası, mod'dan önce Claude Code tarafından atılır. Mod o kısmı geri getiremez. Yalnız kesildiğini söyler.
 - Arka plana alınmış bir komut (`run_in_background`) filtrelenmez: sonucu bir task id'dir.
 - `$(...)` içindeki, bir heredoc'taki, bir process substitution'daki ya da çıktısı bir dosyaya redirect edilen bir komut filtrelenmez.
 - Çıktı basan birden çok komuttan oluşan bir zincir yalnız genel cleanup'ı alır (renk kodları, carriage-return yeniden çizimleri, tekrarlanan satırlar).

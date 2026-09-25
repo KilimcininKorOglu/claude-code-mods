@@ -6,7 +6,7 @@ import { correctionsOf, discoverText, finish, learnFile, learnText, scan, scanne
 import { dayOf, gainFileName, gainReport, linesOfRecords, recordsOf, staleGainFiles, type GainRecord } from './gain.ts'
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
 import { costText } from './pricing.ts'
-import { fullOutputLine, hashOf, needsFile, sha256Of, staleFiles } from './recall.ts'
+import { fullOutputLine, hashOf, isCut, needsFile, sha256Of, staleFiles } from './recall.ts'
 import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionText, statusText, tokensOf } from './text.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -169,7 +169,7 @@ async function shrink($: EngineInterface, state: State, command: string, plan: P
   const filtered = runFilter(plan, out.text, out.exitCode, flagged)
   if (!replaces(out.text, filtered.text, flagged)) return r
   const full = needsFile(filtered.elided, out.exitCode, out.text.length) ? await keepFull($, state, command, out) : undefined
-  const text = full === undefined ? filtered.text : `${filtered.text}\n${fullOutputLine(full)}`
+  const text = full === undefined ? filtered.text : `${filtered.text}\n${fullOutputLine(full, out.isError && isCut(out.text))}`
   state.calls += 1
   state.rawChars += out.text.length
   state.shownChars += text.length
