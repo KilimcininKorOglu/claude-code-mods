@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, isGuarded, isSource, lineOf, modeOf, noteText, placesOf, stillUsed, storageLines } from '../hooks/storage.ts'
+import { denyText, doneLines, isGuarded, isSource, lineOf, modeOf, noteText, placesOf, sidebarLines, stillUsed, storageLines } from '../hooks/storage.ts'
 
 tier('user')
 
@@ -62,6 +62,13 @@ describe('storage', () => {
       "storage-guard: this edit stores data in the browser with localStorage or sessionStorage: src/auth.ts:12. Store it in a cookie instead (document.cookie, or the server's Set-Cookie).",
     )
     expect(noteText(Array.from({ length: 10 }, (_, i) => `a.ts:${i}`))).toContain('a.ts:7 · 2 more.')
+  })
+
+  test('the places past eight are one faint count in the sidebar, not one more red place', () => {
+    const places = Array.from({ length: 10 }, (_, i) => `a.ts:${i}`)
+    expect(sidebarLines(places).slice(-2)).toEqual([{ text: 'a.ts:7', kind: 'error' }, { text: '2 more', kind: 'dim' }])
+    expect(doneLines('a.ts', places).slice(-2)).toEqual([{ text: 'a.ts:7', kind: 'ok' }, { text: '2 more', kind: 'dim' }])
+    expect(sidebarLines(['a.ts:1'])).toEqual([{ text: 'a.ts:1', kind: 'error' }])
   })
 
   test('the gate stops a commit, a push and a merge, and says why', () => {
