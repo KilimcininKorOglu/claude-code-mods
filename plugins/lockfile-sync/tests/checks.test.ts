@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { checkFor, gemCore, lockDir, type Ran } from '../hooks/checks.ts'
-import { doneLines, doneLog } from '../hooks/pairs.ts'
+import { doneLines, doneLog, sidebarLines } from '../hooks/pairs.ts'
 
 tier('user')
 
@@ -85,5 +85,20 @@ describe('checks', () => {
     const settled = [{ manifest: 'Cargo.toml', lock: 'Cargo.lock', tool: 'cargo' }, { manifest: 'package.json', lock: 'package-lock.json' }]
     expect(doneLog([], settled)).toBe('the dependencies match the lockfile again: package.json · cargo reads Cargo.lock as in step with Cargo.toml')
     expect(doneLines([], settled).map(l => l.text)).toEqual(['cargo reads Cargo.lock as in step with Cargo.toml', 'package.json asks for no lockfile change any more'])
+  })
+
+  test('the sidebar colours the lockfile: red while it is behind, green once it closes, the rest faint', () => {
+    const pair = { manifest: 'package.json', lock: 'package-lock.json' }
+    expect(sidebarLines([pair])).toEqual([
+      { text: 'package.json but not package-lock.json', parts: [{ text: 'package.json' }, { text: ' but not ', kind: 'dim' }, { text: 'package-lock.json', kind: 'error' }] },
+    ])
+    expect(doneLines([pair], [{ ...pair, tool: 'npm' }, pair])).toEqual([
+      { text: 'package-lock.json now matches package.json', parts: [{ text: 'package-lock.json', kind: 'ok' }, { text: ' now matches package.json', kind: 'dim' }] },
+      {
+        text: 'npm reads package-lock.json as in step with package.json',
+        parts: [{ text: 'npm reads ', kind: 'dim' }, { text: 'package-lock.json', kind: 'ok' }, { text: ' as in step with package.json', kind: 'dim' }],
+      },
+      { text: 'package.json asks for no lockfile change any more', parts: [{ text: 'package.json', kind: 'ok' }, { text: ' asks for no lockfile change any more', kind: 'dim' }] },
+    ])
   })
 })

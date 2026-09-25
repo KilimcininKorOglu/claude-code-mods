@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { checkFor, lockDir, type Verdict } from './checks.ts'
-import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, isNarrowable, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Mode, type Settled, type Stale } from './pairs.ts'
+import { changedFiles, commitDir, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isManifest, isNarrowable, lockCandidates, logText, modeOf, noteText, openNote, sectionKey, sidebarLines, touchesDependencies, type Line, type Mode, type Settled, type Stale } from './pairs.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -133,7 +133,7 @@ async function staleLock($: EngineInterface, state: State, root: string, manifes
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'warn' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key, title, lines, until: 'stream' })
     if (taken) return

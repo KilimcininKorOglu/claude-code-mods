@@ -250,9 +250,20 @@ export function openNote(stale: readonly Stale[]): string {
   return `lockfile-sync: ${stale.length} lockfile(s) are still behind their manifest: ${pairs}. Run the package manager's install so the lockfile is written, or take the dependency change back.`
 }
 
-/** One sidebar line per pair, so the section reads as a list. */
-export function sidebarLines(stale: readonly Stale[]): { text: string; kind: 'error' }[] {
-  return stale.map(s => ({ text: `${s.manifest} but not ${s.lock}`, kind: 'error' }))
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** One sidebar line per pair, so the section reads as a list: the manifest default, the lockfile left behind red. */
+export function sidebarLines(stale: readonly Stale[]): Line[] {
+  return stale.map(s => partsLine([part(s.manifest, undefined), part(' but not ', 'dim'), part(s.lock, 'error')]))
 }
 
 /** The title of a closed finding, by what closed it. */
@@ -278,15 +289,17 @@ export function doneLog(updated: readonly Stale[], settled: readonly Settled[]):
   return parts.join(' · ')
 }
 
-function settledLine(s: Settled): string {
-  return s.tool === undefined ? `${s.manifest} asks for no lockfile change any more` : `${s.tool} reads ${s.lock} as in step with ${s.manifest}`
+/** A settled pair's line: the lockfile green, or the manifest where no lockfile is named, the rest faint. */
+function settledLine(s: Settled): Line {
+  if (s.tool === undefined) return partsLine([part(s.manifest, 'ok'), part(' asks for no lockfile change any more', 'dim')])
+  return partsLine([part(`${s.tool} reads `, 'dim'), part(s.lock, 'ok'), part(` as in step with ${s.manifest}`, 'dim')])
 }
 
 /** One sidebar line per pair that closed, with what closed it. */
-export function doneLines(updated: readonly Stale[], settled: readonly Settled[]): { text: string; kind: 'ok' }[] {
+export function doneLines(updated: readonly Stale[], settled: readonly Settled[]): Line[] {
   return [
-    ...updated.map(s => ({ text: `${s.lock} now matches ${s.manifest}`, kind: 'ok' as const })),
-    ...settled.map(s => ({ text: settledLine(s), kind: 'ok' as const })),
+    ...updated.map(s => partsLine([part(s.lock, 'ok'), part(` now matches ${s.manifest}`, 'dim')])),
+    ...settled.map(settledLine),
   ]
 }
 
