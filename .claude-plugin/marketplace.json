@@ -492,6 +492,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "session-watch",
+      "source": "./plugins/session-watch",
+      "description": "Shows this session's state in the sidebar: context fill, token totals, cost, model and thinking level, the Claude Code version, and the git branch and status.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
