@@ -10,11 +10,11 @@ Belirli bir süre cevapsız bekleyen bir sorunun önerilen seçeneğini seçen b
 
    Tool, model'e önerdiği seçeneği ilk sıraya koymasını ve etiketini `(Recommended)` ile bitirmesini söyler. Başka bir dilde yazılan bir soruda model bu kelimeyi o dilde yazar. Bu yüzden önerilen seçenek ilk seçenektir: etiketi bu dillerden birinde o kelimeyle, parantez içinde bitiyorsa ve başka hiçbir seçenek bu işareti taşımıyorsa. Diller: İngilizce, Türkçe, Almanca, İspanyolca, Portekizce, Fransızca, İtalyanca, Hollandaca, Lehçe, Rusça, Çince, Japonca ve Korece. Tam genişlikli parantezler de sayılır.
 4. Model cevapla birlikte bir not alır: süre içinde cevap vermediniz, yani seçim bir varsayılandır, sizin kararınız değildir, ve sonraki cevabı bunu söyler. Canlı kontrolde model bunu sizin seçmediğinizi yazdı.
-5. Neyin seçildiğini kırmızı bir kayıt söyler, [sidebar](../sidebar) açıkken onun stream'inde, değilse bir transcript satırı olarak:
+5. Neyin seçildiğini sarı bir kayıt söyler, [sidebar](../sidebar) açıkken onun stream'inde, değilse bir transcript satırı olarak:
 
        ask-autopick: no answer in 10 min, picked the recommended option: Renk? → Mavi (Önerilen)
 
-6. İlk seçeneği işaretli olmayan, ikinci bir işaretli seçeneği olan ya da birden çok cevap alan (`multiSelect`) bir soru hiçbir zaman seçilmez. Sizi bekler ve bir kayıt bunu söyler.
+6. İlk seçeneği işaretli olmayan, ikinci bir işaretli seçeneği olan ya da birden çok cevap alan (`multiSelect`) bir soru hiçbir zaman seçilmez. Sizi bekler ve sarı bir kayıt bunu söyler.
 
 2.1.282 üzerindeki canlı kontrolde açık bırakılan bir soru 1 dakika ve 5 dakika sonra `Mavi (Önerilen)` aldı ve model onunla devam etti.
 

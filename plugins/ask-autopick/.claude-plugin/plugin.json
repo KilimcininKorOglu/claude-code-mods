@@ -1,6 +1,6 @@
 {
   "name": "ask-autopick",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Picks the recommended option of a question that waited unanswered for a set time, so a session you left does not stop. Off until you turn it on. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

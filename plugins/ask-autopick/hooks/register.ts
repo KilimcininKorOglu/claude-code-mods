@@ -10,7 +10,7 @@ type State = { enabled: boolean; minutes: number }
 /** What the person reads: an entry in the shared sidebar's stream while it is open, else one transcript line. */
 async function toPerson($: EngineInterface, key: string, text: string): Promise<void> {
   try {
-    if (await $.sidebar.set({ consumer: 'ask-autopick', key, title: 'question answered for you', lines: [{ text, kind: 'error' }], until: 'stream' })) return
+    if (await $.sidebar.set({ consumer: 'ask-autopick', key, title: 'question answered for you', lines: [{ text, kind: 'warn' }], until: 'stream' })) return
   } catch {
     // The sidebar mod is not installed.
   }
