@@ -33,7 +33,8 @@ export function shownBlocks(blocks: string[][], cap: number, noun: string): { li
   return { lines: [...shown, '', `… +${blocks.length - cap} more ${noun}`], elided: true }
 }
 
-export const plural = (n: number, noun: string): string => `${n} ${noun}${n === 1 ? '' : 's'}`
+/** `1 file`, `2 files`; `many` for a noun whose plural is not `noun + s` (`directories`, `matches`). */
+export const plural = (n: number, noun: string, many = `${noun}s`): string => `${n} ${n === 1 ? noun : many}`
 
 /** One linter finding: the file, the rule, and the message. */
 export type Issue = { file: string; code: string; text: string }
