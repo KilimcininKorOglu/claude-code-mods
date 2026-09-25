@@ -19,7 +19,7 @@ Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u
 - `cost`: session'ın maliyeti, `/cost`'un toplamı olarak ABD doları.
 - `model`: main loop'un modeli ve main loop'un son model request'inin thinking ayarı (`effort`): `low` ile `max` arası, bir budget, effort'u olmayan bir model için `no thinking setting`, ya da ilk request'ten önce `thinking: not read yet`. Modelin adı ailesine göre renklenir, en pahalısı en sıcak renkte: opus kırmızı, fable sarı, sonnet yeşil, haiku soluk. Thinking seviyesi ne kadar zorladığına göre renklenir: `low` soluk, `medium` yeşil, `high` sarı, `xhigh` ve `max` kırmızı. Tek bir kelimeyi renklendirmek için sidebar 0.11.0 veya sonrası gerekir; daha eski bir sidebar satırı tek renkle çizer.
 - `Claude Code`: engine'in sürümü.
-- Git satırı: branch (ya da `detached at <sha>`), staged, modified, untracked ve conflicted dosyalar, upstream'in önünde ve arkasında olan commit'ler (`↑1 ↓0`, ya da `no upstream`). Ağaçta değişiklik varken sarı, temizken yeşil. Bir repository dışında `git: not a repository` yazar.
+- Git satırı: branch (ya da `detached at <sha>`), staged, modified, untracked ve conflicted dosyalar, upstream'in önünde ve arkasında olan commit'ler (`↑1 ↓0`, ya da `no upstream`). Ağaçta değişiklik varken sarı, temizken yeşil. Bir repository dışında `git: this folder is not a git repository` yazar. Git başka bir dilde konuşan bir makinede de böyledir, çünkü git C locale'i ile çalışır.
 
 **Bir status line**, sidebar kapalıyken ya da kurulu değilken bölümün yerine:
 

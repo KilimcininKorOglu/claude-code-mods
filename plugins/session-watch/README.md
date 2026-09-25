@@ -19,7 +19,7 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
 - `cost`: the session's cost in US dollars, as `/cost` totals it.
 - `model`: the main loop's model, and the thinking setting (`effort`) of the main loop's last model request: `low` to `max`, a budget, `no thinking setting` for a model without one, or `thinking: not read yet` before the first request. The model's name is coloured by family, the dearest the warmest: opus red, fable yellow, sonnet green, haiku faint. The thinking level is coloured by how hard it asks: `low` faint, `medium` green, `high` yellow, `xhigh` and `max` red. Colouring one word needs sidebar 0.11.0 or later; an older sidebar draws the line in one colour.
 - `Claude Code`: the engine's version.
-- The git line: the branch (or `detached at <sha>`), the staged, modified, untracked and conflicted files, and the commits ahead of and behind the upstream (`↑1 ↓0`, or `no upstream`). Yellow while the tree has changes, green when it is clean. Outside a repository it reads `git: not a repository`.
+- The git line: the branch (or `detached at <sha>`), the staged, modified, untracked and conflicted files, and the commits ahead of and behind the upstream (`↑1 ↓0`, or `no upstream`). Yellow while the tree has changes, green when it is clean. Outside a repository it reads `git: this folder is not a git repository`, also where git itself speaks another language, because git runs in the C locale.
 
 **A status line** in place of the section while the sidebar is closed or not installed:
 

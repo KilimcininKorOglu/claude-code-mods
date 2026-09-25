@@ -282,7 +282,7 @@ function modelLine(model: string, effort: Effort): Line {
 /** The git line: branch, changes and upstream, yellow while the tree has changes and green when clean. */
 export function gitLine(git: GitState | undefined): Line {
   if (git === undefined) return { text: 'git: not read yet', kind: 'dim' }
-  if (git.kind === 'none') return { text: 'git: not a repository', kind: 'dim' }
+  if (git.kind === 'none') return { text: 'git: this folder is not a git repository', kind: 'dim' }
   if (git.kind === 'error') return { text: `git: ${git.message}`, kind: 'dim' }
   const upstream = git.ab === undefined ? 'no upstream' : `↑${git.ab.ahead} ↓${git.ab.behind}`
   return { text: `${git.head} · ${changesText(git)} · ${upstream}`, kind: isDirty(git) ? 'warn' : 'ok' }

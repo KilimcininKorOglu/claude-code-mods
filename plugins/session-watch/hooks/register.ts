@@ -91,10 +91,13 @@ async function startTotals($: EngineInterface, state: State): Promise<void> {
   }
 }
 
-/** The git state of the session's directory, from one `git status` run. */
+/**
+ * The git state of the session's directory, from one `git status` run. Git runs in the C locale, because
+ * `failedGit` reads its English message and a localized git words it otherwise.
+ */
 async function readGit($: EngineInterface, state: State): Promise<GitState> {
   try {
-    const r = await $.process.run(['git', 'status', '--porcelain=v2', '--branch'], { cwd: state.root, timeoutMs: GIT_MS })
+    const r = await $.process.run(['git', 'status', '--porcelain=v2', '--branch'], { cwd: state.root, timeoutMs: GIT_MS, env: { LC_ALL: 'C' } })
     return r.exitCode === 0 ? parseStatus(r.stdout) : failedGit(r.stderr)
   } catch (err) {
     return { kind: 'error', message: err instanceof Error ? err.message : String(err) }

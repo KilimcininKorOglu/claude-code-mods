@@ -37,7 +37,7 @@ describe('git status', () => {
     expect(gitLine(parseStatus(DIRTY))).toEqual({ text: 'main · 1 staged, 1 modified, 1 untracked · no upstream', kind: 'warn' })
     expect(gitLine(parseStatus(CLEAN))).toEqual({ text: 'main · clean · ↑2 ↓1', kind: 'ok' })
     expect(failedGit('fatal: not a git repository (or any of the parent directories): .git\n')).toEqual({ kind: 'none' })
-    expect(gitLine(failedGit('fatal: not a git repository (or any of the parent directories): .git\n'))).toEqual({ text: 'git: not a repository', kind: 'dim' })
+    expect(gitLine(failedGit('fatal: not a git repository (or any of the parent directories): .git\n'))).toEqual({ text: 'git: this folder is not a git repository', kind: 'dim' })
     expect(gitLine(failedGit('\nfatal: detected dubious ownership\n'))).toEqual({ text: 'git: fatal: detected dubious ownership', kind: 'dim' })
   })
 })

@@ -85,7 +85,9 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('process.run', (_, e) => {
     if (e.argv.join(' ') !== 'git status --porcelain=v2 --branch') throw new Error(`unexpected ${e.argv.join(' ')}`)
     w.gitRuns += 1
-    return { value: w.git }
+    // A git with a Turkish locale words its message in Turkish unless the run asks for the C locale.
+    const localized = w.git.exitCode === 128 && e.init?.env?.LC_ALL !== 'C'
+    return { value: localized ? { ...w.git, stderr: 'onulmaz: bir git deposu (veya üst dizinlerinden birisi) değil: .git\n' } : w.git }
   })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
@@ -231,11 +233,11 @@ describe('session-watch', () => {
     expect(w.gitRuns).toBe(afterStart + 2)
   })
 
-  test('a directory outside git and a failed read are said once, not thrown', async ($, on) => {
+  test('a directory outside git reads as no repository in every locale, and a failed read is said once, not thrown', async ($, on) => {
     const w = world(on)
     w.git = { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git\n' }
     await started($, w)
-    expect((await $.command.run(run)).text?.split('\n').at(-1)).toBe('git: not a repository')
+    expect((await $.command.run(run)).text?.split('\n').at(-1)).toBe('git: this folder is not a git repository')
     w.usageDown = true
     await $.turn.complete(turn())
     await $.turn.complete(turn())
