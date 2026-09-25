@@ -36,7 +36,8 @@ async function toSidebar($: EngineInterface, tasks: Task[], now: number): Promis
       lines: sidebarLines(tasks, now),
       buttons: sidebarButtons(tasks),
       until: 'session',
-      order: 20,
+      // Below every order-20 section (cache-warm, memory-save), which sorts by consumer name.
+      order: 21,
     })
   } catch {
     return false
