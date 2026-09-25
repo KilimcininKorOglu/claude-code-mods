@@ -15,7 +15,7 @@ A Claude Code Mod that measures how much of your context each Bash command spent
 
        output-flood: 30 KB of output from "pytest tests/ -v", over 20 KB
 
-5. While the [sidebar](../sidebar) is open, that finding goes there instead, the size on the first line and the advice faint under it, as an entry in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+5. While the [sidebar](../sidebar) is open, that finding goes there instead, the size on the first line (yellow under twice the limit, red at or above it, with `over N KB` faint) and the advice faint under it, as an entry in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 6. One command text is reported once per session. Its size still counts towards the total `/output-flood` prints.
 
 ## Command

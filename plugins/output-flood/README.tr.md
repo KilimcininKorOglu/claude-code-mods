@@ -15,7 +15,7 @@ Her Bash komutunun context'inizden ne kadar harcadığını ölçen bir Claude C
 
        output-flood: 30 KB of output from "pytest tests/ -v", over 20 KB
 
-5. [sidebar](../sidebar) açıkken bu bulgu oraya gider, ilk satırda boyut ve altında soluk tavsiye ile, stream'inde bir entry halinde, ve transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
+5. [sidebar](../sidebar) açıkken bu bulgu oraya gider, ilk satırda boyut (limitin iki katının altında sarı, iki katında ya da üstünde kırmızı, `over N KB` soluk) ve altında soluk tavsiye ile, stream'inde bir entry halinde, ve transcript temiz kalır. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
 6. Bir komut metni session başına bir kere bildirilir. Boyutu yine de `/output-flood` çıktısındaki toplama sayılır.
 
 ## Komut

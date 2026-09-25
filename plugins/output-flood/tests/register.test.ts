@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { adviceFor, fmtKb, limitOf, sizeOf, statusText } from '../hooks/flood.ts'
+import { adviceFor, fmtKb, limitOf, logText, sidebarLines, sizeOf, statusText } from '../hooks/flood.ts'
 
 tier('user')
 
@@ -72,6 +72,17 @@ describe('output-flood', () => {
     expect(adviceFor('git log --oneline')).toContain('bound it')
     expect(adviceFor('./weird-tool')).toContain('> /tmp/run.log')
     expect(statusText(true, 20, 0, 0)).toBe('on · limit 20 KB · no result over it yet')
+  })
+
+  test('the sidebar colours only the size, yellow under twice the limit and red from it, and the limit faint', () => {
+    const [head, advice] = sidebarLines('pytest tests/ -v', 30 * 1024, 20)
+    expect(head).toEqual({
+      text: '30 KB of output from "pytest tests/ -v", over 20 KB',
+      parts: [{ text: '30 KB', kind: 'warn' }, { text: ' of output from "pytest tests/ -v", ' }, { text: 'over 20 KB', kind: 'dim' }],
+    })
+    expect(head?.text).toBe(logText('pytest tests/ -v', 30 * 1024, 20))
+    expect(advice?.kind).toBe('dim')
+    expect(sidebarLines('pytest', 40 * 1024, 20)[0]?.parts?.[0]).toEqual({ text: '40 KB', kind: 'error' })
   })
 
   test('a result over the limit gets a note, and a smaller one none', async ($, on) => {

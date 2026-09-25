@@ -73,10 +73,29 @@ export function logText(command: string, chars: number, limit: number): string {
   return `${fmtKb(chars)} of output from "${shownCommand(command)}", over ${limit} KB`
 }
 
-/** The sidebar lines of one finding: the size on the first line, the advice faint under it. */
-export function sidebarLines(command: string, chars: number, limit: number): { text: string; kind: 'error' | 'dim' }[] {
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** The size's colour: yellow under twice the limit, red at or past it. */
+export function sizeTone(chars: number, limit: number): 'warn' | 'error' {
+  return chars >= 2 * limit * KB ? 'error' : 'warn'
+}
+
+/**
+ * The sidebar lines of one finding: the size on the first line, coloured by how far it passed the limit,
+ * with the limit faint; the advice faint under it.
+ */
+export function sidebarLines(command: string, chars: number, limit: number): Line[] {
   return [
-    { text: logText(command, chars, limit), kind: 'error' },
+    partsLine([part(fmtKb(chars), sizeTone(chars, limit)), part(` of output from "${shownCommand(command)}", `, undefined), part(`over ${limit} KB`, 'dim')]),
     { text: adviceFor(command), kind: 'dim' },
   ]
 }
