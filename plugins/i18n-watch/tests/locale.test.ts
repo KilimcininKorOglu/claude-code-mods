@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { callKeys, newKeys } from '../hooks/keys.ts'
-import { addFile, denyText, fileLang, isGuarded, jsonKeys, missingKeys, modeOf, noteText, phpKeys, poKeys, yamlKeys, type Catalog } from '../hooks/locale.ts'
+import { addFile, denyText, doneLines, fileLang, isGuarded, jsonKeys, missingKeys, modeOf, noteText, phpKeys, poKeys, sidebarLines, yamlKeys, type Catalog } from '../hooks/locale.ts'
 
 tier('user')
 
@@ -74,6 +74,28 @@ describe('locale files', () => {
     )
     const many = Array.from({ length: 12 }, (_, i) => ({ key: `k${i}`, langs: 'all' as const }))
     expect(noteText(many, {})).toContain('k9 (missing in every locale) · 2 more.')
+  })
+
+  test('the sidebar colours the key red, its line faint, and the locales by how many lack it', () => {
+    const missing = [{ key: 'checkout:vat', langs: ['de', 'tr'] }, { key: 'nope', langs: 'all' as const }]
+    expect(sidebarLines('src/Cart.vue', missing, { 'checkout:vat': 42 })).toEqual([
+      { text: 'src/Cart.vue', kind: 'error' },
+      {
+        text: 'checkout:vat:42 (missing in de, tr)',
+        parts: [{ text: 'checkout:vat', kind: 'error' }, { text: ':42', kind: 'dim' }, { text: ' (missing in ', kind: 'dim' }, { text: 'de, tr', kind: 'warn' }, { text: ')', kind: 'dim' }],
+      },
+      {
+        text: 'nope (missing in every locale)',
+        parts: [{ text: 'nope', kind: 'error' }, { text: ' (missing in ', kind: 'dim' }, { text: 'every locale', kind: 'error' }, { text: ')', kind: 'dim' }],
+      },
+    ])
+    const many = Array.from({ length: 12 }, (_, i) => ({ key: `k${i}`, langs: 'all' as const }))
+    expect(sidebarLines('a.vue', many, {}).at(-1)).toEqual({ text: '2 more', kind: 'dim' })
+    expect(doneLines('a.vue', ['x'], ['y'])).toEqual([
+      { text: 'a.vue', kind: 'ok' },
+      { text: 'x', kind: 'ok' },
+      { text: 'y (no longer used)', parts: [{ text: 'y', kind: 'ok' }, { text: ' (no longer used)', kind: 'dim' }] },
+    ])
   })
 
   test('the gate stops a commit, a push and a merge, and says why', () => {

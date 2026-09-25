@@ -1,6 +1,6 @@
 {
   "name": "i18n-watch",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "Tells the model when an edit uses translation keys that one or more locale files lack. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

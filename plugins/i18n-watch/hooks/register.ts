@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { callKeys, isSource, keyLines, newKeys } from './keys.ts'
-import { addFile, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isLocalePath, isNarrowable, LOCALE_DIRS, LOCALE_EXT, logText, modeOf, noteText, openNote, sectionKey, shownPath, sidebarLines, verdict, type Catalog, type Lines, type Mode } from './locale.ts'
+import { addFile, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isLocalePath, isNarrowable, LOCALE_DIRS, LOCALE_EXT, logText, modeOf, noteText, openNote, sectionKey, shownPath, sidebarLines, verdict, type Catalog, type Line, type Lines, type Mode } from './locale.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -110,7 +110,7 @@ async function catalogOf($: EngineInterface, state: State): Promise<Catalog> {
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: Line[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'i18n-watch', key: sectionKey(key), title, lines, until: 'stream' })
     if (taken) return

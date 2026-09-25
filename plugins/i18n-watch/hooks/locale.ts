@@ -169,9 +169,30 @@ export function logText(file: string, missing: Missing[], lines: Lines): string 
   return `keys ${file} uses that the locale files lack: ${namedKeys(missing, lines)}`
 }
 
+/** How the sidebar colours a line or a part of one. */
+type Tone = 'ok' | 'warn' | 'error' | 'dim'
+export type Part = { text: string; kind?: Tone }
+/** A sidebar line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+const part = (text: string, kind: Tone | undefined): Part => (kind === undefined ? { text } : { text, kind })
+
+/** A line made of parts, its `text` their texts joined. */
+const partsLine = (parts: Part[]): Line => ({ text: parts.map(p => p.text).join(''), parts })
+
+/** One missing key's row: the key red, its line faint, every locale red and a partial list of locales yellow. */
+function missingLine(m: Missing, lines: Lines): Line {
+  const line = lines[m.key]
+  const where = line === undefined ? [] : [part(`:${line}`, 'dim')]
+  const langs = m.langs === 'all' ? part('every locale', 'error') : part(m.langs.join(', '), 'warn')
+  return partsLine([part(m.key, 'error'), ...where, part(' (missing in ', 'dim'), langs, part(')', 'dim')])
+}
+
 /** The sidebar lines of a finding: the file, then one line per missing key, as the closing lines read. */
-export function sidebarLines(file: string, missing: Missing[], lines: Lines): { text: string; kind: 'error' }[] {
-  return [{ text: file, kind: 'error' }, ...namedKeys(missing, lines).split(' · ').map(text => ({ text, kind: 'error' as const }))]
+export function sidebarLines(file: string, missing: Missing[], lines: Lines): Line[] {
+  const rows = missing.slice(0, MAX_NAMED).map(m => missingLine(m, lines))
+  if (missing.length > MAX_NAMED) rows.push({ text: `${missing.length - MAX_NAMED} more`, kind: 'dim' })
+  return [{ text: file, kind: 'error' }, ...rows]
 }
 
 function namedPlain(keys: string[]): string {
@@ -214,9 +235,10 @@ export function doneLog(file: string, added: string[], gone: string[]): string {
 }
 
 /** The sidebar lines of a closed finding: the file, then each key with what happened to it. */
-export function doneLines(file: string, added: string[], gone: string[]): { text: string; kind: 'ok' }[] {
-  const keys = [...added.slice(0, MAX_NAMED), ...gone.slice(0, MAX_NAMED).map(k => `${k} (no longer used)`)]
-  return [{ text: file, kind: 'ok' }, ...keys.map(text => ({ text, kind: 'ok' as const }))]
+export function doneLines(file: string, added: string[], gone: string[]): Line[] {
+  const addedRows = added.slice(0, MAX_NAMED).map((text): Line => ({ text, kind: 'ok' }))
+  const goneRows = gone.slice(0, MAX_NAMED).map(k => partsLine([part(k, 'ok'), part(' (no longer used)', 'dim')]))
+  return [{ text: file, kind: 'ok' }, ...addedRows, ...goneRows]
 }
 
 /** The global flags git takes before the subcommand, so `git -c user.name=x commit` is still a commit. */
