@@ -8,7 +8,7 @@ import {
 const TOTALS_KEY = 'totals'
 /** Where 0.1.0 kept totals counted from the module's first load; they are read again from the transcripts. */
 const OLD_KEY = 'tokens'
-const TICK_MS = 30_000
+const TICK_MS = 10_000
 const GIT_MS = 10_000
 /** A Bash command that may move the branch or the working tree. */
 const GIT_COMMAND = /\bgit\b/
@@ -141,6 +141,16 @@ async function countTurn($: EngineInterface, state: State, usage: Usage | undefi
   if (!state.seeding) await keepTotals($, state)
 }
 
+/**
+ * Counts a model call or a compaction and redraws from a timer, so the caller (memory-save's fork at a
+ * turn's end) does not wait for the git run of the redraw.
+ */
+async function countCall($: EngineInterface, state: State, usage: Usage | undefined): Promise<void> {
+  if (usage === undefined) return
+  await countTurn($, state, usage)
+  $.clock.after(0, () => void refresh($, state))
+}
+
 /** The `/session-watch` answer: the reading as the section's lines. */
 async function commandText($: EngineInterface, state: State): Promise<string> {
   const reading = await readNow($, state)
@@ -183,19 +193,19 @@ export const register: Register = on => {
   // A model call is an op event: its hooks resolve to `{ value }` or `{ deny }`, not the bare result.
   on('model.fork', async ($, e, next) => {
     const r = await next(e)
-    await countTurn($, state, usageOf(valueOf(r)))
+    await countCall($, state, usageOf(valueOf(r)))
     return r
   })
 
   on('model.complete', async ($, e, next) => {
     const r = await next(e)
-    await countTurn($, state, usageOf(valueOf(r)))
+    await countCall($, state, usageOf(valueOf(r)))
     return r
   })
 
   on('session.compact', async ($, e, next) => {
     const r = await next(e)
-    await countTurn($, state, usageOf(r))
+    await countCall($, state, usageOf(r))
     return r
   })
 

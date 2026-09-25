@@ -199,6 +199,11 @@ describe('session-watch', () => {
     // A skipped compaction made no request.
     await $.session.compact({ trigger: 'plugin', messages: [SUMMARY] })
     expect(w.store.totals).toEqual({ [SID]: { input: 130, output: 58, cacheRead: 74_105, cacheWrite: 6845 } })
+    // Each counted call redraws from a timer, so the caller does not wait for git; the skipped one does not.
+    const before = w.gitRuns
+    await w.clock.advance(0)
+    expect(w.gitRuns).toBe(before + 3)
+    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · CR 74k · CW 7k')
   })
 
   test('the thinking setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {
@@ -222,7 +227,7 @@ describe('session-watch', () => {
     expect(w.gitRuns).toBe(afterStart)
     await $.tool.call({ tool: 'Bash', command: 'git checkout -b x' } as never)
     expect(w.gitRuns).toBe(afterStart + 1)
-    await w.clock.advance(30_000)
+    await w.clock.advance(10_000)
     expect(w.gitRuns).toBe(afterStart + 2)
   })
 

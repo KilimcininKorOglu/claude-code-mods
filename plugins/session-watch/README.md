@@ -32,7 +32,8 @@ A `*` after the branch marks a tree with changes. The status line is cleared whi
 - At session start.
 - At the end of each main-loop turn.
 - After each Bash command that names `git`, so a commit, checkout or pull shows at once.
-- Every 30 seconds in an interactive session, so a change made outside the session (a checkout in another terminal) shows too. Measured: a file staged from outside turned `1 untracked` into `1 staged` within the 30 seconds.
+- Every 10 seconds in an interactive session, so a change made outside the session (a checkout in another terminal) shows too. Measured with the earlier 30-second timer: a file staged from outside turned `1 untracked` into `1 staged` within one tick.
+- After a plugin's own model call (`$.model.fork`, `$.model.complete`) or a compaction, so memory-save's fork at a turn's end shows at once. The redraw runs from a timer, so the call's caller does not wait for its git run.
 - At `/session-watch`, which also prints the section's lines.
 
 Each reading runs `git status --porcelain=v2 --branch` once in the directory the session started in. A reading that fails is logged once as `cannot read the session: <error>`.
@@ -61,12 +62,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.282:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, model.fork, model.complete, session.compact, tool.call{tool=Bash}, command.run{command=session-watch}
-    ❯ ./register.ts calls: $.clock.after (via startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via transcriptsOf), $.fs.list (via transcriptsOf), $.fs.stat (via transcriptsOf), $.process.run (via readGit), $.process.spawn (via readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals), $.ui.status (via show)
+    ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via transcriptsOf), $.fs.list (via transcriptsOf), $.fs.stat (via transcriptsOf), $.process.run (via readGit), $.process.spawn (via readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals), $.ui.status (via show)
 
 Reach L2, it runs git and head.
 
     1. Reads:    the session's usage figures (context, cost), model, id, start directory and engine version; each turn's token counts, the usage of each plugin model call and compaction, and each request's thinking setting; the text of each Bash command, to see whether it names git; once per session with no totals kept, the session's transcripts under <config dir>/projects/, only their model responses' usage
-    2. Runs:     git status --porcelain=v2 --branch in the session's start directory, at each reading; head -c <size> on each transcript, once; one 30 second timer in an interactive session
+    2. Runs:     git status --porcelain=v2 --branch in the session's start directory, at each reading; head -c <size> on each transcript, once; one 10 second timer in an interactive session
     3. Sends:    nothing leaves the machine
     4. Persists: the token totals of the last 20 sessions in $.store
     5. Hostile input: git's output is parsed by line shape and only counted; a transcript row is parsed as JSON and only its four token counts are added, a count of another type adding nothing; a stored value of another shape reads as none

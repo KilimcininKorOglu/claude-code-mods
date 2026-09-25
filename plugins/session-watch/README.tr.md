@@ -32,7 +32,8 @@ Branch'ten sonraki `*`, değişiklik olan bir ağacı işaretler. Sidebar bölü
 - Session başında.
 - Her main loop turn'ünün sonunda.
 - `git` adını geçen her Bash komutundan sonra, böylece bir commit, checkout ya da pull hemen görünür.
-- Interactive bir session'da her 30 saniyede bir, böylece session dışında yapılan bir değişiklik (başka bir terminalde bir checkout) da görünür. Ölçüldü: dışarıdan stage edilen bir dosya, 30 saniye içinde `1 untracked` satırını `1 staged` yaptı.
+- Interactive bir session'da her 10 saniyede bir, böylece session dışında yapılan bir değişiklik (başka bir terminalde bir checkout) da görünür. Önceki 30 saniyelik timer ile ölçüldü: dışarıdan stage edilen bir dosya, bir tick içinde `1 untracked` satırını `1 staged` yaptı.
+- Bir plugin'in kendi model çağrısından (`$.model.fork`, `$.model.complete`) ya da bir compaction'dan sonra, böylece memory-save'in turn sonundaki fork'u hemen görünür. Yeniden çizim bir timer'dan çalışır, bu yüzden çağrıyı yapan taraf onun git çalıştırmasını beklemez.
 - `/session-watch` çağrısında. Bu komut bölümün satırlarını da yazar.
 
 Her okuma, session'ın başladığı dizinde bir kez `git status --porcelain=v2 --branch` çalıştırır. Başarısız bir okuma bir kez `cannot read the session: <hata>` olarak loglanır.
@@ -61,12 +62,12 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, model.fork, model.complete, session.compact, tool.call{tool=Bash}, command.run{command=session-watch}
-    ❯ ./register.ts calls: $.clock.after (via startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via transcriptsOf), $.fs.list (via transcriptsOf), $.fs.stat (via transcriptsOf), $.process.run (via readGit), $.process.spawn (via readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals), $.ui.status (via show)
+    ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via transcriptsOf), $.fs.list (via transcriptsOf), $.fs.stat (via transcriptsOf), $.process.run (via readGit), $.process.spawn (via readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals), $.ui.status (via show)
 
 Reach L2, git ve head çalıştırır.
 
     1. Okur:     session'ın usage değerlerini (context, maliyet), modelini, id'sini, başlangıç dizinini ve engine sürümünü; her turn'ün token sayılarını, her plugin model çağrısının ve compaction'ın usage'ını ve her request'in thinking ayarını; git adını geçip geçmediğini görmek için her Bash komutunun metnini; toplamı tutulmamış her session'da bir kez, <config dizini>/projects/ altındaki transcript'lerini, yalnız model cevaplarının usage alanını
-    2. Çalıştırır: her okumada session'ın başlangıç dizininde git status --porcelain=v2 --branch; her transcript üzerinde bir kez head -c <boyut>; interactive bir session'da bir 30 saniyelik timer
+    2. Çalıştırır: her okumada session'ın başlangıç dizininde git status --porcelain=v2 --branch; her transcript üzerinde bir kez head -c <boyut>; interactive bir session'da bir 10 saniyelik timer
     3. Gönderir: makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde son 20 session'ın token toplamlarını
     5. Düşman girdi: git'in çıktısı satır biçimine göre parse edilir ve yalnız sayılır; bir transcript satırı JSON olarak parse edilir ve yalnız dört token sayısı eklenir, başka tipte bir sayı hiçbir şey eklemez; başka biçimde saklanmış bir değer yok sayılır
