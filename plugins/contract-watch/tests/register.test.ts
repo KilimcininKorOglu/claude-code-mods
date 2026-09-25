@@ -14,12 +14,14 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: string[] }[] }
+/** The open flag, each section written, and, when asked for, each line's colour. */
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[]; kinds?: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string }[] }
+    const s = e as unknown as { key: string; lines: { text: string; kind?: string }[] }
     if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    if (bar.open) bar.kinds?.push(...s.lines.map(l => l.kind ?? ''))
     return { value: bar.open }
   })
 }
@@ -180,5 +182,16 @@ describe('contract-watch', () => {
     expect(r).toEqual({ result: 'edited' })
     expect(w.logs).toEqual(['the callers were not checked: ripwire --edit-check failed: ripwire: command not found'])
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
+  })
+
+  withSidebar('a ripwire failure is a yellow sidebar entry while the pane is open', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], kinds: [] }
+    seatSidebar(on, bar)
+    w.ripwire = { exitCode: 127, stdout: '', stderr: 'ripwire: command not found' }
+    await $.tool.call(edit('func parse(a int) {', 'func parse(b int) {'))
+    expect(bar.sections).toEqual([{ key: 'unchecked', lines: ['the callers were not checked: ripwire --edit-check failed: ripwire: command not found'] }])
+    expect(bar.kinds).toEqual(['warn'])
+    expect(w.logs).toEqual([])
   })
 })

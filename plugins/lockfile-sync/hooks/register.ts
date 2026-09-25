@@ -30,11 +30,16 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** Logs an error once until a different one comes. */
-function report($: EngineInterface, state: State, err: unknown): void {
+/**
+ * Writes an error once until a different one comes: a yellow entry in the sidebar's stream while it is
+ * open, else the transcript line.
+ */
+async function report($: EngineInterface, state: State, err: unknown): Promise<void> {
   const text = errorText(err)
-  if (text !== state.lastError) $.ui.log(`the commit's lockfiles were not checked: ${text}`)
+  if (text === state.lastError) return
   state.lastError = text
+  const line = `the commit's lockfiles were not checked: ${text}`
+  await toPerson($, 'unchecked', 'not checked', [{ text: line, kind: 'warn' }], line)
 }
 
 async function git($: EngineInterface, root: string, args: string[]): Promise<{ ok: boolean; out: string }> {
@@ -51,7 +56,7 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
     const head = await git($, root, ['rev-parse', 'HEAD'])
     return { root, head: head.ok ? head.out.trim() : '' }
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
     return undefined
   }
 }
@@ -128,7 +133,7 @@ async function staleLock($: EngineInterface, state: State, root: string, manifes
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'warn' }[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'lockfile-sync', key, title, lines, until: 'stream' })
     if (taken) return
@@ -232,7 +237,7 @@ async function afterCommit($: EngineInterface, state: State, before: Before, r: 
     state.lastError = undefined
     return note === undefined ? r : { ...r, context: [...(r.context ?? []), note] }
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
     return r
   }
 }
@@ -259,7 +264,7 @@ async function recheckNow($: EngineInterface, state: State): Promise<boolean> {
     if (before === undefined) return true
     await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, state, before.root, stale))
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
   }
   return state.open.length > 0
 }
@@ -303,7 +308,7 @@ async function gate($: EngineInterface, state: State, command: string): Promise<
     await closeResolved($, state, await caughtUp($, before.root, stale), await settled($, state, before.root, stale))
     return state.open.length === 0 ? undefined : denyFor($, pairsOf(state), before.root, command)
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
     return undefined
   }
 }

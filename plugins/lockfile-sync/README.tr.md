@@ -120,7 +120,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.command.register, $.env.get (via tmpDir), $.fs.exists (via lockOnDisk), $.fs.read (via treeText), $.process.run (via git, lockVerdict), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, report, toPerson, toolFailed)
+    ❯ ./register.ts calls: $.command.register, $.env.get (via tmpDir), $.fs.exists (via lockOnDisk), $.fs.read (via treeText), $.process.run (via git, lockVerdict), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via denyFor, toPerson, toolFailed)
 
 Reach L3, network'e çıkan process'ler çalıştırır.
 

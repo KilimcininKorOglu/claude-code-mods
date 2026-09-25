@@ -43,7 +43,7 @@ async function locate($: EngineInterface, file: string): Promise<{ root: string;
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'dim' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, key: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'dim' | 'warn' }[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: 'contract-watch', key: sectionKey(key), title, lines, until: 'stream' })
     if (taken) return
@@ -142,11 +142,16 @@ async function scopeOf($: EngineInterface, blocking: readonly Blocking[], comman
   return out
 }
 
-/** Logs an error once until a different one comes. */
-function report($: EngineInterface, state: State, err: unknown): void {
+/**
+ * Writes an error once until a different one comes: a yellow entry in the sidebar's stream while it is
+ * open, else the transcript line.
+ */
+async function report($: EngineInterface, state: State, err: unknown): Promise<void> {
   const text = errorText(err)
-  if (text !== state.lastError) $.ui.log(`the callers were not checked: ${text}`)
+  if (text === state.lastError) return
   state.lastError = text
+  const line = `the callers were not checked: ${text}`
+  await toPerson($, 'unchecked', 'not checked', [{ text: line, kind: 'warn' }], line)
 }
 
 function withNotes(r: ToolCallResult, notes: readonly string[]): ToolCallResult {
@@ -219,7 +224,7 @@ export const register: Register = on => {
     try {
       state.owed = (await recheckOpen($, state)).map(b => b.line)
     } catch (err) {
-      report($, state, err)
+      await report($, state, err)
     }
     return r
   })
@@ -237,7 +242,7 @@ export const register: Register = on => {
       const stop = await atGitCommand($, state, e.command)
       if (stop !== undefined) return { deny: stop }
     } catch (err) {
-      report($, state, err)
+      await report($, state, err)
     }
     return next(e)
   })
@@ -252,7 +257,7 @@ export const register: Register = on => {
       state.lastError = undefined
       return withNotes(r, notes)
     } catch (err) {
-      report($, state, err)
+      await report($, state, err)
       return r
     }
   })

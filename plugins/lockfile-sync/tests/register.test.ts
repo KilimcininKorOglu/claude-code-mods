@@ -14,12 +14,14 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; title: string; lines: string[] }[]; cleared: string[] }
+/** The open flag, each section written, the keys cleared, and, when asked for, each line's colour. */
+type Bar = { open: boolean; sections: { key: string; title: string; lines: string[] }[]; cleared: string[]; kinds?: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; title: string; lines: { text: string }[] }
+    const s = e as unknown as { key: string; title: string; lines: { text: string; kind?: string }[] }
     if (bar.open) bar.sections.push({ key: s.key, title: s.title, lines: s.lines.map(l => l.text) })
+    if (bar.open) bar.kinds?.push(...s.lines.map(l => l.kind ?? ''))
     return { value: bar.open }
   })
   on('sidebar.clear', (_, e) => {
@@ -357,5 +359,15 @@ describe('lockfile-sync', () => {
     w.next = 'fff'
     await $.tool.call({ tool: 'Bash', command: 'git commit -m y' })
     expect(w.logs).toEqual(["the commit's lockfiles were not checked: git show --name-status HEAD failed"])
+  })
+
+  withSidebar('a commit in a directory the shell expands is not checked, and the reason is a yellow sidebar entry', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [], kinds: [] }
+    seatSidebar(on, bar)
+    expect(await $.tool.call({ tool: 'Bash', command: 'cd $D && git commit -m x' })).toEqual({ result: 'ok' })
+    expect(bar.sections).toEqual([{ key: 'unchecked', title: 'not checked', lines: ["the commit's lockfiles were not checked: the commit's directory is not known: cd $D"] }])
+    expect(bar.kinds).toEqual(['warn'])
+    expect(w.logs).toEqual([])
   })
 })

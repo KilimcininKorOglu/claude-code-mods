@@ -14,12 +14,14 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-type Bar = { open: boolean; sections: { key: string; lines: string[] }[]; cleared: string[] }
+/** The open flag, each section written, the keys cleared, and, when asked for, each line's colour. */
+type Bar = { open: boolean; sections: { key: string; lines: string[] }[]; cleared: string[]; kinds?: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { key: string; lines: { text: string }[] }
+    const s = e as unknown as { key: string; lines: { text: string; kind?: string }[] }
     if (bar.open) bar.sections.push({ key: s.key, lines: s.lines.map(l => l.text) })
+    if (bar.open) bar.kinds?.push(...s.lines.map(l => l.kind ?? ''))
     return { value: bar.open }
   })
   on('sidebar.clear', (_, e) => { bar.cleared.push((e as unknown as { key: string }).key); return { value: undefined } })
@@ -142,6 +144,17 @@ describe('doc-drift-watch', () => {
     expect(await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })).toEqual({ result: 'ok' })
     await $.tool.call({ tool: 'Bash', command: 'git commit -m y' })
     expect(w.logs).toEqual(['the docs were not checked: ripwire --doc-drift failed: ripwire: command not found'])
+  })
+
+  withSidebar('a commit in a directory the shell expands runs no git, and the reason is a yellow sidebar entry', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: [], kinds: [] }
+    seatSidebar(on, bar)
+    expect(await $.tool.call({ tool: 'Bash', command: 'cd $D && git commit -m x' })).toEqual({ result: 'ok' })
+    expect(w.argv).toEqual([])
+    expect(bar.sections).toEqual([{ key: 'unchecked', lines: ["the docs were not checked: the commit's directory is not known: cd $D"] }])
+    expect(bar.kinds).toEqual(['warn'])
+    expect(w.logs).toEqual([])
   })
 
   withSidebar('the turn measures the open doc again and closes the finding it no longer holds', async ($, on) => {

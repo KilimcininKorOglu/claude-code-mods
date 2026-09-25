@@ -37,11 +37,16 @@ async function driftNow($: EngineInterface, root: string, doc?: string): Promise
   return parseDrift(r.stdout)
 }
 
-/** Logs an error once until a different one comes. */
-function report($: EngineInterface, state: State, err: unknown): void {
+/**
+ * Writes an error once until a different one comes: a yellow entry in the sidebar's stream while it is
+ * open, else the transcript line.
+ */
+async function report($: EngineInterface, state: State, err: unknown): Promise<void> {
   const text = errorText(err)
-  if (text !== state.lastError) $.ui.log(`the docs were not checked: ${text}`)
+  if (text === state.lastError) return
   state.lastError = text
+  const line = `the docs were not checked: ${text}`
+  await toPerson($, 'unchecked', 'not checked', [{ text: line, kind: 'warn' }], line)
 }
 
 function withNote(r: ToolCallResult, note: string): ToolCallResult {
@@ -55,7 +60,7 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
     const root = await repoRoot($, commitDir(command, await $.session.cwd()))
     return root === undefined ? undefined : { root, stale: await driftNow($, root) }
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
     return undefined
   }
 }
@@ -64,7 +69,7 @@ async function beforeCommit($: EngineInterface, state: State, command: string): 
  * The finding the person reads: an entry in the shared sidebar's stream while it is open, else the
  * transcript line, as before. The model's note is another channel and does not change here.
  */
-async function toPerson($: EngineInterface, doc: string, title: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
+async function toPerson($: EngineInterface, doc: string, title: string, lines: { text: string; kind: 'error' | 'ok' | 'warn' }[], line: string): Promise<void> {
   try {
     const taken = await $.sidebar.set({ consumer: CONSUMER, key: sectionKey(doc), title, lines, until: 'stream' })
     if (taken) return
@@ -100,7 +105,7 @@ async function afterCommit($: EngineInterface, state: State, before: { root: str
     await openFindings($, state, before.root, added, now)
     return withNote(r, noteText(added))
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
     return r
   }
 }
@@ -137,7 +142,7 @@ async function recheckOne($: EngineInterface, state: State, key: string, open: O
     now = await driftNow($, open.root, open.doc)
     state.lastError = undefined
   } catch (err) {
-    report($, state, err)
+    await report($, state, err)
     return
   }
   const stale = new Set(now.filter(s => s.doc === open.doc).map(identity))
