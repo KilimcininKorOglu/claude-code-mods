@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
-  type Effort, type GitState, type Reading, type Split, type Usage,
+  addSplit, endFile, failedGit, lastThinkingOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  type Effort, type GitState, type Reading, type Split, type Usage, type UsageScanner,
 } from './watch.ts'
 
 /** The totals of each session, counted from its transcripts on. */
@@ -17,10 +17,64 @@ const GIT_COMMAND = /\bgit\b/
  * What the hooks share: the repository the session started in, the session id, the token totals, the main
  * loop's last thinking setting, the engine's version, the last git state, and the last refresh error.
  */
-type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; last?: Split; version: string; git?: GitState; lastError?: string }
+type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; last?: Split; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
 
 /** A transcript and its size when the reading began. */
 type Transcript = { path: string; size: number }
+
+/**
+ * A transcript followed past the reading: the bytes read so far, and its responses by message id, so a
+ * response whose lines straddle two reads counts once. No hook's usage names the thinking tokens, so they
+ * are read from what the transcripts gained since.
+ */
+type Follow = { offset: number; scan: UsageScanner }
+
+const utf8 = new TextEncoder()
+
+/** Starts following each transcript at the size it has now; one that appears later is read whole. */
+function startFollow(state: State, files: readonly Transcript[]): void {
+  state.follow = new Map(files.map(f => [f.path, { offset: f.size, scan: usageScannerOf() }]))
+}
+
+/** Reads what one transcript gained since the last read; a line still being written waits for the rest. */
+async function followOne($: EngineInterface, state: State, f: Transcript): Promise<void> {
+  const cur = state.follow.get(f.path) ?? { offset: 0, scan: usageScannerOf() }
+  state.follow.set(f.path, cur)
+  if (f.size <= cur.offset) return
+  for await (const chunk of $.process.spawn({ argv: ['tail', '-c', `+${cur.offset + 1}`, f.path] })) {
+    if (chunk.stream !== 'stdout') throw new Error(`${f.path}: ${chunk.text.trim()}`)
+    scanUsage(cur.scan, chunk.text)
+    cur.offset += utf8.encode(chunk.text).length
+  }
+}
+
+const followedThinking = (state: State): number => [...state.follow.values()].reduce((a, f) => a + thinkingOf(f.scan), 0)
+
+/**
+ * Adds the thinking tokens the transcripts gained, and puts the main loop's last response's on the ctx
+ * line. `main` alone reads the main loop's transcript, as after each of its requests; the turn's end
+ * reads every transcript, the subagents' too.
+ */
+async function followThinking($: EngineInterface, state: State, main: boolean): Promise<void> {
+  const before = followedThinking(state)
+  const files = await transcriptsOf($, state)
+  const mainPath = files.find(f => f.path.endsWith(`/${state.sid}.jsonl`))?.path
+  for (const f of files) if (!main || f.path === mainPath) await followOne($, state, f)
+  state.split = { ...state.split, thinking: state.split.thinking + followedThinking(state) - before }
+  const lastThinking = mainPath === undefined ? undefined : lastThinkingOf(state.follow.get(mainPath)?.scan ?? usageScannerOf())
+  if (state.last !== undefined && lastThinking !== undefined) state.last = { ...state.last, thinking: lastThinking }
+}
+
+/** Follows the transcripts, and says a failed read once instead of failing the hook. */
+async function tryFollow($: EngineInterface, state: State, main: boolean): Promise<void> {
+  try {
+    await followThinking($, state, main)
+  } catch (err) {
+    const text = `the thinking tokens were not read: ${err instanceof Error ? err.message : String(err)}`
+    if (text !== state.lastError) $.ui.log(text)
+    state.lastError = text
+  }
+}
 
 async function configDirOf($: EngineInterface): Promise<string> {
   return (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) ?? ''}/.claude`
@@ -80,9 +134,10 @@ async function startTotals($: EngineInterface, state: State): Promise<void> {
   const kept = storedSplits(await $.store.get(TOTALS_KEY))[state.sid]
   await $.store.delete(OLD_KEY)
   state.split = kept ?? NO_SPLIT
-  if (kept !== undefined) return
   try {
     const files = await transcriptsOf($, state)
+    startFollow(state, files)
+    if (kept !== undefined) return
     state.seeding = true
     // The reading outlives the session.start dispatch, so it runs from a timer.
     $.clock.after(0, () => void seedTotals($, state, files))
@@ -162,7 +217,7 @@ async function commandText($: EngineInterface, state: State): Promise<string> {
 }
 
 export const register: Register = on => {
-  const state: State = { root: '', sid: '', split: NO_SPLIT, seeding: false, effort: undefined, version: '' }
+  const state: State = { root: '', sid: '', split: NO_SPLIT, seeding: false, effort: undefined, version: '', follow: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -179,11 +234,14 @@ export const register: Register = on => {
 
   // The main loop's request says how hard it asks the model to think, and its usage is the window's own; a
   // subagent's request has its own setting and its own window.
-  on('turn.step', async function* (_$, e, next) {
+  on('turn.step', async function* ($, e, next) {
     if (e.agentId === undefined) state.effort = e.effort ?? null
     const r = yield* next(e)
     // The main loop's last request holds the context window, so its split is the window's own.
-    if (e.agentId === undefined && r.usage) state.last = addSplit(NO_SPLIT, r.usage)
+    if (e.agentId === undefined && r.usage) {
+      state.last = addSplit(NO_SPLIT, r.usage)
+      await tryFollow($, state, true)
+    }
     return r
   })
 
@@ -191,7 +249,10 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     await countTurn($, state, e.usage)
-    if (e.agentId === undefined) await refresh($, state)
+    if (e.agentId !== undefined) return r
+    await tryFollow($, state, false)
+    if (!state.seeding) await keepTotals($, state)
+    await refresh($, state)
     return r
   })
 

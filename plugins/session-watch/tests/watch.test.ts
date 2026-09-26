@@ -16,7 +16,7 @@ const CLEAN = '# branch.oid fe4b552c3f34ec65700b7e65fa605c89f136e825\n# branch.h
 const reading = (over: Partial<Reading> = {}): Reading => ({
   context: { tokens: 245_000, window: 1_000_000, percent: 25 },
   costUsd: 1.234,
-  split: { input: 3000, output: 45_000, cacheRead: 1_100_000, cacheWrite: 80_000 },
+  split: { input: 3000, output: 45_000, cacheRead: 1_100_000, cacheWrite: 80_000, thinking: 0 },
   seeding: false,
   model: 'claude-opus-5-5',
   effort: 'high',
@@ -50,7 +50,7 @@ describe('reading', () => {
   test('the section reads context, tokens, cost, model with thinking, version and git, in that order', () => {
     expect(sidebarLines(reading())).toEqual([
       { text: 'ctx 25% · 245k / 1.0M', kind: 'ok' },
-      { text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', parts: [{ text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k' }, { text: ' · CH ' }, { text: '92%', kind: 'ok' }] },
+      { text: 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k · CH 92%', parts: [{ text: 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k' }, { text: ' · CH ' }, { text: '92%', kind: 'ok' }] },
       { text: 'cost $1.23' },
       {
         text: 'model opus-5-5 · thinking high',
@@ -77,7 +77,7 @@ describe('reading', () => {
 
   test('what is not known yet is said, not zeroed', () => {
     const lines = sidebarLines(reading({ context: { window: 200_000 }, costUsd: undefined, effort: undefined, git: undefined }))
-    expect(lines.map(l => l.text)).toEqual(['ctx: no reply yet', 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
+    expect(lines.map(l => l.text)).toEqual(['ctx: no reply yet', 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
     expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no thinking setting')
     expect(sidebarLines(reading({ seeding: true }))[1]?.text).toBe('tokens: reading the transcripts')
     expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · thinking budget 12000')
@@ -91,16 +91,16 @@ describe('reading', () => {
 
 describe('token totals', () => {
   test('the cache hit is the share of the input read from the cache, rounded down, and absent before any input', () => {
-    expect(cacheHit({ input: 0, output: 5, cacheRead: 0, cacheWrite: 0 })).toBe(undefined)
-    expect(cacheHit({ input: 1, output: 0, cacheRead: 999, cacheWrite: 0 })).toBe(99)
-    expect(cacheHit({ input: 0, output: 0, cacheRead: 3_300_000_000, cacheWrite: 27_500_000 })).toBe(99)
-    expect(cacheHit({ input: 0, output: 0, cacheRead: 0, cacheWrite: 100 })).toBe(0)
+    expect(cacheHit({ input: 0, output: 5, cacheRead: 0, cacheWrite: 0, thinking: 0 })).toBe(undefined)
+    expect(cacheHit({ input: 1, output: 0, cacheRead: 999, cacheWrite: 0, thinking: 0 })).toBe(99)
+    expect(cacheHit({ input: 0, output: 0, cacheRead: 3_300_000_000, cacheWrite: 27_500_000, thinking: 0 })).toBe(99)
+    expect(cacheHit({ input: 0, output: 0, cacheRead: 0, cacheWrite: 100, thinking: 0 })).toBe(0)
     expect([100, 90, 89, 70, 69, 0].map(cacheHitTone)).toEqual(['ok', 'ok', 'warn', 'warn', 'error', 'error'])
   })
 
   test('each turn adds its tokens by kind', () => {
     const one = addSplit(NO_SPLIT, { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20 })
-    expect(addSplit(one, { output_tokens: 5 })).toEqual({ input: 10, output: 10, cacheRead: 100, cacheWrite: 20 })
+    expect(addSplit(one, { output_tokens: 5 })).toEqual({ input: 10, output: 10, cacheRead: 100, cacheWrite: 20, thinking: 0 })
     expect(addSplit(one, undefined)).toBe(one)
     expect([830, 245_400, 1_234_567, 3_240_000_000].map(fmtTok)).toEqual(['830', '245k', '1.2M', '3.2B'])
     // A count of another type from a transcript adds nothing.
@@ -120,7 +120,7 @@ describe('token totals', () => {
     endFile(s)
     // The second file starts with a row of its own, not the first file's unfinished line.
     scanUsage(s, `${row('c', 100)}\n`)
-    expect(usageTotal(s)).toEqual({ input: 3, output: 110, cacheRead: 0, cacheWrite: 0 })
+    expect(usageTotal(s)).toEqual({ input: 3, output: 110, cacheRead: 0, cacheWrite: 0, thinking: 0 })
   })
 
   test('the store keeps the last 20 sessions, this one last, and drops a value of another shape', () => {

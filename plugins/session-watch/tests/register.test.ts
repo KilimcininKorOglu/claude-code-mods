@@ -51,8 +51,8 @@ type Line = { text: string; kind?: string; parts?: { text: string; kind?: string
 type World = { stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
 
 /** One transcript row of a model response, as the engine writes one per content block. */
-const response = (id: string | undefined, input: number, output: number): string =>
-  JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } })
+const response = (id: string | undefined, input: number, output: number, thinking?: number): string =>
+  JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10, ...(thinking === undefined ? {} : { output_tokens_details: { thinking_tokens: thinking } }) } } })
 
 function world(on: On, store: Record<string, unknown> = {}): World {
   const w: World = { stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
@@ -66,6 +66,11 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   // `head -c <n> <path>`: the file's first n characters, the transcript as it was when the reading began.
   on('process.spawn', async function* (_, e) {
     const text = w.files.get(e.argv[3] ?? '')
+    // `tail -c +<n> <path>`: the file from its n-th character on, what it gained since the last read.
+    if (e.argv[0] === 'tail' && text !== undefined) {
+      yield { stream: 'stdout' as const, text: text.slice(Number(e.argv[2]?.slice(1)) - 1) }
+      return { value: { code: 0, signal: null } }
+    }
     if (e.argv[0] !== 'head' || text === undefined) {
       yield { stream: 'stderr' as const, text: `head: ${e.argv[3] ?? ''}: No such file or directory\n` }
       return { value: { code: 1, signal: null } }
@@ -144,7 +149,7 @@ describe('session-watch', () => {
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)).toEqual([
       { text: 'ctx 12% · 120k / 1.0M', kind: 'ok' },
-      { text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500 · CH 84%', parts: [{ text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500' }, { text: ' · CH ' }, { text: '84%', kind: 'warn' }] },
+      { text: 'tokens T 10k · I 1k · O 500 · TH 0 · CR 8k · CW 500 · CH 84%', parts: [{ text: 'tokens T 10k · I 1k · O 500 · TH 0 · CR 8k · CW 500' }, { text: ' · CH ' }, { text: '84%', kind: 'warn' }] },
       { text: 'cost $0.50' },
       {
         text: 'model opus-5-5 · thinking high',
@@ -168,23 +173,23 @@ describe('session-watch', () => {
     await step($, undefined, 'a1')
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)?.[0]).toEqual({
-      text: 'ctx 12% · 120k / 1.0M · I 2 · O 300 · CR 450k · CW 3k · CH 99%',
-      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · I 2 · O 300 · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
+      text: 'ctx 12% · 120k / 1.0M · I 2 · O 300 · TH 0 · CR 450k · CW 3k · CH 99%',
+      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · I 2 · O 300 · TH 0 · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
     })
   })
 
   test('every loop\'s turns add to the totals, which the store keeps for a reloaded module', async ($, on) => {
-    const w = world(on, { totals: { [SID]: { input: 5, output: 5, cacheRead: 5, cacheWrite: 5 } } })
+    const w = world(on, { totals: { [SID]: { input: 5, output: 5, cacheRead: 5, cacheWrite: 5, thinking: 0 } } })
     await started($, w)
     await $.turn.complete(turn('agent-1'))
     await $.turn.complete(turn())
-    expect(w.store.totals).toEqual({ [SID]: { input: 2005, output: 1005, cacheRead: 16005, cacheWrite: 1005 } })
-    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 20k · I 2k · O 1k · CR 16k · CW 1k · CH 84%')
+    expect(w.store.totals).toEqual({ [SID]: { input: 2005, output: 1005, cacheRead: 16005, cacheWrite: 1005, thinking: 0 } })
+    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 20k · I 2k · O 1k · TH 0 · CR 16k · CW 1k · CH 84%')
   })
 
   test('a session with no kept totals reads them from its transcripts, each response once, and counts later turns on top', async ($, on) => {
     // 0.1.0 counted from the module's load under `tokens`; that value is dropped and read again.
-    const w = world(on, { tokens: { [SID]: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1 } } })
+    const w = world(on, { tokens: { [SID]: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1, thinking: 0 } } })
     // One response written as two content-block rows, a second response, a row of another kind, and a subagent's response.
     w.files.set(MAIN, [response('msg_1', 3, 40), response('msg_1', 3, 40), response('msg_2', 2, 60), JSON.stringify({ type: 'user', message: { content: 'hi' } })].join('\n') + '\n')
     w.files.set(SUB, `${response(undefined, 7, 7)}\n`)
@@ -196,7 +201,29 @@ describe('session-watch', () => {
     expect(w.store.totals).toBeUndefined()
     await w.clock.advance(0)
     expect(w.store.tokens).toBeUndefined()
-    expect(w.store.totals).toEqual({ [SID]: { input: 1012, output: 607, cacheRead: 8300, cacheWrite: 530 } })
+    expect(w.store.totals).toEqual({ [SID]: { input: 1012, output: 607, cacheRead: 8300, cacheWrite: 530, thinking: 0 } })
+    expect(w.logs).toEqual([])
+  })
+
+  withSidebar('the thinking tokens come from the transcripts: the reading, what they gain after it, a response straddling two reads once', async ($, on) => {
+    const w = world(on)
+    seatSidebar(on, w)
+    w.bar.open = true
+    w.files.set(MAIN, `${response('msg_1', 1, 50, 30)}\n`)
+    w.files.set(SUB, `${response('sub_1', 1, 20, 5)}\n`)
+    await started($, w)
+    // The main loop answers: its response lands in the transcript in two rows, the second after the step.
+    w.files.set(MAIN, `${w.files.get(MAIN) ?? ''}${response('msg_2', 1, 40, 10)}\n`)
+    w.stepUsage = { input_tokens: 1, output_tokens: 40, cache_read_input_tokens: 100, cache_creation_input_tokens: 10, model: 'claude-opus-5-5' }
+    await step($)
+    w.files.set(MAIN, `${w.files.get(MAIN) ?? ''}${response('msg_2', 1, 45, 12)}\n`)
+    // A subagent thought too, in its own transcript.
+    w.files.set(SUB, `${w.files.get(SUB) ?? ''}${response('sub_2', 1, 9, 4)}\n`)
+    await $.turn.complete(turn())
+    const [ctx, tokens] = w.bar.lines.at(-1) ?? []
+    // The last response's own thinking on the ctx line, 12, its last row; the totals 30 + 5 read, then 12 + 4.
+    expect(ctx?.text).toContain('· O 40 · TH 12 ·')
+    expect(tokens?.text).toContain('· TH 51 ·')
     expect(w.logs).toEqual([])
   })
 
@@ -207,7 +234,7 @@ describe('session-watch', () => {
     w.files.delete(MAIN)
     await w.clock.advance(0)
     expect(w.logs).toEqual([`the token totals count from the module's load, because the transcripts were not read: ${MAIN}: head: ${MAIN}: No such file or directory`])
-    expect(w.store.totals).toEqual({ [SID]: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } })
+    expect(w.store.totals).toEqual({ [SID]: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: 0 } })
   })
 
   test('a plugin\'s fork and completion and a compaction\'s summary count, which no transcript records', { plugins: [CALLER] }, async ($, on) => {
@@ -217,12 +244,12 @@ describe('session-watch', () => {
     await $.session.compact({ trigger: 'manual', messages: [SUMMARY] })
     // A skipped compaction made no request.
     await $.session.compact({ trigger: 'plugin', messages: [SUMMARY] })
-    expect(w.store.totals).toEqual({ [SID]: { input: 130, output: 58, cacheRead: 74_105, cacheWrite: 6845 } })
+    expect(w.store.totals).toEqual({ [SID]: { input: 130, output: 58, cacheRead: 74_105, cacheWrite: 6845, thinking: 0 } })
     // Each counted call redraws from a timer, so the caller does not wait for git; the skipped one does not.
     const before = w.gitRuns
     await w.clock.advance(0)
     expect(w.gitRuns).toBe(before + 3)
-    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · CR 74k · CW 7k · CH 91%')
+    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · TH 0 · CR 74k · CW 7k · CH 91%')
   })
 
   test('the thinking setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {

@@ -3,17 +3,21 @@
  * and the sidebar and status lines. Nothing here reads the engine or the clock.
  */
 
-/** The tokens of every turn so far, by kind. */
-export type Split = { input: number; output: number; cacheRead: number; cacheWrite: number }
+/** The tokens of every turn so far, by kind. `thinking` is a part of `output`, read from the transcripts alone. */
+export type Split = { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number }
 
-export const NO_SPLIT: Split = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+export const NO_SPLIT: Split = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: 0 }
 
-/** The token counts one turn carries, as `turn.complete` names them. */
+/**
+ * The token counts one turn carries, as `turn.complete` names them. A transcript line also carries
+ * `output_tokens_details.thinking_tokens`, which no hook's usage holds (measured on 2.1.283).
+ */
 export type Usage = {
   input_tokens?: number
   output_tokens?: number
   cache_read_input_tokens?: number
   cache_creation_input_tokens?: number
+  output_tokens_details?: { thinking_tokens?: unknown } | null
 }
 
 const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
@@ -29,7 +33,13 @@ export function addSplit(split: Split, usage: Usage | undefined): Split {
     output: split.output + countOf(usage.output_tokens),
     cacheRead: split.cacheRead + countOf(usage.cache_read_input_tokens),
     cacheWrite: split.cacheWrite + countOf(usage.cache_creation_input_tokens),
+    thinking: split.thinking + thinkingIn(usage),
   }
+}
+
+/** The thinking tokens a usage record names; 0 where it names none, as every hook's usage does. */
+export function thinkingIn(usage: Usage): number {
+  return countOf(usage.output_tokens_details?.thinking_tokens)
 }
 
 /**
@@ -48,7 +58,7 @@ export function valueOf(result: unknown): unknown {
 
 /** Two splits added. */
 export function sumSplits(a: Split, b: Split): Split {
-  return { input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite }
+  return { input: a.input + b.input, output: a.output + b.output, cacheRead: a.cacheRead + b.cacheRead, cacheWrite: a.cacheWrite + b.cacheWrite, thinking: a.thinking + b.thinking }
 }
 
 const totalOf = (s: Split): number => s.input + s.output + s.cacheRead + s.cacheWrite
@@ -125,9 +135,24 @@ export function usageTotal(s: UsageScanner): Split {
   return [...s.byId.values()].reduce(addSplit, s.noId)
 }
 
+/** The thinking tokens of every response a scanner has read, each response once. */
+export function thinkingOf(s: UsageScanner): number {
+  return [...s.byId.values()].reduce((a, u) => a + thinkingIn(u), s.noId.thinking)
+}
+
+/** The thinking tokens of the last response a scanner has read, or undefined before one. */
+export function lastThinkingOf(s: UsageScanner): number | undefined {
+  const last = [...s.byId.values()].at(-1)
+  return last === undefined ? undefined : thinkingIn(last)
+}
+
+/**
+ * A stored split. One kept before thinking was counted has no `thinking` and reads as none, so the
+ * session's transcripts are read again and the totals hold it.
+ */
 function isSplit(v: unknown): v is Split {
   const s = v as Partial<Split> | null
-  return typeof s === 'object' && s !== null && isCount(s.input) && isCount(s.output) && isCount(s.cacheRead) && isCount(s.cacheWrite)
+  return typeof s === 'object' && s !== null && isCount(s.input) && isCount(s.output) && isCount(s.cacheRead) && isCount(s.cacheWrite) && isCount(s.thinking)
 }
 
 /** How many sessions' totals the store keeps, so the file does not grow with every session. */
@@ -267,7 +292,7 @@ export function cacheHitTone(percent: number): Tone {
 
 /** A split by kind, then its cache hit with only the percentage coloured; no hit before any input. */
 function splitParts(s: Split): Part[] {
-  const kinds = part(` · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
+  const kinds = part(` · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · TH ${fmtTok(s.thinking)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
   const hit = cacheHit(s)
   return hit === undefined ? [kinds] : [kinds, part(' · CH ', undefined), part(`${hit}%`, cacheHitTone(hit))]
 }
