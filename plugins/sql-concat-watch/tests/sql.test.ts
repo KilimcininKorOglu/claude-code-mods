@@ -35,6 +35,10 @@ describe('sql', () => {
       'const msg = "Please select a file from the list: " + name',
       'const label = `where to go: ${place}`',
       'const total = a + " items"',
+      // A PHP or Ruby parameter array after the string's closing quote is not part of the SQL.
+      '$status = \\Database::fetchRow("SELECT status FROM email_queue WHERE id = ?", [$id])[\'status\'] ?? null;',
+      'User.find_by_sql(["SELECT * FROM users WHERE name = ?", name]) # #{note}',
+      '$db->query("SELECT * FROM users WHERE note = \\"x\\" AND id = ?", [$id]);',
     ]
     for (const line of clean) expect([line, sqlLines('', line)]).toEqual([line, []])
   })

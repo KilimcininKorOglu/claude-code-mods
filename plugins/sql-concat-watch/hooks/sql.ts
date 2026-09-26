@@ -16,12 +16,21 @@ const JOINS = [
   /\bf"[^"]*\{|\bf'[^']*\{/, // Python f-string
   /["']\s*%\s*[\w(]/, // Python % formatting
   /["']\s*\.format\(/, // Python str.format
-  /"[^"]*\$[A-Za-z_{]/, // PHP and Kotlin "... $var"
   /["']\s*\.\s*\$\w|\$\w+\s*\.\s*["']/, // PHP "..." . $var
   /\$"[^"]*\{/, // C# $"... {x}"
-  /"[^"]*#\{/, // Ruby "... #{x}"
   /\b(fmt\.Sprintf|String\.format|format!)\(/, // Go, Java, Rust formatting
 ]
+
+/** Interpolation inside a double-quoted string body: PHP and Kotlin `$var`, Ruby `#{x}`. */
+const INTERPOLATES = /\$[A-Za-z_{]|#\{/
+
+/**
+ * Whether a double-quoted string on the line interpolates a value. Only the text between a string's own
+ * quotes is read, so `fetchRow("... = ?", [$id])` does not read its parameter array as part of the SQL.
+ */
+function interpolates(line: string): boolean {
+  return [...line.matchAll(/"((?:[^"\\]|\\.)*)"/g)].some(m => INTERPOLATES.test(m[1] ?? ''))
+}
 
 /** The last name of a template tag that makes the values parameters: sql`...`, Prisma.sql`...`, prisma.$queryRaw`...`. */
 const SAFE_TAG = /^(sql|SQL|\$queryRaw|\$executeRaw)$/
@@ -42,7 +51,7 @@ function hasSql(text: string): boolean {
 function joinsSql(line: string): boolean {
   if (COMMENT.test(line) || !hasSql(line)) return false
   const plain = line.replace(/`[^`]*`/g, '``')
-  return JOINS.some(re => re.test(plain))
+  return JOINS.some(re => re.test(plain)) || interpolates(plain)
 }
 
 /** The lines with a `${` of each untagged or unsafe-tagged template literal that holds SQL. */
