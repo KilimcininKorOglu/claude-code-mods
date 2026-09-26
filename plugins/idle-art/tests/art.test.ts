@@ -32,6 +32,25 @@ describe('art', () => {
     }
   })
 
+  test('the cat walks in to the middle, meows, rolls, and walks out to come round again', () => {
+    const anim = SCENES.cat(60, 8, rngOf(3))
+    const seen: string[] = []
+    for (let i = 0; i < 600; i++) {
+      anim.step()
+      seen.push(textOf(anim.frame()))
+    }
+    // Its face never leaves the band's 8 rows, and it stands in the middle (column 25 of 60) once it sits.
+    expect(seen.some(f => f.split('\n').some(row => row.indexOf('( o.o )') === 25))).toBe(true)
+    expect(seen.some(f => f.includes('< meow >'))).toBe(true)
+    expect(seen.some(f => f.includes('< MEOW! >'))).toBe(true)
+    expect(seen.some(f => f.includes('( -.- )=~'))).toBe(true)
+    expect(seen.some(f => f.includes('♥'))).toBe(true)
+    // It leaves: a frame with no cat, then it enters from the left edge again.
+    const gone = seen.findIndex((f, i) => i > 100 && f.trim() === '')
+    expect(gone).toBeGreaterThan(0)
+    expect(seen.slice(gone).some(f => f.split('\n').some(row => /^\( o\.o \)__/.test(row)))).toBe(true)
+  })
+
   test('a row draws as runs of one colour, joined back to the same text', () => {
     const row = [{ ch: 'a', color: '' }, { ch: 'b', color: '#fff' }, { ch: 'c', color: '#fff' }, { ch: ' ', color: '' }]
     expect(runsOf(row)).toEqual([{ text: 'a', color: '' }, { text: 'bc', color: '#fff' }, { text: ' ', color: '' }])
@@ -49,15 +68,15 @@ describe('config', () => {
     expect(configOf(false, 'rainbow', 99, [])).toEqual({ enabled: false, style: 'random', delaySec: 3 })
     expect(configOf('no', 'life', 0, [])).toEqual({ enabled: true, style: 'life', delaySec: 0 })
     // A stored clip name holds only while the clip is saved.
-    expect(configOf(true, 'cat', 3, ['cat']).style).toBe('cat')
-    expect(configOf(true, 'cat', 3, []).style).toBe('random')
+    expect(configOf(true, 'kitty', 3, ['kitty']).style).toBe('kitty')
+    expect(configOf(true, 'kitty', 3, []).style).toBe('random')
   })
 
   test('random picks every style and saved clip but the last one', () => {
     const picked = new Set<string>()
     const rng = rngOf(5)
-    for (let i = 0; i < 300; i++) picked.add(pickStyle('random', 'fire', rng, ['cat']))
-    expect([...picked].sort()).toEqual([...STYLES.filter(s => s !== 'fire'), 'cat'].sort())
+    for (let i = 0; i < 300; i++) picked.add(pickStyle('random', 'fire', rng, ['kitty']))
+    expect([...picked].sort()).toEqual([...STYLES.filter(s => s !== 'fire'), 'kitty'].sort())
     expect(pickStyle('aquarium', 'aquarium', rng)).toBe('aquarium')
   })
 
@@ -67,7 +86,8 @@ describe('config', () => {
     expect(parseArgs('delay -1').kind).toBe('error')
     expect(parseArgs('delay')).toMatchObject({ kind: 'error' })
     expect(parseArgs('on off')).toMatchObject({ kind: 'error', text: expect.stringContaining('too many arguments') })
-    expect(parseArgs('import ~/My GIFs/Cat.gif Cat')).toEqual({ kind: 'import', path: '~/My GIFs/Cat.gif', name: 'cat' })
+    expect(parseArgs('import ~/My GIFs/Cat.gif Kitty')).toEqual({ kind: 'import', path: '~/My GIFs/Cat.gif', name: 'kitty' })
+    expect(parseArgs('import cat.gif cat')).toMatchObject({ kind: 'error', text: expect.stringContaining('taken') })
     expect(parseArgs('import cat.gif')).toMatchObject({ kind: 'error', text: expect.stringContaining('a GIF path and a name') })
     expect(parseArgs('import cat.gif fire')).toMatchObject({ kind: 'error', text: expect.stringContaining('taken') })
     expect(parseArgs('import cat.gif no_way')).toMatchObject({ kind: 'error', text: expect.stringContaining('not a clip name') })

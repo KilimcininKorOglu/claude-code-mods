@@ -1,6 +1,6 @@
 # idle-art
 
-A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Five scenes are built in: matrix rain, fire, a star field, an aquarium and the Game of Life. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
+A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Six scenes are built in: matrix rain, fire, a star field, an aquarium, the Game of Life and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
 
 ## What it shows
 
@@ -23,6 +23,14 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
 | `stars` | Stars fly toward the viewer from the centre, growing from a grey `·` to a white `✦` as they near. |
 | `aquarium` | Fish of four shapes cross both ways, bubbles rise from them and grow, seaweed sways on the sand. |
 | `life` | Conway's Game of Life on a wrapping board of half blocks, two cells per row; newborn cells are pink, older ones violet. The board is seeded again when it dies out, repeats or reaches 300 generations. |
+| `cat` | A cat walks in slowly to the middle, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps twice, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out to the right and comes round again. |
+
+    ● Brewing… (8s)
+                      < meow >
+               /\_/\
+              ( o.o )
+               > ^ <
+               (_|_)~
 
 The band takes at most 8 rows and 100 columns, fewer when the terminal has less room, and draws nothing in a band under 3 rows. It draws on the terminal only, and gives way to a survey.
 
@@ -50,7 +58,7 @@ A name is lowercase letters, digits and dashes, up to 24 characters, and cannot 
 
     /idle-art                          the state: on or off, the style, the delay
     /idle-art on | off                 draw or stop drawing
-    /idle-art <scene or clip>          always draw that one: matrix, fire, stars, aquarium, life, or a saved clip
+    /idle-art <scene or clip>          always draw that one: matrix, fire, stars, aquarium, life, cat, or a saved clip
     /idle-art random                   a new scene or clip each turn and every 20 seconds or so (the default)
     /idle-art delay <n>                wait n seconds into a turn, 0 to 60 (default 3)
     /idle-art import <gif path> <name> turn a GIF into a clip and keep it under that name

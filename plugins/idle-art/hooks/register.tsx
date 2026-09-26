@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
+import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, nameProblem, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
 import { clipFromGif, isClip, type Clip } from './clip.ts'
 import { bytesOf } from './gif.ts'
 import type { NextMessage, SceneProps } from './scene.tsx'
@@ -33,13 +33,16 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
 
-/** The saved clips; a name whose entry is gone or broken is left out. */
+/**
+ * The saved clips; a name whose entry is gone or broken is left out, and so is one a built-in scene took
+ * after it was saved (`cat`), so the clip never hides the scene.
+ */
 async function loadClips($: EngineInterface): Promise<Map<string, Clip>> {
   const names = await $.store.get(CLIPS_KEY)
   const clips = new Map<string, Clip>()
   if (!Array.isArray(names)) return clips
   for (const name of names) {
-    if (typeof name !== 'string') continue
+    if (typeof name !== 'string' || nameProblem(name) !== null) continue
     const clip = await $.store.get(`${CLIP_PREFIX}${name}`)
     if (isClip(clip)) clips.set(name, clip)
   }
