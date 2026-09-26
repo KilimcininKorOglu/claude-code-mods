@@ -49,7 +49,7 @@ describe('reading', () => {
 
   test('the section reads context, tokens, cost, model with thinking, version and git, in that order', () => {
     expect(sidebarLines(reading())).toEqual([
-      { text: 'context 25% · 245k / 1.0M', kind: 'ok' },
+      { text: 'ctx 25% · 245k / 1.0M', kind: 'ok' },
       { text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', parts: [{ text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k' }, { text: ' · CH ' }, { text: '92%', kind: 'ok' }] },
       { text: 'cost $1.23' },
       {
@@ -77,7 +77,7 @@ describe('reading', () => {
 
   test('what is not known yet is said, not zeroed', () => {
     const lines = sidebarLines(reading({ context: { window: 200_000 }, costUsd: undefined, effort: undefined, git: undefined }))
-    expect(lines.map(l => l.text)).toEqual(['context: no reply yet', 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
+    expect(lines.map(l => l.text)).toEqual(['ctx: no reply yet', 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
     expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no thinking setting')
     expect(sidebarLines(reading({ seeding: true }))[1]?.text).toBe('tokens: reading the transcripts')
     expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · thinking budget 12000')

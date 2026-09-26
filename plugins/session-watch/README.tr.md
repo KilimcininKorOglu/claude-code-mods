@@ -7,14 +7,14 @@ Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u
 **Sidebar'ın en üstünde bir bölüm** (`order: 5`), Claude Code 2.1.282 üzerinde ölçüldü:
 
     session-watch: session
-    context 8% · 81k / 1.0M
+    ctx 8% · 81k / 1.0M
     tokens T 81k · I 2 · O 8 · CR 74k · CW 7k · CH 91%
     cost $0.07
     model opus-5-5[1m] · thinking medium
     Claude Code 2.1.282
     main · 1 untracked · no upstream
 
-- `context`: son cevabın input token'ı, modelin context window'u ve ikisinin oranı. %50 altı yeşil, %50 ile %80 arası sarı, %80 üstü kırmızı. Üç değeri de engine verir (`$.session.usage().context`), mod hiçbirini hesaplamaz. İlk cevaptan önce satır `context: no reply yet` yazar.
+- `ctx`: son cevabın input token'ı, modelin context window'u ve ikisinin oranı. %50 altı yeşil, %50 ile %80 arası sarı, %80 üstü kırmızı. Üç değeri de engine verir (`$.session.usage().context`), mod hiçbirini hesaplamaz. İlk cevaptan önce satır `ctx: no reply yet` yazar.
 - `tokens`: session'ın toplamları: `T` hepsi, `I` input, `O` output, `CR` cache read, `CW` cache write, ve `CH` cache hit: input token'larının cache'ten okunan payı, `CR / (I + CR + CW)`, aşağı yuvarlanır, böylece tek bir soğuk write'ı olan bir session hiçbir zaman %100 okumaz. Yalnız yüzde renklenir: %90 ve üstü yeşil, %70 ile %90 arası sarı, %70 altı kırmızı. İlk input'tan önce yazılmaz. Toplamı tutulmamış bir session, toplamları bir kez kendi transcript'lerinden (main loop'unkinden ve her subagent'ınkinden) okur ve her model cevabını bir kez sayar. Ondan sonra her turn kendi token'larını ekler, bir subagent'ınki de. Hiçbir transcript'in kaydetmediği bir request döndüğü anda sayılır: bir plugin'in kendi model çağrısı (`$.model.fork`, `$.model.complete`, örneğin memory-save'in her turn sonunda çalıştırdığı fork) ve bir compaction özeti. 2.1.282 üzerinde ölçüldü: 16 input token'lık bir fork ve 14'lük bir completion `I`'yı 2'den 32'ye çıkardı, ve bir fork `turn.complete` tetiklemez, bu yüzden bir kez sayılır. Toplamlar session başına `$.store` içinde tutulur, böylece reload edilen bir modül kaldığı yerden devam eder. Transcript'ler okunurken satır `tokens: reading the transcripts` yazar. 2.1.282 üzerinde resume edilen bir session'da ölçüldü: toplamlar `/cost`'un session modeline ait satırına eşitti, `6 input, 19 output, 222.3k cache read, 21.5k cache write`.
 - `cost`: session'ın maliyeti, `/cost`'un toplamı olarak ABD doları.
 - `model`: main loop'un modeli ve main loop'un son model request'inin thinking ayarı (`effort`): `low` ile `max` arası, bir budget, effort'u olmayan bir model için `no thinking setting`, ya da ilk request'ten önce `thinking: not read yet`. Modelin adı ailesine göre renklenir, en pahalısı en sıcak renkte: opus kırmızı, fable sarı, sonnet yeşil, haiku soluk. Thinking seviyesi ne kadar zorladığına göre renklenir: `low` soluk, `medium` yeşil, `high` sarı, `xhigh` ve `max` kırmızı. Tek bir kelimeyi renklendirmek için sidebar 0.11.0 veya sonrası gerekir; daha eski bir sidebar satırı tek renkle çizer.

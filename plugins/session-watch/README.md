@@ -7,14 +7,14 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
 **A section at the top of the sidebar** (`order: 5`), measured on Claude Code 2.1.282:
 
     session-watch: session
-    context 8% · 81k / 1.0M
+    ctx 8% · 81k / 1.0M
     tokens T 81k · I 2 · O 8 · CR 74k · CW 7k · CH 91%
     cost $0.07
     model opus-5-5[1m] · thinking medium
     Claude Code 2.1.282
     main · 1 untracked · no upstream
 
-- `context`: the input tokens of the last reply over the model's context window, and their share. Green under 50%, yellow from 50% to 80%, red above 80%. The engine reports all three (`$.session.usage().context`); the mod computes none of them. Before the first reply the line reads `context: no reply yet`.
+- `ctx`: the input tokens of the last reply over the model's context window, and their share. Green under 50%, yellow from 50% to 80%, red above 80%. The engine reports all three (`$.session.usage().context`); the mod computes none of them. Before the first reply the line reads `ctx: no reply yet`.
 - `tokens`: the session's totals: `T` all, `I` input, `O` output, `CR` cache reads, `CW` cache writes, and `CH` the cache hit: the share of the input tokens read from the cache, `CR / (I + CR + CW)`, rounded down so a session with any cold write never reads 100%. Only the percentage is coloured: green from 90%, yellow from 70% to 90%, red under 70%. It is left out before any input. A session with no totals kept reads them once from its transcripts (the main loop's and each subagent's), counting each model response once, and every turn after that adds its own, a subagent's too. A request no transcript records counts as it returns: a plugin's own model call (`$.model.fork`, `$.model.complete`, such as the fork memory-save runs at each turn's end) and a compaction's summary. Measured on 2.1.282: a fork of 16 input tokens and a completion of 14 raised `I` from 2 to 32, and a fork fires no `turn.complete`, so it counts once. The totals are kept in `$.store` per session, so a reloaded module goes on from them. While the transcripts are read the line reads `tokens: reading the transcripts`. Measured on 2.1.282 in a resumed session: the totals equalled the `/cost` row of the session's model, `6 input, 19 output, 222.3k cache read, 21.5k cache write`.
 - `cost`: the session's cost in US dollars, as `/cost` totals it.
 - `model`: the main loop's model, and the thinking setting (`effort`) of the main loop's last model request: `low` to `max`, a budget, `no thinking setting` for a model without one, or `thinking: not read yet` before the first request. The model's name is coloured by family, the dearest the warmest: opus red, fable yellow, sonnet green, haiku faint. The thinking level is coloured by how hard it asks: `low` faint, `medium` green, `high` yellow, `xhigh` and `max` red. Colouring one word needs sidebar 0.11.0 or later; an older sidebar draws the line in one colour.

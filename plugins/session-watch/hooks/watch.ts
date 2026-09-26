@@ -237,8 +237,8 @@ export function contextTone(percent: number): Tone {
 }
 
 function contextLine(c: Reading['context']): Line {
-  if (c.percent === undefined) return { text: 'context: no reply yet', kind: 'dim' }
-  return { text: `context ${c.percent}% · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`, kind: contextTone(c.percent) }
+  if (c.percent === undefined) return { text: 'ctx: no reply yet', kind: 'dim' }
+  return { text: `ctx ${c.percent}% · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`, kind: contextTone(c.percent) }
 }
 
 /**

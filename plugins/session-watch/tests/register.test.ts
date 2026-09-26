@@ -143,7 +143,7 @@ describe('session-watch', () => {
     await step($, 'high')
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)).toEqual([
-      { text: 'context 12% · 120k / 1.0M', kind: 'ok' },
+      { text: 'ctx 12% · 120k / 1.0M', kind: 'ok' },
       { text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500 · CH 84%', parts: [{ text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500' }, { text: ' · CH ' }, { text: '84%', kind: 'warn' }] },
       { text: 'cost $0.50' },
       {
