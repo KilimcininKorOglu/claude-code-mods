@@ -6,20 +6,35 @@ const ENABLED_KEY = 'enabled'
 const USAGE = 'expects nothing (the status), on or off'
 
 /**
- * The on/off setting, the level the person's last prompt was rated, whether this turn's line was drawn, and
- * the model of the last main-loop request, unknown until the first one.
+ * The on/off setting, the level the person's last prompt was rated, whether this turn's line was drawn,
+ * whether the sidebar holds that line now, and the model of the last main-loop request, unknown until the
+ * first one.
  */
-type State = { enabled: boolean; level?: Level; shown: boolean; model?: string }
+type State = { enabled: boolean; level?: Level; shown: boolean; inSidebar: boolean; model?: string }
+
+const SECTION = { consumer: 'effort-auto', key: 'effort' }
 
 /** The person's line: a standing sidebar section while the pane is open, else one transcript line. */
-async function toPerson($: EngineInterface, line: Line): Promise<void> {
+async function toPerson($: EngineInterface, state: State, line: Line): Promise<void> {
   try {
-    const taken = await $.sidebar.set({ consumer: 'effort-auto', key: 'effort', title: 'effort', lines: [line], until: 'session', order: 6 })
+    const taken = await $.sidebar.set({ ...SECTION, title: 'effort', lines: [line], until: 'session', order: 6 })
+    state.inSidebar = taken
     if (taken) return
   } catch {
     // The sidebar mod is not installed.
   }
   $.ui.log(line.text)
+}
+
+/** Drops the sidebar line of an earlier rated turn, so it never stands beside a turn that runs at another effort. */
+async function dropLine($: EngineInterface, state: State): Promise<void> {
+  if (!state.inSidebar) return
+  state.inSidebar = false
+  try {
+    await $.sidebar.clear(SECTION)
+  } catch {
+    // The sidebar mod went away since the line was drawn; there is nothing to drop.
+  }
 }
 
 /** The level the rater gives a prompt, or undefined when it did not answer with one. */
@@ -46,7 +61,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, shown: false }
+  const state: State = { enabled: true, shown: false, inSidebar: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -72,14 +87,18 @@ export const register: Register = on => {
   })
 
   // A main-loop request of a rated turn runs at the rated effort, on a model whose cache survives the change.
-  // Nothing is stored, so the next turn starts from the session's own effort.
+  // Nothing is stored, so the next turn starts from the session's own effort, and its request drops the line.
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId === undefined) state.model = e.model
+    if (e.agentId !== undefined) return yield* next(e)
+    state.model = e.model
     const level = state.level
-    if (e.agentId !== undefined || level === undefined || !keepsCacheAcrossEffort(e.model)) return yield* next(e)
+    if (level === undefined || !keepsCacheAcrossEffort(e.model)) {
+      await dropLine($, state)
+      return yield* next(e)
+    }
     if (!state.shown) {
       state.shown = true
-      await toPerson($, turnLine(level, e.effort))
+      await toPerson($, state, turnLine(level, e.effort))
     }
     return yield* next({ ...e, effort: level })
   })

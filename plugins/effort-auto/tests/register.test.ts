@@ -150,13 +150,23 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-withSidebar('an open sidebar holds the turn\'s level as a standing section, the level coloured', async ($, on) => {
+withSidebar('an open sidebar holds the turn\'s level as a standing section, the level coloured, until a turn that is not rated', async ($, on) => {
   const w = world(on)
   const sections: unknown[] = []
+  const cleared: unknown[] = []
   on('sidebar.set', (_, e) => { sections.push(e); return { value: true } })
+  on('sidebar.clear', (_, e) => { cleared.push(e); return { value: undefined } })
   await started($)
   await prompt($, 'hard work')
   await step($)
+  await step($)
+  expect(cleared).toEqual([])
+  await turnEnds($)
+  // The next turn is not rated (a notification), so its first request drops the line, once.
+  await prompt($, 'task done', 'task-notification')
+  await step($)
+  await step($)
+  expect(cleared).toEqual([{ consumer: 'effort-auto', key: 'effort' }])
   expect(sections).toEqual([{
     consumer: 'effort-auto', key: 'effort', title: 'effort', until: 'session', order: 6,
     lines: [{ text: 'this turn max · session high', parts: [{ text: 'this turn ' }, { text: 'max', kind: 'error' }, { text: ' · session high', kind: 'dim' }] }],

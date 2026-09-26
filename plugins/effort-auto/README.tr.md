@@ -9,7 +9,7 @@ Bu Claude Code Mod'u, yazdığınız her prompt'un zorluğunu küçük bir model
 3. Session ayarlarına hiçbir şey yazılmaz. Turn bitince sonraki turn yine session'ın effort'uyla başlar, kendi prompt'u puanlanırsa o seviyeyi alır.
 4. Task notification'ları, plugin'lerin gönderdiği prompt'lar ve çalışan bir turn'ün üstüne yazdığınız prompt'lar puanlanmaz. Bu turn'ler session'ın effort'uyla çalışır.
 5. Haiku cevap vermezse ya da seviye olmayan bir şey söylerse turn session'ın effort'uyla çalışır ve bunu bir satır bildirir.
-6. Puanlanan her turn'ün seviyesini görürsünüz. [sidebar](../sidebar) açıksa seviye kalıcı bir bölümde durur: `low` soluk, `medium` yeşil, `high` düz, `xhigh` sarı, `max` kırmızı. Sidebar kapalıysa transcript'e bir satır yazılır:
+6. Puanlanan her turn'ün seviyesini görürsünüz. [sidebar](../sidebar) açıksa seviye kalıcı bir bölümde durur: `low` soluk, `medium` yeşil, `high` düz, `xhigh` sarı, `max` kırmızı. Puanlanmayan bir turn'ün ilk isteği bu bölümü siler, böylece bölüm session'ın effort'uyla çalışan bir turn'ün yanında hiç durmaz. Sidebar kapalıysa transcript'e bir satır yazılır:
 
        effort-auto: this turn max · session low
 
@@ -47,7 +47,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=effort-auto}, prompt.submit, turn.step, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.model.complete (via rate), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via rate, toPerson)
+    ❯ ./register.ts calls: $.command.register, $.model.complete (via rate), $.sidebar.clear (via dropLine), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via rate, toPerson)
 
 Reach L3, her prompt için bir model isteği.
 
