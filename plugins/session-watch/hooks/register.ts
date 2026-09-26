@@ -17,7 +17,7 @@ const GIT_COMMAND = /\bgit\b/
  * What the hooks share: the repository the session started in, the session id, the token totals, the main
  * loop's last thinking setting, the engine's version, the last git state, and the last refresh error.
  */
-type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; version: string; git?: GitState; lastError?: string }
+type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; last?: Split; version: string; git?: GitState; lastError?: string }
 
 /** A transcript and its size when the reading began. */
 type Transcript = { path: string; size: number }
@@ -108,7 +108,7 @@ async function readGit($: EngineInterface, state: State): Promise<GitState> {
 async function readNow($: EngineInterface, state: State): Promise<Reading> {
   const [usage, model, git] = await Promise.all([$.session.usage(), $.session.model(), readGit($, state)])
   state.git = git
-  return { context: usage.context, costUsd: usage.cost?.usd, split: state.split, seeding: state.seeding, model, effort: state.effort, version: state.version, git }
+  return { context: usage.context, costUsd: usage.cost?.usd, split: state.split, last: state.last, seeding: state.seeding, model, effort: state.effort, version: state.version, git }
 }
 
 /** Writes the reading into the sidebar, and into the status line while the sidebar does not take it. */
@@ -177,10 +177,14 @@ export const register: Register = on => {
     return r
   })
 
-  // The main loop's request says how hard it asks the model to think; a subagent's has its own setting.
+  // The main loop's request says how hard it asks the model to think, and its usage is the window's own; a
+  // subagent's request has its own setting and its own window.
   on('turn.step', async function* (_$, e, next) {
     if (e.agentId === undefined) state.effort = e.effort ?? null
-    return yield* next(e)
+    const r = yield* next(e)
+    // The main loop's last request holds the context window, so its split is the window's own.
+    if (e.agentId === undefined && r.usage) state.last = addSplit(NO_SPLIT, r.usage)
+    return r
   })
 
   // Every loop's turn counts toward the totals, as /cost counts them; the main loop's end redraws.

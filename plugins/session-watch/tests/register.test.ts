@@ -48,14 +48,14 @@ const SUB = `${DIR}/${SID}/subagents/agent-a1.jsonl`
 type Line = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
 
 /** The world: what git prints, what the usage says, the files, the store, and what the person saw. */
-type World = { git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
+type World = { stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
 
 /** One transcript row of a model response, as the engine writes one per content block. */
 const response = (id: string | undefined, input: number, output: number): string =>
   JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } })
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
+  const w: World = { stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
   mock.env(on, { HOME: '/Users/u' })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
@@ -94,7 +94,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('turn.step', async function* (_, e) {
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: null }
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: null, usage: w.stepUsage }
   })
   on('tool.call', { tool: 'Bash' }, () => ({ result: { stdout: '', stderr: '', interrupted: false } }) as never)
   // Measured on 2.1.282: a fork of 16 input tokens and a haiku completion of 14.
@@ -154,6 +154,23 @@ describe('session-watch', () => {
       { text: 'main · clean · ↑0 ↓0', kind: 'ok' },
     ])
     expect(w.statuses.at(-1)).toBe(undefined)
+  })
+
+  withSidebar('the ctx line carries the last main-loop request, the window it holds now', async ($, on) => {
+    const w = world(on)
+    seatSidebar(on, w)
+    w.bar.open = true
+    await started($, w)
+    w.stepUsage = { input_tokens: 2, output_tokens: 300, cache_read_input_tokens: 450_000, cache_creation_input_tokens: 3000, model: 'claude-opus-5-5' }
+    await step($)
+    // A subagent's request holds a window of its own, so it leaves the line as it was.
+    w.stepUsage = { input_tokens: 9, output_tokens: 9, cache_read_input_tokens: 0, cache_creation_input_tokens: 9, model: 'claude-haiku-4-5' }
+    await step($, undefined, 'a1')
+    await $.turn.complete(turn())
+    expect(w.bar.lines.at(-1)?.[0]).toEqual({
+      text: 'ctx 12% · 120k / 1.0M · I 2 · O 300 · CR 450k · CW 3k · CH 99%',
+      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · I 2 · O 300 · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
+    })
   })
 
   test('every loop\'s turns add to the totals, which the store keeps for a reloaded module', async ($, on) => {

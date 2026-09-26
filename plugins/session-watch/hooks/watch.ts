@@ -211,6 +211,8 @@ export type Reading = {
   context: { tokens?: number; window: number; percent?: number }
   costUsd?: number
   split: Split
+  /** The split of the last main-loop request, which holds the context window now; unknown before one. */
+  last?: Split
   /** Whether the session's transcripts are still being read into the totals. */
   seeding: boolean
   model: string
@@ -236,9 +238,16 @@ export function contextTone(percent: number): Tone {
   return percent <= 80 ? 'warn' : 'error'
 }
 
-function contextLine(c: Reading['context']): Line {
+/**
+ * The context line: the window's fill, then the split of the last main-loop request, the one that holds the
+ * window now. Without that request's split the whole line takes the fill's colour, as before; with it only
+ * the two percentages are coloured.
+ */
+function contextLine(c: Reading['context'], last: Split | undefined): Line {
   if (c.percent === undefined) return { text: 'ctx: no reply yet', kind: 'dim' }
-  return { text: `ctx ${c.percent}% · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`, kind: contextTone(c.percent) }
+  const fill = ` · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`
+  if (last === undefined) return { text: `ctx ${c.percent}%${fill}`, kind: contextTone(c.percent) }
+  return partsLine([part('ctx ', undefined), part(`${c.percent}%`, contextTone(c.percent)), part(fill, undefined), ...splitParts(last)])
 }
 
 /**
@@ -256,12 +265,18 @@ export function cacheHitTone(percent: number): Tone {
   return percent >= 70 ? 'warn' : 'error'
 }
 
+/** A split by kind, then its cache hit with only the percentage coloured; no hit before any input. */
+function splitParts(s: Split): Part[] {
+  const kinds = part(` · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
+  const hit = cacheHit(s)
+  return hit === undefined ? [kinds] : [kinds, part(' · CH ', undefined), part(`${hit}%`, cacheHitTone(hit))]
+}
+
 function tokensLine(s: Split, seeding: boolean): Line {
   if (seeding) return { text: 'tokens: reading the transcripts', kind: 'dim' }
-  const totals = part(`tokens T ${fmtTok(totalOf(s))} · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
-  const hit = cacheHit(s)
-  if (hit === undefined) return { text: totals.text }
-  return partsLine([totals, part(' · CH ', undefined), part(`${hit}%`, cacheHitTone(hit))])
+  const [kinds, ...hit] = splitParts(s)
+  const totals = part(`tokens T ${fmtTok(totalOf(s))}${kinds?.text ?? ''}`, undefined)
+  return hit.length === 0 ? { text: totals.text } : partsLine([totals, ...hit])
 }
 
 function costLine(usd: number | undefined): Line {
@@ -308,7 +323,7 @@ export function gitLine(git: GitState | undefined): Line {
 
 /** The reading as the sidebar section's lines, in the order the person reads them. */
 export function sidebarLines(r: Reading): Line[] {
-  return [contextLine(r.context), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, gitLine(r.git)]
+  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, gitLine(r.git)]
 }
 
 /** The short status line while the sidebar is closed: `ctx 24% · $1.23 · main*`. */
