@@ -503,6 +503,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "idle-art",
+      "source": "./plugins/idle-art",
+      "description": "Draws an ASCII animation above the prompt while the model works: matrix rain, fire, a star field, an aquarium or the Game of Life. Display only: nothing reaches the model.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
