@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Effort, type GitState, type OtherSession, type Reading, type Split, type Usage, type UsageScanner,
 } from './watch.ts'
 
@@ -17,7 +17,7 @@ const GIT_COMMAND = /\bgit\b/
  * What the hooks share: the repository the session started in, the session id, the token totals, the main
  * loop's last effort setting and the effort that request went out with, the engine's version, the last git state, and the last refresh error.
  */
-type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; sent?: Effort; last?: Split; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
+type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; sent?: Effort; last?: Split; tailError?: string; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
 
 /** A transcript and its size when the reading began. */
 type Transcript = { path: string; size: number }
@@ -146,32 +146,53 @@ async function startTotals($: EngineInterface, state: State): Promise<void> {
   }
 }
 
-/** How much of the transcript's end is read for the last recorded effort. */
-const EFFORT_TAIL_BYTES = 262_144
+/**
+ * How much of the transcript's end is read for the last recorded effort and split, each size tried after
+ * the one before found no response. A resumed session writes large attachment lines after the last
+ * response (measured: 294 KiB), and `$.process.run` cuts its output at 4 MiB.
+ */
+const TAIL_BYTES = [262_144, 1_048_576, 4_000_000]
+
+/** What the main transcript's tail says before the session's next request: the last effort and the last split. */
+type Tail = { effort?: string | number; last?: Split }
 
 /**
- * The effort to show before the session's first request: the one the transcript's last response recorded
- * (a resumed session), else the effort the environment or the settings name; undefined when none does.
+ * The effort and the context split to show before the session's first request: what the transcript's last
+ * response recorded (a resumed or reloaded session), and for the effort, else what the environment or the
+ * settings name.
  */
-async function startEffort($: EngineInterface, state: State): Promise<string | number | undefined> {
+async function readTail($: EngineInterface, state: State): Promise<Tail> {
   const main = `${transcriptDir(await configDirOf($), state.root)}/${state.sid}.jsonl`
-  if (await $.fs.exists(main)) {
-    const r = await $.process.run(['tail', '-c', String(EFFORT_TAIL_BYTES), main], { timeoutMs: GIT_MS })
-    if (r.exitCode !== 0) throw new Error(`${main}: ${r.stderr.trim()}`)
-    const recorded = lastEffortOf(r.stdout)
-    if (recorded !== undefined) return recorded
-  }
+  const tail = (await $.fs.exists(main)) ? await tailWithResponse($, main) : ''
+  const recorded = lastEffortOf(tail)
   const env = await $.env.get('CLAUDE_CODE_EFFORT_LEVEL')
-  return env !== undefined && env !== '' ? env : settingsEffort(await $.settings.read())
+  const effort = recorded ?? (env !== undefined && env !== '' ? env : settingsEffort(await $.settings.read()))
+  return { effort, last: lastSplitOf(tail) }
 }
 
-/** Seeds the effort line unless a request has already set it, and says a failed read once. */
-async function seedEffort($: EngineInterface, state: State): Promise<void> {
+/** The shortest end of the transcript that holds a response, or its last 4 MB when none does. */
+async function tailWithResponse($: EngineInterface, path: string): Promise<string> {
+  const size = (await $.fs.stat(path)).size
+  let tail = ''
+  for (const bytes of TAIL_BYTES) {
+    const r = await $.process.run(['tail', '-c', String(bytes), path], { timeoutMs: GIT_MS })
+    if (r.exitCode !== 0) throw new Error(`${path}: ${r.stderr.trim()}`)
+    tail = r.stdout
+    if (lastSplitOf(tail) !== undefined || bytes >= size) break
+  }
+  return tail
+}
+
+/** Seeds the effort and the context split unless a request has already set them, and says a failed read once. */
+async function seedFromTail($: EngineInterface, state: State): Promise<void> {
   try {
-    const found = await startEffort($, state)
-    if (state.effort === undefined && found !== undefined) state.effort = found
+    const found = await readTail($, state)
+    if (state.effort === undefined && found.effort !== undefined) state.effort = found.effort
+    if (state.last === undefined && found.last !== undefined) state.last = found.last
   } catch (err) {
-    $.ui.log(`the effort was not read before the first request: ${err instanceof Error ? err.message : String(err)}`)
+    const text = `the transcript's last response was not read before the first request: ${err instanceof Error ? err.message : String(err)}`
+    if (text !== state.tailError) $.ui.log(text)
+    state.tailError = text
   }
 }
 
@@ -229,6 +250,8 @@ async function show($: EngineInterface, reading: Reading): Promise<void> {
 
 /** Reads and shows; a failed read is logged once instead of thrown, because a timer has no hook to fail. */
 async function refresh($: EngineInterface, state: State): Promise<void> {
+  // A resumed session's transcript is written after session.start, so its last split is read again until found.
+  if (state.last === undefined) await seedFromTail($, state)
   try {
     await show($, await readNow($, state))
     state.lastError = undefined
@@ -275,7 +298,6 @@ export const register: Register = on => {
     state.sid = await $.session.id()
     state.version = (await $.session.version()).version
     await startTotals($, state)
-    await seedEffort($, state)
     await $.command.register({ name: 'session-watch', description: 'This session\'s context, tokens, cost, model, version and git state (session-watch)', immediate: true })
     // A -p run draws nothing, so only an interactive session refreshes on a timer.
     if (e.isInteractive) $.clock.every(TICK_MS, () => void refresh($, state))

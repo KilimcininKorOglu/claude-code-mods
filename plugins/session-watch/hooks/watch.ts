@@ -237,24 +237,35 @@ function effortValue(v: unknown): string | number | undefined {
   return (typeof v === 'string' && v !== '') || typeof v === 'number' ? v : undefined
 }
 
-/**
- * The effort the last assistant line of a transcript's tail recorded, the engine's `effort` field on each
- * response; undefined when the tail holds none. A first line cut by the tail does not parse and is skipped.
- */
-export function lastEffortOf(tail: string): string | number | undefined {
+/** The last assistant line of a transcript's tail that `pick` finds a value on; a line the tail cut in two is skipped. */
+function lastAssistant<T>(tail: string, pick: (row: { effort?: unknown; message?: { usage?: unknown } }) => T | undefined): T | undefined {
   const lines = tail.split('\n')
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i] ?? ''
-    if (!line.includes('"effort"')) continue
+    if (!line.includes('"assistant"')) continue
     try {
-      const d = JSON.parse(line) as { type?: unknown; effort?: unknown }
-      const found = d.type === 'assistant' ? effortValue(d.effort) : undefined
+      const d = JSON.parse(line) as { type?: unknown; effort?: unknown; message?: { usage?: unknown } }
+      const found = d.type === 'assistant' ? pick(d) : undefined
       if (found !== undefined) return found
     } catch {
       // A line the tail cut in two is not a record.
     }
   }
   return undefined
+}
+
+/** The effort the last response of a transcript's tail recorded, the engine's `effort` field on each response. */
+export function lastEffortOf(tail: string): string | number | undefined {
+  return lastAssistant(tail, d => effortValue(d.effort))
+}
+
+/**
+ * The split of the last response a transcript's tail recorded: the request that holds the context window,
+ * so the context line has it before the session's next request.
+ */
+export function lastSplitOf(tail: string): Split | undefined {
+  const usage = lastAssistant(tail, d => usageOf(d.message))
+  return usage === undefined ? undefined : addSplit(NO_SPLIT, usage)
 }
 
 /** The effort settings name: `effortLevel`, as `/effort` writes it; undefined when none is set. */

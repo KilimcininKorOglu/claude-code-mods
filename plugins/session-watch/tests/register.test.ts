@@ -297,6 +297,20 @@ describe('session-watch', () => {
     expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · effort high')
   })
 
+  test('a reloaded session shows the last response\'s cache split on the ctx line before its next request', async ($, on) => {
+    const w = world(on)
+    w.files.set(MAIN, `${response('m1', 5, 7)}\n`)
+    await started($, w)
+    expect((await $.command.run(run)).text?.split('\n')[0]).toBe('ctx 12% · 120k / 1.0M · CR 100 · CW 10 · CH 86%')
+  })
+
+  test('a response further back than the first tail read is found by a longer one', async ($, on) => {
+    const w = world(on)
+    w.files.set(MAIN, `${response('m1', 5, 7)}\n${JSON.stringify({ type: 'attachment', text: 'x'.repeat(300_000) })}\n`)
+    await started($, w)
+    expect((await $.command.run(run)).text?.split('\n')[0]).toBe('ctx 12% · 120k / 1.0M · CR 100 · CW 10 · CH 86%')
+  })
+
   test('a new session with no transcript line shows the settings\' effort level until its first request', async ($, on) => {
     const w = world(on)
     w.settings = { effortLevel: 'low' }

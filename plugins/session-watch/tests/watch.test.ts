@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -109,6 +109,13 @@ describe('reading', () => {
     expect(sidebarLines(reading({ effort: 'medium', sent: 'medium' }))[3]?.text).toBe('model opus-5-5 · effort medium')
     expect(sidebarLines(reading({ effort: 'medium', sent: undefined }))[3]?.text).toBe('model opus-5-5 · effort medium')
     expect(sidebarLines(reading({ effort: null, sent: null }))[3]?.text).toBe('model opus-5-5 · no effort setting')
+  })
+
+  test('the last assistant line of a tail with a usage gives the context split', () => {
+    const row = (usage?: object) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', ...(usage === undefined ? {} : { usage }) } })
+    const tail = ['ge":{"input_tokens":9}}}', row({ input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 300, cache_creation_input_tokens: 4 }), row(), JSON.stringify({ type: 'user' })].join('\n')
+    expect(lastSplitOf(tail)).toEqual({ input: 1, output: 2, cacheRead: 300, cacheWrite: 4, thinking: 0 })
+    expect(lastSplitOf('')).toBe(undefined)
   })
 
   test('the status line holds the fill, the cost, the last request\'s cache split and the branch, and marks a changed tree with a star', () => {
