@@ -34,7 +34,7 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
                > ^ <
                (_|_)~
 
-The band takes at most 8 rows and 100 columns, fewer when the terminal has less room, and draws nothing in a band under 3 rows. It draws on the terminal only, and gives way to a survey. The scenes draw about 60 frames a second, and each moves by the time that passed, so the rain, the stars, the fish and the cat glide a step on every frame. The fire's heat changes ten times a second, and a clip changes at its own frame delays.
+The band takes at most 8 rows, fewer when the terminal has less room, and the terminal's whole width; a clip stands in its middle. It draws nothing in a band under 3 rows. It draws on the terminal only, and gives way to a survey. The scenes draw about 60 frames a second, and each moves by the time that passed, so the rain, the stars, the fish and the cat glide a step on every frame. The fire's heat changes ten times a second, and a clip changes at its own frame delays.
 
 ## Your own GIFs
 

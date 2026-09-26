@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, nameProblem, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
+import { BAND_ROWS, CLIP_COLUMNS, configOf, helpText, isStyle, nameProblem, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
 import { clipFromGif, isClip, type Clip } from './clip.ts'
 import { bytesOf } from './gif.ts'
 import type { NextMessage, SceneProps } from './scene.tsx'
@@ -82,7 +82,7 @@ async function sceneFor($: EngineInterface, state: State, band: { maxRows: numbe
   const height = Math.min(BAND_ROWS, band.maxRows)
   const waited = now - (state.since ?? now) >= state.cfg.delaySec * 1000
   if (state.style === null || !waited || height < MIN_ROWS) return null
-  state.size = { width: Math.min(BAND_COLUMNS, band.bodyColumns), height }
+  state.size = { width: band.bodyColumns, height }
   return propsOf(state, state.style, state.size)
 }
 
@@ -152,7 +152,7 @@ async function importGif($: EngineInterface, state: State, typed: string, name: 
   let dropped: number
   let frames: number
   try {
-    ;({ clip, dropped, frames } = clipFromGif(await readGifBytes($, path), BAND_COLUMNS, BAND_ROWS))
+    ;({ clip, dropped, frames } = clipFromGif(await readGifBytes($, path), CLIP_COLUMNS, BAND_ROWS))
   } catch (err) {
     return `cannot import ${typed}: ${errorText(err)}`
   }

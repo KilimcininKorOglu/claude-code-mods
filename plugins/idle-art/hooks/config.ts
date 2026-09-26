@@ -12,9 +12,10 @@ export type Config = { enabled: boolean; style: Choice; delaySec: number }
 export const DEFAULT_DELAY_SEC = 3
 export const MAX_DELAY_SEC = 60
 
-/** Rows the band takes at most, and columns. */
+/** Rows the band takes at most; a scene takes the band's whole width. */
 export const BAND_ROWS = 8
-export const BAND_COLUMNS = 100
+/** Columns an imported clip may take at most. */
+export const CLIP_COLUMNS = 100
 
 /** Words the command reads itself, so no clip may take them as its name. */
 const RESERVED = new Set(['random', 'on', 'off', 'help', 'delay', 'import', 'list', 'remove'])

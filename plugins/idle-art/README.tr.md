@@ -34,7 +34,7 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
                > ^ <
                (_|_)~
 
-Band en fazla 8 satır ve 100 sütun kaplar. Terminalde daha az yer varsa daha küçük çizilir. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir. Sahneler saniyede yaklaşık 60 kare çizilir ve her biri geçen süre kadar ilerler. Böylece yağmur, yıldızlar, balıklar ve kedi her karede bir adım kayar. Ateşin ısısı saniyede on kez değişir, bir klip de kendi kare sürelerine göre değişir.
+Band en fazla 8 satır kaplar ve terminalin tüm genişliğini kullanır. Terminalde daha az satır varsa daha alçak çizilir. Bir klip band'in ortasında durur. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir. Sahneler saniyede yaklaşık 60 kare çizilir ve her biri geçen süre kadar ilerler. Böylece yağmur, yıldızlar, balıklar ve kedi her karede bir adım kayar. Ateşin ısısı saniyede on kez değişir, bir klip de kendi kare sürelerine göre değişir.
 
 ## Kendi GIF'lerin
 
