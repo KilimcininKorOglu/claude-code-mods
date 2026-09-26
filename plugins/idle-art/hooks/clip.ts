@@ -1,4 +1,4 @@
-import type { Gif } from './gif.ts'
+import { readGif, type Gif } from './gif.ts'
 import { BLANK, blankFrame, runsOf, type Animation, type Cell, type Frame } from './art/grid.ts'
 
 /** A run of one colour in a stored row: its text and its colour ('' for none). */
@@ -90,13 +90,13 @@ function span(i: number, n: number, size: number): [number, number] {
   return [a, Math.max(a + 1, Math.floor(((i + 1) * size) / n))]
 }
 
-/** The mean of every cell of one frame, row by row. */
-function frameMeans(rgba: Uint8Array, gif: Gif, cols: number, rows: number): Mean[][] {
+/** The mean of every cell of one frame of `width` by `height` pixels, row by row. */
+function frameMeans(rgba: Uint8Array, width: number, height: number, cols: number, rows: number): Mean[][] {
   return Array.from({ length: rows }, (_, cy) => {
-    const [y0, y1] = span(cy, rows, gif.height)
+    const [y0, y1] = span(cy, rows, height)
     return Array.from({ length: cols }, (_, cx) => {
-      const [x0, x1] = span(cx, cols, gif.width)
-      return average(rgba, gif.width, { x0, x1, y0, y1 })
+      const [x0, x1] = span(cx, cols, width)
+      return average(rgba, width, { x0, x1, y0, y1 })
     })
   })
 }
@@ -116,15 +116,38 @@ function thinned(clip: Clip): Clip {
   return { ...clip, frames, delays }
 }
 
-/** A GIF as a clip for a band of `cols` by `rows`, with frames dropped until it fits the size limit. */
-export function toClip(gif: Gif, cols: number, rows: number): { clip: Clip; dropped: number } {
-  const size = fitSize(gif.width, gif.height, cols, rows)
-  const means = gif.frames.map(f => frameMeans(f.rgba, gif, size.cols, size.rows))
-  const range = rangeOf(means)
-  let clip: Clip = { width: size.cols, height: size.rows, delays: gif.frames.map(f => f.delayMs), frames: means.map(m => frameRows(m, range)) }
+/** The cell means and delays of every frame, as the frames are decoded. */
+type Means = { cols: number; rows: number; means: Mean[][][]; delays: number[] }
+
+/** A clip from the frames' cell means, with frames dropped until it fits the size limit. */
+function clipOf(m: Means): { clip: Clip; dropped: number } {
+  const range = rangeOf(m.means)
+  let clip: Clip = { width: m.cols, height: m.rows, delays: m.delays, frames: m.means.map(f => frameRows(f, range)) }
   while (JSON.stringify(clip).length > MAX_CLIP_CHARS && clip.frames.length > 1) clip = thinned(clip)
   if (JSON.stringify(clip).length > MAX_CLIP_CHARS) throw new Error(`one frame is over ${MAX_CLIP_CHARS} characters`)
-  return { clip, dropped: gif.frames.length - clip.frames.length }
+  return { clip, dropped: m.means.length - clip.frames.length }
+}
+
+/** A decoded GIF as a clip for a band of `cols` by `rows`. */
+export function toClip(gif: Gif, cols: number, rows: number): { clip: Clip; dropped: number } {
+  const size = fitSize(gif.width, gif.height, cols, rows)
+  const means = gif.frames.map(f => frameMeans(f.rgba, gif.width, gif.height, size.cols, size.rows))
+  return clipOf({ ...size, means, delays: gif.frames.map(f => f.delayMs) })
+}
+
+/**
+ * A GIF file's bytes as a clip for a band of `cols` by `rows`: each frame is
+ * reduced to its cell means as it is decoded, so a large GIF never holds more
+ * than one frame of pixels.
+ */
+export function clipFromGif(bytes: Uint8Array, cols: number, rows: number): { clip: Clip; dropped: number; frames: number } {
+  const m: Means = { cols: 0, rows: 0, means: [], delays: [] }
+  const { count } = readGif(bytes, (frame, width, height) => {
+    if (m.means.length === 0) Object.assign(m, fitSize(width, height, cols, rows))
+    m.means.push(frameMeans(frame.rgba, width, height, m.cols, m.rows))
+    m.delays.push(frame.delayMs)
+  })
+  return { ...clipOf(m), frames: count }
 }
 
 /** Whether a stored value has the shape of a clip, so a broken store entry is refused rather than drawn. */

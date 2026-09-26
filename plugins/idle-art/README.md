@@ -42,7 +42,7 @@ The mod reads the GIF, decodes every frame with its own delay and transparency, 
         ....-====+-=:--:::::.:-+-....
         ....:-=*++*+++=-:-=--=-=-....
 
-A clip is kept under 90,000 characters, because that is what one drawing may hand the drawing thread. A longer clip keeps every other frame, each kept frame showing for the time of both, until it fits; the answer says how many frames stayed. The clips live in the mod's store, which holds 4 MiB in all, so about forty clips fit; a clip that does not fit is refused with the reason.
+A clip is kept under 90,000 characters, because that is what one drawing may hand the drawing thread. A longer clip keeps every other frame, each kept frame showing for the time of both, and does so again until it fits; the answer says how many frames stayed. The clips live in the mod's store, which holds 4 MiB in all, so about forty clips fit; a clip that does not fit is refused with the reason.
 
 A name is lowercase letters, digits and dashes, up to 24 characters, and cannot be a built-in scene or a word the command reads. Importing under a saved name replaces that clip. A path starting with `~` is under your home directory, and a relative path is under the session's directory. A path may hold spaces: the last word is the name.
 
@@ -90,14 +90,14 @@ Restart Claude Code, or run `/reload-plugins` in an open session. The mod is on 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
-    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
     ❯ ./register.tsx env reads: HOME
     ❯ ./register.tsx surface modules: hooks/scene.tsx
 
-Reach L1, reads the GIF you import.
+Reach L2, runs `base64` to read a GIF over 4 MiB.
 
-    1. Reads:    the band's props (working, survey, rows, columns) and the clock; its settings and clips from the store; the GIF a /idle-art import names, once, when it is 4 MiB or smaller; HOME and the session's directory to resolve that path
-    2. Runs:     nothing; no process and no fork; one timer per turn for the delay, and the drawing thread's 100 ms tick while the band shows
+    1. Reads:    the band's props (working, survey, rows, columns) and the clock; its settings and clips from the store; the GIF a /idle-art import names, once, when it is 32 MiB or smaller; HOME and the session's directory to resolve that path
+    2. Runs:     base64 -i <path> for a GIF over 4 MiB, once per import; no fork; one timer per turn for the delay, and the drawing thread's 100 ms tick while the band shows
     3. Sends:    nothing; no network call and nothing to the model
     4. Persists: the on/off state, the style, the delay and each imported clip in the mod's store
     5. Hostile input: a GIF is untrusted bytes: the decoder bounds every read by the file's length, refuses a broken code stream or a missing color table, stops at 500 frames, and an import that fails keeps nothing; a stored clip of the wrong shape is skipped at load; the command takes a fixed word list, a whole number from 0 to 60, and a clip name of lowercase letters, digits and dashes
@@ -105,7 +105,8 @@ Reach L1, reads the GIF you import.
 ## Limits
 
 - 8 rows is a small canvas: a GIF becomes about 30 columns by 8 rows at the usual 2:1 shape, enough for a silhouette or a motion, not for detail.
-- The GIF is read whole, and `$.fs.read` refuses a file over 4 MiB.
+- A GIF of up to 4 MiB is read with `$.fs.read`. A larger one, up to 32 MiB, is read through `base64 -i <path>` piece by piece, because `$.fs.read` refuses a file over 4 MiB and `$.process.run` cuts its output at 4 MiB (measured on 2.1.283). The bytes that come back must match the file's size, or the import is refused.
+- Each frame is reduced to its cells as it is decoded, so a large GIF holds one frame of pixels at a time. A GIF stops at 500 frames.
 - A long GIF loses frames to the 90,000-character limit; its motion stays as long, but steps more coarsely.
 - The terminal draws the colours with its own palette; a terminal without true colour shows the nearest of its 256 colours.
 - `matrix` draws half-width katakana, and `stars` draws `∗` and `✦`. A font without those glyphs draws a replacement character.

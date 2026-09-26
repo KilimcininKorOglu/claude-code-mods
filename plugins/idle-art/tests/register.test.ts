@@ -1,16 +1,16 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
-import { TWO_FRAMES } from './fixtures.ts'
+import { BIG_GIF, TWO_FRAMES } from './fixtures.ts'
 
 tier('user')
 
 const T0 = Date.parse('2026-09-26T12:00:00Z')
 
 /** The world: the store, the clock, the files by path (base64), and whether the store refuses a write as full. */
-type World = { store: Record<string, unknown>; clock: MockClock; files: Map<string, string>; full: boolean }
+type World = { store: Record<string, unknown>; clock: MockClock; files: Map<string, string>; sizes: Map<string, number>; full: boolean }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { store: { ...store }, clock: mock.clock(on, { now: T0 }), files: new Map(), full: false }
+  const w: World = { store: { ...store }, clock: mock.clock(on, { now: T0 }), files: new Map(), sizes: new Map(), full: false }
   mock.env(on, { HOME: '/Users/u' })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => {
@@ -21,7 +21,19 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
   on('session.cwd', () => ({ value: '/work' }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
-  on('fs.stat', (_, e) => ({ value: { kind: 'file', size: (w.files.get(e.path)?.length ?? 0) * 0.75, mtimeMs: 1, isLink: false } }))
+  on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.sizes.get(e.path) ?? Math.floor(((w.files.get(e.path) ?? '').replace(/=+$/, '').length * 3) / 4), mtimeMs: 1, isLink: false } }))
+  // `base64 -i <path>`: the file's base64 in lines of 76, streamed in pieces of 64 KiB.
+  on('process.spawn', async function* (_, e) {
+    if (e.argv[0] !== 'base64' || e.argv[1] !== '-i') throw new Error(`unexpected ${e.argv.join(' ')}`)
+    const text = w.files.get(e.argv[2] ?? '')
+    if (text === undefined) {
+      yield { stream: 'stderr' as const, text: `base64: ${e.argv[2]}: No such file or directory\n` }
+      return { value: { code: 1, signal: null } }
+    }
+    const out = `${text.match(/.{1,76}/g)?.join('\n') ?? ''}\n`
+    for (let i = 0; i < out.length; i += 65_536) yield { stream: 'stdout' as const, text: out.slice(i, i + 65_536) }
+    return { value: { code: 0, signal: null } }
+  })
   on('fs.read', (_, e) => ({ value: { base64: w.files.get(e.path) ?? '' } }) as never)
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -149,6 +161,21 @@ describe('register', () => {
       await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer' })
     }
     expect(seen.has('blink')).toBe(true)
+  })
+
+  test('a GIF over the 4 MiB read limit is read through base64, and one over 32 MiB is refused', async ($, on) => {
+    const w = world(on)
+    // The two frames with 4.5 MiB of comment blocks before the trailer: a real GIF over the read limit.
+    w.files.set('/work/big.gif', BIG_GIF)
+    await $.session.start(start)
+    expect((await $.command.run(run('import big.gif big'))).text).toBe('saved big: 2 frames, 32×8 cells. Use it with /idle-art big; random draws it too.')
+    // A stat that disagrees with what base64 decodes to is caught, not drawn from.
+    w.files.set('/work/cut.gif', BIG_GIF)
+    w.sizes.set('/work/cut.gif', 5 * 1024 * 1024)
+    expect((await $.command.run(run('import cut.gif cut'))).text).toMatch(/^cannot import cut\.gif: base64 gave \d+ bytes of 5242880$/)
+    w.files.set('/work/huge.gif', TWO_FRAMES)
+    w.sizes.set('/work/huge.gif', 33 * 1024 * 1024)
+    expect((await $.command.run(run('import huge.gif huge'))).text).toBe('cannot import huge.gif: /work/huge.gif is 33 MiB, over the 32 MiB limit')
   })
 
   test('an import that cannot read the GIF or cannot store it names the reason and keeps nothing', async ($, on) => {

@@ -234,23 +234,35 @@ function readScreen(r: Reader): Screen {
   return { width, height, canvas: new Uint8Array(width * height * 4), global: packed & 0x80 ? colorTable(r, packed) : null }
 }
 
-/** Decodes a GIF87a or GIF89a file into composed frames. Throws with a reason on a file it cannot read. */
-export function decodeGif(bytes: Uint8Array): Gif {
+/**
+ * Decodes a GIF87a or GIF89a file frame by frame, handing each composed frame
+ * to `visit` as it is made, so no more than one frame's pixels are held at once.
+ * Answers the screen's size and the number of frames. Throws with a reason on a
+ * file it cannot read.
+ */
+export function readGif(bytes: Uint8Array, visit: (frame: GifFrame, width: number, height: number) => void): { width: number; height: number; count: number } {
   const r = new Reader(bytes)
   const s = readScreen(r)
-  const { width, height } = s
-  const frames: GifFrame[] = []
+  let count = 0
   let ctl: Control = { delayMs: DEFAULT_DELAY_MS, transparent: null, disposal: 0 }
-  while (frames.length < MAX_FRAMES) {
+  while (count < MAX_FRAMES) {
     const kind = r.byte()
     if (kind === 0x3b) break
     if (kind === 0x2c) {
-      frames.push(drawImage(r, s, ctl))
+      visit(drawImage(r, s, ctl), s.width, s.height)
+      count += 1
       ctl = { delayMs: DEFAULT_DELAY_MS, transparent: null, disposal: 0 }
     } else if (kind === 0x21) ctl = readExtension(r, ctl)
     else throw new Error(`the GIF holds an unknown block 0x${kind.toString(16)}`)
   }
-  if (frames.length === 0) throw new Error('the GIF has no image')
+  if (count === 0) throw new Error('the GIF has no image')
+  return { width: s.width, height: s.height, count }
+}
+
+/** Decodes a GIF into all its composed frames at once; for a small GIF, as the tests use. */
+export function decodeGif(bytes: Uint8Array): Gif {
+  const frames: GifFrame[] = []
+  const { width, height } = readGif(bytes, f => frames.push(f))
   return { width, height, frames }
 }
 

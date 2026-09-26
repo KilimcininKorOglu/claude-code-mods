@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, parseArgs, pickStyle, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
-import { isClip, toClip, type Clip } from './clip.ts'
-import { bytesOf, decodeGif } from './gif.ts'
+import { clipFromGif, isClip, type Clip } from './clip.ts'
+import { bytesOf } from './gif.ts'
 import type { SceneProps } from './scene.tsx'
 
 interface State {
@@ -18,8 +18,9 @@ interface State {
 
 /** Rows below which a band has no room for a picture. */
 const MIN_ROWS = 3
-/** `$.fs.read` refuses a file over 4 MiB. */
-const MAX_GIF_BYTES = 4 * 1024 * 1024
+/** `$.fs.read` refuses a file over 4 MiB; a larger GIF is read through `base64`, up to 32 MiB. */
+const MAX_READ_BYTES = 4 * 1024 * 1024
+const MAX_BIG_GIF_BYTES = 32 * 1024 * 1024
 /** The store key of the saved clip names, and the prefix of each clip's own key. */
 const CLIPS_KEY = 'clips'
 const CLIP_PREFIX = 'clip:'
@@ -74,12 +75,40 @@ async function resolvePath($: EngineInterface, path: string): Promise<string> {
   return `${(await $.session.cwd()).replace(/\/+$/, '')}/${path}`
 }
 
+/**
+ * A GIF's bytes: `$.fs.read` up to its 4 MiB limit, and `base64 <path>` above it,
+ * whose text the mod decodes itself, up to 32 MiB.
+ */
 async function readGifBytes($: EngineInterface, path: string): Promise<Uint8Array> {
   if (!(await $.fs.exists(path))) throw new Error(`${path} does not exist`)
   const st = await $.fs.stat(path)
   if (st.kind !== 'file') throw new Error(`${path} is not a file`)
-  if ((st.size ?? 0) > MAX_GIF_BYTES) throw new Error(`${path} is over the 4 MiB read limit`)
-  return bytesOf((await $.fs.read(path, { as: 'bytes' })).base64)
+  const size = st.size ?? 0
+  if (size > MAX_BIG_GIF_BYTES) throw new Error(`${path} is ${Math.round(size / 1024 / 1024)} MiB, over the 32 MiB limit`)
+  if (size <= MAX_READ_BYTES) return bytesOf((await $.fs.read(path, { as: 'bytes' })).base64)
+  // macOS base64 takes its input file only after `-i`; GNU base64 reads `-i` as --ignore-garbage, which only
+  // decoding uses, and the path as its input file.
+  const bytes = bytesOf(await streamedStdout($, ['base64', '-i', path]))
+  if (bytes.length !== size) throw new Error(`base64 gave ${bytes.length} bytes of ${size}`)
+  return bytes
+}
+
+/**
+ * A command's whole stdout, read piece by piece: `$.process.run` cuts stdout at
+ * 4 MiB (measured on 2.1.283), and a large GIF's base64 is longer.
+ */
+async function streamedStdout($: EngineInterface, argv: string[]): Promise<string> {
+  const parts: string[] = []
+  const errors: string[] = []
+  const child = $.process.spawn({ argv })
+  for (;;) {
+    const step = await child.next()
+    if (step.done) {
+      if (step.value.code !== 0) throw new Error(`${argv[0]} failed: ${errors.join('').trim().slice(0, 200)}`)
+      return parts.join('')
+    }
+    ;(step.value.stream === 'stdout' ? parts : errors).push(step.value.text)
+  }
 }
 
 async function saveClips($: EngineInterface, state: State): Promise<void> {
@@ -93,9 +122,7 @@ async function importGif($: EngineInterface, state: State, typed: string, name: 
   let dropped: number
   let frames: number
   try {
-    const gif = decodeGif(await readGifBytes($, path))
-    frames = gif.frames.length
-    ;({ clip, dropped } = toClip(gif, BAND_COLUMNS, BAND_ROWS))
+    ;({ clip, dropped, frames } = clipFromGif(await readGifBytes($, path), BAND_COLUMNS, BAND_ROWS))
   } catch (err) {
     return `cannot import ${typed}: ${errorText(err)}`
   }
@@ -107,7 +134,7 @@ async function importGif($: EngineInterface, state: State, typed: string, name: 
   const replaced = state.clips.has(name)
   state.clips.set(name, clip)
   await saveClips($, state)
-  const kept = dropped > 0 ? `${clip.frames.length} of ${frames} frames (every other one dropped to fit)` : `${frames} frames`
+  const kept = dropped > 0 ? `${clip.frames.length} of ${frames} frames (the rest dropped to fit)` : `${frames} frames`
   return `${replaced ? 'replaced' : 'saved'} ${name}: ${kept}, ${clip.width}×${clip.height} cells. Use it with /idle-art ${name}; random draws it too.`
 }
 

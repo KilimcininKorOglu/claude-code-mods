@@ -42,7 +42,7 @@ Mod GIF'i okur ve her kareyi kendi süresi ve şeffaflığıyla çözer. Sonra h
         ....-====+-=:--:::::.:-+-....
         ....:-=*++*+++=-:-=--=-=-....
 
-Bir klip 90.000 karakterin altında tutulur. Çünkü tek bir çizim, çizim thread'ine en fazla bu kadar veri verebilir. Daha uzun bir klip sığana kadar her iki kareden birini düşürür. Kalan her kare, düşen karenin süresini de üstlenir. Cevap kaç karenin kaldığını söyler. Klipler mod'un store'unda durur. Store toplam 4 MiB tutar, bu da yaklaşık kırk klip eder. Sığmayan bir klip, sebebiyle birlikte reddedilir.
+Bir klip 90.000 karakterin altında tutulur. Çünkü tek bir çizim, çizim thread'ine en fazla bu kadar veri verebilir. Daha uzun bir klip her iki kareden birini düşürür ve sığana kadar bunu tekrarlar. Kalan her kare, düşen karenin süresini de üstlenir. Cevap kaç karenin kaldığını söyler. Klipler mod'un store'unda durur. Store toplam 4 MiB tutar, bu da yaklaşık kırk klip eder. Sığmayan bir klip, sebebiyle birlikte reddedilir.
 
 Klip adı küçük harf, rakam ve tire içerir, en fazla 24 karakterdir. Yerleşik bir sahnenin adı ya da komutun okuduğu bir kelime olamaz. Kayıtlı bir adla yeniden import etmek o klibi değiştirir. `~` ile başlayan bir yol ev dizinini gösterir. Göreli bir yol oturumun dizinine göre çözülür. Yolda boşluk olabilir: son kelime klibin adıdır.
 
@@ -90,14 +90,14 @@ Claude Code'u yeniden başlatın ya da açık bir oturumda `/reload-plugins` ça
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
-    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
     ❯ ./register.tsx env reads: HOME
     ❯ ./register.tsx surface modules: hooks/scene.tsx
 
-Reach L1: import ettiğin GIF'i okur.
+Reach L2: 4 MiB'tan büyük bir GIF'i okumak için `base64` çalıştırır.
 
-    1. Reads:    band'in props değerleri (çalışıyor mu, anket var mı, satır, sütun) ve saat; store'daki ayarları ve klipleri; /idle-art import komutunun verdiği GIF'i, 4 MiB veya daha küçükse, bir kez; bu yolu çözmek için HOME ve oturumun dizini
-    2. Runs:     hiçbir şey; process ve fork yok; turn başına gecikme için bir timer, band görünürken çizim thread'inin 100 ms'lik tick'i
+    1. Reads:    band'in props değerleri (çalışıyor mu, anket var mı, satır, sütun) ve saat; store'daki ayarları ve klipleri; /idle-art import komutunun verdiği GIF'i, 32 MiB veya daha küçükse, bir kez; bu yolu çözmek için HOME ve oturumun dizini
+    2. Runs:     4 MiB'tan büyük bir GIF için import başına bir kez base64 -i <yol>; fork yok; turn başına gecikme için bir timer, band görünürken çizim thread'inin 100 ms'lik tick'i
     3. Sends:    hiçbir şey; network çağrısı yok, modele bir şey gitmez
     4. Persists: açık/kapalı durumu, stil, gecikme ve import edilen her klip, mod'un store'unda
     5. Hostile input: bir GIF güvenilmeyen byte'lardır: decoder her okumayı dosyanın uzunluğuyla sınırlar, bozuk bir kod akışını ya da eksik bir color table'ı reddeder, 500 karede durur; başarısız bir import hiçbir şey saklamaz; yanlış biçimdeki kayıtlı bir klip yüklenirken atlanır; komut sabit bir kelime listesi, 0 ile 60 arası bir tam sayı ve küçük harf, rakam ve tireden oluşan bir klip adı kabul eder
@@ -105,7 +105,8 @@ Reach L1: import ettiğin GIF'i okur.
 ## Sınırlar
 
 - 8 satır küçük bir tuvaldir: bir GIF, alışılmış 2:1 oranda yaklaşık 30 sütun ve 8 satır olur. Bu bir siluet ya da hareket için yeterlidir, ayrıntı için yetmez.
-- GIF tek seferde okunur ve `$.fs.read` 4 MiB'tan büyük bir dosyayı reddeder.
+- 4 MiB'a kadar bir GIF `$.fs.read` ile okunur. 32 MiB'a kadar daha büyük bir GIF, `base64 -i <yol>` ile parça parça okunur. Sebebi şu: `$.fs.read` 4 MiB'tan büyük bir dosyayı reddeder, `$.process.run` da çıktısını 4 MiB'ta keser (2.1.283 üzerinde ölçüldü). Dönen byte'lar dosyanın boyutuyla aynı olmalıdır, değilse import reddedilir.
+- Her kare, çözülür çözülmez hücrelerine indirilir. Böylece büyük bir GIF bellekte aynı anda yalnız bir karenin piksellerini tutar. Bir GIF'ten en fazla 500 kare okunur.
 - Uzun bir GIF, 90.000 karakter sınırı yüzünden kare kaybeder. Hareketi aynı sürede kalır, ama daha kaba adımlarla ilerler.
 - Renkleri terminal kendi paletiyle çizer. True color desteklemeyen bir terminal, 256 rengi içinden en yakın olanı gösterir.
 - `matrix` yarım genişlikte katakana, `stars` ise `∗` ve `✦` çizer. Bu karakterleri içermeyen bir font yerlerine yedek bir karakter çizer.
