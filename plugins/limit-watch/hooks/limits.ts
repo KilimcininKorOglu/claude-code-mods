@@ -96,6 +96,23 @@ export function record(tracks: Tracks, limits: readonly SessionRateLimit[], now:
 /** A pace in percent per hour, or the span still missing before a pace can be read. */
 export type Pace = { perHour: number; span: number } | { missing: number }
 
+/**
+ * The least-squares slope of the samples, in percent per millisecond. Every sample weighs in, so one
+ * jump of the whole-number percentage at either end does not set the pace alone, as it did when the
+ * pace was read from the first and last sample.
+ */
+function slope(samples: readonly Sample[]): number {
+  const meanAt = samples.reduce((a, s) => a + s.at, 0) / samples.length
+  const meanPercent = samples.reduce((a, s) => a + s.percent, 0) / samples.length
+  let cov = 0
+  let variance = 0
+  for (const s of samples) {
+    cov += (s.at - meanAt) * (s.percent - meanPercent)
+    variance += (s.at - meanAt) ** 2
+  }
+  return cov / variance
+}
+
 /** Reads the pace of a limit from the samples of its lookback. */
 export function pace(track: Track | undefined, kind: string, now: number): Pace {
   const { lookback, minSpan } = profile(kind)
@@ -104,7 +121,7 @@ export function pace(track: Track | undefined, kind: string, now: number): Pace 
   const last = recent.at(-1)
   const span = first !== undefined && last !== undefined ? last.at - first.at : 0
   if (first === undefined || last === undefined || span < minSpan) return { missing: minSpan - span }
-  return { perHour: ((last.percent - first.percent) / span) * HOUR, span }
+  return { perHour: slope(recent) * HOUR, span }
 }
 
 /**

@@ -51,6 +51,18 @@ describe('pace', () => {
     expect(pace(tracks.five_hour, 'five_hour', T0 + 30 * MINUTE)).toEqual({ perHour: 10, span: 30 * MINUTE })
   })
 
+  test('fits a line through every sample, so a late jump of the percentage does not set the pace alone', async () => {
+    const tracks = readings([
+      [0, 10],
+      [10, 10],
+      [20, 10],
+      [30, 16],
+    ])
+    // The first and last sample alone would read 12%/h.
+    const p = pace(tracks.five_hour, 'five_hour', T0 + 30 * MINUTE)
+    expect('perHour' in p ? Math.round(p.perHour * 1000) / 1000 : NaN).toBe(10.8)
+  })
+
   test('ignores samples older than the one hour lookback', async () => {
     const tracks = readings([
       [0, 0],
