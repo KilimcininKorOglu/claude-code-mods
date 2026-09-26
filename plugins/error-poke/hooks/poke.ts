@@ -55,10 +55,67 @@ export function pokeDelay(pokes: number): number {
   return Math.min(FIRST_DELAY_MS * 3 ** Math.max(pokes - 1, 0), MAX_DELAY_MS)
 }
 
-/** The wait as the person reads it: seconds under two minutes, whole minutes above. */
+/** A usage limit as the session reports it. */
+export type UsageLimit = { kind: string; percentUsed: number; resetsAt?: string }
+
+/** A continue prompt held back until a usage limit resets: which limit, and when to send. */
+export type LimitWait = { kind: string; until: number }
+
+/** Claude Code's own text of a turn a usage limit stopped: `You've hit your session limit · resets 3:40pm`. */
+const HIT_LIMIT = /hit your .*limit/i
+
+/** Sent this long after the reset, so the first request does not race the limit's own clock. */
+export const RESET_MARGIN_MS = 60_000
+
+/**
+ * Whether the turn died on a usage limit, and until when the continue prompt waits: a limit at 100% or
+ * more waits for its reset (the latest, when several are full), and Claude Code's own limit text with no
+ * limit at 100% waits for the fullest limit's reset. A retry before the reset only fails again, so the
+ * backoff's prompts would all be spent on it. Undefined for any other error, and for a limit whose reset
+ * is not in the future.
+ */
+export function limitWait(limits: readonly UsageLimit[], lastText: string, now: number): LimitWait | undefined {
+  const future = limits.flatMap(l => {
+    const at = l.resetsAt === undefined ? NaN : Date.parse(l.resetsAt)
+    return Number.isFinite(at) && at > now ? [{ limit: l, at }] : []
+  })
+  const full = future.filter(x => x.limit.percentUsed >= 100)
+  if (full.length > 0) {
+    const last = full.reduce((a, b) => (b.at > a.at ? b : a))
+    return { kind: last.limit.kind, until: last.at + RESET_MARGIN_MS }
+  }
+  if (future.length === 0 || !HIT_LIMIT.test(lastText)) return undefined
+  const fullest = future.reduce((a, b) => (b.limit.percentUsed > a.limit.percentUsed ? b : a))
+  return { kind: fullest.limit.kind, until: fullest.at + RESET_MARGIN_MS }
+}
+
+/** A limit's short name: `5h`, `7d`, `spend`, or the engine's own word. */
+function limitName(kind: string): string {
+  return ({ five_hour: '5h', seven_day: '7d', spend_limit: 'spend' } as Record<string, string>)[kind] ?? kind.replaceAll('_', ' ')
+}
+
+/** A local clock time, `15:41`. */
+function clockOf(at: number): string {
+  const d = new Date(at)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** The line of a continue prompt held back until a limit resets: the limit red, the count as a poke's. */
+export function limitWaitLines(w: LimitWait, now: number, pokes: number, max: number): Line[] {
+  return [partsLine([
+    part('the turn hit the ', undefined),
+    part(`${limitName(w.kind)} usage limit`, 'error'),
+    part(`, continuing at ${clockOf(w.until)} (in ${waitText(w.until - now)}) `, undefined),
+    part(`(${pokes}/${max})`, countTone(pokes, max)),
+  ])]
+}
+
+/** The wait as the person reads it: seconds under two minutes, whole minutes up to two hours, then hours and minutes. */
 function waitText(ms: number): string {
   const s = Math.round(ms / 1000)
-  return s < 120 ? `${s} s` : `${Math.round(s / 60)} min`
+  if (s < 120) return `${s} s`
+  const m = Math.round(s / 60)
+  return m < 120 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`
 }
 
 /** The line the person reads when a prompt is scheduled. The engine adds the mod name. */

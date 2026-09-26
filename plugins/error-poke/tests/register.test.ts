@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On } from 'claude-code'
+import type { CommandRunInput, On, SessionRateLimit } from 'claude-code'
 
-import { DEFAULT_MAX_POKES, decide, eventLines, limitLines, limitLog, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLines, pokeLog, statusText } from '../hooks/poke.ts'
+import { DEFAULT_MAX_POKES, RESET_MARGIN_MS, decide, limitWait, eventLines, limitLines, limitLog, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLines, pokeLog, statusText } from '../hooks/poke.ts'
 
 tier('user')
 
@@ -35,10 +35,12 @@ const run = (args: string): CommandRunInput => ({
  * through `send`, the logged lines, `sendFails` to make the engine refuse that command, `drop` to make it
  * refuse a submitted prompt, and the clock.
  */
-type World = { sent: string[]; sends: number; logs: string[]; sendFails?: true; drop?: string; clock: MockClock }
+type World = { sent: string[]; sends: number; logs: string[]; sendFails?: true; drop?: string; clock: MockClock; limits: SessionRateLimit[]; lastText: string }
 
 function world(on: On): World {
-  const w: World = { sent: [], sends: 0, logs: [], clock: mock.clock(on) }
+  const w: World = { sent: [], sends: 0, logs: [], clock: mock.clock(on), limits: [], lastText: 'API Error: 529 Overloaded.' }
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: w.limits } }))
+  on('session.messages', () => ({ value: [{ role: 'assistant', text: w.lastText, toolUses: [] }] }) as never)
   on('command.run', { command: 'error-poke:send' }, (_, e) => {
     if (w.sendFails === true) throw new Error('unknown command')
     w.sent.push(e.args)
@@ -72,7 +74,42 @@ async function ended($: Engine, w: World, reason: 'answer' | 'aborted' | 'error'
   await w.clock.advance(MAX_DELAY_MS)
 }
 
+describe('usage limits', () => {
+  const NOW = Date.parse('2026-09-26T12:00:00Z')
+  const at = (h: number): string => new Date(NOW + h * 3_600_000).toISOString()
+
+  test('a full limit holds the prompt until its reset, the latest of several full ones', () => {
+    const limits = [{ kind: 'five_hour', percentUsed: 100, resetsAt: at(2) }, { kind: 'seven_day', percentUsed: 100, resetsAt: at(30) }, { kind: 'spend_limit', percentUsed: 40, resetsAt: at(1) }]
+    expect(limitWait(limits, 'API Error: Request rejected (429)', NOW)).toEqual({ kind: 'seven_day', until: Date.parse(at(30)) + RESET_MARGIN_MS })
+  })
+
+  test("Claude Code's own limit text waits for the fullest limit when none reads 100%", () => {
+    const limits = [{ kind: 'five_hour', percentUsed: 98, resetsAt: at(2) }, { kind: 'seven_day', percentUsed: 60, resetsAt: at(30) }]
+    expect(limitWait(limits, "You've hit your session limit · resets 2:00pm (Europe/Istanbul)", NOW)).toEqual({ kind: 'five_hour', until: Date.parse(at(2)) + RESET_MARGIN_MS })
+  })
+
+  test('another error, or a reset already past, keeps the usual backoff', () => {
+    expect(limitWait([{ kind: 'five_hour', percentUsed: 80, resetsAt: at(2) }], 'API Error: 529 Overloaded.', NOW)).toBe(undefined)
+    expect(limitWait([{ kind: 'five_hour', percentUsed: 100, resetsAt: at(-1) }], "You've hit your session limit", NOW)).toBe(undefined)
+    expect(limitWait([], "You've hit your weekly limit", NOW)).toBe(undefined)
+  })
+})
+
 describe('error-poke', () => {
+  test('a turn a usage limit stopped sends one prompt after the reset, not the backoff before it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const now = w.clock.now()
+    w.limits = [{ kind: 'five_hour', percentUsed: 100, resetsAt: new Date(now + 2 * 3_600_000).toISOString() }]
+    w.lastText = "You've hit your session limit · resets 2:00pm (Europe/Istanbul)"
+    await $.turn.complete({ answer: '', durationMs: 10, isAborted: false, turnId: 't1', reason: 'error' })
+    expect(w.logs.at(-1)).toMatch(/^the turn hit the 5h usage limit, continuing at \d\d:\d\d \(in 2 h 1 min\) \(1\/99\)$/)
+    await w.clock.advance(2 * 3_600_000)
+    expect(w.sent).toEqual([])
+    await w.clock.advance(RESET_MARGIN_MS)
+    expect(w.sent).toEqual([POKE_TEXT])
+  })
+
   test('only an API error asks for a continue prompt', () => {
     expect(decide('error', 0, DEFAULT_MAX_POKES)).toBe('poke')
     expect(decide('error', DEFAULT_MAX_POKES, DEFAULT_MAX_POKES)).toBe('limit')

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, Timer } from 'claude-code'
-import { DEFAULT_MAX_POKES, decide, eventLines, limitLines, limitOf, limitText, POKE_TEXT, pokeDelay, pokeLines, statusText, type Line } from './poke.ts'
+import { DEFAULT_MAX_POKES, decide, eventLines, limitLines, limitOf, limitText, limitWait, limitWaitLines, POKE_TEXT, pokeDelay, pokeLines, statusText, type LimitWait, type Line } from './poke.ts'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
@@ -55,6 +55,21 @@ function sendPoke($: EngineInterface): void {
   })
 }
 
+/**
+ * Whether a usage limit stopped the turn, read from the session's limits and the last assistant text,
+ * because the turn's end names no cause. A read that fails is said once and leaves the backoff in place.
+ */
+async function readLimitWait($: EngineInterface, now: number): Promise<LimitWait | undefined> {
+  try {
+    const limits = (await $.session.usage()).rateLimits
+    const last = (await $.session.messages()).findLast(m => m.role === 'assistant')?.text ?? ''
+    return limitWait(limits, last, now)
+  } catch (err) {
+    await toPerson($, 'limit-read', 'usage limits not read', eventLines('the usage limits were not read, the usual wait applies', String(err)))
+    return undefined
+  }
+}
+
 /** Acts on one main-loop turn that ended: a continue prompt, the limit, or nothing. */
 async function afterTurn($: EngineInterface, state: State, reason: string): Promise<void> {
   const decision = decide(reason, state.pokes, state.max)
@@ -66,9 +81,12 @@ async function afterTurn($: EngineInterface, state: State, reason: string): Prom
     return
   }
   state.pokes += 1
-  await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', pokeLines(state.pokes, state.max))
+  const now = await $.clock.now()
+  const wait = await readLimitWait($, now)
+  const lines = wait === undefined ? pokeLines(state.pokes, state.max) : limitWaitLines(wait, now, state.pokes, state.max)
+  await toPerson($, `poke-${state.pokes}`, 'turn continued after an API error', lines)
   state.pending?.cancel()
-  state.pending = $.clock.after(pokeDelay(state.pokes), () => {
+  state.pending = $.clock.after(wait === undefined ? pokeDelay(state.pokes) : wait.until - now, () => {
     state.pending = undefined
     sendPoke($)
   })

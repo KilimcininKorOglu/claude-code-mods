@@ -13,6 +13,10 @@ A Claude Code Mod that continues a turn an API error killed. When the engine end
    The interrupted turn's own work is still in the transcript, so the prompt asks the model to carry on rather than repeat it.
 4. The prompt waits before it goes out, longer after each failure of the stretch: 5 s, 15 s, 45 s, 135 s, then 5 minutes each. An overloaded API recovers in seconds, and an error that fails the same way on every try (the context limit) does not spend the whole limit back to back. A prompt of yours during the wait, or `/error-poke off`, cancels the waiting prompt.
 
+   A turn a usage limit stopped waits for the limit instead: when a limit reads 100% or more, or the last assistant text is Claude Code's own `You've hit your ... limit`, the one continue prompt goes out a minute after that limit resets (the latest reset, when several limits are full), because every prompt before it would fail the same way:
+
+       error-poke: the turn hit the 5h usage limit, continuing at 14:01 (in 2 h 1 min) (1/99)
+
    The same moment writes one line to the transcript, so you see why the session will move by itself:
 
        error-poke: the turn died on an API error, continuing in 5 s (1/99)
@@ -52,14 +56,14 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.282:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=error-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.command.run (via sendPoke), $.prompt.submit (via submitPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.clock.now (via afterTurn), $.command.register, $.command.run (via sendPoke), $.prompt.submit (via submitPoke), $.session.messages (via readLimitWait), $.session.usage (via readLimitWait), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
 
 Reach L2, drives Claude.
 
-    1. Reads:    how each main-loop turn ended, and the origin of each prompt; no file, no command
+    1. Reads:    how each main-loop turn ended, and the origin of each prompt; after a turn an API error ended, the session's usage limits and the last assistant text; no file, no command
     2. Runs:     nothing
     3. Sends:    one fixed continue prompt to your own session, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the limit; the count lives in memory for one stretch of failures

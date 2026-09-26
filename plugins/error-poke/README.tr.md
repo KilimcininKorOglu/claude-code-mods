@@ -13,6 +13,10 @@ Bir API hatasının öldürdüğü turn'ü sürdüren bir Claude Code Mod'u. Eng
    Kesilen turn'ün kendi işi hâlâ transcript'tedir, yani prompt modelden tekrarlamasını değil, devam etmesini ister.
 4. Prompt gönderilmeden önce bekler, serideki her hatadan sonra daha uzun: 5 s, 15 s, 45 s, 135 s, sonra her biri 5 dakika. Aşırı yüklenmiş bir API saniyeler içinde düzelir, her denemede aynı şekilde düşen bir hata (context limiti) ise limitin tamamını art arda harcamaz. Bekleme sırasında sizin bir prompt'unuz ya da `/error-poke off` bekleyen prompt'u iptal eder.
 
+   Bir kullanım limitinin durdurduğu turn ise limiti bekler: bir limit %100 ya da üstündeyse, ya da son asistan metni Claude Code'un kendi `You've hit your ... limit` metniyse, tek devam prompt'u o limit sıfırlandıktan bir dakika sonra gider (birden çok limit doluysa en geç sıfırlanan), çünkü ondan önceki her prompt aynı şekilde düşer:
+
+       error-poke: the turn hit the 5h usage limit, continuing at 14:01 (in 2 h 1 min) (1/99)
+
    Aynı anda transcript'e bir satır yazılır, böylece session'ın neden kendi kendine ilerleyeceğini görürsünüz:
 
        error-poke: the turn died on an API error, continuing in 5 s (1/99)
@@ -52,14 +56,14 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=error-poke}, prompt.submit, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.command.register, $.command.run (via sendPoke), $.prompt.submit (via submitPoke), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.after (via afterTurn), $.clock.now (via afterTurn), $.command.register, $.command.run (via sendPoke), $.prompt.submit (via submitPoke), $.session.messages (via readLimitWait), $.session.usage (via readLimitWait), $.sidebar.set (via toPerson), $.store.get, $.store.set, $.ui.log (via toPerson)
 
 Reach L2, Claude'u sürer.
 
-    1. Okur:     her main-loop turn'ünün nasıl bittiğini ve her prompt'un origin'ini; dosya yok, komut yok
+    1. Okur:     her main-loop turn'ünün nasıl bittiğini ve her prompt'un origin'ini; bir API hatasının bitirdiği turn'den sonra session'ın kullanım limitlerini ve son asistan metnini; dosya yok, komut yok
     2. Çalıştırır: hiçbir şey
     3. Gönderir: kendi session'ınıza sabit bir devam prompt'u ve transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:   $.store içinde on/off ayarını ve limiti; sayaç bir hata serisi boyunca bellekte yaşar
