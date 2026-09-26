@@ -8,10 +8,10 @@ const HEART = '#ff6b9d'
 const SPRITE_ROWS = 4
 const SPRITE_COLS = 10
 
-/** The cat walking right, two steps. */
+/** The cat walking right, its head ahead and its tail behind, two steps. */
 const WALK = [
-  [' /\\_/\\    ', '( o.o )__ ', ' (      )~', '  /\\  /\\  '],
-  [' /\\_/\\    ', '( o.o )__ ', ' (      )~', '  ||  ||  '],
+  ['    /\\_/\\ ', ' __( o.o )', '~(      ) ', '  /\\  /\\  '],
+  ['    /\\_/\\ ', ' __( o.o )', '~(      ) ', '  ||  ||  '],
 ]
 
 /** The cat sitting, its eyes given. */
@@ -62,13 +62,14 @@ function walkPhase(s: Stage, from: number, to: number): Phase {
 }
 
 function sitPhase(s: Stage): Phase {
-  // A blink in the middle.
-  return { ticks: 15, draw: (t, out) => sprite(out, sitting(t >= 7 && t < 9 ? '-.-' : 'o.o'), s.center, s.base) }
+  // Two blinks.
+  const blinking = (t: number): boolean => (t >= 8 && t < 10) || (t >= 18 && t < 20)
+  return { ticks: 25, draw: (t, out) => sprite(out, sitting(blinking(t) ? '-.-' : 'o.o'), s.center, s.base) }
 }
 
 function meowPhase(s: Stage, text: string, eyes: string): Phase {
   return {
-    ticks: 15,
+    ticks: 20,
     draw: (_, out) => {
       sprite(out, sitting(eyes), s.center, s.base)
       bubble(out, s, text)
@@ -79,14 +80,14 @@ function meowPhase(s: Stage, text: string, eyes: string): Phase {
 /** Rolls three cells right and back, one pose every two ticks. */
 function rollPhase(s: Stage): Phase {
   const drift = [0, 1, 2, 3, 3, 2, 1, 0]
-  return { ticks: 32, draw: (t, out) => sprite(out, ROLL[Math.floor(t / 2) % ROLL.length] as string[], s.center + (drift[Math.floor(t / 4) % drift.length] ?? 0), s.base) }
+  return { ticks: 48, draw: (t, out) => sprite(out, ROLL[Math.floor(t / 2) % ROLL.length] as string[], s.center + (drift[Math.floor(t / 6) % drift.length] ?? 0), s.base) }
 }
 
-/** Two jumps. */
+/** Three jumps. */
 function jumpPhase(s: Stage): Phase {
   const lift = [0, 1, 2, 2, 1, 0, 0, 0]
   return {
-    ticks: 16,
+    ticks: 24,
     draw: (t, out) => {
       const up = lift[Math.floor(t) % lift.length] ?? 0
       sprite(out, sitting(up === 0 ? 'o.o' : '^o^'), s.center, s.base - up)
@@ -97,19 +98,19 @@ function jumpPhase(s: Stage): Phase {
 /** Purring, with a heart floating up from its head. */
 function purrPhase(s: Stage): Phase {
   return {
-    ticks: 20,
+    ticks: 32,
     draw: (t, out) => {
       sprite(out, sitting('^.^'), s.center, s.base)
       bubble(out, s, 'purr~')
-      put(out, s.center + 3, s.base - 1 - Math.floor(t / 5), '♥', HEART)
+      put(out, s.center + 3, s.base - 1 - Math.floor(t / 8), '♥', HEART)
     },
   }
 }
 
-/** Looking left and right. */
+/** Looking left and right, twice. */
 function lookPhase(s: Stage): Phase {
   const eyes = ['o.o', 'O.o', 'O.o', 'o.o', 'o.O', 'o.O']
-  return { ticks: 18, draw: (t, out) => sprite(out, sitting(eyes[Math.floor(t / 3) % eyes.length] as string), s.center, s.base) }
+  return { ticks: 30, draw: (t, out) => sprite(out, sitting(eyes[Math.floor(t / 2.5) % eyes.length] as string), s.center, s.base) }
 }
 
 /** The tricks in the middle of the show, in a new order each time round. */
@@ -143,16 +144,20 @@ export function cat(w: number, h: number, rng: Rng): Animation {
   let phases = show(s, rng)
   let index = 0
   let t = 0
+  let wrapped = false
 
   // `t` counts steps of STEP_MS within the phase, with a fraction between them, so a walk moves on every frame.
+  // A round that ends says so through `wrapped`, so `random` moves on only once the cat has walked out.
   const step = (dtMs?: number): void => {
     t += unitsOf(dtMs)
+    wrapped = false
     for (let ticks = phases[index]?.ticks ?? 0; t >= ticks; ticks = phases[index]?.ticks ?? 0) {
       t -= ticks
       index += 1
       if (index >= phases.length) {
         index = 0
         phases = show(s, rng)
+        wrapped = true
       }
     }
   }
@@ -163,5 +168,5 @@ export function cat(w: number, h: number, rng: Rng): Animation {
     return out
   }
 
-  return { step, frame }
+  return { step, frame, wrapped: () => wrapped }
 }

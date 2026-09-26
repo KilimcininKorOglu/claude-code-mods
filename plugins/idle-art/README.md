@@ -4,7 +4,7 @@ A Claude Code Mod that draws an ASCII animation above the prompt while the model
 
 ## What it shows
 
-The picture appears 3 seconds into a turn, so a short turn shows nothing, and it goes away when the turn ends. By default each turn draws a scene at random from the built-in scenes and your saved clips, never the one shown before. A long turn moves on to another at random: a built-in scene after 20 seconds, a clip at the end of its first loop that ends after 20 seconds, so a long clip plays through once and a short one repeats until then. A scene you chose by name stays for the whole turn, and choosing one while a turn draws changes the picture at once.
+The picture appears 3 seconds into a turn, so a short turn shows nothing, and it goes away when the turn ends. By default each turn draws a scene at random from the built-in scenes and your saved clips, never the one shown before. A long turn moves on to another at random: a built-in scene after 20 seconds, the cat and a clip at the end of their first round or loop that ends after 20 seconds, so a long clip plays through once and a short one repeats until then. A scene you chose by name stays for the whole turn, and choosing one while a turn draws changes the picture at once.
 
     ● Brewing… (5s)
              .:   .                 ,
@@ -22,7 +22,7 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
 | `fire` | Heat rises from a hidden row under the band and cools on the way up, drawn from `.` to `@` and from dark red to pale yellow. |
 | `stars` | Stars fly toward the viewer from the centre, growing from a grey `·` to a white `✦` as they near. |
 | `aquarium` | Fish of four shapes cross both ways, bubbles rise from them and grow, seaweed sways on the sand. |
-| `cat` | A cat walks in slowly to the middle, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps twice, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out to the right and comes round again. Each word stands in a speech bubble over its head. |
+| `cat` | A cat walks in slowly to the middle, head first, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps three times, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out slowly to the right and comes round again. Each word stands in a speech bubble over its head. A round takes about 34 seconds, and `random` waits for the cat to walk out before it moves on. |
 
     ● Brewing… (8s)
                      .------.

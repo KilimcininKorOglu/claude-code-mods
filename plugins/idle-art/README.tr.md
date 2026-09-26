@@ -4,7 +4,7 @@ Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Co
 
 ## Ne gösterir
 
-Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şey göstermez. Turn bitince resim kaybolur. Varsayılan olarak her turn, yerleşik sahneler ve kaydettiğin klipler arasından rastgele birini çizer ve bir önce gösterileni asla tekrar seçmez. Uzun bir turn, rastgele başka bir sahneye geçer. Yerleşik bir sahne 20 saniye sonra değişir. Bir klip, 20 saniyeden sonra biten ilk döngüsünün sonunda değişir: uzun bir klip bir kez baştan sona oynar, kısa bir klip o süre dolana kadar tekrar eder. Adıyla seçtiğin bir sahne bütün turn boyunca kalır. Bir turn çizilirken sahne seçersen resim hemen değişir.
+Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şey göstermez. Turn bitince resim kaybolur. Varsayılan olarak her turn, yerleşik sahneler ve kaydettiğin klipler arasından rastgele birini çizer ve bir önce gösterileni asla tekrar seçmez. Uzun bir turn, rastgele başka bir sahneye geçer. Yerleşik bir sahne 20 saniye sonra değişir. Kedi ve bir klip, 20 saniyeden sonra biten ilk turlarının ya da döngülerinin sonunda değişir: uzun bir klip bir kez baştan sona oynar, kısa bir klip o süre dolana kadar tekrar eder. Adıyla seçtiğin bir sahne bütün turn boyunca kalır. Bir turn çizilirken sahne seçersen resim hemen değişir.
 
     ● Brewing… (5s)
              .:   .                 ,
@@ -22,7 +22,7 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
 | `fire` | Isı, band'in altındaki gizli bir satırdan yükselir ve yukarı çıktıkça soğur. `.` ile `@` arasındaki karakterlerle, koyu kırmızıdan açık sarıya kadar çizilir. |
 | `stars` | Yıldızlar merkezden izleyiciye doğru uçar. Yaklaştıkça gri bir `·` işaretinden beyaz bir `✦` işaretine büyür. |
 | `aquarium` | Dört şekilde balık iki yönde de geçer. Balıklardan çıkan kabarcıklar yükseldikçe büyür. Kumun üstünde yosunlar sallanır. |
-| `cat` | Bir kedi yavaş yavaş yürüyerek ortaya gelir, oturur, göz kırpar ve `meow` der. Sonra her turda başka bir sırayla şebeklik yapar: yerde bir o yana bir bu yana yuvarlanır, iki kez zıplar, başından bir kalp yükselirken mırlar, sağa sola bakar. `MEOW!` der, sağdan yürüyüp çıkar ve yeniden gelir. Her söz, başının üstünde bir konuşma balonunda çıkar. |
+| `cat` | Bir kedi, kafası önde, yavaş yavaş yürüyerek ortaya gelir, oturur, göz kırpar ve `meow` der. Sonra her turda başka bir sırayla şebeklik yapar: yerde bir o yana bir bu yana yuvarlanır, üç kez zıplar, başından bir kalp yükselirken mırlar, sağa sola bakar. `MEOW!` der, sağa doğru yavaş yavaş yürüyüp sahneden çıkar ve yeniden gelir. Her söz, başının üstünde bir konuşma balonunda çıkar. Bir tur yaklaşık 34 saniye sürer. `random`, başka sahneye geçmeden önce kedinin sahneden çıkmasını bekler. |
 
     ● Brewing… (8s)
                      .------.

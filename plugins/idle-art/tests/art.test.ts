@@ -48,10 +48,31 @@ describe('art', () => {
     expect(seen.some(f => f.includes('( purr~ )'))).toBe(true)
     expect(seen.some(f => f.includes('( -.- )=~'))).toBe(true)
     expect(seen.some(f => f.includes('♥'))).toBe(true)
-    // It leaves: a frame with no cat, then it enters from the left edge again.
-    const gone = seen.findIndex((f, i) => i > 100 && f.trim() === '')
-    expect(gone).toBeGreaterThan(0)
-    expect(seen.slice(gone).some(f => f.split('\n').some(row => /^\( o\.o \)__/.test(row)))).toBe(true)
+    // It walks head first: the head leads to the right, the tail trails on the left.
+    expect(seen.some(f => f.split('\n').some(row => row.startsWith(' __( o.o )')))).toBe(true)
+    expect(seen.some(f => f.includes('( o.o )__'))).toBe(false)
+  })
+
+  test('the cat walks out slowly to the right, and only then does random take the next scene', () => {
+    const anim = SCENES.cat(60, 8, rngOf(3))
+    const faces: number[] = []
+    let ms = 0
+    for (; ms < 120_000; ms += 100) {
+      anim.step(100)
+      const col = textOf(anim.frame()).split('\n').map(row => row.indexOf('( o.o )')).find(c => c >= 0) ?? -1
+      faces.push(col)
+      if (anim.wrapped?.() === true) break
+    }
+    // The round ends after 20 seconds, with the head at the right edge on the way out, a cell each 200 ms.
+    expect(ms).toBeGreaterThan(20_000)
+    const out = faces.slice(-40).filter(c => c >= 0)
+    expect(out.length).toBeGreaterThanOrEqual(20)
+    expect(out.every((c, i) => i === 0 || c - (out[i - 1] ?? 0) <= 1)).toBe(true)
+    expect(out.at(-1)).toBeGreaterThan(50)
+    // At 20 seconds the round is still on, so random does not cut the cat off mid-show.
+    const midway = SCENES.cat(60, 8, rngOf(3))
+    for (let t = 0; t < 20_000; t += 100) midway.step(100)
+    expect(sceneDone(midway, 20_000)).toBe(false)
   })
 
   test('a row draws as runs of one colour, joined back to the same text', () => {
