@@ -20,12 +20,26 @@ const COLD_WRITE_MIN_CONTEXT = 20_000
 /** A warm ping writes only its own message; a write of this share of the read or more means the prefix broke. */
 const WARM_WRITE_RATIO = 0.1
 
+/** The last request that read the cache: a ping, or a main-loop turn, whichever came last. */
 export interface PingRecord {
+  kind: 'ping' | 'turn'
   read: number
   write: number
   usd: number | null
-  /** When the ping's answer came, in ms since the epoch. */
+  /** When the answer came, in ms since the epoch. */
   at: number
+}
+
+const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0
+
+/** A record kept in the store, or null when the stored value is of another shape. */
+export function pingRecordOf(value: unknown): PingRecord | null {
+  if (typeof value !== 'object' || value === null) return null
+  const r = value as Record<string, unknown>
+  if (r.kind !== 'ping' && r.kind !== 'turn') return null
+  if (!isCount(r.read) || !isCount(r.write) || !isCount(r.at)) return null
+  if (r.usd !== null && !isCount(r.usd)) return null
+  return { kind: r.kind, read: r.read, write: r.write, usd: r.usd, at: r.at }
 }
 
 export interface ColdWrite {
@@ -53,7 +67,7 @@ export interface State {
   compacted: boolean
   coldWrites: ColdWrite[]
   pending: { cancel: () => void } | null
-  lastPing: PingRecord | null
+  lastRead: PingRecord | null
   stopped: string | null
   /** The short form of the last transcript line, drawn faint under the window line in the sidebar. */
   event?: Line
@@ -67,7 +81,7 @@ export function priceNow(s: State): Price | null {
 export function freshState(): State {
   return {
     sid: '', deadline: 0, endless: false, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, fast: false, ctx: 0,
-    compacted: false, coldWrites: [], pending: null, lastPing: null, stopped: null,
+    compacted: false, coldWrites: [], pending: null, lastRead: null, stopped: null,
   }
 }
 
@@ -193,7 +207,8 @@ export function statusParts(s: State, now: number): Part[] | undefined {
   if (s.stopped) return [part('stopped:', 'error'), part(` ${s.stopped}`, undefined)]
   if (!hasWindow(s)) return undefined
   const next = s.lastRequestAt && !s.compacted ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
-  const ping = s.lastPing ? [part(` · last ping read ${fmtTok(s.lastPing.read)} ${fmtUsd(s.lastPing.usd)} (${clockText(s.lastPing.at, now)})`, 'dim')] : []
+  const last = s.lastRead
+  const ping = last ? [part(` · last ${last.kind} read ${fmtTok(last.read)} ${fmtUsd(last.usd)} (${clockText(last.at, now)})`, 'dim')] : []
   const left = s.endless ? 'always' : `${fmtDuration(s.deadline - now)} left`
   return [part(left, statusTone(s, now)), part(next, 'dim'), ...ping]
 }
@@ -291,7 +306,7 @@ export function resetForClear(s: State): void {
   s.lastRequestAt = 0
   s.compacted = false
   s.coldWrites = []
-  s.lastPing = null
+  s.lastRead = null
   s.stopped = null
   s.event = undefined
   s.renew = null

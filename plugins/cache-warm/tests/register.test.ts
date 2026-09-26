@@ -133,7 +133,7 @@ describe('keep warm', () => {
     expect(r.text).toBe('on for 6h, a ping 50m after each idle stretch keeps the cache read, not re-written')
     expect(w.statuses.at(-1)).toBe('6h left · waiting for the first turn')
     await $.turn.complete(turn())
-    expect(w.statuses.at(-1)).toBe('6h left · ping in 50m')
+    expect(w.statuses.at(-1)).toMatch(/^6h left · ping in 50m · last turn read 200k \$0\.06 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
     await w.clock.advance(49 * MIN)
     expect(w.forks).toBe(0)
     await w.clock.advance(MIN)
@@ -149,7 +149,7 @@ describe('keep warm', () => {
     await $.command.run(run('cache-warm'))
     await $.turn.complete(turn())
     await w.clock.advance(13 * MIN)
-    expect(w.statuses.at(-1)).toBe('5h 47m left · ping in 37m')
+    expect(w.statuses.at(-1)).toMatch(/^5h 47m left · ping in 37m · last turn read 200k \$0\.06 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
   })
 
   test('the always loop counts down too, and keeps the last ping on the line', async ($, on) => {
@@ -160,6 +160,27 @@ describe('keep warm', () => {
     await w.clock.advance(50 * MIN)
     await w.clock.advance(13 * MIN)
     expect(w.statuses.at(-1)).toMatch(/^always · ping in 37m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
+  })
+
+  test('the line names the last read alone, a ping or a turn, whichever came last', async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', 'always'))
+    await $.turn.complete(turn())
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 50m · last turn read 200k \$0\.06 \(/)
+    await w.clock.advance(50 * MIN)
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 50m · last ping read 200k \$0\.05 \([^)]*\)$/)
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 250_000 }) }))
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 50m · last turn read 250k \$0\.07 \([^)]*\)$/)
+  })
+
+  test('a reloaded module draws the last read it kept', async ($, on) => {
+    const record = { kind: 'ping', read: 247_000, write: 0, usd: 0.05, at: START - 10 * MIN }
+    const w = world(on, [], { store: [['always', true], ['last:S1', record], ['last:OLD', { ...record, at: START - 2 * HOUR }]] })
+    await $.session.start(session)
+    expect(w.statuses.at(-1)).toMatch(/^always · waiting for the first turn · last ping read 247k \$0\.05 \(/)
+    // Another session's read older than the cache is dropped with its request time.
+    expect(w.store.has('last:OLD')).toBe(false)
   })
 
   test('a -p run draws no line on a timer', async ($, on) => {
@@ -190,7 +211,7 @@ describe('keep warm', () => {
     await $.turn.complete(turn())
     await w.clock.advance(3 * HOUR)
     await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
-    expect(bar.sections.at(-1)?.lines).toEqual(['6h left · ping in 50m', 'cold write 201k tokens paid ($4.01)'])
+    expect(bar.sections.at(-1)?.lines).toEqual([expect.stringMatching(/^6h left · ping in 50m · last turn read 0 \$4\.01 /), 'cold write 201k tokens paid ($4.01)'])
   })
 
   withSidebar('the stop reason gives way to the idle line at the next turn', async ($, on) => {
@@ -238,7 +259,7 @@ describe('keep warm', () => {
     await $.command.run(run('cache-warm'))
     await $.turn.complete(turn())
     await $.session.compact({ trigger: 'auto', messages: [{ role: 'user', text: 'old', toolUses: [] }] })
-    expect(w.statuses.at(-1)).toBe('6h left · waiting for the first turn')
+    expect(w.statuses.at(-1)).toMatch(/^6h left · waiting for the first turn · last turn read 200k \$0\.06 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
     await step($)
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(1)
@@ -573,7 +594,7 @@ describe('cold writes', () => {
     await w.clock.advance(3 * HOUR)
     await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
     expect(w.logs.at(-1)).toBe('cold write of 201k tokens paid ($4.01). Keeping the cache warm for 6h; /cache-warm off stops it.')
-    expect(w.statuses.at(-1)).toBe('6h left · ping in 50m')
+    expect(w.statuses.at(-1)).toMatch(/^6h left · ping in 50m · last turn read 0 \$4\.01 \(/)
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(1)
     const status = await $.command.run(run('cache-status'))
@@ -667,7 +688,7 @@ describe('compaction', () => {
     await $.turn.complete(turn())
     await w.clock.advance(10 * MIN)
     await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'old', toolUses: [] }] })
-    expect(w.statuses.at(-1)).toBe('5h 50m left · waiting for the first turn')
+    expect(w.statuses.at(-1)).toMatch(/^5h 50m left · waiting for the first turn · last turn read 200k \$0\.06 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
     expect((await $.command.run(run('cache-status'))).text).toMatch(/state       reset by compaction/)
     await w.clock.advance(HOUR)
     expect(w.forks).toBe(0)

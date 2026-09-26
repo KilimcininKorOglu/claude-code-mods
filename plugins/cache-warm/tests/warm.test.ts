@@ -116,12 +116,12 @@ describe('resume and clear', () => {
     s.ctx = 200_000
     s.lastRequestAt = NOW - 2 * HOUR
     s.coldWrites = [{ tokens: 200_000, usd: 4 }]
-    s.lastPing = { read: 1, write: 0, usd: 0, at: 0 }
+    s.lastRead = { kind: 'ping', read: 1, write: 0, usd: 0, at: 0 }
     s.stopped = 'x'
     let cancelled = false
     s.pending = { cancel: () => { cancelled = true } }
     resetForClear(s)
-    expect([s.ctx, s.lastRequestAt, s.coldWrites, s.lastPing, s.stopped, s.pending]).toEqual([0, 0, [], null, null, null])
+    expect([s.ctx, s.lastRequestAt, s.coldWrites, s.lastRead, s.stopped, s.pending]).toEqual([0, 0, [], null, null, null])
     expect(cancelled).toBe(true)
   })
 })

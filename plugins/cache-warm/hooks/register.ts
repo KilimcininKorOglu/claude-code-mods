@@ -18,6 +18,7 @@ import {
   isOver,
   isWarmPing,
   parseWarmArgs,
+  pingRecordOf,
   priceNow,
   resetForClear,
   seedFromResume,
@@ -27,6 +28,7 @@ import {
   unsentText,
   windowLine,
   type Line,
+  type PingRecord,
   type State,
 } from './warm.ts'
 
@@ -35,6 +37,7 @@ const KEY_ALWAYS = 'always'
 const DEADLINE = 'deadline:'
 const EVERY = 'every:'
 const REQUEST = 'request:'
+const LAST = 'last:'
 
 /** How often a running window's line is drawn again, so its minutes count down between turns and pings. */
 const REDRAW_MS = 60_000
@@ -53,6 +56,17 @@ function everyKey(s: State): string {
 /** The session's last main-loop request, kept for a module loaded into the running conversation. */
 function requestKey(s: State): string {
   return REQUEST + s.sid
+}
+
+/** The session's last ping or turn read, kept so a reloaded module draws it again. */
+function lastKey(s: State): string {
+  return LAST + s.sid
+}
+
+/** Records the last request that read the cache, in memory and in the store. */
+async function keepLastRead($: EngineInterface, s: State, record: PingRecord): Promise<void> {
+  s.lastRead = record
+  await $.store.set(lastKey(s), record)
 }
 
 function errorText(err: unknown): string {
@@ -118,15 +132,22 @@ async function prune($: EngineInterface, now: number): Promise<void> {
   }
 }
 
+/** The time a stored request or read record was made, or undefined for a value of another shape. */
+function storedAt(key: string, value: unknown): number | undefined {
+  if (key.startsWith(REQUEST)) return typeof value === 'number' ? value : undefined
+  return pingRecordOf(value)?.at
+}
+
 /**
- * Deletes every other session's last request time that is older than the cache, which is gone by then.
- * This session's own stays: its age is what tells the seed the cache is gone, and the next turn rewrites it.
+ * Deletes every other session's last request time and last read that are older than the cache, which is
+ * gone by then. This session's own stay: the request's age is what tells the seed the cache is gone, and
+ * the next turn rewrites both.
  */
 async function pruneRequests($: EngineInterface, s: State, now: number): Promise<void> {
   for (const key of await $.store.keys()) {
-    if (!key.startsWith(REQUEST) || key === requestKey(s)) continue
-    const at = await $.store.get(key)
-    if (typeof at !== 'number' || now - at >= TTL_MS) await $.store.delete(key)
+    if (!(key.startsWith(REQUEST) || key.startsWith(LAST)) || key === requestKey(s) || key === lastKey(s)) continue
+    const at = storedAt(key, await $.store.get(key))
+    if (at === undefined || now - at >= TTL_MS) await $.store.delete(key)
   }
 }
 
@@ -136,6 +157,7 @@ async function restore($: EngineInterface, s: State, now: number): Promise<void>
   s.deadline = typeof deadline === 'number' && deadline > now ? deadline : 0
   s.every = typeof every === 'number' && every >= MIN_PING_MS ? every : PING_AFTER_MS
   s.always = (await $.store.get(KEY_ALWAYS)) === true
+  s.lastRead = pingRecordOf(await $.store.get(lastKey(s)))
 }
 
 async function stop($: EngineInterface, s: State, why: string | null, forgetAlways = false): Promise<void> {
@@ -182,7 +204,7 @@ async function arm($: EngineInterface, s: State): Promise<void> {
 async function settlePing($: EngineInterface, s: State, usage: Usage, now: number): Promise<void> {
   const price = priceNow(s)
   const usd = price ? responseUsd(usage, price) : null
-  s.lastPing = { read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd, at: now }
+  await keepLastRead($, s, { kind: 'ping', read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd, at: now })
   if (!isWarmPing(usage)) {
     if (!s.endless) return stop($, s, coldPingText(usage, usd))
     const write = usage.cache_creation_input_tokens
@@ -312,6 +334,9 @@ async function renewWindow($: EngineInterface, s: State, kind: string | undefine
 /** Scores a turn that re-wrote the context, and keeps the cache warm after it. */
 async function measure($: EngineInterface, s: State, u: TurnUsage, now: number): Promise<void> {
   if (u.model) s.model = u.model
+  // A turn's usage sums its requests, so this is what the whole turn read and cost.
+  const price = priceNow(s)
+  await keepLastRead($, s, { kind: 'turn', read: u.cache_read_input_tokens, write: u.cache_creation_input_tokens, usd: price ? responseUsd(u, price) : null, at: now })
   const previous = s.ctx
   const write = u.cache_creation_input_tokens
   // A turn's usage sums its responses, so a ten-step turn counts the context ten
