@@ -135,12 +135,16 @@ function fromModel(r: ModelForkResult, ms: number): Asked {
   return { answer: { text: r.text.trim(), ms, inTokens: u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens, outTokens: u.output_tokens } }
 }
 
-/** A Claude member: a fork of the session when it runs on the session's model, else a completion over the conversation as text. */
-async function askClaude($: EngineInterface, member: Member, via: Via, ctx: Ctx): Promise<Asked> {
+/**
+ * A Claude member: a fork of the session when it runs on the session's model, else a completion over the
+ * conversation as text. A session with nothing to fork yet gets the completion, and the seat says so.
+ */
+async function askClaude($: EngineInterface, member: Member, seat: Seat, ctx: Ctx): Promise<Asked> {
   const started = await $.clock.now()
-  if (via === 'fork') {
+  if (seat.via === 'fork') {
     const forked = await $.model.fork({ prompt: forkMemberPrompt(ctx.question) })
     if (forked.isAnswered || forked.reason !== 'nothing-to-fork') return fromModel(forked, (await $.clock.now()) - started)
+    seat.via = 'complete'
   }
   const prompt = memberPrompt(transcriptOf(ctx, member), ctx.question)
   const r = await $.model.complete({ model: member.id, system: MEMBER_SYSTEM, prompt, effort: 'high', maxTokens: MAX_TOKENS, timeoutMs: MEMBER_MS })
@@ -185,7 +189,7 @@ async function sit($: EngineInterface, job: Job, seat: Seat, member: Member): Pr
   if (seat.state === 'skipped') return { why: seat.why ?? 'skipped' }
   let asked: Asked
   try {
-    asked = member.kind === 'gemini' ? await askGemini($, member, job.ctx) : await askClaude($, member, seat.via, job.ctx)
+    asked = member.kind === 'gemini' ? await askGemini($, member, job.ctx) : await askClaude($, member, seat, job.ctx)
   } catch (err) {
     asked = { why: errorText(err) }
   }
@@ -212,8 +216,18 @@ async function askChair($: EngineInterface, job: Job, answers: readonly Lettered
   if (job.run.chair.via === 'fork') {
     const forked = await $.model.fork({ prompt })
     if (forked.isAnswered || forked.reason !== 'nothing-to-fork') return forked
+    Object.assign(job.run.chair, { via: 'complete', label: labelOfModel(job.model) })
   }
   return $.model.complete({ model: job.model, prompt, effort: 'high', maxTokens: MAX_TOKENS, timeoutMs: MEMBER_MS })
+}
+
+/**
+ * The chair as the person reads it. A fork runs on the session's model, which is not known after a module
+ * reload until the next main-loop request, so the label then names the session and not the fallback model.
+ */
+function chairOf(ctx: Ctx, model: string): Chair {
+  if (ctx.messages === undefined) return { label: labelOfModel(model), via: 'complete', state: 'waiting' }
+  return { label: ctx.sessionModel === undefined ? 'the model of the session' : labelOfModel(ctx.sessionModel), via: 'fork', state: 'waiting' }
 }
 
 /** The chair's verdict over the lettered answers, or why there is none; the chair's seat is redrawn either way. */
@@ -257,7 +271,7 @@ async function convene($: EngineInterface, state: State, config: Config, questio
   const ctx = await contextOf($, state, config, question, agentId)
   const members = await membersNow($)
   const model = chairModel(ctx, members)
-  const chair: Chair = { label: labelOfModel(model), via: ctx.messages === undefined ? 'complete' : 'fork', state: 'waiting' }
+  const chair = chairOf(ctx, model)
   const run: Run = { id: ++state.runs, question, startedAt: await $.clock.now(), seats: members.map(m => seatOf(m, ctx)), chair }
   const job: Job = { state, run, ctx, model }
   state.current = run.id

@@ -54,6 +54,8 @@ type World = {
   forks: string[]
   /** Every fork fails with an overloaded API error. */
   forkFails: boolean
+  /** Every fork answers that the session has no response to fork yet. */
+  nothingToFork: boolean
   fetches: { url: string; key: string | undefined; body: string }[]
   statuses: number[]
   enrolled: unknown[]
@@ -71,6 +73,7 @@ function answerOf(w: World, model: string) {
 function forkOf(w: World, prompt: string) {
   w.forks.push(prompt)
   if (w.forkFails) return { isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: USAGE }
+  if (w.nothingToFork) return { isAnswered: false, reason: 'nothing-to-fork' }
   return { isAnswered: true, text: prompt.startsWith('You chair') ? 'Verdict: follow A.' : 'the answer of the fork', usage: USAGE }
 }
 
@@ -112,7 +115,7 @@ function world(on: On, opts: { enabled?: boolean; key?: string | null; core?: bo
     clock: mock.clock(on, { now: Date.parse('2026-09-26T10:00:00Z') }),
     core: { ...(opts.key === null ? {} : { key: opts.key ?? 'KEY' }), tier: 'free', old: false },
     store: new Map(opts.enabled === false ? [] : [['enabled', true]]),
-    claude: new Map(), completes: [], forks: [], forkFails: false, fetches: [], statuses: [], enrolled: [], tools: [], sent: [], logs: [],
+    claude: new Map(), completes: [], forks: [], forkFails: false, nothingToFork: false, fetches: [], statuses: [], enrolled: [], tools: [], sent: [], logs: [],
   }
   if (opts.core !== false) seatCore(on, w)
   seatModels(on, w)
@@ -227,6 +230,20 @@ describe('council', () => {
     expect(w.completes.map(c => c.model)).toEqual(['claude-opus-5-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5'])
     expect(w.completes[0]?.prompt).toContain('The conversation is not available; only the question is.')
     expect(w.completes[4]?.prompt.startsWith('You chair a council of models')).toBe(true)
+  })
+
+  it('names the chair as the session while its model is unknown, and completes where there is nothing to fork', async ($, on) => {
+    const w = world(on)
+    answerSteps(on)
+    // After a module reload no main-loop request has named the model yet; the fork still runs on it.
+    expect((await convene($)).result).toContain('(5 of 5 members answered; the chair, the model of the session, wrote it)')
+    await step($)
+    w.nothingToFork = true
+    w.completes.length = 0
+    const r = await convene($)
+    expect(w.completes.map(c => c.model)).toEqual(['claude-sonnet-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-opus-5-5', 'claude-opus-5-5'])
+    expect(w.completes[3]?.system).toBe(MEMBER_SYSTEM)
+    expect(r.result).toContain('the chair, opus 5.5, wrote it')
   })
 
   it('a missing question is refused', async ($, on) => {
