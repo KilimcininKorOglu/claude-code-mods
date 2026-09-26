@@ -12,12 +12,18 @@ export function isTier(value: unknown): value is GeminiTier {
   return value === 'free' || value === 'paid'
 }
 
-/** Store keys: the tier, the enrolled mods, and each mod's model and thinking level. */
+/** Store keys: the tier, the enrolled mods, each mod's model and thinking level, and the mods that name their own models. */
 export const KEYS = {
   tier: 'tier',
   consumers: 'consumers',
   model: (consumer: string) => `model:${consumer}`,
   thinking: (consumer: string) => `thinking:${consumer}`,
+  own: (consumer: string) => `own:${consumer}`,
+}
+
+/** Why /gemini-core sets no model for a mod that names the model of each request itself. */
+export function ownModelsText(consumer: string): string {
+  return `${consumer} names the model of each request itself, so /gemini-core sets no model for it; its thinking level is set here`
 }
 
 /** The enrolled mods and their default models, from the store. */
@@ -82,11 +88,11 @@ export const FREE_WARNING =
   'free tier: Google may use what the Gemini mods send (the conversation, tool outputs, diffs) to improve its products, and human reviewers may read it (Gemini API Additional Terms). Use paid with a billing-enabled key to avoid this.'
 
 /** One mod's line in the status. */
-export type ConsumerLine = { consumer: string; model: string; thinking?: GeminiThinking }
+export type ConsumerLine = { consumer: string; model: string; thinking?: GeminiThinking; ownModels?: true }
 
 /** The status of /gemini-core. */
 export function statusText(tier: GeminiTier, keys: number, lines: readonly ConsumerLine[]): string {
   const key = keys === 0 ? 'no key: set GEMINI_API_KEY or the gemini-core apiKey option' : keys === 1 ? 'key set' : `${keys} keys, tried in turn`
-  const mods = lines.map(l => `${l.consumer}: ${l.model} · thinking ${l.thinking ?? 'model default'}`)
+  const mods = lines.map(l => `${l.consumer}: ${l.ownModels === true ? 'models set by the mod' : l.model} · thinking ${l.thinking ?? 'model default'}`)
   return [`${tier} tier · ${key}`, ...(mods.length === 0 ? ['no Gemini mod has enrolled yet'] : mods)].join('\n')
 }

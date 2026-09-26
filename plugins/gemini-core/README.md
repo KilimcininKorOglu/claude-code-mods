@@ -1,11 +1,11 @@
 # gemini-core
 
-A Claude Code Mod that keeps the Gemini settings of every Gemini mod in one place: the key and the tier for all of them, and the model and the thinking level for each. It adds `$.gemini` to the engine interface; `gemini-compact`, `gemini-advisor`, `gemini-review` and `gemini-plan-review` depend on it and build their Gemini requests through it.
+A Claude Code Mod that keeps the Gemini settings of every Gemini mod in one place: the key and the tier for all of them, and the model and the thinking level for each. It adds `$.gemini` to the engine interface; `gemini-compact`, `gemini-advisor`, `gemini-review` and `gemini-plan-review` depend on it and build their Gemini requests through it. `council` uses it when it is installed, without depending on it.
 
 ## What it does
 
 1. Each Gemini mod enrolls at session start with its plugin name and its default model.
-2. When a mod asks Gemini, `$.gemini.request` builds the `generateContent` request from the mod's body: the key in the `x-goog-api-key` header, never in the URL, the mod's model, and its thinking level in `generationConfig.thinkingConfig.thinkingLevel`. Without a level the body is sent as it is, so the model uses its own default.
+2. When a mod asks Gemini, `$.gemini.request` builds the `generateContent` request from the mod's body: the key in the `x-goog-api-key` header, never in the URL, the mod's model, and its thinking level in `generationConfig.thinkingConfig.thinkingLevel`. Without a level the body is sent as it is, so the model uses its own default. A mod may name another model for one request (`model`); the mod's thinking level still applies to it.
 3. The mod sends the request with its own `$.http.fetch`, and `$.gemini.read` reads the answer: the text and the token counts, Gemini's error message, or a wait before the same request goes again after an HTTP 503 (1 s, 2 s, 3 s, at most four attempts, no attempt once the mod's deadline has passed). After an HTTP 429 or a key error it answers the same request with the next key, which the mod sends at once.
 
 A method on a plugin's noun must answer within 10 seconds (measured on 2.1.278: a 14-second fetch inside one was refused with `did not answer within 10000ms`). A Gemini request can take longer, so the request is sent by the mod and not inside `$.gemini`.
@@ -32,6 +32,8 @@ The Gemini docs say Gemini 3.1 Pro takes no `minimal` either.
     /gemini-core reset                              the tier from the plugin option, each mod its default model and no level
 
 A mod is named in full (`gemini-review`) or without `gemini-` (`review`). The settings are kept across sessions and take effect at the next request. A mod may hook `gemini.configure` to follow a change.
+
+A mod that enrolls with `ownModels` names the model of each request itself, as `council` does with its members. The status shows it as `council: models set by the mod · thinking model default`, and `model <mod>` is refused for it without asking Google. Its thinking level is set here as for any mod.
 
 ## Model list
 
@@ -108,9 +110,13 @@ for (let attempt = 1; ; attempt++) {
 }
 ```
 
+`request` takes `model` to send one request to another model than the mod's. A mod that always does so enrolls with `ownModels: true`: `$.gemini.enroll({ consumer: 'my-mod', defaultModel, ownModels: true })`.
+
+A hook's budget is 10 seconds, and `$.clock.sleep` counts against it while the wait of `$.http.fetch` does not (measured on 2.1.283). A mod that asks several models at once in one hook can resend after `retryInMs` without the wait, because the waits of parallel requests add up.
+
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ types ./types/index.d.ts declares on $: $.gemini
     ❯ ./register.ts hooks: engine.create, session.start, command.run{command=gemini-core}, ui.render{component=Pane}, ui.close
@@ -123,8 +129,8 @@ Reach L3, reaches the network: `/gemini-core models` and a model change ask Goog
     1. Reads:    GEMINI_API_KEY or the apiKey option; its own $.store
     2. Runs:     no process; it opens one pane for a model pick
     3. Sends:    the model list request (GET generativelanguage.googleapis.com/v1beta/models, no conversation), once per session and on refresh, with the key in the x-goog-api-key header; the Gemini mods send the requests it builds
-    4. Persists: in $.store, the tier, the enrolled mods with their default models, and each mod's model and thinking level
-    5. Hostile input: a mod that calls $.gemini.request receives the key, so only install Gemini mods you trust; a model id must match [a-z0-9.-] because it goes into the URL path; the response text is read as JSON and never run
+    4. Persists: in $.store, the tier, the enrolled mods with their default models, which of them name their own models, and each mod's model and thinking level
+    5. Hostile input: a mod that calls $.gemini.request receives the key, so only install Gemini mods you trust; a model id, also one a request names, must match [a-z0-9.-] because it goes into the URL path; the response text is read as JSON and never run
 
 ## Limits
 

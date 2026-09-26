@@ -1,11 +1,11 @@
 # gemini-core
 
-Her Gemini mod'unun Gemini ayarlarını tek bir yerde tutan bir Claude Code Mod'u: hepsi için key ve tier, her biri için model ve thinking seviyesi. Engine arayüzüne `$.gemini` ekler; `gemini-compact`, `gemini-advisor`, `gemini-review` ve `gemini-plan-review` ona bağlıdır ve Gemini isteklerini onun üzerinden kurar.
+Her Gemini mod'unun Gemini ayarlarını tek bir yerde tutan bir Claude Code Mod'u: hepsi için key ve tier, her biri için model ve thinking seviyesi. Engine arayüzüne `$.gemini` ekler; `gemini-compact`, `gemini-advisor`, `gemini-review` ve `gemini-plan-review` ona bağlıdır ve Gemini isteklerini onun üzerinden kurar. `council` kuruluysa onu kullanır, ama ona bağlı değildir.
 
 ## Ne yapar
 
 1. Her Gemini mod'u session başlangıcında plugin adı ve varsayılan modeli ile kaydolur.
-2. Bir mod Gemini'ye sorduğunda `$.gemini.request`, mod'un gövdesinden `generateContent` isteğini kurar: key `x-goog-api-key` header'ında, hiçbir zaman URL'de değil; mod'un modeli; ve thinking seviyesi `generationConfig.thinkingConfig.thinkingLevel` içinde. Seviye yoksa gövde olduğu gibi gönderilir, yani model kendi varsayılanını kullanır.
+2. Bir mod Gemini'ye sorduğunda `$.gemini.request`, mod'un gövdesinden `generateContent` isteğini kurar: key `x-goog-api-key` header'ında, hiçbir zaman URL'de değil; mod'un modeli; ve thinking seviyesi `generationConfig.thinkingConfig.thinkingLevel` içinde. Seviye yoksa gövde olduğu gibi gönderilir, yani model kendi varsayılanını kullanır. Bir mod tek bir istek için başka bir model adlandırabilir (`model`); mod'un thinking seviyesi o modele de uygulanır.
 3. İsteği mod kendi `$.http.fetch` çağrısıyla gönderir ve `$.gemini.read` cevabı okur: metni ve token sayılarını, Gemini'nin hata mesajını, ya da HTTP 503 sonrası aynı isteğin tekrar gönderilmesi için bir bekleme (1 sn, 2 sn, 3 sn, en fazla dört deneme; mod'un süresi dolduktan sonra deneme yok). HTTP 429 ya da key hatası sonrasında aynı isteği sıradaki key ile cevaplar ve mod onu hemen gönderir.
 
 Bir plugin noun'unun method'u 10 saniye içinde cevap vermek zorundadır (2.1.278 üzerinde ölçüldü: içindeki 14 saniyelik bir fetch `did not answer within 10000ms` ile reddedildi). Bir Gemini isteği daha uzun sürebilir, bu yüzden istek `$.gemini` içinde değil, mod tarafından gönderilir.
@@ -32,6 +32,8 @@ Gemini dokümanları Gemini 3.1 Pro'nun da `minimal` almadığını söyler.
     /gemini-core reset                              tier plugin option'ından, her mod varsayılan modeline ve seviyesiz
 
 Bir mod tam adıyla (`gemini-review`) ya da `gemini-` olmadan (`review`) adlandırılır. Ayarlar session'lar arasında saklanır ve bir sonraki istekte geçerli olur. Bir mod değişimi izlemek için `gemini.configure` olayını hook'layabilir.
+
+`ownModels` ile kaydolan bir mod her isteğin modelini kendisi adlandırır; `council` üyeleri için bunu yapar. Status onu `council: models set by the mod · thinking model default` olarak gösterir ve `model <mod>` onun için Google'a sormadan reddedilir. Thinking seviyesi her mod gibi burada ayarlanır.
 
 ## Model listesi
 
@@ -108,9 +110,13 @@ for (let attempt = 1; ; attempt++) {
 }
 ```
 
+`request`, tek bir isteği mod'un modelinden başka bir modele göndermek için `model` alır. Bunu her istekte yapan bir mod `ownModels: true` ile kaydolur: `$.gemini.enroll({ consumer: 'my-mod', defaultModel, ownModels: true })`.
+
+Bir hook'un budget'ı 10 saniyedir ve `$.clock.sleep` bu budget'tan düşer, `$.http.fetch` beklemesi düşmez (2.1.283 üzerinde ölçüldü). Tek bir hook içinde birkaç modele aynı anda soran bir mod `retryInMs` sonrasında beklemeden yeniden gönderebilir, çünkü paralel isteklerin beklemeleri toplanır.
+
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ types ./types/index.d.ts declares on $: $.gemini
     ❯ ./register.ts hooks: engine.create, session.start, command.run{command=gemini-core}, ui.render{component=Pane}, ui.close
@@ -123,8 +129,8 @@ Reach L3, network'e çıkar: `/gemini-core models` ve bir model değişimi Googl
     1. Okur:     GEMINI_API_KEY ya da apiKey option'ını; kendi $.store dosyasını
     2. Çalıştırır: hiçbir process; model seçimi için bir pane açar
     3. Gönderir: model listesi isteğini (GET generativelanguage.googleapis.com/v1beta/models, konuşma yok), session başına bir kere ve refresh'te, key x-goog-api-key header'ında; kurduğu istekleri Gemini mod'ları gönderir
-    4. Saklar:   $.store içinde tier'ı, kayıtlı mod'ları varsayılan modelleriyle, ve her mod'un modeli ile thinking seviyesini
-    5. Düşman girdi: `$.gemini.request` çağıran her plugin key'i alır, bu yüzden yalnız güvendiğiniz Gemini mod'larını kurun; model id'si `[a-z0-9.-]` ile eşleşmek zorundadır, çünkü URL path'ine girer; cevap metni JSON olarak okunur ve hiç çalıştırılmaz
+    4. Saklar:   $.store içinde tier'ı, kayıtlı mod'ları varsayılan modelleriyle, hangilerinin kendi modellerini adlandırdığını, ve her mod'un modeli ile thinking seviyesini
+    5. Düşman girdi: `$.gemini.request` çağıran her plugin key'i alır, bu yüzden yalnız güvendiğiniz Gemini mod'larını kurun; model id'si, bir isteğin adlandırdığı da, `[a-z0-9.-]` ile eşleşmek zorundadır, çünkü URL path'ine girer; cevap metni JSON olarak okunur ve hiç çalıştırılmaz
 
 ## Sınırlar
 

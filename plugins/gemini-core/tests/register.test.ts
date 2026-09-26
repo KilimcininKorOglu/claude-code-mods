@@ -126,6 +126,28 @@ describe('$.gemini', () => {
     expect((await fromEnv.settings({ consumer: 'gemini-review' })).keys).toBe(2)
   })
 
+  test('a request that names a model goes to that model with the mod\'s thinking level', async () => {
+    const { gemini } = provider({ key: 'KEY' })
+    await gemini.enroll({ consumer: 'council', defaultModel: 'gemini-3.8-flash', ownModels: true })
+    await gemini.configure({ consumer: 'council', thinking: 'low' })
+    const r = await gemini.request({ consumer: 'council', body: BODY, model: 'gemini-3.5-flash' })
+    if ('error' in r) throw new Error(r.error)
+    expect(r.model).toBe('gemini-3.5-flash')
+    expect(r.http.url).toContain('/models/gemini-3.5-flash:generateContent')
+    expect(JSON.parse(r.http.init.body).generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' })
+    expect(await gemini.request({ consumer: 'council', body: BODY, model: 'gemini/../x' })).toEqual({ error: 'gemini/../x is not a Gemini model id' })
+  })
+
+  test('a mod that names its own models gets no model from /gemini-core, until it enrolls without the flag', async () => {
+    const { gemini } = provider({ key: 'KEY' })
+    await gemini.enroll({ consumer: 'council', defaultModel: 'gemini-3.8-flash', ownModels: true })
+    expect((await gemini.settings({ consumer: 'council' })).ownModels).toBe(true)
+    await expect(gemini.configure({ consumer: 'council', model: 'gemini-3.5-flash' })).rejects.toThrow('council names the model of each request itself')
+    await gemini.enroll({ consumer: 'council', defaultModel: 'gemini-3.8-flash' })
+    expect((await gemini.settings({ consumer: 'council' })).ownModels).toBe(undefined)
+    expect(await gemini.configure({ consumer: 'council', model: 'gemini-3.5-flash' })).toBe('council: model gemini-3.5-flash')
+  })
+
   test('says why there is no request, and refuses a bad enrollment or change', async () => {
     const { gemini } = provider()
     await gemini.enroll({ consumer: 'gemini-review', defaultModel: 'gemini-3.8-flash' })
@@ -149,6 +171,18 @@ describe('/gemini-core', () => {
     expect((await $.command.run(run(''))).text).toBe('paid tier · key set\ngemini-compact: gemini-3.5-flash-lite · thinking model default\ngemini-review: gemini-3.8-flash · thinking low')
     expect((await $.command.run(run('thinking advisor low'))).text).toContain('no Gemini mod named advisor')
     expect((await $.command.run(run('thinking review max'))).text).toBe('thinking level max is not one of minimal, low, medium, high, default')
+  })
+
+  test('shows a mod that names its own models, and refuses a model for it without asking Google', async ($, on) => {
+    const p = provider({ key: 'KEY' })
+    const w = world(on, p, 'KEY')
+    await p.gemini.enroll({ consumer: 'council', defaultModel: 'gemini-3.8-flash', ownModels: true })
+    const refused = 'council names the model of each request itself, so /gemini-core sets no model for it; its thinking level is set here'
+    expect((await $.command.run(run(''))).text).toBe('free tier · key set\ncouncil: models set by the mod · thinking model default')
+    expect((await $.command.run(run('model council gemini-3.5-flash'))).text).toBe(refused)
+    expect((await $.command.run(run('model council'))).text).toBe(refused)
+    expect((await $.command.run(run('thinking council low'))).text).toBe('council: thinking low')
+    expect([w.fetches, w.panes]).toEqual([[], []])
   })
 
   test('lists the text models the key gives, asking Google once until refresh', async ($, on) => {

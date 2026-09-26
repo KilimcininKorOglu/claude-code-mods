@@ -12,11 +12,25 @@ export type GeminiThinking = 'minimal' | 'low' | 'medium' | 'high'
 
 export type GeminiTier = 'free' | 'paid'
 
-/** A Gemini mod: its plugin name, and the model it uses until /gemini-core sets another. */
-export type GeminiEnroll = { consumer: string; defaultModel: string }
+/**
+ * A Gemini mod: its plugin name, and the model it uses until /gemini-core sets another. `ownModels` says
+ * the mod names the model of each request itself (`GeminiRequest`'s `model`), so /gemini-core sets none
+ * for it and shows it so.
+ */
+export type GeminiEnroll = { consumer: string; defaultModel: string; ownModels?: boolean }
 
-/** What a Gemini mod runs with; `keys` counts the keys tried in turn, `thinking` absent is the model's own default. */
-export type GeminiSettings = { hasKey: boolean; keys: number; tier: GeminiTier; model: string; thinking?: GeminiThinking }
+/**
+ * What a Gemini mod runs with; `keys` counts the keys tried in turn, `thinking` absent is the model's own
+ * default, and `ownModels` is set when the mod enrolled so.
+ */
+export type GeminiSettings = { hasKey: boolean; keys: number; tier: GeminiTier; model: string; thinking?: GeminiThinking; ownModels?: true }
+
+/**
+ * `request`'s input: the mod, the generateContent body, and a model for this request alone. `model`
+ * absent is the mod's model; a present one must be a plain model id, and the mod's thinking level applies
+ * to it as well.
+ */
+export type GeminiRequest = { consumer: string; body: Record<string, unknown>; model?: string }
 
 /**
  * A generateContent POST with the key in a header, never in the URL. `tried`
@@ -65,8 +79,8 @@ export type Gemini = {
   enroll(input: GeminiEnroll): Promise<void>
   /** What a mod runs with now. */
   settings(input: { consumer: string }): Promise<GeminiSettings>
-  /** The request for a generateContent body, with the mod's model and thinking level. */
-  request(input: { consumer: string; body: Record<string, unknown> }): Promise<GeminiPrepared>
+  /** The request for a generateContent body, with the mod's model, or the one the input names, and the mod's thinking level. */
+  request(input: GeminiRequest): Promise<GeminiPrepared>
   /** Reads a response; asks for another attempt after an HTTP 503 while the deadline allows, and moves to the next key after a 429 or a key error. */
   read(input: GeminiResponse): Promise<GeminiRead>
   /** Stores a change and answers the line /gemini-core prints. A mod may hook `gemini.configure` to follow its own changes. */

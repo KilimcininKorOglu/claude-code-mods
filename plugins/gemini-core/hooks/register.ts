@@ -1,10 +1,10 @@
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
-import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiSettings, GeminiTier } from '../types/index.d.ts'
+import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiRequest, GeminiSettings, GeminiTier } from '../types/index.d.ts'
 import { buildHttp, MODEL_ID, withThinking } from './api.ts'
 import { parseKeys, readWithKeys, type KeyState } from './keys.ts'
 import { modelsRequest, modelsText, parseModels, unknownModel, type ModelInfo } from './models.ts'
 import { listTree, PANE_ID, paneRows, pickerTree, type Pick } from './picker.tsx'
-import { consumersOf, FREE_WARNING, isThinking, isTier, KEYS, parseCommand, resolveConsumer, statusText, type ConsumerLine } from './settings.ts'
+import { consumersOf, FREE_WARNING, isThinking, isTier, KEYS, ownModelsText, parseCommand, resolveConsumer, statusText, type ConsumerLine } from './settings.ts'
 
 /**
  * The store and environment the methods of `$.gemini` run on. The validator
@@ -50,6 +50,7 @@ async function settingsFor(host: Host, config: Config, consumer: string): Promis
   if (defaultModel === undefined) throw new Error(`${consumer} has not enrolled with gemini-core`)
   const model = await host.get(KEYS.model(consumer))
   const thinking = await host.get(KEYS.thinking(consumer))
+  const own = (await host.get(KEYS.own(consumer))) === true
   const keys = (await apiKeys(host, config)).length
   return {
     hasKey: keys > 0,
@@ -57,7 +58,15 @@ async function settingsFor(host: Host, config: Config, consumer: string): Promis
     tier: await tierOf(host, config),
     model: typeof model === 'string' && MODEL_ID.test(model) ? model : defaultModel,
     ...(isThinking(thinking) ? { thinking } : {}),
+    ...(own ? { ownModels: true as const } : {}),
   }
+}
+
+/** Keeps whether a mod names the model of each request itself, as its latest enrollment says. */
+async function markOwnModels(host: Host, consumer: string, own: boolean): Promise<void> {
+  if (((await host.get(KEYS.own(consumer))) === true) === own) return
+  if (own) await host.set(KEYS.own(consumer), true)
+  else await host.del(KEYS.own(consumer))
 }
 
 async function enroll(host: Host, input: GeminiEnroll): Promise<void> {
@@ -65,16 +74,19 @@ async function enroll(host: Host, input: GeminiEnroll): Promise<void> {
   if (!MODEL_ID.test(input.defaultModel)) throw new Error(`enroll takes a Gemini model id, not ${JSON.stringify(input.defaultModel)}`)
   const mods = await enrolled(host)
   if (mods[input.consumer] !== input.defaultModel) await host.set(KEYS.consumers, { ...mods, [input.consumer]: input.defaultModel })
+  await markOwnModels(host, input.consumer, input.ownModels === true)
 }
 
-/** The request for a mod, with the key the last request succeeded or moved on with. */
-async function request(host: Host, config: Config, state: KeyState, consumer: string, body: Record<string, unknown>): Promise<GeminiPrepared> {
+/** The request for a mod, with the key the last request succeeded or moved on with, and the model the input names, if any. */
+async function request(host: Host, config: Config, state: KeyState, input: GeminiRequest): Promise<GeminiPrepared> {
+  if (input.model !== undefined && !MODEL_ID.test(input.model)) return { error: `${input.model} is not a Gemini model id` }
   const keys = await apiKeys(host, config)
   const key = keys[state.preferred] ?? keys[0]
   if (key === undefined) return { error: NO_KEY }
   try {
-    const s = await settingsFor(host, config, consumer)
-    return { http: buildHttp(s.model, key, withThinking(body, s.thinking)), model: s.model, tier: s.tier }
+    const s = await settingsFor(host, config, input.consumer)
+    const model = input.model ?? s.model
+    return { http: buildHttp(model, key, withThinking(input.body, s.thinking)), model, tier: s.tier }
   } catch (err) {
     return { error: errorText(err) }
   }
@@ -95,6 +107,7 @@ async function configureMod(host: Host, change: Extract<GeminiChange, { consumer
   const consumer = resolveConsumer(change.consumer, names)
   if (consumer === undefined) throw new Error(`no Gemini mod named ${change.consumer}; enrolled: ${names.join(', ') || 'none'}`)
   if ('model' in change) {
+    if ((await host.get(KEYS.own(consumer))) === true) throw new Error(ownModelsText(consumer))
     if (!MODEL_ID.test(change.model)) throw new Error(`${change.model} is not a Gemini model id`)
     await host.set(KEYS.model(consumer), change.model)
     return `${consumer}: model ${change.model}`
@@ -119,7 +132,7 @@ export function createGemini(host: Host, config: Config): Gemini {
   return {
     enroll: input => enroll(host, input),
     settings: ({ consumer }) => settingsFor(host, config, consumer),
-    request: ({ consumer, body }) => request(host, config, state, consumer, body),
+    request: input => request(host, config, state, input),
     read: async input => readWithKeys(input, await apiKeys(host, config), state),
     configure: change => configure(host, change),
   }
@@ -130,7 +143,7 @@ async function statusOf($: EngineInterface, config: Config): Promise<string> {
   const lines: ConsumerLine[] = []
   for (const consumer of mods) {
     const s = await $.gemini.settings({ consumer })
-    lines.push({ consumer, model: s.model, ...(s.thinking === undefined ? {} : { thinking: s.thinking }) })
+    lines.push({ consumer, model: s.model, ...(s.thinking === undefined ? {} : { thinking: s.thinking }), ...(s.ownModels === true ? { ownModels: true as const } : {}) })
   }
   const tier = await $.store.get(KEYS.tier)
   const keys = config.apiKeys.length > 0 ? config.apiKeys : parseKeys(await $.env.get('GEMINI_API_KEY'))
@@ -164,6 +177,7 @@ async function openPicker($: EngineInterface, config: Config, session: Session, 
   const names = Object.keys(consumersOf(await $.store.get(KEYS.consumers)))
   const consumer = resolveConsumer(name, names)
   if (consumer === undefined) return `no Gemini mod named ${name}; enrolled: ${names.join(', ') || 'none'}`
+  if ((await $.store.get(KEYS.own(consumer))) === true) return ownModelsText(consumer)
   const models = await listModels($, config, session, false)
   if (models.length === 0) return modelsText(models)
   session.pick = { consumer, models, current: (await $.gemini.settings({ consumer })).model }
@@ -180,9 +194,18 @@ async function pickModel($: EngineInterface, session: Session, model: string): P
   $.ui.toast(await $.gemini.configure({ consumer: pick.consumer, model }))
 }
 
-/** A model id set by argument is checked against the list the keys give. */
+/** Whether the mod named in a command names the model of each request itself. */
+async function ownsModels($: EngineInterface, name: string): Promise<boolean> {
+  const consumer = resolveConsumer(name, Object.keys(consumersOf(await $.store.get(KEYS.consumers))))
+  return consumer !== undefined && (await $.store.get(KEYS.own(consumer))) === true
+}
+
+/**
+ * A model id set by argument is checked against the list the keys give; a mod that names its own models
+ * is refused by `configure` before the list is asked for.
+ */
 async function applyChange($: EngineInterface, config: Config, session: Session, change: GeminiChange): Promise<string> {
-  if ('model' in change) {
+  if ('model' in change && !(await ownsModels($, change.consumer))) {
     const refused = unknownModel(change.model, await listModels($, config, session, false))
     if (refused !== undefined) return refused
   }
