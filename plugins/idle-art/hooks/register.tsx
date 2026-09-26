@@ -90,5 +90,12 @@ export const register: Register = on => {
     )
   })
 
+  // The band is not drawn idle between two turns, so the main loop's turn end is what starts the next
+  // turn with a new style and its own delay.
+  on('turn.complete', async (_, e, next) => {
+    if (e.agentId === undefined) state.since = null
+    return next(e)
+  })
+
   on('command.run', { command: 'idle-art' }, async ($, e) => ({ text: await apply($, state, parseArgs(e.args)) }))
 }

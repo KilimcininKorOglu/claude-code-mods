@@ -1,5 +1,5 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
-import type { CommandRunInput, On } from 'claude-code'
+import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
 
 tier('user')
 
@@ -85,6 +85,23 @@ describe('register', () => {
       expect(style).not.toBe(last)
       last = style
       await band($, { isWorking: false })
+    }
+  })
+
+  test('a new main-loop turn takes a new style though the band was never drawn idle in between, and a subagent turn does not', async ($, on) => {
+    world(on, { delay: 0 })
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await $.session.start(start)
+    const styleNow = async (): Promise<string> => /"style":"(\w+)"/.exec(await band($))?.[1] ?? ''
+    const done = (agentId?: string): TurnCompleteInput => ({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer', agentId })
+    let last = await styleNow()
+    await $.turn.complete(done('agent-1'))
+    expect(await styleNow()).toBe(last)
+    for (let i = 0; i < 8; i++) {
+      await $.turn.complete(done())
+      const style = await styleNow()
+      expect(style).not.toBe(last)
+      last = style
     }
   })
 

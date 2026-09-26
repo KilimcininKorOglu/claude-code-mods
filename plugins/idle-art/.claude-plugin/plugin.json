@@ -1,6 +1,6 @@
 {
   "name": "idle-art",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Draws an ASCII animation above the prompt while the model works: matrix rain, fire, a star field, an aquarium or the Game of Life. Display only: nothing reaches the model. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

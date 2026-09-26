@@ -66,7 +66,7 @@ Restart Claude Code, or run `/reload-plugins` in an open session. The mod is on 
 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
-    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, command.run{command=idle-art}
+    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
     ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.store.get (via loadConfig), $.store.set (via apply), $.ui.invalidate (via apply, beginTurn), $.ui.resolve
     ❯ ./register.tsx surface modules: hooks/scene.tsx
 

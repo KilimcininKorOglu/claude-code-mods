@@ -66,7 +66,7 @@ Claude Code'u yeniden başlatın ya da açık bir oturumda `/reload-plugins` ça
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, command.run{command=idle-art}
+    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
     ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.store.get (via loadConfig), $.store.set (via apply), $.ui.invalidate (via apply, beginTurn), $.ui.resolve
     ❯ ./register.tsx surface modules: hooks/scene.tsx
 
