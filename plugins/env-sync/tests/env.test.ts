@@ -5,6 +5,11 @@ import { commitDir, denyText, diffReads, doneLines, isCommit, isGuarded, lineRea
 tier('user')
 
 describe('env reads', () => {
+  test('the $_SERVER values the web server sets without a prefix are not env reads', () => {
+    const line = "$_SERVER['HTTPS']; $_SERVER['AUTH_TYPE']; $_SERVER['ORIG_PATH_INFO']; $_SERVER['REDIRECT_URL']; $_SERVER['UNIQUE_ID']; $_SERVER['HTTPS_PROXY_TOKEN']"
+    expect(lineReads(line)).toEqual(['HTTPS_PROXY_TOKEN'])
+  })
+
   test('reads every language form and skips system and request names', () => {
     const lines = [
       'const a = process.env.STRIPE_KEY; const b = process.env["DB_URL"]; import.meta.env.VITE_API',

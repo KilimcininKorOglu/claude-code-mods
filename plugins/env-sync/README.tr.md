@@ -19,7 +19,7 @@ Bir commit, `.env.example` dosyasında olmayan env variable'ları okuduğunda bu
    | Ruby | `ENV['X']`, `ENV.fetch('X')` |
    | Java, Kotlin | `System.getenv("X")` |
 
-   Ad büyük harftir (`[A-Z][A-Z0-9_]*`). `NODE_ENV`, `HOME`, `PATH`, `USER`, `PWD`, `SHELL`, `TMPDIR`, `TERM`, `LANG` ve `CI` atlanır; `$_SERVER` içindeki request değerleri de (`HTTP_*`, `REQUEST_*`, `SERVER_*` ve benzerleri). Düz metin dosyalarının satırları (`.md`, `.txt`, `.rst` ve benzerleri) okunmaz.
+   Ad büyük harftir (`[A-Z][A-Z0-9_]*`). `NODE_ENV`, `HOME`, `PATH`, `USER`, `PWD`, `SHELL`, `TMPDIR`, `TERM`, `LANG` ve `CI` atlanır; web sunucusunun `$_SERVER` içine yazdığı request değerleri de (`HTTP_*`, `REQUEST_*`, `SERVER_*` ve benzerleri, ve önek taşımayan `HTTPS`, `AUTH_TYPE` ve `UNIQUE_ID`). Düz metin dosyalarının satırları (`.md`, `.txt`, `.rst` ve benzerleri) okunmaz.
 5. Bir variable, referans dosyada `X=`, `export X=` ya da comment'lenmiş `# X=` satırı varsa listelenmiş sayılır. Model, commit'in sonucundan sonra şu notu okur:
 
        env-sync: this commit reads env variables .env.example lacks: STRIPE_KEY (src/pay.ts:12) · REDIS_URL (app/cache.py:4). Add them to .env.example with a placeholder value, never a real secret.

@@ -19,7 +19,7 @@ A Claude Code Mod that tells the model when a commit reads env variables that `.
    | Ruby | `ENV['X']`, `ENV.fetch('X')` |
    | Java, Kotlin | `System.getenv("X")` |
 
-   A name is upper case (`[A-Z][A-Z0-9_]*`). `NODE_ENV`, `HOME`, `PATH`, `USER`, `PWD`, `SHELL`, `TMPDIR`, `TERM`, `LANG` and `CI` are skipped, and so are the request values of `$_SERVER` (`HTTP_*`, `REQUEST_*`, `SERVER_*` and the like). Lines of prose files (`.md`, `.txt`, `.rst` and the like) are not read.
+   A name is upper case (`[A-Z][A-Z0-9_]*`). `NODE_ENV`, `HOME`, `PATH`, `USER`, `PWD`, `SHELL`, `TMPDIR`, `TERM`, `LANG` and `CI` are skipped, and so are the request values the web server sets in `$_SERVER` (`HTTP_*`, `REQUEST_*`, `SERVER_*` and the like, and `HTTPS`, `AUTH_TYPE` and `UNIQUE_ID`, which carry no prefix). Lines of prose files (`.md`, `.txt`, `.rst` and the like) are not read.
 5. A variable counts as listed when the reference file has `X=`, `export X=` or a commented `# X=` line. The model reads this note after the commit's result:
 
        env-sync: this commit reads env variables .env.example lacks: STRIPE_KEY (src/pay.ts:12) · REDIS_URL (app/cache.py:4). Add them to .env.example with a placeholder value, never a real secret.

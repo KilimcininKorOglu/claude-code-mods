@@ -83,8 +83,11 @@ const SYSTEM = new Set(['NODE_ENV', 'HOME', 'PATH', 'USER', 'PWD', 'SHELL', 'TMP
 /** PHP `$_SERVER`, which holds the env variables and also the web server's request values. */
 const SERVER_READ = new RegExp(`\\$_SERVER\\[\\s*['"]${NAME}['"]\\s*\\]`, 'g')
 
-/** The request values in `$_SERVER`, which are not env variables. */
-const SERVER_VALUE = /^(HTTP|REQUEST|SERVER|REMOTE|SCRIPT|PHP|CONTENT|DOCUMENT|QUERY|GATEWAY|PATH)_/
+/**
+ * The request values in `$_SERVER`, which the web server sets and are not env variables: the prefixed
+ * families, and the names PHP documents without a prefix (`HTTPS`, `AUTH_TYPE`, Apache's `UNIQUE_ID`).
+ */
+const SERVER_VALUE = /^(?:(?:HTTP|REQUEST|SERVER|REMOTE|SCRIPT|PHP|CONTENT|DOCUMENT|QUERY|GATEWAY|PATH|ORIG|REDIRECT)_|(?:HTTPS|AUTH_TYPE|UNIQUE_ID)$)/
 
 /** Prose files, whose examples are not reads. */
 const PROSE = /\.(md|mdx|markdown|txt|rst|adoc)$/i
