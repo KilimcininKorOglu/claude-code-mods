@@ -2,9 +2,10 @@ import type { ClientModule, ClientSurface, RenderElement } from 'claude-code'
 import { isStyle } from './config.ts'
 import { rngOf, runsOf, type Animation, type Frame } from './art/grid.ts'
 import { SCENES } from './art/scenes.ts'
+import { playClip, type Clip } from './clip.ts'
 
-/** What the hooks module hands this instance: the turn's style and seed, and the region. */
-export type SceneProps = { style: string; seed: number; width: number; height: number }
+/** What the hooks module hands this instance: the turn's style and seed, the region, and a saved clip's frames. */
+export type SceneProps = { style: string; seed: number; width: number; height: number; clip?: Clip }
 
 /** The running animation and what it was started for, so new props start a new one. */
 type Live = { anim: Animation; key: string }
@@ -17,7 +18,9 @@ function keyOf(p: SceneProps): string {
 }
 
 function start(p: SceneProps): Live | undefined {
-  if (!isStyle(p.style) || p.width < 1 || p.height < 1) return undefined
+  if (p.width < 1 || p.height < 1) return undefined
+  if (p.clip !== undefined) return { anim: playClip(p.clip, p.width, p.height, TICK_MS), key: keyOf(p) }
+  if (!isStyle(p.style)) return undefined
   return { anim: SCENES[p.style](p.width, p.height, rngOf(p.seed)), key: keyOf(p) }
 }
 

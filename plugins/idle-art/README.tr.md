@@ -1,10 +1,10 @@
 # idle-art
 
-Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Beş sahne var: matrix yağmuru, ateş, yıldız alanı, akvaryum ve Game of Life. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
+Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Beş sahne yerleşik olarak gelir: matrix yağmuru, ateş, yıldız alanı, akvaryum ve Game of Life. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
 
 ## Ne gösterir
 
-Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şey göstermez. Turn bitince resim kaybolur. Varsayılan olarak her turn rastgele bir sahne çizer, ama bir önceki turn'ün sahnesini asla seçmez.
+Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şey göstermez. Turn bitince resim kaybolur. Varsayılan olarak her turn, yerleşik sahneler ve kaydettiğin klipler arasından rastgele birini çizer. Bir önceki turn'ün seçimini asla tekrar seçmez.
 
     ● Brewing… (5s)
              .:   .                 ,
@@ -26,20 +26,43 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
 
 Band en fazla 8 satır ve 100 sütun kaplar. Terminalde daha az yer varsa daha küçük çizilir. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir.
 
+## Kendi GIF'lerin
+
+    /idle-art import ~/Downloads/kedi.gif kedi
+
+Mod GIF'i okur ve her kareyi kendi süresi ve şeffaflığıyla çözer. Sonra her kareyi karakterlere çevirir. Her hücre, kapladığı piksellerin ortalama rengini alır. Hücrenin karakteri `.:-=+*#%@` dizisinden parlaklığına göre seçilir. Parlaklık, klibin kendi en koyu ve en parlak hücresi arasına yayılır. Çoğu şeffaf olan bir hücre boş kalır. Resim şeklini korur ve band'in 8 satırını doldurur. Bir hücre, genişliğinin iki katı yükseklikte sayılır. Klip band'in ortasında, her kare kendi süresi kadar gösterilerek döngü halinde oynar.
+
+    ● Brewing… (6s)
+        ....=*******++=+***+====-....
+        ....=******=----=*#=====-....
+        ....-+++++*==+----===---:....
+        ....:--=###++*=-:-=-:---:....
+        ....-+#%#%*--==-:-:-==--:....
+        ....+**#*++-:-:---::::--:....
+        ....-====+-=:--:::::.:-+-....
+        ....:-=*++*+++=-:-=--=-=-....
+
+Bir klip 90.000 karakterin altında tutulur. Çünkü tek bir çizim, çizim thread'ine en fazla bu kadar veri verebilir. Daha uzun bir klip sığana kadar her iki kareden birini düşürür. Kalan her kare, düşen karenin süresini de üstlenir. Cevap kaç karenin kaldığını söyler. Klipler mod'un store'unda durur. Store toplam 4 MiB tutar, bu da yaklaşık kırk klip eder. Sığmayan bir klip, sebebiyle birlikte reddedilir.
+
+Klip adı küçük harf, rakam ve tire içerir, en fazla 24 karakterdir. Yerleşik bir sahnenin adı ya da komutun okuduğu bir kelime olamaz. Kayıtlı bir adla yeniden import etmek o klibi değiştirir. `~` ile başlayan bir yol ev dizinini gösterir. Göreli bir yol oturumun dizinine göre çözülür. Yolda boşluk olabilir: son kelime klibin adıdır.
+
 ## Komut
 
-    /idle-art                 durum: açık ya da kapalı, stil, gecikme
-    /idle-art on | off        çizimi aç ya da kapat
-    /idle-art <sahne>         her zaman o sahneyi çiz: matrix, fire, stars, aquarium, life
-    /idle-art random          her turn yeni bir sahne (varsayılan)
-    /idle-art delay <n>       turn'ün n. saniyesinde başla, 0 ile 60 arası (varsayılan 3)
+    /idle-art                          durum: açık ya da kapalı, stil, gecikme
+    /idle-art on | off                 çizimi aç ya da kapat
+    /idle-art <sahne ya da klip>       her zaman onu çiz: matrix, fire, stars, aquarium, life ya da kayıtlı bir klip
+    /idle-art random                   her turn yeni bir sahne ya da klip (varsayılan)
+    /idle-art delay <n>                turn'ün n. saniyesinde başla, 0 ile 60 arası (varsayılan 3)
+    /idle-art import <gif yolu> <ad>   bir GIF'i klibe çevir ve o adla sakla
+    /idle-art list                     yerleşik sahneler ve kayıtlı klipler
+    /idle-art remove <ad>              kayıtlı bir klibi sil; stil o klipse yeniden random olur
     /idle-art help
 
-Ayarlar mod'un store'unda durur ve güncellemelerden sonra da kalır.
+Ayarlar ve klipler mod'un store'unda durur. Store bütün projelerde ortaktır ve güncellemelerden sonra da kalır.
 
 ## Nasıl çizer
 
-`AbovePrompt` için bir `ui.render` hook'u, `isWorking` true olduğu sürece bir `Client` element mount eder. `Client`, `hooks/scene.tsx` modülünü çizim thread'inde çalıştırır. 100 ms'lik bir `surface.every` tick'i sahneyi bir adım ilerletir ve sonraki frame'i ister. Bu yüzden frame başına hiçbir hook çalışmaz. Her sahne `hooks/art/` altında saf bir modüldür ve bir hücre grid'i döner. Bir satırdaki aynı renkli ardışık hücreler tek bir `Text` olarak çizilir. Hooks modülü, band çalışan bir turn'ü ilk gördüğünde stili ve rastgele bir seed seçer. Gecikme dolunca bir `$.clock.after` timer'ı band'i yeniden çizdirir.
+`AbovePrompt` için bir `ui.render` hook'u, `isWorking` true olduğu sürece bir `Client` element mount eder. `Client`, `hooks/scene.tsx` modülünü çizim thread'inde çalıştırır. 100 ms'lik bir `surface.every` tick'i sahneyi bir adım ilerletir ve sonraki frame'i ister. Bu yüzden frame başına hiçbir hook çalışmaz. Her yerleşik sahne `hooks/art/` altında saf bir modüldür ve bir hücre grid'i döner. Kayıtlı bir klip çizim thread'ine `Client`'ın props değeriyle ulaşır ve `hooks/clip.ts` ile oynar. Bir satırdaki aynı renkli ardışık hücreler tek bir `Text` olarak çizilir. Hooks modülü, band çalışan bir turn'ü ilk gördüğünde sahneyi ve rastgele bir seed seçer. Gecikme dolunca bir `$.clock.after` timer'ı band'i yeniden çizdirir. Ana döngünün `turn.complete` olayı turn'ü bitirir, böylece sonraki turn yeniden seçer. `hooks/gif.ts` içindeki GIF decoder'ı bu mod için yazıldı ve makinede başka bir araç gerektirmez.
 
 ## Kurulum
 
@@ -67,20 +90,24 @@ Claude Code'u yeniden başlatın ya da açık bir oturumda `/reload-plugins` ça
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
-    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.store.get (via loadConfig), $.store.set (via apply), $.ui.invalidate (via apply, beginTurn), $.ui.resolve
+    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
+    ❯ ./register.tsx env reads: HOME
     ❯ ./register.tsx surface modules: hooks/scene.tsx
 
-Reach L0: çizer ve hatırlar.
+Reach L1: import ettiğin GIF'i okur.
 
-    1. Reads:    band'in props değerleri (çalışıyor mu, anket var mı, satır, sütun) ve saat; store'daki kendi üç ayarı
+    1. Reads:    band'in props değerleri (çalışıyor mu, anket var mı, satır, sütun) ve saat; store'daki ayarları ve klipleri; /idle-art import komutunun verdiği GIF'i, 4 MiB veya daha küçükse, bir kez; bu yolu çözmek için HOME ve oturumun dizini
     2. Runs:     hiçbir şey; process ve fork yok; turn başına gecikme için bir timer, band görünürken çizim thread'inin 100 ms'lik tick'i
     3. Sends:    hiçbir şey; network çağrısı yok, modele bir şey gitmez
-    4. Persists: açık/kapalı durumu, stil ve gecikme, mod'un store'unda
-    5. Hostile input: dışarıdan girdi almaz; komut sabit bir kelime listesi ve 0 ile 60 arası bir tam sayı kabul eder, geri kalan her şeyi kullanım satırıyla reddeder
+    4. Persists: açık/kapalı durumu, stil, gecikme ve import edilen her klip, mod'un store'unda
+    5. Hostile input: bir GIF güvenilmeyen byte'lardır: decoder her okumayı dosyanın uzunluğuyla sınırlar, bozuk bir kod akışını ya da eksik bir color table'ı reddeder, 500 karede durur; başarısız bir import hiçbir şey saklamaz; yanlış biçimdeki kayıtlı bir klip yüklenirken atlanır; komut sabit bir kelime listesi, 0 ile 60 arası bir tam sayı ve küçük harf, rakam ve tireden oluşan bir klip adı kabul eder
 
 ## Sınırlar
 
-- Sahnelerin renklerini terminal kendi paletiyle çizer. True color desteklemeyen bir terminal, 256 rengi içinden en yakın olanı gösterir.
+- 8 satır küçük bir tuvaldir: bir GIF, alışılmış 2:1 oranda yaklaşık 30 sütun ve 8 satır olur. Bu bir siluet ya da hareket için yeterlidir, ayrıntı için yetmez.
+- GIF tek seferde okunur ve `$.fs.read` 4 MiB'tan büyük bir dosyayı reddeder.
+- Uzun bir GIF, 90.000 karakter sınırı yüzünden kare kaybeder. Hareketi aynı sürede kalır, ama daha kaba adımlarla ilerler.
+- Renkleri terminal kendi paletiyle çizer. True color desteklemeyen bir terminal, 256 rengi içinden en yakın olanı gösterir.
 - `matrix` yarım genişlikte katakana, `stars` ise `∗` ve `✦` çizer. Bu karakterleri içermeyen bir font yerlerine yedek bir karakter çizer.
 
 ## Geliştirme

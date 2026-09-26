@@ -1,29 +1,55 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, parseArgs, pickStyle, statusText, type Action, type Config, type Style } from './config.ts'
+import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, parseArgs, pickStyle, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
+import { isClip, toClip, type Clip } from './clip.ts'
+import { bytesOf, decodeGif } from './gif.ts'
 import type { SceneProps } from './scene.tsx'
 
 interface State {
   cfg: Config
+  /** The saved clips by name, as the store holds them. */
+  clips: Map<string, Clip>
   /** When the band first saw the model working in this turn; null while it is idle. */
   since: number | null
-  /** The style and seed of the running turn, and the style of the one before. */
-  style: Style | null
+  /** The scene and seed of the running turn, and the scene of the one before. */
+  style: string | null
   seed: number
-  last: Style | null
+  last: string | null
 }
 
 /** Rows below which a band has no room for a picture. */
 const MIN_ROWS = 3
+/** `$.fs.read` refuses a file over 4 MiB. */
+const MAX_GIF_BYTES = 4 * 1024 * 1024
+/** The store key of the saved clip names, and the prefix of each clip's own key. */
+const CLIPS_KEY = 'clips'
+const CLIP_PREFIX = 'clip:'
 
-async function loadConfig($: EngineInterface): Promise<Config> {
-  const [enabled, style, delay] = await Promise.all([$.store.get('enabled'), $.store.get('style'), $.store.get('delay')])
-  return configOf(enabled, style, delay)
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }
 
-/** A turn began: pick its style and seed, and redraw once the delay has passed. */
+/** The saved clips; a name whose entry is gone or broken is left out. */
+async function loadClips($: EngineInterface): Promise<Map<string, Clip>> {
+  const names = await $.store.get(CLIPS_KEY)
+  const clips = new Map<string, Clip>()
+  if (!Array.isArray(names)) return clips
+  for (const name of names) {
+    if (typeof name !== 'string') continue
+    const clip = await $.store.get(`${CLIP_PREFIX}${name}`)
+    if (isClip(clip)) clips.set(name, clip)
+  }
+  return clips
+}
+
+async function loadConfig($: EngineInterface, clips: readonly string[]): Promise<Config> {
+  const [enabled, style, delay] = await Promise.all([$.store.get('enabled'), $.store.get('style'), $.store.get('delay')])
+  return configOf(enabled, style, delay, clips)
+}
+
+/** A turn began: pick its scene and seed, and redraw once the delay has passed. */
 function beginTurn($: EngineInterface, state: State, now: number): void {
   state.since = now
-  state.style = pickStyle(state.cfg.style, state.last, Math.random)
+  state.style = pickStyle(state.cfg.style, state.last, Math.random, [...state.clips.keys()])
   state.last = state.style
   state.seed = Math.floor(Math.random() * 2 ** 31)
   if (state.cfg.delaySec > 0) $.clock.after(state.cfg.delaySec * 1000, () => $.ui.invalidate('ui.render'))
@@ -36,7 +62,86 @@ async function sceneFor($: EngineInterface, state: State, band: { maxRows: numbe
   const height = Math.min(BAND_ROWS, band.maxRows)
   const waited = now - (state.since ?? now) >= state.cfg.delaySec * 1000
   if (state.style === null || !waited || height < MIN_ROWS) return null
-  return { style: state.style, seed: state.seed, width: Math.min(BAND_COLUMNS, band.bodyColumns), height }
+  const props: SceneProps = { style: state.style, seed: state.seed, width: Math.min(BAND_COLUMNS, band.bodyColumns), height }
+  const clip = state.clips.get(state.style)
+  return clip === undefined ? props : { ...props, clip }
+}
+
+/** A path as typed: `~` is the home directory, and a relative path is under the session's directory. */
+async function resolvePath($: EngineInterface, path: string): Promise<string> {
+  if (path === '~' || path.startsWith('~/')) return `${(await $.env.get('HOME')) ?? ''}${path.slice(1)}`
+  if (path.startsWith('/')) return path
+  return `${(await $.session.cwd()).replace(/\/+$/, '')}/${path}`
+}
+
+async function readGifBytes($: EngineInterface, path: string): Promise<Uint8Array> {
+  if (!(await $.fs.exists(path))) throw new Error(`${path} does not exist`)
+  const st = await $.fs.stat(path)
+  if (st.kind !== 'file') throw new Error(`${path} is not a file`)
+  if ((st.size ?? 0) > MAX_GIF_BYTES) throw new Error(`${path} is over the 4 MiB read limit`)
+  return bytesOf((await $.fs.read(path, { as: 'bytes' })).base64)
+}
+
+async function saveClips($: EngineInterface, state: State): Promise<void> {
+  await $.store.set(CLIPS_KEY, [...state.clips.keys()])
+}
+
+/** Turns a GIF into a clip, keeps it in the store under its name, and says what was kept. */
+async function importGif($: EngineInterface, state: State, typed: string, name: string): Promise<string> {
+  const path = await resolvePath($, typed)
+  let clip: Clip
+  let dropped: number
+  let frames: number
+  try {
+    const gif = decodeGif(await readGifBytes($, path))
+    frames = gif.frames.length
+    ;({ clip, dropped } = toClip(gif, BAND_COLUMNS, BAND_ROWS))
+  } catch (err) {
+    return `cannot import ${typed}: ${errorText(err)}`
+  }
+  try {
+    await $.store.set(`${CLIP_PREFIX}${name}`, clip)
+  } catch (err) {
+    return `cannot save ${name}: ${errorText(err)}. The store holds 4 MiB in all; /idle-art remove <name> frees room.`
+  }
+  const replaced = state.clips.has(name)
+  state.clips.set(name, clip)
+  await saveClips($, state)
+  const kept = dropped > 0 ? `${clip.frames.length} of ${frames} frames (every other one dropped to fit)` : `${frames} frames`
+  return `${replaced ? 'replaced' : 'saved'} ${name}: ${kept}, ${clip.width}×${clip.height} cells. Use it with /idle-art ${name}; random draws it too.`
+}
+
+async function removeClip($: EngineInterface, state: State, name: string): Promise<string> {
+  if (!state.clips.has(name)) return `no saved clip is named ${name}`
+  state.clips.delete(name)
+  await $.store.delete(`${CLIP_PREFIX}${name}`)
+  await saveClips($, state)
+  const wasChosen = state.cfg.style === name
+  if (wasChosen) {
+    state.cfg.style = 'random'
+    await $.store.set('style', 'random')
+  }
+  return `removed ${name}${wasChosen ? '; the style is random again' : ''}`
+}
+
+function listText(state: State): string {
+  const clips = [...state.clips].map(([name, c]) => `${name} (${c.frames.length} frames, ${c.width}×${c.height})`)
+  return [`built in: ${STYLES.join(', ')}`, `saved clips: ${clips.length > 0 ? clips.join(', ') : 'none; add one with /idle-art import <gif path> <name>'}`].join('\n')
+}
+
+/** Stores a setting, redraws, and answers with the state. */
+async function setting($: EngineInterface, state: State, key: 'enabled' | 'style' | 'delay', value: boolean | string | number): Promise<string> {
+  if (key === 'enabled') state.cfg.enabled = value as boolean
+  if (key === 'style') state.cfg.style = value as string
+  if (key === 'delay') state.cfg.delaySec = value as number
+  await $.store.set(key, value)
+  $.ui.invalidate('ui.render')
+  return statusText(state.cfg)
+}
+
+async function chooseStyle($: EngineInterface, state: State, style: string): Promise<string> {
+  if (style !== 'random' && !isStyle(style) && !state.clips.has(style)) return unknownText(style, [...state.clips.keys()])
+  return setting($, state, 'style', style)
 }
 
 async function apply($: EngineInterface, state: State, action: Action): Promise<string> {
@@ -45,32 +150,31 @@ async function apply($: EngineInterface, state: State, action: Action): Promise<
       return statusText(state.cfg)
     case 'help':
       return helpText(state.cfg)
+    case 'list':
+      return listText(state)
     case 'error':
       return action.text
     case 'enable':
-      state.cfg.enabled = action.enabled
-      await $.store.set('enabled', action.enabled)
-      break
-    case 'style':
-      state.cfg.style = action.style
-      await $.store.set('style', action.style)
-      break
+      return setting($, state, 'enabled', action.enabled)
     case 'delay':
-      state.cfg.delaySec = action.seconds
-      await $.store.set('delay', action.seconds)
-      break
+      return setting($, state, 'delay', action.seconds)
+    case 'style':
+      return chooseStyle($, state, action.style)
+    case 'import':
+      return importGif($, state, action.path, action.name)
+    case 'remove':
+      return removeClip($, state, action.name)
   }
-  $.ui.invalidate('ui.render')
-  return statusText(state.cfg)
 }
 
 export const register: Register = on => {
-  const state: State = { cfg: configOf(undefined, undefined, undefined), since: null, style: null, seed: 0, last: null }
+  const state: State = { cfg: configOf(undefined, undefined, undefined, []), clips: new Map(), since: null, style: null, seed: 0, last: null }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.cfg = await loadConfig($)
-    await $.command.register({ name: 'idle-art', description: 'ASCII animation above the prompt while the model works: on, off, a style, random, delay (idle-art)', immediate: true })
+    state.clips = await loadClips($)
+    state.cfg = await loadConfig($, [...state.clips.keys()])
+    await $.command.register({ name: 'idle-art', description: 'ASCII animation above the prompt while the model works: on, off, a scene, random, delay, import a GIF (idle-art)', immediate: true })
     return r
   })
 
