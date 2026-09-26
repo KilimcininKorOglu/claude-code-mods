@@ -59,7 +59,7 @@ Reach L3, one model request per prompt.
 
 ## Limits
 
-- The rating costs one haiku request per prompt and delays the turn by about 0.6 seconds.
+- The rating costs one haiku request per prompt and delays the turn by about 0.6 seconds. Measured on 2.1.283 through the mod's own call: a short prompt took 168 to 236 input tokens and 4 output tokens, a prompt cut at 4,000 characters 667 input tokens; no cache was read or written. At Haiku 4.5's $1 per million input tokens and $5 per million output tokens, that is about $0.0002 for a short prompt and $0.0007 at the most, so about $0.20 for 1,000 short prompts. On a Claude subscription the request counts toward the usage limits instead.
 - Haiku judges from the prompt alone, not from the conversation, so a short follow-up such as "go on" is rated `low` even in the middle of hard work.
 - A `max` turn thinks much longer and costs more. In the live check a five-point design summary took 7 minutes and 42,683 output tokens.
 - The cache check follows the model name alone. On Amazon Bedrock, Google Cloud, a Claude apps gateway, or with `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS`, the Claude Code docs say an effort change still rewrites the cache on every model.

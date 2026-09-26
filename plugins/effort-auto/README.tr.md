@@ -59,7 +59,7 @@ Reach L3, her prompt için bir model isteği.
 
 ## Sınırlar
 
-- Puanlama her prompt için bir haiku isteğine mal olur ve turn'ü yaklaşık 0,6 saniye geciktirir.
+- Puanlama her prompt için bir haiku isteğine mal olur ve turn'ü yaklaşık 0,6 saniye geciktirir. 2.1.283 üzerinde mod'un kendi çağrısıyla ölçüldü: kısa bir prompt 168 ile 236 arası input token ve 4 output token harcadı, 4.000 karakterde kesilen bir prompt 667 input token. Cache okunmadı ve yazılmadı. Haiku 4.5'in milyon input token başına 1 dolar, milyon output token başına 5 dolar fiyatıyla bu, kısa bir prompt için yaklaşık 0,0002 dolar, en fazla 0,0007 dolar eder. 1.000 kısa prompt yaklaşık 0,20 dolar tutar. Claude aboneliğinde bu istek bunun yerine kullanım limitinden düşer.
 - Haiku yalnız prompt'a bakar, konuşmaya bakmaz. Bu yüzden zor bir işin ortasında yazılan "devam et" gibi kısa bir prompt `low` puan alır.
 - Bir `max` turn'ü çok daha uzun düşünür ve daha pahalıdır. Canlı kontrolde beş maddelik bir tasarım özeti 7 dakika ve 42.683 output token sürdü.
 - Cache kontrolü yalnız model adına bakar. Claude Code dokümanına göre Amazon Bedrock, Google Cloud, bir Claude apps gateway ya da `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` ile effort değişikliği her modelde cache'i yeniden yazdırır.
