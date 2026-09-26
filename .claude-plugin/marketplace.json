@@ -536,6 +536,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "council",
+      "source": "./plugins/council",
+      "description": "Asks a council of models about a hard problem, when the model calls its tool or you run /council <question>: Claude models, and Gemini models when gemini-core has a key, answer in parallel, and the model of the session writes one verdict from their answers.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

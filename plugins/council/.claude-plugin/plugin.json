@@ -1,0 +1,19 @@
+{
+  "name": "council",
+  "version": "0.1.0",
+  "description": "Asks a council of models about a hard problem, when the model calls its tool or you run /council <question>: Claude models, and Gemini models when gemini-core has a key, answer in parallel, and the model of the session writes one verdict from their answers. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT",
+  "userConfig": {
+    "maxInputChars": {
+      "type": "number",
+      "title": "Conversation characters per member",
+      "description": "How much of the conversation each member reads when it does not fork the session. Above it the longest tool outputs are cut first, then the oldest messages are left out. Haiku 4.5 reads at most 560000. From 20000 to 2000000.",
+      "default": 400000
+    }
+  }
+}
