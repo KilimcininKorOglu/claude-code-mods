@@ -229,7 +229,7 @@ function changesText(t: Tree): string {
   return named.length === 0 ? 'clean' : named.join(', ')
 }
 
-/** The thinking setting of the main loop's last request: a level, a budget, none for a model without one, or not read yet. */
+/** The effort setting of the main loop's last request: a level, a budget, none for a model without one, or not read yet. */
 export type Effort = string | number | null | undefined
 
 /** Everything one reading shows. */
@@ -332,18 +332,18 @@ export function modelTone(model: string): Tone | undefined {
   return families.find(([family]) => family.test(model))?.[1]
 }
 
-/** The thinking level's colour: low faint, medium green, high yellow, xhigh and max red; a budget has none. */
+/** The effort level's colour: low faint, medium green, high yellow, xhigh and max red; a budget has none. */
 export function effortTone(effort: Effort): Tone | undefined {
   const tones: Record<string, Tone> = { low: 'dim', medium: 'ok', high: 'warn', xhigh: 'error', max: 'error' }
   return typeof effort === 'string' ? tones[effort] : undefined
 }
 
-/** The thinking part: the label and the value, only the value coloured. */
+/** The effort part: the label and the value, only the value coloured. */
 function effortParts(effort: Effort): Part[] {
-  if (effort === undefined) return [part('thinking: not read yet', 'dim')]
-  if (effort === null) return [part('no thinking setting', 'dim')]
-  if (typeof effort === 'number') return [part(`thinking budget ${effort}`, undefined)]
-  return [part('thinking ', undefined), part(effort, effortTone(effort))]
+  if (effort === undefined) return [part('effort: not read yet', 'dim')]
+  if (effort === null) return [part('no effort setting', 'dim')]
+  if (typeof effort === 'number') return [part(`effort budget ${effort}`, undefined)]
+  return [part('effort ', undefined), part(effort, effortTone(effort))]
 }
 
 function modelLine(model: string, effort: Effort): Line {

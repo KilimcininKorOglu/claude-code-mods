@@ -15,7 +15,7 @@ const GIT_COMMAND = /\bgit\b/
 
 /**
  * What the hooks share: the repository the session started in, the session id, the token totals, the main
- * loop's last thinking setting, the engine's version, the last git state, and the last refresh error.
+ * loop's last effort setting, the engine's version, the last git state, and the last refresh error.
  */
 type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; last?: Split; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
 

@@ -155,8 +155,8 @@ describe('session-watch', () => {
       { text: 'tokens T 10k · I 1k · O 500 · TH 0 · CR 8k · CW 500 · CH 84%', parts: [{ text: 'tokens T 10k · I 1k · O 500 · TH 0 · CR 8k · CW 500' }, { text: ' · CH ' }, { text: '84%', kind: 'warn' }] },
       { text: 'cost $0.50' },
       {
-        text: 'model opus-5-5 · thinking high',
-        parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'thinking ' }, { text: 'high', kind: 'warn' }],
+        text: 'model opus-5-5 · effort high',
+        parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'effort ' }, { text: 'high', kind: 'warn' }],
       },
       { text: 'Claude Code 2.1.282' },
       { text: 'main · clean · ↑0 ↓0', kind: 'ok' },
@@ -284,15 +284,15 @@ describe('session-watch', () => {
     expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · TH 0 · CR 74k · CW 7k · CH 91%')
   })
 
-  test('the thinking setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {
+  test('the effort setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {
     const w = world(on)
     await started($, w)
-    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · thinking: not read yet')
+    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · effort: not read yet')
     await step($, 'high')
     await step($, 'low', 'agent-1')
-    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · thinking high')
+    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · effort high')
     await step($)
-    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · no thinking setting')
+    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · no effort setting')
   })
 
   test('a git command, a subagent\'s turn end and the timer: git is read again only where it may have moved', async ($, on) => {

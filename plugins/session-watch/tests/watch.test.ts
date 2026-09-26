@@ -53,8 +53,8 @@ describe('reading', () => {
       { text: 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k · CH 92%', parts: [{ text: 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k' }, { text: ' · CH ' }, { text: '92%', kind: 'ok' }] },
       { text: 'cost $1.23' },
       {
-        text: 'model opus-5-5 · thinking high',
-        parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'thinking ' }, { text: 'high', kind: 'warn' }],
+        text: 'model opus-5-5 · effort high',
+        parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'effort ' }, { text: 'high', kind: 'warn' }],
       },
       { text: 'Claude Code 2.1.282' },
       { text: 'main · clean · ↑2 ↓1', kind: 'ok' },
@@ -68,7 +68,7 @@ describe('reading', () => {
   test('the thinking level is coloured by how hard it asks, and only the level itself', () => {
     expect(['low', 'medium', 'high', 'xhigh', 'max', 'turbo', 12_000, null, undefined].map(effortTone)).toEqual(['dim', 'ok', 'warn', 'error', 'error', undefined, undefined, undefined, undefined])
     expect(sidebarLines(reading({ effort: 'low' }))[3]?.parts?.at(-1)).toEqual({ text: 'low', kind: 'dim' })
-    expect(sidebarLines(reading({ effort: null }))[3]?.parts?.at(-1)).toEqual({ text: 'no thinking setting', kind: 'dim' })
+    expect(sidebarLines(reading({ effort: null }))[3]?.parts?.at(-1)).toEqual({ text: 'no effort setting', kind: 'dim' })
   })
 
   test('while the transcripts are read, the tokens line says so instead of a partial count', () => {
@@ -77,10 +77,10 @@ describe('reading', () => {
 
   test('what is not known yet is said, not zeroed', () => {
     const lines = sidebarLines(reading({ context: { window: 200_000 }, costUsd: undefined, effort: undefined, git: undefined }))
-    expect(lines.map(l => l.text)).toEqual(['ctx: no reply yet', 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
-    expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no thinking setting')
+    expect(lines.map(l => l.text)).toEqual(['ctx: no reply yet', 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · effort: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
+    expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no effort setting')
     expect(sidebarLines(reading({ seeding: true }))[1]?.text).toBe('tokens: reading the transcripts')
-    expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · thinking budget 12000')
+    expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · effort budget 12000')
   })
 
   test('the status line is short, and marks a changed tree with a star', () => {
