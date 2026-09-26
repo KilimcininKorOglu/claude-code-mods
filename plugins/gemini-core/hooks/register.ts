@@ -78,7 +78,7 @@ async function enroll(host: Host, input: GeminiEnroll): Promise<void> {
 }
 
 /** The request for a mod, with the key the last request succeeded or moved on with, and the model the input names, if any. */
-async function request(host: Host, config: Config, state: KeyState, input: GeminiRequest): Promise<GeminiPrepared> {
+async function prepareRequest(host: Host, config: Config, state: KeyState, input: GeminiRequest): Promise<GeminiPrepared> {
   if (input.model !== undefined && !MODEL_ID.test(input.model)) return { error: `${input.model} is not a Gemini model id` }
   const keys = await apiKeys(host, config)
   const key = keys[state.preferred] ?? keys[0]
@@ -132,7 +132,7 @@ export function createGemini(host: Host, config: Config): Gemini {
   return {
     enroll: input => enroll(host, input),
     settings: ({ consumer }) => settingsFor(host, config, consumer),
-    request: input => request(host, config, state, input),
+    request: input => prepareRequest(host, config, state, input),
     read: async input => readWithKeys(input, await apiKeys(host, config), state),
     configure: change => configure(host, change),
   }
