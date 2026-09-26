@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, lastThinkingOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
-  type Effort, type GitState, type Reading, type Split, type Usage, type UsageScanner,
+  addSplit, endFile, failedGit, lastThinkingOf, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  type Effort, type GitState, type OtherSession, type Reading, type Split, type Usage, type UsageScanner,
 } from './watch.ts'
 
 /** The totals of each session, counted from its transcripts on. */
@@ -159,11 +159,32 @@ async function readGit($: EngineInterface, state: State): Promise<GitState> {
   }
 }
 
+/** The pids of those that still run, from one `ps`: a session that crashed leaves its registry file behind. */
+async function livePids($: EngineInterface, pids: readonly number[]): Promise<Set<number>> {
+  if (pids.length === 0) return new Set()
+  const r = await $.process.run(['ps', '-o', 'pid=', '-p', pids.join(',')], { timeoutMs: GIT_MS })
+  return new Set(r.stdout.split('\n').map(l => Number(l.trim())).filter(n => n > 0))
+}
+
+/** The other live sessions of this machine, from Claude Code's session registry. */
+async function readOthers($: EngineInterface, state: State): Promise<OtherSession[]> {
+  const dir = `${await configDirOf($)}/sessions`
+  if (!(await $.fs.exists(dir))) return []
+  const files = (await $.fs.list(dir)).filter(f => f.kind === 'file' && /^\d+\.json$/.test(f.name))
+  const found: OtherSession[] = []
+  for (const f of files) {
+    const s = otherSessionOf(String(await $.fs.read(`${dir}/${f.name}`)), state.sid)
+    if (s !== undefined) found.push(s)
+  }
+  const live = await livePids($, found.map(s => s.pid))
+  return found.filter(s => live.has(s.pid))
+}
+
 /** Everything the section shows, read now. */
 async function readNow($: EngineInterface, state: State): Promise<Reading> {
-  const [usage, model, git] = await Promise.all([$.session.usage(), $.session.model(), readGit($, state)])
+  const [usage, model, git, others] = await Promise.all([$.session.usage(), $.session.model(), readGit($, state), readOthers($, state)])
   state.git = git
-  return { context: usage.context, costUsd: usage.cost?.usd, split: state.split, last: state.last, seeding: state.seeding, model, effort: state.effort, version: state.version, git }
+  return { context: usage.context, costUsd: usage.cost?.usd, split: state.split, last: state.last, seeding: state.seeding, model, effort: state.effort, version: state.version, git, others }
 }
 
 /** Writes the reading into the sidebar, and into the status line while the sidebar does not take it. */

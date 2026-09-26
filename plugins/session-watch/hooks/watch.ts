@@ -244,6 +244,8 @@ export type Reading = {
   effort: Effort
   version: string
   git?: GitState
+  /** The other live sessions on this machine, which share the account's usage limits. */
+  others?: readonly OtherSession[]
 }
 
 /** How the sidebar colours a line or a part of one. */
@@ -346,9 +348,45 @@ export function gitLine(git: GitState | undefined): Line {
   return { text: `${git.head} · ${changesText(git)} · ${upstream}`, kind: isDirty(git) ? 'warn' : 'ok' }
 }
 
+/** Another live session, from its registry file under `<config dir>/sessions/<pid>.json`. */
+export type OtherSession = { pid: number; sessionId: string; busy: boolean; place: string }
+
+/**
+ * A registry file of another session, or undefined for this session's own, a file of another shape, or
+ * one without a pid. `place` is the session's name, else its start directory's last part.
+ */
+export function otherSessionOf(text: string, ownId: string): OtherSession | undefined {
+  let j: { pid?: unknown; sessionId?: unknown; status?: unknown; name?: unknown; cwd?: unknown }
+  try {
+    j = JSON.parse(text) as typeof j
+  } catch {
+    return undefined
+  }
+  if (typeof j.pid !== 'number' || typeof j.sessionId !== 'string' || j.sessionId === ownId) return undefined
+  const dir = typeof j.cwd === 'string' ? (j.cwd.split('/').filter(Boolean).at(-1) ?? j.cwd) : '?'
+  return { pid: j.pid, sessionId: j.sessionId, busy: j.status === 'busy', place: typeof j.name === 'string' && j.name !== '' ? j.name : dir }
+}
+
+/** At most this many busy sessions are named on the line; the rest are counted. */
+const MAX_BUSY_NAMED = 3
+
+/**
+ * The other live sessions on one line: how many, the busy ones by name in yellow, because they spend the
+ * same usage limits now, and the idle ones counted. Undefined while no other session runs.
+ */
+export function sessionsLine(others: readonly OtherSession[]): Line | undefined {
+  if (others.length === 0) return undefined
+  const busy = others.filter(o => o.busy)
+  const named = busy.slice(0, MAX_BUSY_NAMED).map(o => o.place).join(', ') + (busy.length > MAX_BUSY_NAMED ? ', …' : '')
+  const busyParts = busy.length === 0 ? [] : [part(' · ', undefined), part(`${busy.length} busy`, 'warn'), part(` (${named})`, 'dim')]
+  const idle = others.length - busy.length
+  return partsLine([part(`sessions: ${others.length} other${others.length === 1 ? '' : 's'}`, undefined), ...busyParts, ...(idle === 0 ? [] : [part(` · ${idle} idle`, 'dim')])])
+}
+
 /** The reading as the sidebar section's lines, in the order the person reads them. */
 export function sidebarLines(r: Reading): Line[] {
-  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, gitLine(r.git)]
+  const sessions = sessionsLine(r.others ?? [])
+  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, ...(sessions === undefined ? [] : [sessions]), gitLine(r.git)]
 }
 
 /** The short status line while the sidebar is closed: `ctx 24% · $1.23 · main*`. */

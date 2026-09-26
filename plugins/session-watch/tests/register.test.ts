@@ -48,14 +48,14 @@ const SUB = `${DIR}/${SID}/subagents/agent-a1.jsonl`
 type Line = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
 
 /** The world: what git prints, what the usage says, the files, the store, and what the person saw. */
-type World = { stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
+type World = { live: number[]; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
 
 /** One transcript row of a model response, as the engine writes one per content block. */
 const response = (id: string | undefined, input: number, output: number, thinking?: number): string =>
   JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10, ...(thinking === undefined ? {} : { output_tokens_details: { thinking_tokens: thinking } }) } } })
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
+  const w: World = { live: [], stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
   mock.env(on, { HOME: '/Users/u' })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
@@ -87,7 +87,10 @@ function world(on: On, store: Record<string, unknown> = {}): World {
     if (w.usageDown) throw new Error('usage down')
     return { value: { startedAt: 0, context: { window: 1_000_000, tokens: w.percent === undefined ? undefined : w.percent * 10_000, percent: w.percent }, rateLimits: [], cost: { usd: 0.5 } } }
   })
+  on('fs.read', (_, e) => ({ value: w.files.get(e.path) ?? '' }))
+  // `ps -o pid= -p <pids>`: the pids that still run.
   on('process.run', (_, e) => {
+    if (e.argv[0] === 'ps') return { value: { exitCode: 0, stdout: w.live.map(p => `  ${p}\n`).join(''), stderr: '' } }
     if (e.argv.join(' ') !== 'git status --porcelain=v2 --branch') throw new Error(`unexpected ${e.argv.join(' ')}`)
     w.gitRuns += 1
     // A git with a Turkish locale words its message in Turkish unless the run asks for the C locale.
@@ -225,6 +228,22 @@ describe('session-watch', () => {
     expect(ctx?.text).toContain('· O 40 · TH 12 ·')
     expect(tokens?.text).toContain('· TH 51 ·')
     expect(w.logs).toEqual([])
+  })
+
+  withSidebar('the other live sessions stand above the git line, a crashed one left out', async ($, on) => {
+    const w = world(on)
+    seatSidebar(on, w)
+    w.bar.open = true
+    const reg = '/Users/u/.claude/sessions'
+    w.files.set(`${reg}/100.json`, JSON.stringify({ pid: 100, sessionId: SID, status: 'busy', cwd: '/work' }))
+    w.files.set(`${reg}/200.json`, JSON.stringify({ pid: 200, sessionId: 's-2', status: 'busy', name: 'cors-fix', cwd: '/x/sso' }))
+    w.files.set(`${reg}/300.json`, JSON.stringify({ pid: 300, sessionId: 's-3', status: 'idle', cwd: '/x/lankeeper' }))
+    w.files.set(`${reg}/400.json`, JSON.stringify({ pid: 400, sessionId: 's-4', status: 'busy', cwd: '/x/gone' }))
+    w.files.set(`${reg}/300.abc.key`, 'secret')
+    w.live = [100, 200, 300]
+    await started($, w)
+    const lines = w.bar.lines.at(-1) ?? []
+    expect(lines.at(-2)).toEqual({ text: 'sessions: 2 others · 1 busy (cors-fix) · 1 idle', parts: [{ text: 'sessions: 2 others' }, { text: ' · ' }, { text: '1 busy', kind: 'warn' }, { text: ' (cors-fix)', kind: 'dim' }, { text: ' · 1 idle', kind: 'dim' }] })
   })
 
   test('a transcript that cannot be read leaves the totals counted from the load, and says why once', async ($, on) => {

@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, cacheHit, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -86,6 +86,22 @@ describe('reading', () => {
   test('the status line is short, and marks a changed tree with a star', () => {
     expect(statusText(reading())).toBe('ctx 25% · $1.23 · main')
     expect(statusText(reading({ git: parseStatus(DIRTY), costUsd: undefined }))).toBe('ctx 25% · main*')
+  })
+})
+
+describe('other sessions', () => {
+  test('a registry file names another session; this one, another shape or no pid names none', () => {
+    expect(otherSessionOf(JSON.stringify({ pid: 7, sessionId: 'b', status: 'idle', cwd: '/x/app/' }), 'a')).toEqual({ pid: 7, sessionId: 'b', busy: false, place: 'app' })
+    expect(otherSessionOf(JSON.stringify({ pid: 7, sessionId: 'a', status: 'busy' }), 'a')).toBe(undefined)
+    expect(otherSessionOf('not json', 'a')).toBe(undefined)
+    expect(otherSessionOf(JSON.stringify({ sessionId: 'b' }), 'a')).toBe(undefined)
+  })
+
+  test('no other session writes no line; past three busy ones the rest are an ellipsis', () => {
+    expect(sessionsLine([])).toBe(undefined)
+    const busy = (place: string) => ({ pid: 1, sessionId: place, busy: true, place })
+    expect(sessionsLine(['a', 'b', 'c', 'd'].map(busy))?.text).toBe('sessions: 4 others · 4 busy (a, b, c, …)')
+    expect(sessionsLine([{ pid: 1, sessionId: 'x', busy: false, place: 'x' }])?.text).toBe('sessions: 1 other · 1 idle')
   })
 })
 

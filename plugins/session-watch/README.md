@@ -12,6 +12,7 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
     cost $0.07
     model opus-5-5[1m] · thinking medium
     Claude Code 2.1.282
+    sessions: 2 others · 1 busy (cors-fix) · 1 idle
     main · 1 untracked · no upstream
 
 - `ctx`: the input tokens of the last reply over the model's context window, and their share. Green under 50%, yellow from 50% to 80%, red above 80%. The engine reports all three (`$.session.usage().context`); the mod computes none of them. After it come the input, output, cache read and cache write tokens of the main loop's last model request, the one that holds the window now, and that request's cache hit (`CH`, the same measure as on the tokens line). A subagent's request has a window of its own and does not change the line. With the request's split on it, only the two percentages are coloured. Before the first reply the line reads `ctx: no reply yet`.
@@ -20,6 +21,7 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
 - `cost`: the session's cost in US dollars, as `/cost` totals it.
 - `model`: the main loop's model, and the thinking setting (`effort`) of the main loop's last model request: `low` to `max`, a budget, `no thinking setting` for a model without one, or `thinking: not read yet` before the first request. The model's name is coloured by family, the dearest the warmest: opus red, fable yellow, sonnet green, haiku faint. The thinking level is coloured by how hard it asks: `low` faint, `medium` green, `high` yellow, `xhigh` and `max` red. Colouring one word needs sidebar 0.11.0 or later; an older sidebar draws the line in one colour.
 - `Claude Code`: the engine's version.
+- `sessions`: the other live Claude Code sessions of this machine, which spend the same account's usage limits: how many, the busy ones by name in yellow (at most three, the rest an ellipsis), the idle ones counted. Read from Claude Code's registry, `<config dir>/sessions/<pid>.json`; a file whose pid no longer runs (a crashed session leaves it) is left out, checked with one `ps`. No other session writes no line.
 - The git line: the branch (or `detached at <sha>`), the staged, modified, untracked and conflicted files, and the commits ahead of and behind the upstream (`↑1 ↓0`, or `no upstream`). Yellow while the tree has changes, green when it is clean. Outside a repository it reads `git: this folder is not a git repository`, also where git itself speaks another language, because git runs in the C locale.
 
 **A status line** in place of the section while the sidebar is closed or not installed:
@@ -63,12 +65,12 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, model.fork, model.complete, session.compact, tool.call{tool=Bash}, command.run{command=session-watch}
-    ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via transcriptsOf), $.fs.list (via transcriptsOf), $.fs.stat (via transcriptsOf), $.process.run (via readGit), $.process.spawn (via followOne, readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals, tryFollow), $.ui.status (via show)
+    ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf), $.fs.exists (via readOthers, transcriptsOf), $.fs.list (via readOthers, transcriptsOf), $.fs.read (via readOthers), $.fs.stat (via transcriptsOf), $.process.run (via livePids, readGit), $.process.spawn (via followOne, readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedTotals, startTotals, tryFollow), $.ui.status (via show)
 
-Reach L2, it runs git, head and tail.
+Reach L2, it runs git, ps, head and tail.
 
-    1. Reads:    the session's usage figures (context, cost), model, id, start directory and engine version; each turn's token counts, the usage of each plugin model call and compaction, and each request's thinking setting; the text of each Bash command, to see whether it names git; once per session with no totals kept, the session's transcripts under <config dir>/projects/, only their model responses' usage
-    2. Runs:     git status --porcelain=v2 --branch in the session's start directory, at each reading; head -c <size> on each transcript, once; tail -c +<offset> on the main loop's transcript after each of its requests and on every transcript that grew at each turn's end, for the thinking tokens no hook reports; one 10 second timer in an interactive session
+    1. Reads:    the session's usage figures (context, cost), model, id, start directory and engine version; the other sessions' registry files under <config dir>/sessions/*.json (pid, session id, status, name, start directory; never the .key files beside them); each turn's token counts, the usage of each plugin model call and compaction, and each request's thinking setting; the text of each Bash command, to see whether it names git; once per session with no totals kept, the session's transcripts under <config dir>/projects/, only their model responses' usage
+    2. Runs:     git status --porcelain=v2 --branch in the session's start directory, at each reading; ps -o pid= -p <pids> on the other sessions' pids, at each reading; head -c <size> on each transcript, once; tail -c +<offset> on the main loop's transcript after each of its requests and on every transcript that grew at each turn's end, for the thinking tokens no hook reports; one 10 second timer in an interactive session
     3. Sends:    nothing leaves the machine
     4. Persists: the token totals of the last 20 sessions in $.store
     5. Hostile input: git's output is parsed by line shape and only counted; a transcript row is parsed as JSON and only its four token counts are added, a count of another type adding nothing; a stored value of another shape reads as none
