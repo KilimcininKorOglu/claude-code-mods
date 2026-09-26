@@ -4,7 +4,7 @@ Yerel clone'u zaten daha yeni bir sürüm sunan her kurulu plugin'i, her marketp
 
 ## Ne yapar
 
-1. Her session başlangıcında ve session'ın ilk turunun sonunda bir kere daha mod, host'un diskte tuttuğunu okur: her `<plugin>@<marketplace>` için scope başına kurulu sürümü adlandıran `~/.claude/plugins/installed_plugins.json` (user kurulumu ve adlandırdığı proje için bir project kurulumu; başka bir projenin project kurulumu okunmaz, geçerli iki kurulumdan eski sürüm karşılaştırılır; `CLAUDE_CONFIG_DIR` ayarlıysa dosya host gibi `$CLAUDE_CONFIG_DIR/plugins/` altından okunur); her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json` dosyası, o plugin'in içeride nerede olduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir); ve o plugin'in `.claude-plugin/plugin.json` dosyası, clone'un sunduğu sürüm.
+1. Her session başlangıcında ve her main-loop turn'ünün sonunda mod, host'un diskte tuttuğunu okur: her `<plugin>@<marketplace>` için scope başına kurulu sürümü adlandıran `~/.claude/plugins/installed_plugins.json` (user kurulumu ve adlandırdığı proje için bir project kurulumu; başka bir projenin project kurulumu okunmaz, geçerli iki kurulumdan eski sürüm karşılaştırılır; `CLAUDE_CONFIG_DIR` ayarlıysa dosya host gibi `$CLAUDE_CONFIG_DIR/plugins/` altından okunur); her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json` dosyası, o plugin'in içeride nerede olduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir); ve o plugin'in `.claude-plugin/plugin.json` dosyası, clone'un sunduğu sürüm.
 2. Kurulu sürümü sunulan sürümle her parçanın sayısına göre karşılaştırır, yani `0.10.0`, `0.9.0` sürümünden yeni sayılır. Sayı olarak karşılaştıramadığı iki sürüm eşit sayılır, yani başka biçimde bir sürüm hiçbir zaman update istemez.
 3. [sidebar](../sidebar) açıkken geride kalan plugin'ler session boyunca duran tek bir `update available` section'ıdır:
 
@@ -15,7 +15,7 @@ Yerel clone'u zaten daha yeni bir sürüm sunan her kurulu plugin'i, her marketp
 
    Her satırda kurulu sürüm soluktur, sunulan sürüm ise atlamaya göre renklenir: yeni bir major sürüm kırmızı, yeni bir minor sürüm sarı, yeni bir patch yeşil. Sekizinciden sonraki satırlar tek bir soluk satırda sayılır. Sidebar kapalıyken ya da o mod kurulu değilken aynı bulgu tek bir transcript satırıdır.
 4. Her kurulu plugin clone'unun sürümündeyken hiçbir şey çizilmez ve bu doğru olur olmaz section kaldırılır.
-5. İkinci ölçüm, ilkinin çözemediği iki durumu çözer: bu session açıkken başka bir pencerede güncellediğiniz bir plugin, ve bu mod ilk ölçtüğünde kendi plugin'i pane'ini henüz açmamış bir sidebar. Bulgu transcript'e bir kere ulaşır; aynı bulgunun ikinci ölçümü hiçbir şey söylemez.
+5. Her turn sonundaki ölçüm, session başlangıcının göremediğini yakalar: bu session açıkken başka bir pencerede güncellediğiniz bir plugin ya da marketplace, ve bu mod ilk ölçtüğünde kendi plugin'i pane'ini henüz açmamış bir sidebar. Bulgu transcript'e bir kere ulaşır; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
 6. `/mod-doctor` anında yeniden ölçer ve ayarı, kapsamı, kaç plugin tuttuğunu ve hangilerinin geride olduğunu yazar. `/mod-doctor marketplace <name>` bunu tek bir marketplace'e daraltır, `marketplace all` yeniden genişletir.
 
 Clone yalnız son `claude plugin marketplace update` kadar yenidir, yani bu mod "marketplace'i güncelledim, plugin'leri güncelledim mi?" sorusuna cevap verir, "GitHub'da daha yeni bir sürüm var mı?" sorusuna değil.

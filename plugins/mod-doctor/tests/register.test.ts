@@ -140,17 +140,22 @@ describe('mod-doctor', () => {
     expect((await $.command.run(run(''))).text).toContain('2 of 4 plugin(s) behind')
   })
 
-  test("the turn's end measures again, so an update made meanwhile settles by itself", async ($, on) => {
+  test("each turn's end measures again, and says a finding once", async ($, on) => {
     const w = world(on, RECORD)
     await started($)
     expect(w.logs).toHaveLength(1)
+    // The same finding at the turn's end says nothing new.
+    await $.turn.complete(turn())
+    expect(w.logs).toHaveLength(1)
     // The person ran the update in another window while this session was open.
+    const behind = w.record
     w.record = JSON.stringify({ plugins: { 'cache-warm@kilimcininkoroglu-mods': [{ version: '0.5.0' }] } })
     await $.turn.complete(turn())
     expect((await $.command.run(run(''))).text).toBe("on · every marketplace · 1 plugin(s) installed, each at its clone's version")
-    // Nothing was said twice, and a later turn measures nothing at all.
+    // A later turn still measures: a plugin that falls behind again is said again.
+    w.record = behind
     await $.turn.complete(turn())
-    expect(w.logs).toHaveLength(1)
+    expect(w.logs).toHaveLength(2)
   })
 
   test('a scope with no installed plugin says so, and off measures nothing', async ($, on) => {

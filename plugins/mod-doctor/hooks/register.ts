@@ -11,9 +11,9 @@ const SECTION = { consumer: 'mod-doctor', key: 'behind' }
 
 /**
  * The on/off setting, the scope read, how many plugins are installed in it, which are behind, the host's
- * config directory, the directory the session started in, what was last said to the person, and whether the second measure of this session ran.
+ * config directory, the directory the session started in and what was last said to the person.
  */
-type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; cwd: string; said: string; again: boolean }
+type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; cwd: string; said: string }
 
 /** Where the host keeps the record of every installed plugin. */
 function recordPath(config: string): string {
@@ -157,7 +157,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
   await $.store.set(ENABLED_KEY, on)
   if (on) await check($, state)
   else await clearShown($, state)
-  return on ? 'on: the installed plugins are measured at each session start and once after the first turn' : 'off: nothing is measured'
+  return on ? 'on: the installed plugins are measured at each session start and at the end of each turn' : 'off: nothing is measured'
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
@@ -174,7 +174,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', cwd: '', said: '', again: false }
+  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', cwd: '', said: '' }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -188,7 +188,7 @@ export const register: Register = on => {
       argumentHint: '[on | off | marketplace <name | all>]',
       immediate: true,
     })
-    // The first of the session's two measures; the second runs at the end of its first turn.
+    // The session's first measure; each turn's end measures again.
     if (state.enabled && state.config !== '') await check($, state)
     return r
   })
@@ -197,16 +197,13 @@ export const register: Register = on => {
   on('command.run', { command: 'mod-doctor' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   /*
-   * One second measure, at the end of the session's first main-loop turn. It settles two cases the
-   * measure at the session's start cannot: a plugin updated while this session runs, and a sidebar whose
-   * own plugin had not opened its pane yet when this mod measured, where the first `set` answered false.
+   * A measure at the end of each main-loop turn. It catches a plugin updated, or a marketplace updated,
+   * while this session runs, and a sidebar whose own plugin had not opened its pane yet when this mod
+   * measured at the session's start, where the first `set` answered false.
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (state.enabled && !state.again && e.agentId === undefined && state.config !== '') {
-      state.again = true
-      await check($, state)
-    }
+    if (state.enabled && e.agentId === undefined && state.config !== '') await check($, state)
     return r
   })
 }
