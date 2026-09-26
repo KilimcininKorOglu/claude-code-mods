@@ -1,8 +1,8 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, parseArgs, pickStyle, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
+import { BAND_COLUMNS, BAND_ROWS, configOf, helpText, isStyle, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
 import { clipFromGif, isClip, type Clip } from './clip.ts'
 import { bytesOf } from './gif.ts'
-import type { SceneProps } from './scene.tsx'
+import type { NextMessage, SceneProps } from './scene.tsx'
 
 interface State {
   cfg: Config
@@ -14,7 +14,11 @@ interface State {
   style: string | null
   seed: number
   last: string | null
+  /** The region the scene was last drawn in, which the next scene of the same turn takes. */
+  size?: Size
 }
+
+type Size = { width: number; height: number }
 
 /** Rows below which a band has no room for a picture. */
 const MIN_ROWS = 3
@@ -47,13 +51,25 @@ async function loadConfig($: EngineInterface, clips: readonly string[]): Promise
   return configOf(enabled, style, delay, clips)
 }
 
-/** A turn began: pick its scene and seed, and redraw once the delay has passed. */
-function beginTurn($: EngineInterface, state: State, now: number): void {
-  state.since = now
+/** Picks the next scene and its seed, never the one shown last. */
+function pickScene(state: State): void {
   state.style = pickStyle(state.cfg.style, state.last, Math.random, [...state.clips.keys()])
   state.last = state.style
   state.seed = Math.floor(Math.random() * 2 ** 31)
+}
+
+/** A turn began: pick its scene and seed, and redraw once the delay has passed. */
+function beginTurn($: EngineInterface, state: State, now: number): void {
+  state.since = now
+  pickScene(state)
   if (state.cfg.delaySec > 0) $.clock.after(state.cfg.delaySec * 1000, () => $.ui.invalidate('ui.render'))
+}
+
+/** The props of the current scene in a region; under `random` the scene gives way to another once it has run. */
+function propsOf(state: State, style: string, size: Size): SceneProps {
+  const props: SceneProps = { style, seed: state.seed, ...size, rotate: state.cfg.style === 'random' }
+  const clip = state.clips.get(style)
+  return clip === undefined ? props : { ...props, clip }
 }
 
 /** The scene of a working band, or null while the delay runs or the band has no room. */
@@ -63,9 +79,20 @@ async function sceneFor($: EngineInterface, state: State, band: { maxRows: numbe
   const height = Math.min(BAND_ROWS, band.maxRows)
   const waited = now - (state.since ?? now) >= state.cfg.delaySec * 1000
   if (state.style === null || !waited || height < MIN_ROWS) return null
-  const props: SceneProps = { style: state.style, seed: state.seed, width: Math.min(BAND_COLUMNS, band.bodyColumns), height }
-  const clip = state.clips.get(state.style)
-  return clip === undefined ? props : { ...props, clip }
+  state.size = { width: Math.min(BAND_COLUMNS, band.bodyColumns), height }
+  return propsOf(state, state.style, state.size)
+}
+
+/**
+ * The next scene's props when the running one asks to leave: only under `random`, only for the scene
+ * showing now (a late or repeated message changes nothing), and only while a band is drawn.
+ */
+function nextScene(state: State, data: unknown): SceneProps | undefined {
+  const asked = (data as Partial<NextMessage> | null)?.next
+  if (state.cfg.style !== 'random' || state.style === null || state.size === undefined) return undefined
+  if (asked !== sceneOf({ style: state.style, seed: state.seed })) return undefined
+  pickScene(state)
+  return propsOf(state, state.style as string, state.size)
 }
 
 /** A path as typed: `~` is the home directory, and a relative path is under the session's directory. */
@@ -166,8 +193,11 @@ async function setting($: EngineInterface, state: State, key: 'enabled' | 'style
   return statusText(state.cfg)
 }
 
+/** Stores the chosen style, and a turn already drawing takes it at once instead of at its end. */
 async function chooseStyle($: EngineInterface, state: State, style: string): Promise<string> {
   if (style !== 'random' && !isStyle(style) && !state.clips.has(style)) return unknownText(style, [...state.clips.keys()])
+  state.cfg.style = style
+  if (state.since !== null) pickScene(state)
   return setting($, state, 'style', style)
 }
 
@@ -219,6 +249,13 @@ export const register: Register = on => {
         <Client key="idle-art" module="./scene.tsx" width={props.width} height={props.height} props={props} />
       </Box>
     )
+  })
+
+  // A scene under `random` that has run its time asks for the next; the answer's props start it in place.
+  on('ui.message', async (_, e, next) => {
+    if (e.element !== 'idle-art') return next(e)
+    const props = nextScene(state, e.data)
+    return props === undefined ? next(e) : { props }
   })
 
   // The band is not drawn idle between two turns, so the main loop's turn end is what starts the next

@@ -174,14 +174,17 @@ function putRow(out: Frame, y: number, x: number, runs: ClipRun[]): void {
 export function playClip(clip: Clip, w: number, h: number, tickMs: number): Animation {
   let index = 0
   let shown = 0
+  let wrapped = false
   const x = Math.floor((w - clip.width) / 2)
   const y = Math.floor((h - clip.height) / 2)
   const step = (): void => {
     shown += tickMs
+    wrapped = false
     // A stored delay under 20 ms is read as 20 ms, so a broken entry cannot spin this loop.
     for (let d = Math.max(20, clip.delays[index] ?? tickMs); shown >= d; d = Math.max(20, clip.delays[index] ?? tickMs)) {
       shown -= d
       index = (index + 1) % clip.frames.length
+      if (index === 0) wrapped = true
     }
   }
   const frame = (): Frame => {
@@ -189,5 +192,5 @@ export function playClip(clip: Clip, w: number, h: number, tickMs: number): Anim
     clip.frames[index]?.forEach((runs, row) => putRow(out, y + row, x, runs))
     return out
   }
-  return { step, frame }
+  return { step, frame, wrapped: () => wrapped }
 }

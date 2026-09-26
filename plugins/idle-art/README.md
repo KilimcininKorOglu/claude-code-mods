@@ -4,7 +4,7 @@ A Claude Code Mod that draws an ASCII animation above the prompt while the model
 
 ## What it shows
 
-The picture appears 3 seconds into a turn, so a short turn shows nothing, and it goes away when the turn ends. By default each turn draws a scene at random from the built-in scenes and your saved clips, never the one of the turn before.
+The picture appears 3 seconds into a turn, so a short turn shows nothing, and it goes away when the turn ends. By default each turn draws a scene at random from the built-in scenes and your saved clips, never the one shown before. A long turn moves on to another at random: a built-in scene after 20 seconds, a clip at the end of its first loop that ends after 20 seconds, so a long clip plays through once and a short one repeats until then. A scene you chose by name stays for the whole turn, and choosing one while a turn draws changes the picture at once.
 
     ● Brewing… (5s)
              .:   .                 ,
@@ -51,7 +51,7 @@ A name is lowercase letters, digits and dashes, up to 24 characters, and cannot 
     /idle-art                          the state: on or off, the style, the delay
     /idle-art on | off                 draw or stop drawing
     /idle-art <scene or clip>          always draw that one: matrix, fire, stars, aquarium, life, or a saved clip
-    /idle-art random                   a new scene or clip each turn (the default)
+    /idle-art random                   a new scene or clip each turn and every 20 seconds or so (the default)
     /idle-art delay <n>                wait n seconds into a turn, 0 to 60 (default 3)
     /idle-art import <gif path> <name> turn a GIF into a clip and keep it under that name
     /idle-art list                     the built-in scenes and the saved clips
@@ -62,7 +62,7 @@ The settings and the clips stay in the mod's store, shared by every project, and
 
 ## How it draws
 
-An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is true. The `Client` runs `hooks/scene.tsx` on the drawing thread: a 100 ms `surface.every` tick advances the scene and asks for the next frame, so no hook runs per frame. Each built-in scene is a pure module under `hooks/art/` that answers a grid of cells; a saved clip reaches the drawing thread in the `Client`'s props and plays from `hooks/clip.ts`. A row draws as one `Text` per run of one colour. The hooks module picks the scene and a random seed when the band first shows a working turn, a `$.clock.after` timer redraws the band once the delay has passed, and the main loop's `turn.complete` ends the turn, so the next one picks again. The GIF decoder in `hooks/gif.ts` is written for this mod and needs no tool on the machine.
+An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is true. The `Client` runs `hooks/scene.tsx` on the drawing thread: a 100 ms `surface.every` tick advances the scene and asks for the next frame, so no hook runs per frame. Each built-in scene is a pure module under `hooks/art/` that answers a grid of cells; a saved clip reaches the drawing thread in the `Client`'s props and plays from `hooks/clip.ts`. A row draws as one `Text` per run of one colour. The hooks module picks the scene and a random seed when the band first shows a working turn, a `$.clock.after` timer redraws the band once the delay has passed, and the main loop's `turn.complete` ends the turn, so the next one picks again. Under `random` the drawing thread counts a scene's time itself, and once it has run it posts the scene's name with `surface.post`; the `ui.message` hook picks the next scene and answers with its props, which the running instance takes in place. A message that names a scene no longer showing changes nothing, so a late or repeated post cannot skip one. No clip travels to the drawing thread before its turn to show, because one clip may take most of the 100,000 characters a `Client`'s props hold. The GIF decoder in `hooks/gif.ts` is written for this mod and needs no tool on the machine.
 
 ## Install
 
@@ -89,7 +89,7 @@ Restart Claude Code, or run `/reload-plugins` in an open session. The mod is on 
 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
-    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
+    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, ui.message, turn.complete, command.run{command=idle-art}
     ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
     ❯ ./register.tsx env reads: HOME
     ❯ ./register.tsx surface modules: hooks/scene.tsx

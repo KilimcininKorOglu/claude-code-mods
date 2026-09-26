@@ -10,13 +10,27 @@ export type Run = { text: string; color: string }
 /** A random source in [0, 1). */
 export type Rng = () => number
 
-/** One running animation: `step` advances it one tick, `frame` draws where it stands. */
-export type Animation = { step: () => void; frame: () => Frame }
+/**
+ * One running animation: `step` advances it one tick, `frame` draws where it stands. An animation with an
+ * end, a clip, says through `wrapped` whether the last step went from its last frame back to its first.
+ */
+export type Animation = { step: () => void; frame: () => Frame; wrapped?: () => boolean }
 
 /** Starts an animation for a region of `w` columns and `h` rows. */
 export type Maker = (w: number, h: number, rng: Rng) => Animation
 
 export const BLANK: Cell = { ch: ' ', color: '' }
+
+/** How long a scene runs before `random` moves to another in the same turn. */
+export const SCENE_MS = 20_000
+
+/**
+ * Whether a scene that has run `ms` has run its time: a built-in scene after SCENE_MS, a clip at the first
+ * end of a loop from then on, so a long clip plays through once and a short one repeats until then.
+ */
+export function sceneDone(anim: Animation, ms: number): boolean {
+  return ms >= SCENE_MS && (anim.wrapped === undefined || anim.wrapped())
+}
 
 /** A seeded generator (mulberry32), so a test replays the same frames. */
 export function rngOf(seed: number): Rng {

@@ -44,6 +44,8 @@ function world(on: On, store: Record<string, unknown> = {}): World {
 
 const run = (args: string): CommandRunInput => ({ command: 'idle-art', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
 
+const BAND_PROPS = { hasSurvey: false, isWorking: true, maxRows: 20, bodyColumns: 120, scroll: { offset: 0, bodyRows: 20 }, view: {} }
+
 type Band = { isWorking?: boolean; hasSurvey?: boolean; maxRows?: number; surface?: 'terminal' | 'desktop' }
 
 async function band($: Engine, b: Band = {}): Promise<string> {
@@ -127,6 +129,28 @@ describe('register', () => {
       expect(style).not.toBe(last)
       last = style
     }
+  })
+
+  test('under random a scene gives way to another after 20 seconds in the same turn; a chosen one stays', async ($, on) => {
+    const w = world(on, { delay: 0 })
+    await $.session.start(start)
+    const ui = await $.ui.mount({ plugin: 'idle-art', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS })
+    const styleNow = async (): Promise<string> => /"style":"([\w-]+)"/.exec(await band($))?.[1] ?? ''
+    const first = await styleNow()
+    await ui.advance(19_900)
+    expect(await styleNow()).toBe(first)
+    await ui.advance(200)
+    const second = await styleNow()
+    expect(second).not.toBe(first)
+    // A message naming a scene no longer showing, as a late or repeated post, changes nothing.
+    await ui.post({ next: `${first}:0` }, { in: 'idle-art' })
+    expect(await styleNow()).toBe(second)
+    await ui.unmount()
+    await $.command.run(run('stars'))
+    const fixed = await $.ui.mount({ plugin: 'idle-art', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS })
+    await fixed.advance(60_000)
+    expect(await styleNow()).toBe('stars')
+    expect(w.store.style).toBe('stars')
   })
 
   test('a GIF imported under a name is kept in the store, drawn by name and by random, listed, and removed', async ($, on) => {

@@ -22,6 +22,11 @@ const RESERVED = new Set(['random', 'on', 'off', 'help', 'delay', 'import', 'lis
 /** A clip name: lowercase letters, digits and dashes, starting with a letter or digit, up to 24 characters. */
 const NAME = /^[a-z0-9][a-z0-9-]{0,23}$/
 
+/** One showing of a scene: its style and seed, which an instance names when it asks to leave it. */
+export function sceneOf(p: { style: string; seed: number }): string {
+  return `${p.style}:${p.seed}`
+}
+
 export function isStyle(v: unknown): v is Style {
   return typeof v === 'string' && (STYLES as readonly string[]).includes(v)
 }

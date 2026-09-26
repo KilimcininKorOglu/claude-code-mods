@@ -4,7 +4,7 @@ Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Co
 
 ## Ne gösterir
 
-Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şey göstermez. Turn bitince resim kaybolur. Varsayılan olarak her turn, yerleşik sahneler ve kaydettiğin klipler arasından rastgele birini çizer. Bir önceki turn'ün seçimini asla tekrar seçmez.
+Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şey göstermez. Turn bitince resim kaybolur. Varsayılan olarak her turn, yerleşik sahneler ve kaydettiğin klipler arasından rastgele birini çizer ve bir önce gösterileni asla tekrar seçmez. Uzun bir turn, rastgele başka bir sahneye geçer. Yerleşik bir sahne 20 saniye sonra değişir. Bir klip, 20 saniyeden sonra biten ilk döngüsünün sonunda değişir: uzun bir klip bir kez baştan sona oynar, kısa bir klip o süre dolana kadar tekrar eder. Adıyla seçtiğin bir sahne bütün turn boyunca kalır. Bir turn çizilirken sahne seçersen resim hemen değişir.
 
     ● Brewing… (5s)
              .:   .                 ,
@@ -51,7 +51,7 @@ Klip adı küçük harf, rakam ve tire içerir, en fazla 24 karakterdir. Yerleş
     /idle-art                          durum: açık ya da kapalı, stil, gecikme
     /idle-art on | off                 çizimi aç ya da kapat
     /idle-art <sahne ya da klip>       her zaman onu çiz: matrix, fire, stars, aquarium, life ya da kayıtlı bir klip
-    /idle-art random                   her turn yeni bir sahne ya da klip (varsayılan)
+    /idle-art random                   her turn ve yaklaşık her 20 saniyede yeni bir sahne ya da klip (varsayılan)
     /idle-art delay <n>                turn'ün n. saniyesinde başla, 0 ile 60 arası (varsayılan 3)
     /idle-art import <gif yolu> <ad>   bir GIF'i klibe çevir ve o adla sakla
     /idle-art list                     yerleşik sahneler ve kayıtlı klipler
@@ -62,7 +62,7 @@ Ayarlar ve klipler mod'un store'unda durur. Store bütün projelerde ortaktır v
 
 ## Nasıl çizer
 
-`AbovePrompt` için bir `ui.render` hook'u, `isWorking` true olduğu sürece bir `Client` element mount eder. `Client`, `hooks/scene.tsx` modülünü çizim thread'inde çalıştırır. 100 ms'lik bir `surface.every` tick'i sahneyi bir adım ilerletir ve sonraki frame'i ister. Bu yüzden frame başına hiçbir hook çalışmaz. Her yerleşik sahne `hooks/art/` altında saf bir modüldür ve bir hücre grid'i döner. Kayıtlı bir klip çizim thread'ine `Client`'ın props değeriyle ulaşır ve `hooks/clip.ts` ile oynar. Bir satırdaki aynı renkli ardışık hücreler tek bir `Text` olarak çizilir. Hooks modülü, band çalışan bir turn'ü ilk gördüğünde sahneyi ve rastgele bir seed seçer. Gecikme dolunca bir `$.clock.after` timer'ı band'i yeniden çizdirir. Ana döngünün `turn.complete` olayı turn'ü bitirir, böylece sonraki turn yeniden seçer. `hooks/gif.ts` içindeki GIF decoder'ı bu mod için yazıldı ve makinede başka bir araç gerektirmez.
+`AbovePrompt` için bir `ui.render` hook'u, `isWorking` true olduğu sürece bir `Client` element mount eder. `Client`, `hooks/scene.tsx` modülünü çizim thread'inde çalıştırır. 100 ms'lik bir `surface.every` tick'i sahneyi bir adım ilerletir ve sonraki frame'i ister. Bu yüzden frame başına hiçbir hook çalışmaz. Her yerleşik sahne `hooks/art/` altında saf bir modüldür ve bir hücre grid'i döner. Kayıtlı bir klip çizim thread'ine `Client`'ın props değeriyle ulaşır ve `hooks/clip.ts` ile oynar. Bir satırdaki aynı renkli ardışık hücreler tek bir `Text` olarak çizilir. Hooks modülü, band çalışan bir turn'ü ilk gördüğünde sahneyi ve rastgele bir seed seçer. Gecikme dolunca bir `$.clock.after` timer'ı band'i yeniden çizdirir. Ana döngünün `turn.complete` olayı turn'ü bitirir, böylece sonraki turn yeniden seçer. `random` modunda sahnenin süresini çizim thread'i kendisi sayar. Süre dolunca sahnenin adını `surface.post` ile gönderir. `ui.message` hook'u sıradaki sahneyi seçer ve onun props değerini döner, çalışan instance bunu yerinde alır. Artık gösterilmeyen bir sahneyi adlandıran mesaj hiçbir şeyi değiştirmez, böylece geç gelen ya da tekrarlanan bir mesaj bir sahneyi atlatamaz. Hiçbir klip, gösterilme sırası gelmeden çizim thread'ine gönderilmez. Çünkü tek bir klip, bir `Client`'ın props sınırı olan 100.000 karakterin büyük kısmını kaplayabilir. `hooks/gif.ts` içindeki GIF decoder'ı bu mod için yazıldı ve makinede başka bir araç gerektirmez.
 
 ## Kurulum
 
@@ -89,7 +89,7 @@ Claude Code'u yeniden başlatın ya da açık bir oturumda `/reload-plugins` ça
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, turn.complete, command.run{command=idle-art}
+    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, ui.message, turn.complete, command.run{command=idle-art}
     ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
     ❯ ./register.tsx env reads: HOME
     ❯ ./register.tsx surface modules: hooks/scene.tsx

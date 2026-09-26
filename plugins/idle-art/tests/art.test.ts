@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import { SCENES } from '../hooks/art/scenes.ts'
-import { rngOf, runsOf, textOf } from '../hooks/art/grid.ts'
+import { rngOf, runsOf, sceneDone, textOf } from '../hooks/art/grid.ts'
 import { nextAlive } from '../hooks/art/life.ts'
 import { configOf, parseArgs, pickStyle, STYLES } from '../hooks/config.ts'
 import { bytesOf, decodeGif } from '../hooks/gif.ts'
@@ -109,6 +109,19 @@ describe('gif', () => {
     expect(firstRow()).toBe(white)
     for (let i = 0; i < 3; i++) anim.step()
     expect(firstRow()).toBe(red)
+  })
+
+  test('a scene has run its time at 20 seconds; a clip at the first end of a loop from then on', () => {
+    const endless = SCENES.fire(10, 4, rngOf(1))
+    expect([sceneDone(endless, 19_900), sceneDone(endless, 20_000)]).toEqual([false, true])
+    // The clip loops every 500 ms: from 20,000 ms it is done at each end of a loop, and between them not.
+    const clip = playClip(toClip(decodeGif(bytesOf(TWO_FRAMES)), 100, 8).clip, 40, 8, 100)
+    const done: number[] = []
+    for (let ms = 100; ms <= 21_000; ms += 100) {
+      clip.step()
+      if (sceneDone(clip, ms)) done.push(ms)
+    }
+    expect(done).toEqual([20_000, 20_500, 21_000])
   })
 
   test('a clip over the size limit drops every other frame until it fits', () => {
