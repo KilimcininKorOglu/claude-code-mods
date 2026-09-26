@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, cacheHit, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -50,7 +50,7 @@ describe('reading', () => {
   test('the section reads context, tokens, cost, model with thinking, version and git, in that order', () => {
     expect(sidebarLines(reading())).toEqual([
       { text: 'context 25% · 245k / 1.0M', kind: 'ok' },
-      { text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k' },
+      { text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', parts: [{ text: 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k' }, { text: ' · CH ' }, { text: '92%', kind: 'ok' }] },
       { text: 'cost $1.23' },
       {
         text: 'model opus-5-5 · thinking high',
@@ -77,7 +77,7 @@ describe('reading', () => {
 
   test('what is not known yet is said, not zeroed', () => {
     const lines = sidebarLines(reading({ context: { window: 200_000 }, costUsd: undefined, effort: undefined, git: undefined }))
-    expect(lines.map(l => l.text)).toEqual(['context: no reply yet', 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
+    expect(lines.map(l => l.text)).toEqual(['context: no reply yet', 'tokens T 1.2M · I 3k · O 45k · CR 1.1M · CW 80k · CH 92%', 'cost: no ledger in this host', 'model opus-5-5 · thinking: not read yet', 'Claude Code 2.1.282', 'git: not read yet'])
     expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no thinking setting')
     expect(sidebarLines(reading({ seeding: true }))[1]?.text).toBe('tokens: reading the transcripts')
     expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · thinking budget 12000')
@@ -90,6 +90,14 @@ describe('reading', () => {
 })
 
 describe('token totals', () => {
+  test('the cache hit is the share of the input read from the cache, rounded down, and absent before any input', () => {
+    expect(cacheHit({ input: 0, output: 5, cacheRead: 0, cacheWrite: 0 })).toBe(undefined)
+    expect(cacheHit({ input: 1, output: 0, cacheRead: 999, cacheWrite: 0 })).toBe(99)
+    expect(cacheHit({ input: 0, output: 0, cacheRead: 3_300_000_000, cacheWrite: 27_500_000 })).toBe(99)
+    expect(cacheHit({ input: 0, output: 0, cacheRead: 0, cacheWrite: 100 })).toBe(0)
+    expect([100, 90, 89, 70, 69, 0].map(cacheHitTone)).toEqual(['ok', 'ok', 'warn', 'warn', 'error', 'error'])
+  })
+
   test('each turn adds its tokens by kind', () => {
     const one = addSplit(NO_SPLIT, { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20 })
     expect(addSplit(one, { output_tokens: 5 })).toEqual({ input: 10, output: 10, cacheRead: 100, cacheWrite: 20 })

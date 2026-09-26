@@ -144,7 +144,7 @@ describe('session-watch', () => {
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)).toEqual([
       { text: 'context 12% · 120k / 1.0M', kind: 'ok' },
-      { text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500' },
+      { text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500 · CH 84%', parts: [{ text: 'tokens T 10k · I 1k · O 500 · CR 8k · CW 500' }, { text: ' · CH ' }, { text: '84%', kind: 'warn' }] },
       { text: 'cost $0.50' },
       {
         text: 'model opus-5-5 · thinking high',
@@ -162,7 +162,7 @@ describe('session-watch', () => {
     await $.turn.complete(turn('agent-1'))
     await $.turn.complete(turn())
     expect(w.store.totals).toEqual({ [SID]: { input: 2005, output: 1005, cacheRead: 16005, cacheWrite: 1005 } })
-    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 20k · I 2k · O 1k · CR 16k · CW 1k')
+    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 20k · I 2k · O 1k · CR 16k · CW 1k · CH 84%')
   })
 
   test('a session with no kept totals reads them from its transcripts, each response once, and counts later turns on top', async ($, on) => {
@@ -205,7 +205,7 @@ describe('session-watch', () => {
     const before = w.gitRuns
     await w.clock.advance(0)
     expect(w.gitRuns).toBe(before + 3)
-    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · CR 74k · CW 7k')
+    expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · CR 74k · CW 7k · CH 91%')
   })
 
   test('the thinking setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {

@@ -241,9 +241,27 @@ function contextLine(c: Reading['context']): Line {
   return { text: `context ${c.percent}% · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`, kind: contextTone(c.percent) }
 }
 
+/**
+ * The share of the input tokens read from the cache, in whole percent rounded down, so a session with any
+ * cold write never reads 100%; undefined before any input.
+ */
+export function cacheHit(s: Split): number | undefined {
+  const input = s.input + s.cacheRead + s.cacheWrite
+  return input === 0 ? undefined : Math.floor((100 * s.cacheRead) / input)
+}
+
+/** The cache hit's colour: green from 90%, yellow from 70% to 90%, red under 70%. */
+export function cacheHitTone(percent: number): Tone {
+  if (percent >= 90) return 'ok'
+  return percent >= 70 ? 'warn' : 'error'
+}
+
 function tokensLine(s: Split, seeding: boolean): Line {
   if (seeding) return { text: 'tokens: reading the transcripts', kind: 'dim' }
-  return { text: `tokens T ${fmtTok(totalOf(s))} · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}` }
+  const totals = part(`tokens T ${fmtTok(totalOf(s))} · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
+  const hit = cacheHit(s)
+  if (hit === undefined) return { text: totals.text }
+  return partsLine([totals, part(' · CH ', undefined), part(`${hit}%`, cacheHitTone(hit))])
 }
 
 function costLine(usd: number | undefined): Line {
