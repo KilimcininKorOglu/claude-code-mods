@@ -525,6 +525,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "effort-auto",
+      "source": "./plugins/effort-auto",
+      "description": "Has a small model rate how hard each prompt is and runs that turn at the matching effort, on the models whose prompt cache survives an effort change.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
