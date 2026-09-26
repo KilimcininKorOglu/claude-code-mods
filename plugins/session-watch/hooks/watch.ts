@@ -4,7 +4,7 @@
  */
 
 /** The tokens of every turn so far, by kind. `thinking` is a part of `output`, read from the transcripts alone. */
-export type Split = { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number }
+export type Split = { input: number; output: number; cacheRead: number; cacheWrite: number; thinking: number; noThinking?: true }
 
 export const NO_SPLIT: Split = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, thinking: 0 }
 
@@ -146,13 +146,20 @@ export function lastThinkingOf(s: UsageScanner): number | undefined {
   return last === undefined ? undefined : thinkingIn(last)
 }
 
-/**
- * A stored split. One kept before thinking was counted has no `thinking` and reads as none, so the
- * session's transcripts are read again and the totals hold it.
- */
-function isSplit(v: unknown): v is Split {
+/** A stored split's four counts; thinking is read on its own, because an older version kept none. */
+function hasCounts(v: unknown): v is Omit<Split, 'thinking'> & { thinking?: unknown; noThinking?: unknown } {
   const s = v as Partial<Split> | null
-  return typeof s === 'object' && s !== null && isCount(s.input) && isCount(s.output) && isCount(s.cacheRead) && isCount(s.cacheWrite) && isCount(s.thinking)
+  return typeof s === 'object' && s !== null && isCount(s.input) && isCount(s.output) && isCount(s.cacheRead) && isCount(s.cacheWrite)
+}
+
+/**
+ * A stored split as the totals use it. One kept before thinking was counted has no `thinking`: its four
+ * counts stay, because they hold the plugin model calls and compactions no transcript records, and it is
+ * marked `noThinking`, so the session reads the thinking alone from its transcripts.
+ */
+function splitOf(s: Omit<Split, 'thinking'> & { thinking?: unknown; noThinking?: unknown }): Split {
+  const counts = { input: s.input, output: s.output, cacheRead: s.cacheRead, cacheWrite: s.cacheWrite }
+  return isCount(s.thinking) && s.noThinking !== true ? { ...counts, thinking: s.thinking } : { ...counts, thinking: 0, noThinking: true }
 }
 
 /** How many sessions' totals the store keeps, so the file does not grow with every session. */
@@ -161,7 +168,7 @@ const KEPT_SESSIONS = 20
 /** The totals the store keeps, by session id; a value of another shape reads as none. */
 export function storedSplits(value: unknown): Record<string, Split> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  return Object.fromEntries(Object.entries(value).filter(([, s]) => isSplit(s))) as Record<string, Split>
+  return Object.fromEntries(Object.entries(value).flatMap(([id, s]) => (hasCounts(s) ? [[id, splitOf(s)]] : [])))
 }
 
 /** The stored totals with this session's written last, the oldest dropped past the kept number. */

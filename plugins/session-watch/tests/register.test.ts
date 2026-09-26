@@ -246,6 +246,19 @@ describe('session-watch', () => {
     expect(lines.at(-2)).toEqual({ text: 'sessions: 2 others · 1 busy (cors-fix) · 1 idle', parts: [{ text: 'sessions: 2 others' }, { text: ' · ' }, { text: '1 busy', kind: 'warn' }, { text: ' (cors-fix)', kind: 'dim' }, { text: ' · 1 idle', kind: 'dim' }] })
   })
 
+  test('totals kept before thinking was counted keep their counts and take the thinking alone; another session keeps its own', async ($, on) => {
+    // The kept counts hold plugin model calls no transcript records, so they stand.
+    const w = world(on, { totals: { other: { input: 9, output: 9, cacheRead: 9, cacheWrite: 9 }, [SID]: { input: 500_000, output: 700, cacheRead: 9000, cacheWrite: 800 } } })
+    w.files.set(MAIN, `${response('msg_1', 3, 40, 25)}\n`)
+    await $.session.start({ surface: null, isInteractive: false, cwd: '/work' })
+    await w.clock.advance(0)
+    expect(w.store.totals).toEqual({
+      other: { input: 9, output: 9, cacheRead: 9, cacheWrite: 9, thinking: 0, noThinking: true },
+      [SID]: { input: 500_000, output: 700, cacheRead: 9000, cacheWrite: 800, thinking: 25 },
+    })
+    expect(w.logs).toEqual([])
+  })
+
   test('a transcript that cannot be read leaves the totals counted from the load, and says why once', async ($, on) => {
     const w = world(on)
     w.files.set(MAIN, `${response('msg_1', 3, 40)}\n`)

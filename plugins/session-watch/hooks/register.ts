@@ -115,9 +115,11 @@ async function keepTotals($: EngineInterface, state: State): Promise<void> {
 }
 
 /** Adds the transcripts' totals under the turns counted while they were read, then keeps and draws them. */
-async function seedTotals($: EngineInterface, state: State, files: readonly Transcript[]): Promise<void> {
+async function seedTotals($: EngineInterface, state: State, files: readonly Transcript[], thinkingOnly: boolean): Promise<void> {
   try {
-    state.split = sumSplits(await readTotals($, files), state.split)
+    const read = await readTotals($, files)
+    // Totals kept before thinking was counted keep their counts and take the thinking alone.
+    state.split = thinkingOnly ? { ...state.split, thinking: state.split.thinking + read.thinking } : sumSplits(read, state.split)
   } catch (err) {
     $.ui.log(`the token totals count from the module's load, because the transcripts were not read: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -133,14 +135,15 @@ async function seedTotals($: EngineInterface, state: State, files: readonly Tran
 async function startTotals($: EngineInterface, state: State): Promise<void> {
   const kept = storedSplits(await $.store.get(TOTALS_KEY))[state.sid]
   await $.store.delete(OLD_KEY)
-  state.split = kept ?? NO_SPLIT
+  const thinkingOnly = kept?.noThinking === true
+  state.split = kept === undefined ? NO_SPLIT : { input: kept.input, output: kept.output, cacheRead: kept.cacheRead, cacheWrite: kept.cacheWrite, thinking: kept.thinking }
   try {
     const files = await transcriptsOf($, state)
     startFollow(state, files)
-    if (kept !== undefined) return
+    if (kept !== undefined && !thinkingOnly) return
     state.seeding = true
     // The reading outlives the session.start dispatch, so it runs from a timer.
-    $.clock.after(0, () => void seedTotals($, state, files))
+    $.clock.after(0, () => void seedTotals($, state, files, thinkingOnly))
   } catch (err) {
     $.ui.log(`the token totals count from the module's load, because the transcripts were not found: ${err instanceof Error ? err.message : String(err)}`)
   }
