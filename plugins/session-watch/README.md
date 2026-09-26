@@ -80,7 +80,7 @@ Reach L2, it runs git, ps, head and tail.
 - The engine's own side calls (part of the `haiku` row in `/cost`) reach no hook and are not counted; measured on 2.1.282, 888 of 902 haiku input tokens in a probe session. `$.model.classify` reports no usage and is not counted either. `cost` counts every request.
 - A plugin's model call or a compaction made before the module loaded left no record, so a session open before the install misses them for good.
 - A turn that ran across the moment the transcripts' sizes were read can be counted twice: its responses written before that moment are read from the transcript, and its `turn.complete` adds the whole turn.
-- The effort setting is the one the main loop's last request carried when session-watch read it; a subagent's own setting is not shown. A mod whose hook changes a request's effort after session-watch read it, such as effort-auto, is not shown: measured on 2.1.283, a turn effort-auto sent at `max` read `effort low`, the session's own setting.
+- The effort setting is the one the main loop's last request went out with, read from the chain's trace after the request (`next.trace`, the deepest link's input), so a mod beneath session-watch that changes it, such as effort-auto, is shown: measured on 2.1.283, a turn effort-auto sent at `max` in a session set to `low` read `effort max`. While the first request of a turn runs, the line still shows the effort the request was asked with. A subagent's own setting is not shown.
 - `git status` reads the directory the session started in; a Bash `cd` into another repository does not move it.
 - A Bash command that runs git through a script without naming `git` refreshes the git line only at the turn's end or the timer.
 

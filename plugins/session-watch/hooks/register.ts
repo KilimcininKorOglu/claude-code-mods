@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Effort, type GitState, type OtherSession, type Reading, type Split, type Usage, type UsageScanner,
 } from './watch.ts'
 
@@ -258,6 +258,8 @@ export const register: Register = on => {
   on('turn.step', async function* ($, e, next) {
     if (e.agentId === undefined) state.effort = e.effort ?? null
     const r = yield* next(e)
+    // A hook beneath this one may have sent the request at another effort; the chain's trace says which.
+    if (e.agentId === undefined) state.effort = sentEffort(next.trace, e.effort)
     // The main loop's last request holds the context window, so its split is the window's own.
     if (e.agentId === undefined && r.usage) {
       state.last = addSplit(NO_SPLIT, r.usage)

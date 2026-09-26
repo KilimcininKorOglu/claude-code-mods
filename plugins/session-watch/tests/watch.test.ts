@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -81,6 +81,15 @@ describe('reading', () => {
     expect(sidebarLines(reading({ effort: null }))[3]?.text).toBe('model opus-5-5 · no effort setting')
     expect(sidebarLines(reading({ seeding: true }))[1]?.text).toBe('tokens: reading the transcripts')
     expect(sidebarLines(reading({ effort: 12_000 }))[3]?.text).toBe('model opus-5-5 · effort budget 12000')
+  })
+
+  test('the effort shown is the one the deepest link beneath received, so a rewrite beneath is read', () => {
+    const link = (index: number, effort?: string) => ({ index, received: effort === undefined ? {} : { effort } })
+    expect(sentEffort([link(2, 'max'), link(3, 'max')], 'low')).toBe('max')
+    expect(sentEffort([link(3, 'medium'), link(2, 'max')], 'low')).toBe('medium')
+    expect(sentEffort([], 'low')).toBe('low')
+    expect(sentEffort([link(2)], 'low')).toBe(null)
+    expect(sentEffort([], undefined)).toBe(null)
   })
 
   test('the status line is short, and marks a changed tree with a star', () => {

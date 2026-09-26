@@ -232,6 +232,19 @@ function changesText(t: Tree): string {
 /** The effort setting of the main loop's last request: a level, a budget, none for a model without one, or not read yet. */
 export type Effort = string | number | null | undefined
 
+/** A link of the chain beneath a hook, as `next.trace` lists it: its place, and the request it received. */
+export type StepLink = { readonly index: number; readonly received: { readonly effort?: string | number } }
+
+/**
+ * The effort a request went out with: what the deepest link beneath received, the engine's own end, so a
+ * hook beneath this one that changed the effort (effort-auto) is read too; the request's own effort, or none,
+ * when nothing beneath is listed.
+ */
+export function sentEffort(trace: readonly StepLink[], asked: string | number | undefined): Effort {
+  const deepest = trace.reduce<StepLink | undefined>((d, link) => (d === undefined || link.index > d.index ? link : d), undefined)
+  return (deepest === undefined ? asked : deepest.received.effort) ?? null
+}
+
 /** Everything one reading shows. */
 export type Reading = {
   context: { tokens?: number; window: number; percent?: number }
