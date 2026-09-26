@@ -176,8 +176,8 @@ describe('session-watch', () => {
     await step($, undefined, 'a1')
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)?.[0]).toEqual({
-      text: 'ctx 12% · 120k / 1.0M · new 2 · O 300 · TH 0 · CR 450k · CW 3k · CH 99%',
-      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · new 2 · O 300 · TH 0 · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
+      text: 'ctx 12% · 120k / 1.0M · CR 450k · CW 3k · CH 99%',
+      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
     })
   })
 
@@ -224,8 +224,8 @@ describe('session-watch', () => {
     w.files.set(SUB, `${w.files.get(SUB) ?? ''}${response('sub_2', 1, 9, 4)}\n`)
     await $.turn.complete(turn())
     const [ctx, tokens] = w.bar.lines.at(-1) ?? []
-    // The last response's own thinking on the ctx line, 12, its last row; the totals 30 + 5 read, then 12 + 4.
-    expect(ctx?.text).toContain('· O 40 · TH 12 ·')
+    // The totals: 30 + 5 read, then 12 (msg_2's last row) + 4. The ctx line holds the window's cache split alone.
+    expect(ctx?.text).toBe('ctx 12% · 120k / 1.0M · CR 100 · CW 10 · CH 90%')
     expect(tokens?.text).toContain('· TH 51 ·')
     expect(w.logs).toEqual([])
   })

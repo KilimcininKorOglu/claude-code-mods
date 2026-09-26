@@ -140,12 +140,6 @@ export function thinkingOf(s: UsageScanner): number {
   return [...s.byId.values()].reduce((a, u) => a + thinkingIn(u), s.noId.thinking)
 }
 
-/** The thinking tokens of the last response a scanner has read, or undefined before one. */
-export function lastThinkingOf(s: UsageScanner): number | undefined {
-  const last = [...s.byId.values()].at(-1)
-  return last === undefined ? undefined : thinkingIn(last)
-}
-
 /** A stored split's four counts; thinking is read on its own, because an older version kept none. */
 function hasCounts(v: unknown): v is Omit<Split, 'thinking'> & { thinking?: unknown; noThinking?: unknown } {
   const s = v as Partial<Split> | null
@@ -281,7 +275,17 @@ function contextLine(c: Reading['context'], last: Split | undefined): Line {
   if (c.percent === undefined) return { text: 'ctx: no reply yet', kind: 'dim' }
   const fill = ` · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`
   if (last === undefined) return { text: `ctx ${c.percent}%${fill}`, kind: contextTone(c.percent) }
-  return partsLine([part('ctx ', undefined), part(`${c.percent}%`, contextTone(c.percent)), part(fill, undefined), ...splitParts(last, 'new')])
+  return partsLine([part('ctx ', undefined), part(`${c.percent}%`, contextTone(c.percent)), part(fill, undefined), ...windowParts(last)])
+}
+
+/**
+ * The window's own split: its cache read and cache write, and the request's cache hit. The uncached input
+ * (the few tokens past the cache) and the output are left to the tokens line.
+ */
+function windowParts(s: Split): Part[] {
+  const kinds = part(` · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
+  const hit = cacheHit(s)
+  return hit === undefined ? [kinds] : [kinds, part(' · CH ', undefined), part(`${hit}%`, cacheHitTone(hit))]
 }
 
 /**
@@ -299,12 +303,9 @@ export function cacheHitTone(percent: number): Tone {
   return percent >= 70 ? 'warn' : 'error'
 }
 
-/**
- * A split by kind, then its cache hit with only the percentage coloured; no hit before any input. The ctx line
- * names the uncached input `new`, because for one request it is the few tokens past the cache, not its input.
- */
-function splitParts(s: Split, inputLabel = 'I'): Part[] {
-  const kinds = part(` · ${inputLabel} ${fmtTok(s.input)} · O ${fmtTok(s.output)} · TH ${fmtTok(s.thinking)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
+/** A split by kind, then its cache hit with only the percentage coloured; no hit before any input. */
+function splitParts(s: Split): Part[] {
+  const kinds = part(` · I ${fmtTok(s.input)} · O ${fmtTok(s.output)} · TH ${fmtTok(s.thinking)} · CR ${fmtTok(s.cacheRead)} · CW ${fmtTok(s.cacheWrite)}`, undefined)
   const hit = cacheHit(s)
   return hit === undefined ? [kinds] : [kinds, part(' · CH ', undefined), part(`${hit}%`, cacheHitTone(hit))]
 }

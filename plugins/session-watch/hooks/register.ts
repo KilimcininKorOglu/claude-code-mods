@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, lastThinkingOf, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Effort, type GitState, type OtherSession, type Reading, type Split, type Usage, type UsageScanner,
 } from './watch.ts'
 
@@ -51,9 +51,8 @@ async function followOne($: EngineInterface, state: State, f: Transcript): Promi
 const followedThinking = (state: State): number => [...state.follow.values()].reduce((a, f) => a + thinkingOf(f.scan), 0)
 
 /**
- * Adds the thinking tokens the transcripts gained, and puts the main loop's last response's on the ctx
- * line. `main` alone reads the main loop's transcript, as after each of its requests; the turn's end
- * reads every transcript, the subagents' too.
+ * Adds the thinking tokens the transcripts gained. `main` alone reads the main loop's transcript, as after
+ * each of its requests; the turn's end reads every transcript, the subagents' too.
  */
 async function followThinking($: EngineInterface, state: State, main: boolean): Promise<void> {
   const before = followedThinking(state)
@@ -61,8 +60,6 @@ async function followThinking($: EngineInterface, state: State, main: boolean): 
   const mainPath = files.find(f => f.path.endsWith(`/${state.sid}.jsonl`))?.path
   for (const f of files) if (!main || f.path === mainPath) await followOne($, state, f)
   state.split = { ...state.split, thinking: state.split.thinking + followedThinking(state) - before }
-  const lastThinking = mainPath === undefined ? undefined : lastThinkingOf(state.follow.get(mainPath)?.scan ?? usageScannerOf())
-  if (state.last !== undefined && lastThinking !== undefined) state.last = { ...state.last, thinking: lastThinking }
 }
 
 /** Follows the transcripts, and says a failed read once instead of failing the hook. */
