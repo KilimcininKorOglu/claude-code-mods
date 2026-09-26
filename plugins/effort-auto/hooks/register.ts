@@ -87,7 +87,7 @@ export const register: Register = on => {
   })
 
   // A main-loop request of a rated turn runs at the rated effort, on a model whose cache survives the change.
-  // Nothing is stored, so the next turn starts from the session's own effort, and its request drops the line.
+  // Nothing is stored, so the next turn starts from the session's own effort.
   on('turn.step', async function* ($, e, next) {
     if (e.agentId !== undefined) return yield* next(e)
     state.model = e.model
@@ -103,8 +103,12 @@ export const register: Register = on => {
     return yield* next({ ...e, effort: level })
   })
 
-  on('turn.complete', async (_, e, next) => {
-    if (e.agentId === undefined) state.level = undefined
+  // The rated effort ends with the turn, so its line goes with it and the pane shows no level that is not in force.
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) {
+      state.level = undefined
+      await dropLine($, state)
+    }
     return next(e)
   })
 }
