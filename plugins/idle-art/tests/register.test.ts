@@ -61,14 +61,15 @@ async function band($: Engine, b: Band = {}): Promise<string> {
 const start = { surface: 'terminal' as const, isInteractive: true, cwd: '/work' }
 
 describe('register', () => {
-  test('draws the scene only once the delay has passed in a working turn, sized to the band', async ($, on) => {
+  test('draws the scene only once the delay has passed in a working turn, over the band\'s whole width', async ($, on) => {
     const w = world(on)
     await $.session.start(start)
     expect(await band($)).not.toContain('scene.tsx')
     await w.clock.advance(3000)
     const drawn = await band($)
     expect(drawn).toContain('"module":"hooks/scene.tsx"')
-    expect(drawn).toContain('"width":100')
+    // The band is 120 columns wide, and the scene takes all of them.
+    expect(drawn).toContain('"width":120')
     expect(drawn).toContain('"height":8')
   })
 
@@ -139,7 +140,8 @@ describe('register', () => {
     const first = await styleNow()
     await ui.advance(19_900)
     expect(await styleNow()).toBe(first)
-    await ui.advance(200)
+    // The cat gives way only once it has walked out, at the end of its round of about 34 seconds.
+    await ui.advance(first === 'cat' ? 14_100 : 200)
     const second = await styleNow()
     expect(second).not.toBe(first)
     // A message naming a scene no longer showing, as a late or repeated post, changes nothing.
