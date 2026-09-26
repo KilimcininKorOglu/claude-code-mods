@@ -22,7 +22,8 @@ Her Bash sonucunu model okumadan önce küçülten bir Claude Code Mod'u. Biline
        [output cut by Claude Code at 10000 characters; the middle is lost: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 7. Başarısız bir komut exit kodu ile bir hata olarak kalır: model `Exit code 1` ve filtrelenmiş metni bir tool hatası olarak okur.
 8. Session başında, `/clear`'dan sonra ve bir compaction'dan sonra model bir not okur: kısaltılmış bir sonuç eksiksizdir, tam çıktı adı verilen yoldadır ve `BASH_DIET_RAW=1 <komut>` birebir byte'ları döndürür.
-9. [sidebar](../sidebar) açıkken session'ın tasarrufu orada "Bash output" başlığı altında durur. Sidebar yokken status line taşır.
+9. Playwright MCP her tarayıcı çağrısının kodunu sonucunda `### Ran Playwright code` başlığı altında tekrarlar: modelin `browser_run_code_unsafe` ve `browser_evaluate` için yazdığı kodu, ve bir tıklamanın ya da bir sayfa geçişinin kodunu. Mod bu bölümü her Playwright tarayıcı tool'unun sonucundan çıkarır, her zaman ve hiçbir ayar olmadan; sayfa, snapshot bağlantısı, console olayları ve bir hata yerinde kalır. Bu makinenin son 30 günlük transcript'lerinde bu bölüm bütün Playwright sonuç metninin yarısından fazlasıydı, 1,8 milyon karakterin yaklaşık 950.000'i. `PLAYWRIGHT_MCP_CODEGEN` değişkenini mod'dan ayarlamak işe yaramaz, çünkü MCP sunucusu session başlangıcı çalışmadan önce başlar (2.1.283 üzerinde ölçüldü).
+10. [sidebar](../sidebar) açıkken session'ın tasarrufu orada "Bash output" başlığı altında durur. Sidebar yokken status line taşır.
 
 ## Filtreler
 
@@ -179,14 +180,14 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 Claude Code 2.1.282 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=bash-diet}, tool.call{tool=Bash}
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=bash-diet}, tool.call{tool=Bash}, tool.call{tool=?}
     ❯ ./register.ts calls: $.clock.now (via gainCommand, pruneGain, pruneRecall, recordGain, transcriptsOf), $.command.register, $.env.get (via locate, recallDir), $.fs.exists (via gainFiles, refreshFile, transcriptDirs), $.fs.list (via gainFiles, pruneRecall, transcriptDirs, transcriptsOf), $.fs.read (via gainCommand, refreshFile, seedGain, wholeText), $.fs.stat (via pruneRecall, refreshFile, transcriptsOf), $.fs.write (via keepFull, recordGain, writeLearned), $.process.run (via locate, pruneGain, pruneRecall, recallDir, recordGain, writeLearned), $.process.spawn (via callsIn), $.session.id, $.session.model (via costCommand), $.session.root (via locate), $.session.usage (via costCommand), $.sidebar.set (via showGain), $.store.get, $.store.set (via setEnabled, setExcludes, setTrusted), $.tool.check (via withPlanFlags), $.ui.log (via activeRules, discoverAll, refreshFile, report), $.ui.status (via showGain)
 
 Reach L2, dosya yazar ve process çalıştırır.
 
-    1. Okur:     her Bash komutunu ve çıktısını; iki filters.json dosyasını; bu session'ın modelini, harcamasını ve id'sini; discover ve learn için ~/.claude/projects altındaki transcript'leri
+    1. Okur:     her Bash komutunu ve çıktısını; her Playwright MCP tarayıcı tool'unun sonucunu; iki filters.json dosyasını; bu session'ın modelini, harcamasını ve id'sini; discover ve learn için ~/.claude/projects altındaki transcript'leri
     2. Çalıştırır: modelin kendi Bash komutunu, permission kontrolü izin verdiğinde eklenmiş, çıktıyı kısaltan bir flag ile; git rev-parse, mkdir, rm (yalnız kendi dosyalarını) ve cat (transcript'leri)
-    3. Gönderir: çıktının yerine filtrelenmiş sonucu modele; makineden hiçbir şey çıkmaz
+    3. Gönderir: çıktının yerine filtrelenmiş sonucu, ve her Playwright sonucunu kod yankısı olmadan modele; makineden hiçbir şey çıkmaz
     4. Saklar:   $TMPDIR/bash-diet içinde tam çıktıları (200 dosya, 30 gün); ~/.claude/bash-diet/gain içinde tasarruf kayıtlarını (90 gün); learn write ile .claude/rules/cli-corrections.md; $.store içinde on/off, exclude'lar ve trust edilen kural dosyalarının hash'leri
     5. Düşman girdi: bir komutun çıktısı yalnız regex'lerden ve JSON.parse'tan geçer ve hiçbir zaman çalıştırılmaz; bir proje kural dosyası yalnız /bash-diet trust'tan sonra ve SHA-256'sı tuttuğu sürece çalışır; credential benzeri adların env değerleri maskelenir
 

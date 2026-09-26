@@ -6,6 +6,7 @@ import { correctionsOf, discoverText, finish, learnFile, learnText, scan, scanne
 import type { FilterResult } from './filters/common.ts'
 import { dayOf, gainFileName, gainReport, linesOfRecords, recordsOf, staleGainFiles, type GainRecord } from './gain.ts'
 import { failureOf, joined, persistedPathOf, planFor, replaces, runFilter, type Plan } from './pipeline.ts'
+import { PLAYWRIGHT_TOOL, resultWithoutEcho } from './playwright.ts'
 import { costText } from './pricing.ts'
 import { fullOutputLine, hashOf, isCut, needsFile, sha256Of, staleFiles } from './recall.ts'
 import { AWARENESS, USAGE, filtersText, isExcluded, patternError, sessionLine, sessionText, statusText, tokensOf } from './text.ts'
@@ -534,4 +535,7 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => filterCall($, state, e, next as never))
+
+  // Playwright MCP repeats the code of each call in its result; the model already holds that code.
+  on('tool.call', { tool: PLAYWRIGHT_TOOL }, async (_$, e, next) => resultWithoutEcho(await next(e)))
 }

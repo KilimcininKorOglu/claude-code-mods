@@ -22,7 +22,8 @@ A Claude Code Mod that shrinks each Bash result before the model reads it. Known
        [output cut by Claude Code at 10000 characters; the middle is lost: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 7. A failed command stays an error with its exit code: the model reads `Exit code 1` and the filtered text as a tool error.
 8. At the session's start, after `/clear` and after a compaction, the model reads one note: a condensed result is complete, the full output is at the named path, and `BASH_DIET_RAW=1 <command>` returns the exact bytes.
-9. While the [sidebar](../sidebar) is open, the session's saving stands there under "Bash output". Without it, the status line carries it.
+9. Playwright MCP repeats the code of each browser call in its result, under `### Ran Playwright code`: the code the model wrote for `browser_run_code_unsafe` and `browser_evaluate`, and the code of a click or a navigation. The mod takes that section out of every Playwright browser tool's result, always, with no setting; the page, the snapshot link, the console events and an error stay. In 30 days of this machine's transcripts that section was over half of all Playwright result text, about 950,000 of 1.8 million characters. Setting `PLAYWRIGHT_MCP_CODEGEN` from the mod does not help, because the MCP server starts before the session start runs (measured on 2.1.283).
+10. While the [sidebar](../sidebar) is open, the session's saving stands there under "Bash output". Without it, the status line carries it.
 
 ## Filters
 
@@ -179,14 +180,14 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.282:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=bash-diet}, tool.call{tool=Bash}
+    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=bash-diet}, tool.call{tool=Bash}, tool.call{tool=?}
     ❯ ./register.ts calls: $.clock.now (via gainCommand, pruneGain, pruneRecall, recordGain, transcriptsOf), $.command.register, $.env.get (via locate, recallDir), $.fs.exists (via gainFiles, refreshFile, transcriptDirs), $.fs.list (via gainFiles, pruneRecall, transcriptDirs, transcriptsOf), $.fs.read (via gainCommand, refreshFile, seedGain, wholeText), $.fs.stat (via pruneRecall, refreshFile, transcriptsOf), $.fs.write (via keepFull, recordGain, writeLearned), $.process.run (via locate, pruneGain, pruneRecall, recallDir, recordGain, writeLearned), $.process.spawn (via callsIn), $.session.id, $.session.model (via costCommand), $.session.root (via locate), $.session.usage (via costCommand), $.sidebar.set (via showGain), $.store.get, $.store.set (via setEnabled, setExcludes, setTrusted), $.tool.check (via withPlanFlags), $.ui.log (via activeRules, discoverAll, refreshFile, report), $.ui.status (via showGain)
 
 Reach L2, writes files and runs processes.
 
-    1. Reads:    each Bash command and its output; the two filters.json files; this session's model, spend and id; the transcripts under ~/.claude/projects for discover and learn
+    1. Reads:    each Bash command and its output; the result of each Playwright MCP browser tool; the two filters.json files; this session's model, spend and id; the transcripts under ~/.claude/projects for discover and learn
     2. Runs:     the model's own Bash command, with a flag that shortens its output added when the permission check allows it; git rev-parse, mkdir, rm (of its own files only) and cat (of transcripts)
-    3. Sends:    the filtered result to the model in place of the output; nothing leaves the machine
+    3. Sends:    the filtered result to the model in place of the output, and each Playwright result without its code echo; nothing leaves the machine
     4. Persists: full outputs in $TMPDIR/bash-diet (200 files, 30 days); saving records in ~/.claude/bash-diet/gain (90 days); .claude/rules/cli-corrections.md on learn write; in $.store, on/off, the excludes and the trusted rule file hashes
     5. Hostile input: a command's output only passes through regexes and JSON.parse, and is never run; a project rule file runs only after /bash-diet trust and only while its SHA-256 matches; env values of credential-like names are masked
 
