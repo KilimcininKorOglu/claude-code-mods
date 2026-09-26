@@ -514,6 +514,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "tool-coach",
+      "source": "./plugins/tool-coach",
+      "description": "Stops the model from repeating a tool call that just failed with the same input, until a file or command has changed something.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
