@@ -26,9 +26,9 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
 
 **A status line** in place of the section while the sidebar is closed or not installed:
 
-    session-watch: ctx 8% · $0.07 · main*
+    session-watch: ctx 56% · 557k / 1.0M · $0.11 · CR 557k · CW 502 · CH 99% · main*
 
-A `*` after the branch marks a tree with changes. The status line is cleared while the sidebar holds the section.
+It holds the context fill, the cost, the cache split of the main loop's last request as the section's ctx line has it, and the branch; the split waits for the first request, and the branch is left out outside a git repository. A `*` after the branch marks a tree with changes. The status line is cleared while the sidebar holds the section.
 
 ## When it reads
 
@@ -57,7 +57,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 ## After installing
 
 1. Restart Claude Code.
-2. Install the [sidebar](../sidebar) mod and open it with `/sidebar`. Without it the mod writes the short status line.
+2. Install the [sidebar](../sidebar) mod and open it with `/sidebar`. Without it the mod writes the status line.
 3. Install `git`. Without it the git line reads the error.
 
 ## What it can reach

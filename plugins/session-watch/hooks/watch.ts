@@ -312,6 +312,11 @@ export function contextTone(percent: number): Tone {
   return percent <= 80 ? 'warn' : 'error'
 }
 
+/** The window's fill in tokens: ` · 557k / 1.0M`. */
+function fillText(c: Reading['context']): string {
+  return ` · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`
+}
+
 /**
  * The context line: the window's fill, then the split of the last main-loop request, the one that holds the
  * window now. Without that request's split the whole line takes the fill's colour, as before; with it only
@@ -319,7 +324,7 @@ export function contextTone(percent: number): Tone {
  */
 function contextLine(c: Reading['context'], last: Split | undefined): Line {
   if (c.percent === undefined) return { text: 'ctx: no reply yet', kind: 'dim' }
-  const fill = ` · ${fmtTok(c.tokens ?? 0)} / ${fmtTok(c.window)}`
+  const fill = fillText(c)
   if (last === undefined) return { text: `ctx ${c.percent}%${fill}`, kind: contextTone(c.percent) }
   return partsLine([part('ctx ', undefined), part(`${c.percent}%`, contextTone(c.percent)), part(fill, undefined), ...windowParts(last)])
 }
@@ -455,10 +460,14 @@ export function sidebarLines(r: Reading): Line[] {
   return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort, r.sent), { text: `Claude Code ${r.version}` }, ...(sessions === undefined ? [] : [sessions]), gitLine(r.git)]
 }
 
-/** The short status line while the sidebar is closed: `ctx 24% · $1.23 · main*`. */
+/**
+ * The status line while the sidebar is closed: the window's fill, the cost, the last request's cache split
+ * and the branch, `ctx 56% · 557k / 1.0M · $0.11 · CR 557k · CW 502 · CH 99% · main*`.
+ */
 export function statusText(r: Reading): string {
-  const ctx = r.context.percent === undefined ? 'ctx -' : `ctx ${r.context.percent}%`
-  const cost = r.costUsd === undefined ? [] : [`$${r.costUsd.toFixed(2)}`]
-  const git = r.git?.kind === 'repo' ? [`${r.git.head}${isDirty(r.git) ? '*' : ''}`] : []
-  return [ctx, ...cost, ...git].join(' · ')
+  const ctx = r.context.percent === undefined ? 'ctx -' : `ctx ${r.context.percent}%${fillText(r.context)}`
+  const cost = r.costUsd === undefined ? '' : ` · $${r.costUsd.toFixed(2)}`
+  const split = r.last === undefined || r.context.percent === undefined ? '' : windowParts(r.last).map(p => p.text).join('')
+  const git = r.git?.kind === 'repo' ? ` · ${r.git.head}${isDirty(r.git) ? '*' : ''}` : ''
+  return `${ctx}${cost}${split}${git}`
 }

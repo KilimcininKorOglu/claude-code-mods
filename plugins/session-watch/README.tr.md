@@ -26,9 +26,9 @@ Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u
 
 **Bir status line**, sidebar kapalıyken ya da kurulu değilken bölümün yerine:
 
-    session-watch: ctx 8% · $0.07 · main*
+    session-watch: ctx 56% · 557k / 1.0M · $0.11 · CR 557k · CW 502 · CH 99% · main*
 
-Branch'ten sonraki `*`, değişiklik olan bir ağacı işaretler. Sidebar bölümü tuttuğu sürece status line temizlenir.
+Satır context doluluğunu, maliyeti, main loop'un son request'inin cache dağılımını (bölümdeki ctx satırındaki gibi) ve branch'i tutar. Dağılım ilk request'i bekler, branch ise git reposu dışında yazılmaz. Branch'ten sonraki `*`, değişiklik olan bir ağacı işaretler. Sidebar bölümü tuttuğu sürece status line temizlenir.
 
 ## Ne zaman okur
 
@@ -57,7 +57,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 ## Kurulumdan sonra
 
 1. Claude Code'u yeniden başlatın.
-2. [sidebar](../sidebar) mod'unu kurun ve `/sidebar` ile açın. O olmadan mod kısa status line'ı yazar.
+2. [sidebar](../sidebar) mod'unu kurun ve `/sidebar` ile açın. O olmadan mod status line'ı yazar.
 3. `git` kurun. O olmadan git satırı hatayı yazar.
 
 ## Nereye uzanır

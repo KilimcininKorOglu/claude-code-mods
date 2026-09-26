@@ -139,11 +139,11 @@ describe('session-watch', () => {
   test('the status line carries the reading while no sidebar takes it', async ($, on) => {
     const w = world(on)
     await started($, w)
-    expect(w.statuses.at(-1)).toBe('ctx 12% · $0.50 · main')
+    expect(w.statuses.at(-1)).toBe('ctx 12% · 120k / 1.0M · $0.50 · main')
     w.git = { exitCode: 0, stdout: DIRTY, stderr: '' }
     w.percent = 60
     await $.turn.complete(turn())
-    expect(w.statuses.at(-1)).toBe('ctx 60% · $0.50 · main*')
+    expect(w.statuses.at(-1)).toBe('ctx 60% · 600k / 1.0M · $0.50 · main*')
   })
 
   withSidebar('an open sidebar takes the section, and the status line is cleared', async ($, on) => {

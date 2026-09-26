@@ -111,9 +111,13 @@ describe('reading', () => {
     expect(sidebarLines(reading({ effort: null, sent: null }))[3]?.text).toBe('model opus-5-5 · no effort setting')
   })
 
-  test('the status line is short, and marks a changed tree with a star', () => {
-    expect(statusText(reading())).toBe('ctx 25% · $1.23 · main')
-    expect(statusText(reading({ git: parseStatus(DIRTY), costUsd: undefined }))).toBe('ctx 25% · main*')
+  test('the status line holds the fill, the cost, the last request\'s cache split and the branch, and marks a changed tree with a star', () => {
+    const last = { input: 3, output: 40, cacheRead: 557_000, cacheWrite: 502, thinking: 0 }
+    expect(statusText(reading({ context: { tokens: 557_000, window: 1_000_000, percent: 56 }, costUsd: 0.11, last, git: undefined }))).toBe('ctx 56% · 557k / 1.0M · $0.11 · CR 557k · CW 502 · CH 99%')
+    expect(statusText(reading({ last }))).toBe('ctx 25% · 245k / 1.0M · $1.23 · CR 557k · CW 502 · CH 99% · main')
+    expect(statusText(reading())).toBe('ctx 25% · 245k / 1.0M · $1.23 · main')
+    expect(statusText(reading({ git: parseStatus(DIRTY), costUsd: undefined }))).toBe('ctx 25% · 245k / 1.0M · main*')
+    expect(statusText(reading({ context: { window: 1_000_000 }, last }))).toBe('ctx - · $1.23 · main')
   })
 })
 
