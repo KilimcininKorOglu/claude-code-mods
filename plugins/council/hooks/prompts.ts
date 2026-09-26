@@ -85,7 +85,7 @@ Write the council's verdict for the agent:
 - where they disagree, and which side ${context} supports;
 - what the members missed;
 - the next step you recommend.
-Name members by letter. Keep it short. Answer in the language of the question.
+Start with the verdict itself, without a title. Name members by letter. Keep it short. Answer in the language of the question.
 
 The question:
 

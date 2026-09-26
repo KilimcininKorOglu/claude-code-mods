@@ -335,8 +335,8 @@ withSidebar('an open sidebar shows each member as it answers, the chair, and the
     'haiku 4.5 · complete · failed: api-error 529 overloaded',
     'gemini-3.8-flash · gemini · answered 0s · 1.5k in, 40 out · free tier',
     'chair · opus 5.5 · fork · done 0s',
-    'verdict: Verdict: follow A.',
+    'verdict: follow A.',
   ])
-  expect(sections.at(-1)).toMatchObject({ until: 'session', order: 7 })
+  expect(sections.at(-1)).toMatchObject({ title: 'run', until: 'session', order: 7 })
   expect(w.logs).toEqual([])
 })

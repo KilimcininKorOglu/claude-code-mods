@@ -67,9 +67,14 @@ function headLine(run: Run, now: number): Line {
   return line([{ text: cut(run.question, 60), kind: 'dim' }, { text: ' · ' }, state])
 }
 
-/** The section's lines: the question, each member, the chair, and the verdict's first line once there is one. */
+/** The verdict's first words as plain text: markdown marks and a leading "verdict" title left out. */
+function plainVerdict(text: string): string {
+  return text.replace(/[*_`#>]/g, '').replace(/\s+/g, ' ').trim().replace(/^(?:council )?verdict:?\s*/i, '')
+}
+
+/** The section's lines: the question, each member, the chair, and the verdict's first words once there is one. */
 export function runLines(run: Run, now: number): Line[] {
-  const verdict = run.verdict === undefined ? [] : [{ text: `verdict: ${cut(run.verdict, 80)}` }]
+  const verdict = run.verdict === undefined ? [] : [{ text: `verdict: ${cut(plainVerdict(run.verdict), 80)}` }]
   return [headLine(run, now), ...run.seats.map(seatLine), chairLine(run.chair), ...verdict]
 }
 

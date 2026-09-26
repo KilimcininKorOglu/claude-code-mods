@@ -84,7 +84,8 @@ type Job = { state: State; run: Run; ctx: Ctx; model: string }
 async function drawRun($: EngineInterface, job: Job): Promise<boolean> {
   if (job.state.current !== job.run.id) return false
   try {
-    return await $.sidebar.set({ ...SECTION, title: 'council', lines: runLines(job.run, await $.clock.now()), until: 'session', order: 7 })
+    // The pane draws the consumer in front of the title, so the title does not repeat it.
+    return await $.sidebar.set({ ...SECTION, title: 'run', lines: runLines(job.run, await $.clock.now()), until: 'session', order: 7 })
   } catch {
     // The sidebar mod is not installed; the run's end writes one log line instead.
     return false
