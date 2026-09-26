@@ -23,6 +23,9 @@ describe('drift', () => {
     expect(commitDir('cd /tmp/demo && git add a && git commit -m x', '/s')).toBe('/tmp/demo')
     expect(commitDir('cd "sub dir" && git commit -m x && cd /elsewhere', '/s')).toBe('/s/sub dir')
     expect(commitDir('git -C ../other commit -m x', '/s')).toBe('/s/../other')
+    // `cd -` goes back to the directory before, and each `cd` starts where the one before it ended.
+    expect(commitDir('cd internal/web && git add a.go && cd - >/dev/null && git commit -m x', '/r')).toBe('/r')
+    expect(commitDir('cd a && cd b && git commit -m x', '/r')).toBe('/r/a/b')
   })
 
   test('a directory the shell expands first is named, never joined as text', async () => {

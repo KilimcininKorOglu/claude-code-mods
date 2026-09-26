@@ -50,15 +50,18 @@ function joinDir(base: string, word: string, how: string): string {
 }
 
 /**
- * The directory the commit runs in: the session's directory, moved by the last `cd` before the commit and by
- * its `git -C`, because the hook reads the repository before the command's own `cd` has run.
+ * The directory the commit runs in: the session's directory, moved by each `cd` before the commit in turn (`cd -`
+ * back to the directory before it) and by its `git -C`, because the hook reads the repository before the
+ * command's own `cd` has run.
  */
 export function commitDir(command: string, cwd: string): string {
   const commit = COMMIT.exec(command)
   if (commit === null) return cwd
   const cds = [...command.slice(0, commit.index).matchAll(/(?:^|[;&|(]\s*)cd\s+("[^"]*"|'[^']*'|[^\s;&|)]+)/g)]
-  const lastCd = cds.at(-1)?.[1]
-  const afterCd = lastCd === undefined ? cwd : joinDir(cwd, lastCd, 'cd')
+  const afterCd = cds.reduce(
+    (at, cd) => (cd[1] === '-' ? { dir: at.prev, prev: at.dir } : { dir: joinDir(at.dir, cd[1] ?? '.', 'cd'), prev: at.dir }),
+    { dir: cwd, prev: cwd },
+  ).dir
   return [...commit[0].matchAll(/-C\s+(\S+)/g)].reduce((dir, c) => joinDir(dir, c[1] ?? '.', 'git -C'), afterCd)
 }
 

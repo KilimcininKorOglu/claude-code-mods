@@ -17,6 +17,9 @@ const touches = (manifest: string, ...lines: string[]): boolean =>
 describe('commits', () => {
   test('finds the commit\'s directory, and names one the shell expands first', () => {
     expect(commitDir('cd sub && git -C inner commit -m x', '/r')).toBe('/r/sub/inner')
+    // `cd -` goes back to the directory before, and each `cd` starts where the one before it ended.
+    expect(commitDir('cd internal/web && git add a.go && cd - >/dev/null && git commit -m x', '/r')).toBe('/r')
+    expect(commitDir('cd a && cd b && git commit -m x', '/r')).toBe('/r/a/b')
     expect(() => commitDir('cd $D && git commit -m x', '/r')).toThrow("the commit's directory is not known: cd $D")
     expect(() => commitDir('cd `mktemp -d` && git commit -m x', '/r')).toThrow("the commit's directory is not known: cd `mktemp")
   })
