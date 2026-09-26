@@ -1,4 +1,4 @@
-export const STYLES = ['matrix', 'fire', 'stars', 'aquarium', 'life', 'cat'] as const
+export const STYLES = ['matrix', 'fire', 'stars', 'aquarium', 'cat'] as const
 export type Style = (typeof STYLES)[number]
 
 /**

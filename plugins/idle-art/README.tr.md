@@ -1,6 +1,6 @@
 # idle-art
 
-Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Altı sahne yerleşik olarak gelir: matrix yağmuru, ateş, yıldız alanı, akvaryum, Game of Life ve bir kedi. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
+Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Beş sahne yerleşik olarak gelir: matrix yağmuru, ateş, yıldız alanı, akvaryum ve bir kedi. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
 
 ## Ne gösterir
 
@@ -22,7 +22,6 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
 | `fire` | Isı, band'in altındaki gizli bir satırdan yükselir ve yukarı çıktıkça soğur. `.` ile `@` arasındaki karakterlerle, koyu kırmızıdan açık sarıya kadar çizilir. |
 | `stars` | Yıldızlar merkezden izleyiciye doğru uçar. Yaklaştıkça gri bir `·` işaretinden beyaz bir `✦` işaretine büyür. |
 | `aquarium` | Dört şekilde balık iki yönde de geçer. Balıklardan çıkan kabarcıklar yükseldikçe büyür. Kumun üstünde yosunlar sallanır. |
-| `life` | Conway'in Game of Life'ı kenarları birbirine bağlı bir tahtada oynanır. Tahta yarım bloklarla çizilir, her satırda iki hücre vardır. Yeni doğan hücreler pembe, eski hücreler mordur. Tahta ölünce, kendini tekrar edince ya da 300 nesle ulaşınca yeniden tohumlanır. |
 | `cat` | Bir kedi yavaş yavaş yürüyerek ortaya gelir, oturur, göz kırpar ve `meow` der. Sonra her turda başka bir sırayla şebeklik yapar: yerde bir o yana bir bu yana yuvarlanır, iki kez zıplar, başından bir kalp yükselirken mırlar, sağa sola bakar. `MEOW!` der, sağdan yürüyüp çıkar ve yeniden gelir. Her söz, başının üstünde bir konuşma balonunda çıkar. |
 
     ● Brewing… (8s)
@@ -35,7 +34,7 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
                > ^ <
                (_|_)~
 
-Band en fazla 8 satır ve 100 sütun kaplar. Terminalde daha az yer varsa daha küçük çizilir. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir.
+Band en fazla 8 satır ve 100 sütun kaplar. Terminalde daha az yer varsa daha küçük çizilir. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir. Sahneler saniyede yaklaşık 60 kare çizilir ve her biri geçen süre kadar ilerler. Böylece yağmur, yıldızlar, balıklar ve kedi her karede bir adım kayar. Ateşin ısısı saniyede on kez değişir, bir klip de kendi kare sürelerine göre değişir.
 
 ## Kendi GIF'lerin
 
@@ -61,7 +60,7 @@ Klip adı küçük harf, rakam ve tire içerir, en fazla 24 karakterdir. Yerleş
 
     /idle-art                          durum: açık ya da kapalı, stil, gecikme
     /idle-art on | off                 çizimi aç ya da kapat
-    /idle-art <sahne ya da klip>       her zaman onu çiz: matrix, fire, stars, aquarium, life, cat ya da kayıtlı bir klip
+    /idle-art <sahne ya da klip>       her zaman onu çiz: matrix, fire, stars, aquarium, cat ya da kayıtlı bir klip
     /idle-art random                   her turn ve yaklaşık her 20 saniyede yeni bir sahne ya da klip (varsayılan)
     /idle-art delay <n>                turn'ün n. saniyesinde başla, 0 ile 60 arası (varsayılan 3)
     /idle-art import <gif yolu> <ad>   bir GIF'i klibe çevir ve o adla sakla
@@ -73,7 +72,7 @@ Ayarlar ve klipler mod'un store'unda durur. Store bütün projelerde ortaktır v
 
 ## Nasıl çizer
 
-`AbovePrompt` için bir `ui.render` hook'u, `isWorking` true olduğu sürece bir `Client` element mount eder. `Client`, `hooks/scene.tsx` modülünü çizim thread'inde çalıştırır. 100 ms'lik bir `surface.every` tick'i sahneyi bir adım ilerletir ve sonraki frame'i ister. Bu yüzden frame başına hiçbir hook çalışmaz. Her yerleşik sahne `hooks/art/` altında saf bir modüldür ve bir hücre grid'i döner. Kayıtlı bir klip çizim thread'ine `Client`'ın props değeriyle ulaşır ve `hooks/clip.ts` ile oynar. Bir satırdaki aynı renkli ardışık hücreler tek bir `Text` olarak çizilir. Hooks modülü, band çalışan bir turn'ü ilk gördüğünde sahneyi ve rastgele bir seed seçer. Gecikme dolunca bir `$.clock.after` timer'ı band'i yeniden çizdirir. Ana döngünün `turn.complete` olayı turn'ü bitirir, böylece sonraki turn yeniden seçer. `random` modunda sahnenin süresini çizim thread'i kendisi sayar. Süre dolunca sahnenin adını `surface.post` ile gönderir. `ui.message` hook'u sıradaki sahneyi seçer ve onun props değerini döner, çalışan instance bunu yerinde alır. Artık gösterilmeyen bir sahneyi adlandıran mesaj hiçbir şeyi değiştirmez, böylece geç gelen ya da tekrarlanan bir mesaj bir sahneyi atlatamaz. Hiçbir klip, gösterilme sırası gelmeden çizim thread'ine gönderilmez. Çünkü tek bir klip, bir `Client`'ın props sınırı olan 100.000 karakterin büyük kısmını kaplayabilir. `hooks/gif.ts` içindeki GIF decoder'ı bu mod için yazıldı ve makinede başka bir araç gerektirmez.
+`AbovePrompt` için bir `ui.render` hook'u, `isWorking` true olduğu sürece bir `Client` element mount eder. `Client`, `hooks/scene.tsx` modülünü çizim thread'inde çalıştırır. 16 ms'lik bir `surface.every` tick'i sahneyi 16 ms ilerletir ve sonraki frame'i ister. Bu yüzden frame başına hiçbir hook çalışmaz. 2.1.283 üzerinde ölçüldü: frame saati bu hızı tutuyor. Saniyede 5 hücre yürüyen kedi, canlı bir band'de her saniye 5 hücre ilerledi. Her yerleşik sahne `hooks/art/` altında saf bir modüldür ve bir hücre grid'i döner. Kayıtlı bir klip çizim thread'ine `Client`'ın props değeriyle ulaşır ve `hooks/clip.ts` ile oynar. Bir satırdaki aynı renkli ardışık hücreler tek bir `Text` olarak çizilir. Hooks modülü, band çalışan bir turn'ü ilk gördüğünde sahneyi ve rastgele bir seed seçer. Gecikme dolunca bir `$.clock.after` timer'ı band'i yeniden çizdirir. Ana döngünün `turn.complete` olayı turn'ü bitirir, böylece sonraki turn yeniden seçer. `random` modunda sahnenin süresini çizim thread'i kendisi sayar. Süre dolunca sahnenin adını `surface.post` ile gönderir. `ui.message` hook'u sıradaki sahneyi seçer ve onun props değerini döner, çalışan instance bunu yerinde alır. Artık gösterilmeyen bir sahneyi adlandıran mesaj hiçbir şeyi değiştirmez, böylece geç gelen ya da tekrarlanan bir mesaj bir sahneyi atlatamaz. Hiçbir klip, gösterilme sırası gelmeden çizim thread'ine gönderilmez. Çünkü tek bir klip, bir `Client`'ın props sınırı olan 100.000 karakterin büyük kısmını kaplayabilir. `hooks/gif.ts` içindeki GIF decoder'ı bu mod için yazıldı ve makinede başka bir araç gerektirmez.
 
 ## Kurulum
 

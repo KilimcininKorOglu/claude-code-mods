@@ -507,7 +507,7 @@
     {
       "name": "idle-art",
       "source": "./plugins/idle-art",
-      "description": "Draws an ASCII animation above the prompt while the model works: matrix rain, fire, a star field, an aquarium, the Game of Life, a cat, or a GIF of your own imported as a character clip for every project. Display only: nothing reaches the model.",
+      "description": "Draws an ASCII animation above the prompt while the model works: matrix rain, fire, a star field, an aquarium, a cat, or a GIF of your own imported as a character clip for every project. Display only: nothing reaches the model.",
       "category": "development",
       "tags": [
         "mods",

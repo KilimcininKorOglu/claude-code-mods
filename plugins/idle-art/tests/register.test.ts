@@ -164,7 +164,7 @@ describe('register', () => {
     const drawn = await band($)
     expect(drawn).toContain('"style":"blink"')
     expect(drawn).toContain('"clip":{')
-    expect((await $.command.run(run('list'))).text).toBe('built in: matrix, fire, stars, aquarium, life, cat\nsaved clips: blink (2 frames, 32×8)')
+    expect((await $.command.run(run('list'))).text).toBe('built in: matrix, fire, stars, aquarium, cat\nsaved clips: blink (2 frames, 32×8)')
     expect((await $.command.run(run('remove blink'))).text).toBe('removed blink; the style is random again')
     expect(w.store.clips).toEqual([])
     expect(w.store['clip:blink']).toBeUndefined()

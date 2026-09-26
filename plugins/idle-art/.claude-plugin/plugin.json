@@ -1,7 +1,7 @@
 {
   "name": "idle-art",
-  "version": "0.5.1",
-  "description": "Draws an ASCII animation above the prompt while the model works: matrix rain, fire, a star field, an aquarium, the Game of Life, a cat, or a GIF of your own imported as a character clip for every project. Display only: nothing reaches the model. Needs function hooks (early access).",
+  "version": "0.6.0",
+  "description": "Draws an ASCII animation above the prompt while the model works: matrix rain, fire, a star field, an aquarium, a cat, or a GIF of your own imported as a character clip for every project. Display only: nothing reaches the model. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

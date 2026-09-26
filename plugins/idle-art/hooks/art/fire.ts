@@ -1,4 +1,4 @@
-import { below, blankFrame, type Animation, type Frame, type Rng } from './grid.ts'
+import { below, blankFrame, everyStep, type Animation, type Frame, type Rng } from './grid.ts'
 
 /** Glyphs and colours from the coolest visible heat to the hottest. */
 const GLYPHS = [...'.,:;+*oO#@']
@@ -22,7 +22,8 @@ export function fire(w: number, h: number, rng: Rng): Animation {
   const heat = Array.from({ length: h + 1 }, () => new Array<number>(w).fill(0))
   const cooling = (2 * MAX) / h
 
-  const step = (): void => {
+  // The heat changes in whole steps, ten a second, at any frame rate: the flicker the person liked.
+  const step = everyStep((): void => {
     const source = heat[h] as number[]
     for (let x = 0; x < w; x++) source[x] = sourceHeat(x, w, rng)
     for (let y = 0; y < h; y++) {
@@ -33,7 +34,7 @@ export function fire(w: number, h: number, rng: Rng): Animation {
         row[x] = Math.max(0, (under[from] ?? 0) - rng() * cooling)
       }
     }
-  }
+  })
 
   const frame = (): Frame => {
     const out = blankFrame(w, h)

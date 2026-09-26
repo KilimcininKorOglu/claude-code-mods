@@ -1,4 +1,4 @@
-import { blankFrame, type Animation, type Frame, type Rng } from './grid.ts'
+import { blankFrame, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
 
 /** A star in view space: x and y in [-1, 1] at depth 1, z from 1 (far) toward 0 (near). */
 type Star = { x: number; y: number; z: number }
@@ -35,9 +35,10 @@ export function stars(w: number, h: number, rng: Rng): Animation {
     row: Math.floor(cy + ((s.y / s.z) * cy) / 2),
   })
 
-  const step = (): void => {
+  const step = (dtMs?: number): void => {
+    const u = unitsOf(dtMs)
     field.forEach((s, i) => {
-      s.z -= SPEED
+      s.z -= SPEED * u
       const { col, row } = place(s)
       if (s.z <= 0.05 || col < 0 || col >= w || row < 0 || row >= h) field[i] = newStar(rng, true)
     })

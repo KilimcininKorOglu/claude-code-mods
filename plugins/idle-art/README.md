@@ -1,6 +1,6 @@
 # idle-art
 
-A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Six scenes are built in: matrix rain, fire, a star field, an aquarium, the Game of Life and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
+A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Five scenes are built in: matrix rain, fire, a star field, an aquarium and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
 
 ## What it shows
 
@@ -22,7 +22,6 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
 | `fire` | Heat rises from a hidden row under the band and cools on the way up, drawn from `.` to `@` and from dark red to pale yellow. |
 | `stars` | Stars fly toward the viewer from the centre, growing from a grey `·` to a white `✦` as they near. |
 | `aquarium` | Fish of four shapes cross both ways, bubbles rise from them and grow, seaweed sways on the sand. |
-| `life` | Conway's Game of Life on a wrapping board of half blocks, two cells per row; newborn cells are pink, older ones violet. The board is seeded again when it dies out, repeats or reaches 300 generations. |
 | `cat` | A cat walks in slowly to the middle, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps twice, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out to the right and comes round again. Each word stands in a speech bubble over its head. |
 
     ● Brewing… (8s)
@@ -35,11 +34,11 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
                > ^ <
                (_|_)~
 
-The band takes at most 8 rows and 100 columns, fewer when the terminal has less room, and draws nothing in a band under 3 rows. It draws on the terminal only, and gives way to a survey.
+The band takes at most 8 rows and 100 columns, fewer when the terminal has less room, and draws nothing in a band under 3 rows. It draws on the terminal only, and gives way to a survey. The scenes draw about 60 frames a second, and each moves by the time that passed, so the rain, the stars, the fish and the cat glide a step on every frame. The fire's heat changes ten times a second, and a clip changes at its own frame delays.
 
 ## Your own GIFs
 
-    /idle-art import ~/Downloads/cat.gif cat
+    /idle-art import ~/Downloads/kitty.gif kitty
 
 The mod reads the GIF, decodes every frame with its own delay and transparency, and turns each frame into characters: every cell takes the mean colour of its pixels, and a glyph from `.:-=+*#%@` by its brightness, spread over the clip's own darkest to brightest cell. A cell mostly transparent stays blank. The picture keeps its shape and fills the 8 rows of the band; a cell counts as twice as tall as wide. The clip then plays in the middle of the band, each frame for its own delay, in a loop.
 
@@ -61,7 +60,7 @@ A name is lowercase letters, digits and dashes, up to 24 characters, and cannot 
 
     /idle-art                          the state: on or off, the style, the delay
     /idle-art on | off                 draw or stop drawing
-    /idle-art <scene or clip>          always draw that one: matrix, fire, stars, aquarium, life, cat, or a saved clip
+    /idle-art <scene or clip>          always draw that one: matrix, fire, stars, aquarium, cat, or a saved clip
     /idle-art random                   a new scene or clip each turn and every 20 seconds or so (the default)
     /idle-art delay <n>                wait n seconds into a turn, 0 to 60 (default 3)
     /idle-art import <gif path> <name> turn a GIF into a clip and keep it under that name
@@ -73,7 +72,7 @@ The settings and the clips stay in the mod's store, shared by every project, and
 
 ## How it draws
 
-An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is true. The `Client` runs `hooks/scene.tsx` on the drawing thread: a 100 ms `surface.every` tick advances the scene and asks for the next frame, so no hook runs per frame. Each built-in scene is a pure module under `hooks/art/` that answers a grid of cells; a saved clip reaches the drawing thread in the `Client`'s props and plays from `hooks/clip.ts`. A row draws as one `Text` per run of one colour. The hooks module picks the scene and a random seed when the band first shows a working turn, a `$.clock.after` timer redraws the band once the delay has passed, and the main loop's `turn.complete` ends the turn, so the next one picks again. Under `random` the drawing thread counts a scene's time itself, and once it has run it posts the scene's name with `surface.post`; the `ui.message` hook picks the next scene and answers with its props, which the running instance takes in place. A message that names a scene no longer showing changes nothing, so a late or repeated post cannot skip one. No clip travels to the drawing thread before its turn to show, because one clip may take most of the 100,000 characters a `Client`'s props hold. The GIF decoder in `hooks/gif.ts` is written for this mod and needs no tool on the machine.
+An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is true. The `Client` runs `hooks/scene.tsx` on the drawing thread: a 16 ms `surface.every` tick advances the scene by 16 ms and asks for the next frame, so no hook runs per frame. Measured on 2.1.283, the frame clock keeps that rate: the cat, which walks 5 cells a second, moved 5 cells in each second of a live band. Each built-in scene is a pure module under `hooks/art/` that answers a grid of cells; a saved clip reaches the drawing thread in the `Client`'s props and plays from `hooks/clip.ts`. A row draws as one `Text` per run of one colour. The hooks module picks the scene and a random seed when the band first shows a working turn, a `$.clock.after` timer redraws the band once the delay has passed, and the main loop's `turn.complete` ends the turn, so the next one picks again. Under `random` the drawing thread counts a scene's time itself, and once it has run it posts the scene's name with `surface.post`; the `ui.message` hook picks the next scene and answers with its props, which the running instance takes in place. A message that names a scene no longer showing changes nothing, so a late or repeated post cannot skip one. No clip travels to the drawing thread before its turn to show, because one clip may take most of the 100,000 characters a `Client`'s props hold. The GIF decoder in `hooks/gif.ts` is written for this mod and needs no tool on the machine.
 
 ## Install
 

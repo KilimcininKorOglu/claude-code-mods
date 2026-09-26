@@ -1,7 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import { SCENES } from '../hooks/art/scenes.ts'
 import { rngOf, runsOf, sceneDone, textOf } from '../hooks/art/grid.ts'
-import { nextAlive } from '../hooks/art/life.ts'
 import { configOf, parseArgs, pickStyle, STYLES } from '../hooks/config.ts'
 import { bytesOf, decodeGif } from '../hooks/gif.ts'
 import { MAX_CLIP_CHARS, playClip, toClip } from '../hooks/clip.ts'
@@ -60,9 +59,34 @@ describe('art', () => {
     expect(runsOf(row)).toEqual([{ text: 'a', color: '' }, { text: 'bc', color: '#fff' }, { text: ' ', color: '' }])
   })
 
-  test('the Game of Life keeps a cell with 2 or 3 neighbours and gives birth at exactly 3', () => {
-    expect([0, 1, 2, 3, 4].map(n => nextAlive(true, n))).toEqual([false, false, true, true, false])
-    expect([0, 1, 2, 3, 4].map(n => nextAlive(false, n))).toEqual([false, false, false, true, false])
+  test('a scene keeps its pace at any frame rate: small steps reach where large ones do, drawing more frames on the way', () => {
+    const plays = (stepMs: number): { end: string; frames: number } => {
+      const anim = SCENES.cat(60, 8, rngOf(3))
+      const frames = new Set<string>()
+      for (let ms = 0; ms < 3000; ms += stepMs) {
+        anim.step(stepMs)
+        frames.add(textOf(anim.frame()))
+      }
+      return { end: textOf(anim.frame()), frames: frames.size }
+    }
+    const coarse = plays(100)
+    const fine = plays(25)
+    expect(fine.end).toBe(coarse.end)
+    // The walk moves a cell every 200 ms either way; the fine steps show the same frames, not fewer.
+    expect(fine.frames).toBeGreaterThanOrEqual(coarse.frames)
+  })
+
+  test('a fire changes ten times a second whatever the frame rate', () => {
+    const anim = SCENES.fire(20, 5, rngOf(2))
+    const changes: number[] = []
+    let last = textOf(anim.frame())
+    for (let ms = 16; ms <= 1600; ms += 16) {
+      anim.step(16)
+      const now = textOf(anim.frame())
+      if (now !== last) changes.push(ms)
+      last = now
+    }
+    expect(changes.length).toBe(16)
   })
 })
 
@@ -70,7 +94,9 @@ describe('config', () => {
   test('a missing or broken setting takes its default, and only a stored false turns the mod off', () => {
     expect(configOf(undefined, undefined, undefined, [])).toEqual({ enabled: true, style: 'random', delaySec: 3 })
     expect(configOf(false, 'rainbow', 99, [])).toEqual({ enabled: false, style: 'random', delaySec: 3 })
-    expect(configOf('no', 'life', 0, [])).toEqual({ enabled: true, style: 'life', delaySec: 0 })
+    expect(configOf('no', 'stars', 0, [])).toEqual({ enabled: true, style: 'stars', delaySec: 0 })
+    // A scene that is gone (the Game of Life, removed) reads as random.
+    expect(configOf(true, 'life', 3, []).style).toBe('random')
     // A stored clip name holds only while the clip is saved.
     expect(configOf(true, 'kitty', 3, ['kitty']).style).toBe('kitty')
     expect(configOf(true, 'kitty', 3, []).style).toBe('random')

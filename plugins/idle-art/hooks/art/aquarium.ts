@@ -1,4 +1,4 @@
-import { below, blankFrame, pick, put, type Animation, type Frame, type Rng } from './grid.ts'
+import { below, blankFrame, pick, put, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
 
 /** Each fish as it looks swimming right, and the same fish swimming left. */
 const SHAPES: readonly { right: string; left: string }[] = [
@@ -50,16 +50,17 @@ export function aquarium(w: number, h: number, rng: Rng): Animation {
   const sand = Array.from({ length: w }, () => pick(rng, ['.', ',', '_', '.', ' ']))
   let tick = 0
 
-  const step = (): void => {
-    tick += 1
+  const step = (dtMs?: number): void => {
+    const u = unitsOf(dtMs)
+    tick += u
     fish.forEach((f, i) => {
-      f.x += f.dir * f.speed
+      f.x += f.dir * f.speed * u
       if (isGone(f, w)) fish[i] = newFish(rng, w, h, false)
-      else if (rng() < 0.02) bubbles.push({ x: Math.round(f.dir === 1 ? f.x + fishText(f).length : f.x - 1), y: f.y })
+      else if (rng() < 0.02 * u) bubbles.push({ x: Math.round(f.dir === 1 ? f.x + fishText(f).length : f.x - 1), y: f.y })
     })
     for (let i = bubbles.length - 1; i >= 0; i--) {
       const b = bubbles[i] as Bubble
-      b.y -= 0.3
+      b.y -= 0.3 * u
       if (b.y < 0) bubbles.splice(i, 1)
     }
   }

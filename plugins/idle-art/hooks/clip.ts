@@ -170,15 +170,18 @@ function putRow(out: Frame, y: number, x: number, runs: ClipRun[]): void {
   }
 }
 
-/** Plays a clip centred in a region of `w` by `h`, each frame for its own delay, in a loop. */
+/**
+ * Plays a clip centred in a region of `w` by `h`, each frame for its own delay, in a loop; a step without a
+ * length of its own is `tickMs` long.
+ */
 export function playClip(clip: Clip, w: number, h: number, tickMs: number): Animation {
   let index = 0
   let shown = 0
   let wrapped = false
   const x = Math.floor((w - clip.width) / 2)
   const y = Math.floor((h - clip.height) / 2)
-  const step = (): void => {
-    shown += tickMs
+  const step = (dtMs?: number): void => {
+    shown += dtMs ?? tickMs
     wrapped = false
     // A stored delay under 20 ms is read as 20 ms, so a broken entry cannot spin this loop.
     for (let d = Math.max(20, clip.delays[index] ?? tickMs); shown >= d; d = Math.max(20, clip.delays[index] ?? tickMs)) {

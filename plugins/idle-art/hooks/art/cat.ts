@@ -1,4 +1,4 @@
-import { blankFrame, put, type Animation, type Frame, type Rng } from './grid.ts'
+import { blankFrame, put, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
 
 const FUR = '#ffb86b'
 const SPEECH = '#ffffff'
@@ -85,7 +85,13 @@ function rollPhase(s: Stage): Phase {
 /** Two jumps. */
 function jumpPhase(s: Stage): Phase {
   const lift = [0, 1, 2, 2, 1, 0, 0, 0]
-  return { ticks: 16, draw: (t, out) => sprite(out, sitting(lift[t % lift.length] === 0 ? 'o.o' : '^o^'), s.center, s.base - (lift[t % lift.length] ?? 0)) }
+  return {
+    ticks: 16,
+    draw: (t, out) => {
+      const up = lift[Math.floor(t) % lift.length] ?? 0
+      sprite(out, sitting(up === 0 ? 'o.o' : '^o^'), s.center, s.base - up)
+    },
+  }
 }
 
 /** Purring, with a heart floating up from its head. */
@@ -138,14 +144,17 @@ export function cat(w: number, h: number, rng: Rng): Animation {
   let index = 0
   let t = 0
 
-  const step = (): void => {
-    t += 1
-    if (t < (phases[index]?.ticks ?? 0)) return
-    t = 0
-    index += 1
-    if (index < phases.length) return
-    index = 0
-    phases = show(s, rng)
+  // `t` counts steps of STEP_MS within the phase, with a fraction between them, so a walk moves on every frame.
+  const step = (dtMs?: number): void => {
+    t += unitsOf(dtMs)
+    for (let ticks = phases[index]?.ticks ?? 0; t >= ticks; ticks = phases[index]?.ticks ?? 0) {
+      t -= ticks
+      index += 1
+      if (index >= phases.length) {
+        index = 0
+        phases = show(s, rng)
+      }
+    }
   }
 
   const frame = (): Frame => {

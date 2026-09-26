@@ -11,10 +11,31 @@ export type Run = { text: string; color: string }
 export type Rng = () => number
 
 /**
- * One running animation: `step` advances it one tick, `frame` draws where it stands. An animation with an
- * end, a clip, says through `wrapped` whether the last step went from its last frame back to its first.
+ * One running animation: `step` advances it by `dtMs` milliseconds (STEP_MS when not given), `frame` draws
+ * where it stands. An animation with an end, a clip, says through `wrapped` whether the last step went from
+ * its last frame back to its first.
  */
-export type Animation = { step: () => void; frame: () => Frame; wrapped?: () => boolean }
+export type Animation = { step: (dtMs?: number) => void; frame: () => Frame; wrapped?: () => boolean }
+
+/** The step every scene's speeds are written for: a speed of 1 is one cell per STEP_MS. */
+export const STEP_MS = 100
+
+/** A step of `dtMs` in units of STEP_MS, the factor a per-step speed is multiplied by. */
+export function unitsOf(dtMs: number | undefined): number {
+  return (dtMs ?? STEP_MS) / STEP_MS
+}
+
+/**
+ * Runs `fn` once for every whole STEP_MS the steps have added up to, for a scene that changes in whole steps
+ * (a fire's heat, a board's generation) and keeps its pace at any frame rate.
+ */
+export function everyStep(fn: () => void): (dtMs?: number) => void {
+  let owed = 0
+  return dtMs => {
+    owed += dtMs ?? STEP_MS
+    for (; owed >= STEP_MS; owed -= STEP_MS) fn()
+  }
+}
 
 /** Starts an animation for a region of `w` columns and `h` rows. */
 export type Maker = (w: number, h: number, rng: Rng) => Animation

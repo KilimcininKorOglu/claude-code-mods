@@ -19,8 +19,11 @@ export type NextMessage = { next: string }
  */
 type Live = { anim: Animation; key: string; scene: string; rotate: boolean; ms: number; asked: boolean }
 
-/** Milliseconds per animation tick. */
-const TICK_MS = 100
+/**
+ * Milliseconds per animation tick, about 60 frames a second. Each scene moves by the time a tick stands for,
+ * so its pace does not hang on this rate; a fire and a clip still change at their own pace.
+ */
+const TICK_MS = 16
 
 function keyOf(p: SceneProps): string {
   return `${sceneOf(p)}:${p.width}x${p.height}`
@@ -41,7 +44,7 @@ function start(p: SceneProps): Live | undefined {
 function tick(surface: ClientSurface<Live>): void {
   const now = surface.state
   if (now === undefined) return
-  now.anim.step()
+  now.anim.step(TICK_MS)
   now.ms += TICK_MS
   if (now.rotate && !now.asked && sceneDone(now.anim, now.ms)) {
     now.asked = true

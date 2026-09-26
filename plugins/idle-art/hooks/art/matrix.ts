@@ -1,4 +1,4 @@
-import { below, blankFrame, pick, type Animation, type Frame, type Rng } from './grid.ts'
+import { below, blankFrame, everyStep, pick, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
 
 /** Half-width katakana and digits: one cell wide each. */
 const GLYPHS = [...'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789']
@@ -27,17 +27,22 @@ export function matrix(w: number, h: number, rng: Rng): Animation {
   const glyphs = Array.from({ length: h }, () => Array.from({ length: w }, () => pick(rng, GLYPHS)))
   const drops: (Drop | null)[] = Array.from({ length: w }, (_, x) => (x % 2 === 0 ? newDrop(rng, h, true) : null))
 
-  const step = (): void => {
-    drops.forEach((d, x) => {
-      if (d === null) return
-      d.y += d.speed
-      if (d.y - d.len > h) drops[x] = newDrop(rng, h, false)
-    })
-    // A few glyphs change each tick, so a still trail shimmers.
+  // A few glyphs change each step, so a still trail shimmers at the same pace at any frame rate.
+  const shimmer = everyStep(() => {
     for (let i = 0; i < Math.ceil((w * h) / 30); i++) {
       const row = glyphs[below(rng, h)]
       if (row !== undefined) row[below(rng, w)] = pick(rng, GLYPHS)
     }
+  })
+
+  const step = (dtMs?: number): void => {
+    const u = unitsOf(dtMs)
+    drops.forEach((d, x) => {
+      if (d === null) return
+      d.y += d.speed * u
+      if (d.y - d.len > h) drops[x] = newDrop(rng, h, false)
+    })
+    shimmer(dtMs)
   }
 
   const frame = (): Frame => {
