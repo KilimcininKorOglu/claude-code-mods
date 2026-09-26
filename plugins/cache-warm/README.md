@@ -37,6 +37,8 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
 The time in brackets is when the last ping's answer came, in local time; a ping of an earlier day carries its day and month, as `(22 Sep 23:10)`.
 
+While a window runs, an interactive session draws the line again every minute, so the time left and the time to the next ping count down between turns and pings. The last ping stays on the line.
+
 While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. There only the time left (or `always`) is coloured: yellow for a window whose end is nearer than one ping period, green for a window that holds, faint while it waits for the first turn. The ping details after it are faint, and a stopped window shows its `stopped:` front red with the reason in the default colour. With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
 A stop reason stands for one turn. At the next turn the section carries the idle line instead, faint but for a paid `N cold writes paid $X`, which is yellow, so the pane holds a measurement of now and not one sentence of the window that ended. The reason stays in the transcript, and the status line is empty while no window runs:
@@ -107,10 +109,11 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.281:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.now, $.command.register (via registerCommands), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via ping), $.session.id, $.session.model, $.session.root (via seedFromTranscript), $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, pruneRequests, startEndless, startWindow, stop), $.store.get (via prune, pruneRequests, restore, seedLastRequest), $.store.keys (via prune, pruneRequests), $.store.set (via afterTurn, startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript), $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.every, $.clock.now, $.command.register (via registerCommands), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via ping), $.session.id, $.session.model, $.session.root (via seedFromTranscript), $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, pruneRequests, startEndless, startWindow, stop), $.store.get (via prune, pruneRequests, restore, seedLastRequest), $.store.keys (via prune, pruneRequests), $.store.set (via afterTurn, startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript), $.ui.status (via showStatusAt)
+    ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L2, drives Claude.

@@ -36,6 +36,9 @@ const DEADLINE = 'deadline:'
 const EVERY = 'every:'
 const REQUEST = 'request:'
 
+/** How often a running window's line is drawn again, so its minutes count down between turns and pings. */
+const REDRAW_MS = 60_000
+
 // The window and its ping period belong to the session that armed them, so a
 // second session never inherits them and cannot turn them off. The always
 // switch is global.
@@ -422,6 +425,8 @@ export const register: Register = on => {
     // whatever the last window of this session left behind.
     if (s.always) await startEndless($, s)
     await registerCommands($)
+    // A -p run draws nothing, so only an interactive session redraws on a timer, and only while a window runs.
+    if (e.isInteractive) $.clock.every(REDRAW_MS, () => { if (hasWindow(s)) void showStatus($, s) })
     await showStatus($, s)
     return r
   })

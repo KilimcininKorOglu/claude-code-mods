@@ -143,6 +143,35 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
+  test('a running window counts its minutes down between turns and pings', async ($, on) => {
+    const w = world(on, [])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    await $.turn.complete(turn())
+    await w.clock.advance(13 * MIN)
+    expect(w.statuses.at(-1)).toBe('5h 47m left · ping in 37m')
+  })
+
+  test('the always loop counts down too, and keeps the last ping on the line', async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', 'always'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    await w.clock.advance(13 * MIN)
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 37m · last ping read 200k \$0\.05 \((?:\d+ \w{3} )?\d\d:\d\d\)$/)
+  })
+
+  test('a -p run draws no line on a timer', async ($, on) => {
+    const w = world(on, [])
+    await $.session.start({ ...session, isInteractive: false })
+    await $.command.run(run('cache-warm'))
+    await $.turn.complete(turn())
+    const drawn = w.statuses.length
+    await w.clock.advance(13 * MIN)
+    expect(w.statuses.length).toBe(drawn)
+  })
+
   withSidebar('an open sidebar takes the window state and the status line stays clear', async ($, on) => {
     const w = world(on, [])
     const bar: Bar = { open: true, sections: [] }
