@@ -330,6 +330,8 @@ export const register: Register = on => {
     const r = await next(e)
     await countTurn($, state, e.usage)
     if (e.agentId !== undefined) return r
+    // A changed effort lasts one turn at most (effort-auto), so the line goes back to the session's setting.
+    state.sent = undefined
     await tryFollow($, state, false)
     if (!state.seeding) await keepTotals($, state)
     await refresh($, state)
