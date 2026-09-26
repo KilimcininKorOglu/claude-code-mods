@@ -176,8 +176,8 @@ describe('session-watch', () => {
     await step($, undefined, 'a1')
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)?.[0]).toEqual({
-      text: 'ctx 12% · 120k / 1.0M · I 2 · O 300 · TH 0 · CR 450k · CW 3k · CH 99%',
-      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · I 2 · O 300 · TH 0 · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
+      text: 'ctx 12% · 120k / 1.0M · new 2 · O 300 · TH 0 · CR 450k · CW 3k · CH 99%',
+      parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }, { text: ' · new 2 · O 300 · TH 0 · CR 450k · CW 3k' }, { text: ' · CH ' }, { text: '99%', kind: 'ok' }],
     })
   })
 
