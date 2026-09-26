@@ -101,6 +101,16 @@ describe('reading', () => {
     expect(settingsEffort({})).toBe(undefined)
   })
 
+  test('an effort a hook beneath changed shows first, with the session\'s setting beside it, faint', () => {
+    expect(sidebarLines(reading({ effort: 'medium', sent: 'low' }))[3]).toEqual({
+      text: 'model opus-5-5 · effort low (session medium)',
+      parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'effort ' }, { text: 'low', kind: 'dim' }, { text: ' (session medium)', kind: 'dim' }],
+    })
+    expect(sidebarLines(reading({ effort: 'medium', sent: 'medium' }))[3]?.text).toBe('model opus-5-5 · effort medium')
+    expect(sidebarLines(reading({ effort: 'medium', sent: undefined }))[3]?.text).toBe('model opus-5-5 · effort medium')
+    expect(sidebarLines(reading({ effort: null, sent: null }))[3]?.text).toBe('model opus-5-5 · no effort setting')
+  })
+
   test('the status line is short, and marks a changed tree with a star', () => {
     expect(statusText(reading())).toBe('ctx 25% · $1.23 · main')
     expect(statusText(reading({ git: parseStatus(DIRTY), costUsd: undefined }))).toBe('ctx 25% · main*')

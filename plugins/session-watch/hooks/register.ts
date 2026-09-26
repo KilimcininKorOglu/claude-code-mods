@@ -15,9 +15,9 @@ const GIT_COMMAND = /\bgit\b/
 
 /**
  * What the hooks share: the repository the session started in, the session id, the token totals, the main
- * loop's last effort setting, the engine's version, the last git state, and the last refresh error.
+ * loop's last effort setting and the effort that request went out with, the engine's version, the last git state, and the last refresh error.
  */
-type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; last?: Split; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
+type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; sent?: Effort; last?: Split; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
 
 /** A transcript and its size when the reading began. */
 type Transcript = { path: string; size: number }
@@ -213,7 +213,7 @@ async function readOthers($: EngineInterface, state: State): Promise<OtherSessio
 async function readNow($: EngineInterface, state: State): Promise<Reading> {
   const [usage, model, git, others] = await Promise.all([$.session.usage(), $.session.model(), readGit($, state), readOthers($, state)])
   state.git = git
-  return { context: usage.context, costUsd: usage.cost?.usd, split: state.split, last: state.last, seeding: state.seeding, model, effort: state.effort, version: state.version, git, others }
+  return { context: usage.context, costUsd: usage.cost?.usd, split: state.split, last: state.last, seeding: state.seeding, model, effort: state.effort, sent: state.sent, version: state.version, git, others }
 }
 
 /** Writes the reading into the sidebar, and into the status line while the sidebar does not take it. */
@@ -286,10 +286,15 @@ export const register: Register = on => {
   // The main loop's request says how hard it asks the model to think, and its usage is the window's own; a
   // subagent's request has its own setting and its own window.
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId === undefined) state.effort = e.effort ?? null
+    // The setting is read before the request; what it went out with is known only once it has run, so a
+    // turn's first request shows the setting alone, not the last turn's.
+    if (e.agentId === undefined) {
+      state.effort = e.effort ?? null
+      if (e.index === 0) state.sent = undefined
+    }
     const r = yield* next(e)
     // A hook beneath this one may have sent the request at another effort; the chain's trace says which.
-    if (e.agentId === undefined) state.effort = sentEffort(next.trace, e.effort)
+    if (e.agentId === undefined) state.sent = sentEffort(next.trace, e.effort)
     // The main loop's last request holds the context window, so its split is the window's own.
     if (e.agentId === undefined && r.usage) {
       state.last = addSplit(NO_SPLIT, r.usage)

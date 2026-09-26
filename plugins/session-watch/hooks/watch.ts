@@ -285,7 +285,10 @@ export type Reading = {
   /** Whether the session's transcripts are still being read into the totals. */
   seeding: boolean
   model: string
+  /** The session's effort setting, as the main loop's last request was asked with it. */
   effort: Effort
+  /** The effort that request of this turn went out with, which a hook beneath may have changed; unknown before one. */
+  sent?: Effort
   version: string
   git?: GitState
   /** The other live sessions on this machine, which share the account's usage limits. */
@@ -381,16 +384,25 @@ export function effortTone(effort: Effort): Tone | undefined {
   return typeof effort === 'string' ? tones[effort] : undefined
 }
 
-/** The effort part: the label and the value, only the value coloured. */
-function effortParts(effort: Effort): Part[] {
+/** One effort value: the label and the value, only the value coloured. */
+function effortValueParts(effort: Effort): Part[] {
   if (effort === undefined) return [part('effort: not read yet', 'dim')]
   if (effort === null) return [part('no effort setting', 'dim')]
   if (typeof effort === 'number') return [part(`effort budget ${effort}`, undefined)]
   return [part('effort ', undefined), part(effort, effortTone(effort))]
 }
 
-function modelLine(model: string, effort: Effort): Line {
-  return partsLine([part('model ', undefined), part(shortModel(model), modelTone(model)), part(' · ', undefined), ...effortParts(effort)])
+/**
+ * The effort part: the effort the request went out with, and the session's setting beside it, faint, when
+ * a hook beneath changed it (`effort low (session medium)`); the setting alone when they agree.
+ */
+function effortParts(effort: Effort, sent: Effort): Part[] {
+  const changed = effort !== undefined && effort !== null && sent !== undefined && sent !== null && sent !== effort
+  return changed ? [...effortValueParts(sent), part(` (session ${effort})`, 'dim')] : effortValueParts(effort)
+}
+
+function modelLine(model: string, effort: Effort, sent: Effort): Line {
+  return partsLine([part('model ', undefined), part(shortModel(model), modelTone(model)), part(' · ', undefined), ...effortParts(effort, sent)])
 }
 
 /** The git line: branch, changes and upstream, yellow while the tree has changes and green when clean. */
@@ -440,7 +452,7 @@ export function sessionsLine(others: readonly OtherSession[]): Line | undefined 
 /** The reading as the sidebar section's lines, in the order the person reads them. */
 export function sidebarLines(r: Reading): Line[] {
   const sessions = sessionsLine(r.others ?? [])
-  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort), { text: `Claude Code ${r.version}` }, ...(sessions === undefined ? [] : [sessions]), gitLine(r.git)]
+  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort, r.sent), { text: `Claude Code ${r.version}` }, ...(sessions === undefined ? [] : [sessions]), gitLine(r.git)]
 }
 
 /** The short status line while the sidebar is closed: `ctx 24% · $1.23 · main*`. */
