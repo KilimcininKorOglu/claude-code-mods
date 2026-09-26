@@ -232,6 +232,36 @@ function changesText(t: Tree): string {
 /** The effort setting of the main loop's last request: a level, a budget, none for a model without one, or not read yet. */
 export type Effort = string | number | null | undefined
 
+/** A level or a budget as settings or a transcript line spell it, or undefined for anything else. */
+function effortValue(v: unknown): string | number | undefined {
+  return (typeof v === 'string' && v !== '') || typeof v === 'number' ? v : undefined
+}
+
+/**
+ * The effort the last assistant line of a transcript's tail recorded, the engine's `effort` field on each
+ * response; undefined when the tail holds none. A first line cut by the tail does not parse and is skipped.
+ */
+export function lastEffortOf(tail: string): string | number | undefined {
+  const lines = tail.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i] ?? ''
+    if (!line.includes('"effort"')) continue
+    try {
+      const d = JSON.parse(line) as { type?: unknown; effort?: unknown }
+      const found = d.type === 'assistant' ? effortValue(d.effort) : undefined
+      if (found !== undefined) return found
+    } catch {
+      // A line the tail cut in two is not a record.
+    }
+  }
+  return undefined
+}
+
+/** The effort settings name: `effortLevel`, as `/effort` writes it; undefined when none is set. */
+export function settingsEffort(settings: Readonly<Record<string, unknown>>): string | number | undefined {
+  return effortValue(settings.effortLevel)
+}
+
 /** A link of the chain beneath a hook, as `next.trace` lists it: its place, and the request it received. */
 export type StepLink = { readonly index: number; readonly received: { readonly effort?: string | number } }
 

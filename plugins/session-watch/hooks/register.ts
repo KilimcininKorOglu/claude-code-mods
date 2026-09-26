@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Effort, type GitState, type OtherSession, type Reading, type Split, type Usage, type UsageScanner,
 } from './watch.ts'
 
@@ -146,6 +146,35 @@ async function startTotals($: EngineInterface, state: State): Promise<void> {
   }
 }
 
+/** How much of the transcript's end is read for the last recorded effort. */
+const EFFORT_TAIL_BYTES = 262_144
+
+/**
+ * The effort to show before the session's first request: the one the transcript's last response recorded
+ * (a resumed session), else the effort the environment or the settings name; undefined when none does.
+ */
+async function startEffort($: EngineInterface, state: State): Promise<string | number | undefined> {
+  const main = `${transcriptDir(await configDirOf($), state.root)}/${state.sid}.jsonl`
+  if (await $.fs.exists(main)) {
+    const r = await $.process.run(['tail', '-c', String(EFFORT_TAIL_BYTES), main], { timeoutMs: GIT_MS })
+    if (r.exitCode !== 0) throw new Error(`${main}: ${r.stderr.trim()}`)
+    const recorded = lastEffortOf(r.stdout)
+    if (recorded !== undefined) return recorded
+  }
+  const env = await $.env.get('CLAUDE_CODE_EFFORT_LEVEL')
+  return env !== undefined && env !== '' ? env : settingsEffort(await $.settings.read())
+}
+
+/** Seeds the effort line unless a request has already set it, and says a failed read once. */
+async function seedEffort($: EngineInterface, state: State): Promise<void> {
+  try {
+    const found = await startEffort($, state)
+    if (state.effort === undefined && found !== undefined) state.effort = found
+  } catch (err) {
+    $.ui.log(`the effort was not read before the first request: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 /**
  * The git state of the session's directory, from one `git status` run. Git runs in the C locale, because
  * `failedGit` reads its English message and a localized git words it otherwise.
@@ -246,6 +275,7 @@ export const register: Register = on => {
     state.sid = await $.session.id()
     state.version = (await $.session.version()).version
     await startTotals($, state)
+    await seedEffort($, state)
     await $.command.register({ name: 'session-watch', description: 'This session\'s context, tokens, cost, model, version and git state (session-watch)', immediate: true })
     // A -p run draws nothing, so only an interactive session refreshes on a timer.
     if (e.isInteractive) $.clock.every(TICK_MS, () => void refresh($, state))

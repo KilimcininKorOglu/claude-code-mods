@@ -48,14 +48,14 @@ const SUB = `${DIR}/${SID}/subagents/agent-a1.jsonl`
 type Line = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
 
 /** The world: what git prints, what the usage says, the files, the store, and what the person saw. */
-type World = { live: number[]; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
+type World = { live: number[]; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; settings: Record<string, unknown>; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
 
 /** One transcript row of a model response, as the engine writes one per content block. */
 const response = (id: string | undefined, input: number, output: number, thinking?: number): string =>
   JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10, ...(thinking === undefined ? {} : { output_tokens_details: { thinking_tokens: thinking } }) } } })
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { live: [], stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
+  const w: World = { live: [], stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, settings: {}, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
   mock.env(on, { HOME: '/Users/u' })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
@@ -90,6 +90,8 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('fs.read', (_, e) => ({ value: w.files.get(e.path) ?? '' }))
   // `ps -o pid= -p <pids>`: the pids that still run.
   on('process.run', (_, e) => {
+    // `tail -c <n> <path>`: the transcript's last n characters, for the effort its last response recorded.
+    if (e.argv[0] === 'tail') return { value: { exitCode: 0, stdout: (w.files.get(e.argv[3] ?? '') ?? '').slice(-Number(e.argv[2])), stderr: '' } }
     if (e.argv[0] === 'ps') return { value: { exitCode: 0, stdout: w.live.map(p => `  ${p}\n`).join(''), stderr: '' } }
     if (e.argv.join(' ') !== 'git status --porcelain=v2 --branch') throw new Error(`unexpected ${e.argv.join(' ')}`)
     w.gitRuns += 1
@@ -98,6 +100,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
     return { value: localized ? { ...w.git, stderr: 'onulmaz: bir git deposu (veya üst dizinlerinden birisi) değil: .git\n' } : w.git }
   })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('settings.read', () => ({ value: w.settings }))
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('turn.complete', (_, e) => ({ text: e.answer }))
@@ -282,6 +285,23 @@ describe('session-watch', () => {
     await w.clock.advance(0)
     expect(w.gitRuns).toBe(before + 3)
     expect((await $.command.run(run)).text?.split('\n')[1]).toBe('tokens T 81k · I 130 · O 58 · TH 0 · CR 74k · CW 7k · CH 91%')
+  })
+
+  test('before the first request the effort comes from the transcript\'s last response, else from the settings', async ($, on) => {
+    const w = world(on)
+    w.settings = { effortLevel: 'low' }
+    w.files.set(MAIN, [JSON.stringify({ type: 'assistant', effort: 'medium', message: { role: 'assistant' } }), JSON.stringify({ type: 'assistant', effort: 'xhigh', message: { role: 'assistant' } }), JSON.stringify({ type: 'user', effort: 'max' }), ''].join('\n'))
+    await started($, w)
+    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · effort xhigh')
+    await step($, 'high')
+    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · effort high')
+  })
+
+  test('a new session with no transcript line shows the settings\' effort level until its first request', async ($, on) => {
+    const w = world(on)
+    w.settings = { effortLevel: 'low' }
+    await started($, w)
+    expect((await $.command.run(run)).text?.split('\n')[3]).toBe('model opus-5-5 · effort low')
   })
 
   test('the effort setting is the main loop\'s last request, not a subagent\'s', async ($, on) => {

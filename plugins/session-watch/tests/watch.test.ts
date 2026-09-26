@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -90,6 +90,15 @@ describe('reading', () => {
     expect(sentEffort([], 'low')).toBe('low')
     expect(sentEffort([link(2)], 'low')).toBe(null)
     expect(sentEffort([], undefined)).toBe(null)
+  })
+
+  test('the last assistant line of a tail names the effort, and a cut first line is skipped', () => {
+    const a = (effort: unknown) => JSON.stringify({ type: 'assistant', effort })
+    expect(lastEffortOf(['ffort":"max"}', a('low'), a('high'), JSON.stringify({ type: 'user', effort: 'max' })].join('\n'))).toBe('high')
+    expect(lastEffortOf(['{"type":"assistant","effort":"max', a('')].join('\n'))).toBe(undefined)
+    expect(lastEffortOf('')).toBe(undefined)
+    expect(settingsEffort({ effortLevel: 'medium' })).toBe('medium')
+    expect(settingsEffort({})).toBe(undefined)
   })
 
   test('the status line is short, and marks a changed tree with a star', () => {
