@@ -86,6 +86,7 @@ Reach L2, runs processes.
 - The comparison is against git HEAD. A second signature edit of the same function before a commit repeats the note.
 - Only the Edit tool is watched. A Write that replaces a whole file is not.
 - Outside a git repository nothing runs.
+- A function ripwire does not index, such as a JavaScript function inside a PHP file's `<script>` block, is not checked. The sidebar shows one faint line, `<name>: ripwire does not index it, its callers were not checked`, and the model reads nothing. An open symbol ripwire no longer indexes was removed or renamed, and its finding closes.
 - The gate follows ripwire's `incompatible` count, which is itself a floor: a caller ripwire cannot bind by name does not hold the gate. The note stays the wider measure.
 - The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/contract-watch mode note`.
 - The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped, and the finding is then measured at the next turn's end instead.

@@ -77,6 +77,19 @@ export function parseCheck(output: string): Check | undefined {
   return { sym: attr(head, 'sym') ?? '?', status: attr(head, 'status') ?? '', paramsWas: count(head, 'params_was'), paramsNow: count(head, 'params_now'), incompatible: count(head, 'incompatible') ?? 0, callers }
 }
 
+/**
+ * Whether ripwire refused the check because its index holds no such symbol, as for a JavaScript function
+ * inside a PHP file's script block. Nothing is known about its callers then, and nothing failed.
+ */
+export function isNotIndexed(output: string): boolean {
+  return /--edit-check symbol not found/.test(output)
+}
+
+/** The faint line for a changed function ripwire does not index: its callers were not checked. */
+export function notIndexedLine(sym: string): string {
+  return `${sym}: ripwire does not index it, its callers were not checked`
+}
+
 /** At most this many callers are named; the rest are counted. */
 const MAX_CALLERS = 10
 

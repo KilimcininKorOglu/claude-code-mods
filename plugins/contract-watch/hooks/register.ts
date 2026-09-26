@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isCommit, isGuarded, isNarrowable, isReported, logText, modeOf, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Line, type Mode } from './signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isCommit, isGuarded, isNarrowable, isNotIndexed, isReported, logText, modeOf, notIndexedLine, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Line, type Mode } from './signature.ts'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
@@ -62,16 +62,26 @@ async function dropEntry($: EngineInterface, key: string): Promise<void> {
   }
 }
 
-/** Asks ripwire about one symbol; undefined when its output has no edit-check element. */
-async function askRipwire($: EngineInterface, root: string, rel: string, sym: string): Promise<Check | undefined> {
+/**
+ * Asks ripwire about one symbol; undefined when its output has no edit-check element, and `not-indexed`
+ * when ripwire's index holds no such symbol.
+ */
+async function askRipwire($: EngineInterface, root: string, rel: string, sym: string): Promise<Check | 'not-indexed' | undefined> {
   const r = await $.process.run(['ripwire', root, `--edit-check=${rel}:${sym}`], { cwd: root, timeoutMs: 20_000 })
-  if (r.exitCode !== 0) throw new Error(`ripwire --edit-check failed: ${(r.stderr || r.stdout).trim().slice(0, 200)}`)
-  return parseCheck(r.stdout)
+  if (r.exitCode === 0) return parseCheck(r.stdout)
+  const out = (r.stderr || r.stdout).trim()
+  if (isNotIndexed(out)) return 'not-indexed'
+  throw new Error(`ripwire --edit-check failed: ${out.slice(0, 200)}`)
 }
 
 /** Asks ripwire about one changed function and answers the note, if its callers need a look. */
 async function checkOne($: EngineInterface, state: State, place: { root: string; rel: string }, name: string): Promise<string | undefined> {
   const check = await askRipwire($, place.root, place.rel, name)
+  if (check === 'not-indexed') {
+    const line = notIndexedLine(name)
+    await toPerson($, name, 'not checked', [{ text: line, kind: 'dim' }], line)
+    return undefined
+  }
   if (check === undefined) return undefined
   // The finding the person reads is the one the mod holds, so every reported symbol is closed later too.
   if (isReported(check)) state.open.set(`${place.rel}:${check.sym}`, { root: place.root, rel: place.rel, sym: check.sym })
@@ -100,7 +110,9 @@ async function notesFor($: EngineInterface, state: State, file: string, names: r
 async function recheckOpen($: EngineInterface, state: State): Promise<Blocking[]> {
   const lines: Blocking[] = []
   for (const [key, held] of [...state.open]) {
-    const check = await askRipwire($, held.root, held.rel, held.sym)
+    // A symbol ripwire no longer indexes was removed or renamed, so nothing calls it by this name any more.
+    const answer = await askRipwire($, held.root, held.rel, held.sym)
+    const check = answer === 'not-indexed' ? undefined : answer
     if (check !== undefined && isBlocking(check)) {
       lines.push({ root: held.root, rel: held.rel, line: blockingLine(check) })
       continue

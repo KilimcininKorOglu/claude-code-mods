@@ -184,6 +184,30 @@ describe('contract-watch', () => {
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off or mode note | deny')
   })
 
+  // Captured from ripwire on a JavaScript function inside a PHP file's script block.
+  const NOT_FOUND = "ripwire: --edit-check symbol not found: cmd/parse.go:parse (did you mean 'deleteTemplate'?)"
+
+  withSidebar('a function ripwire does not index is a faint line, not a failure', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], kinds: [] }
+    seatSidebar(on, bar)
+    w.ripwire = { exitCode: 1, stdout: '', stderr: NOT_FOUND }
+    const r = await $.tool.call(edit('function parse(a) {', 'function parse(a, b) {'))
+    expect(r).toEqual({ result: 'edited' })
+    expect(bar.sections).toEqual([{ key: 'parse', lines: ['parse: ripwire does not index it, its callers were not checked'] }])
+    expect(bar.kinds).toEqual(['dim'])
+    expect(w.logs).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · no signature is open; it needs ripwire on PATH')
+  })
+
+  test('an open symbol ripwire no longer indexes closes', async ($, on) => {
+    const w = world(on)
+    await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
+    w.ripwire = { exitCode: 1, stdout: '', stderr: NOT_FOUND }
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
+    expect(w.logs.at(-1)).toBe('every caller matches parse again')
+  })
+
   withSidebar('a ripwire failure is a yellow sidebar entry while the pane is open', async ($, on) => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], kinds: [] }

@@ -86,6 +86,7 @@ Reach L2, process çalıştırır.
 - Karşılaştırma git HEAD'e karşıdır. Commit'ten önce aynı fonksiyonun ikinci bir signature edit'i notu tekrarlar.
 - Yalnız Edit tool'u izlenir. Tüm dosyayı değiştiren bir Write izlenmez.
 - git repository'si dışında hiçbir şey çalışmaz.
+- ripwire'ın index'lemediği bir fonksiyon, örneğin bir PHP dosyasının `<script>` bloğundaki bir JavaScript fonksiyonu, kontrol edilmez. Sidebar soluk bir satır gösterir, `<name>: ripwire does not index it, its callers were not checked`, ve model hiçbir şey okumaz. ripwire'ın artık index'lemediği açık bir sembol silinmiş ya da yeniden adlandırılmıştır, ve bulgusu kapanır.
 - Gate, ripwire'ın `incompatible` sayısını izler; o sayı kendisi bir alt sınırdır: ripwire'ın adına göre bağlayamadığı bir caller gate'i tutmaz. Not daha geniş ölçüm olarak kalır.
 - `deny` modunun kaçış yolu yoktur. Bulgu düzeltilemiyorsa kişi gate'i `/contract-watch mode note` ile kapatır.
 - Gate komut metnini okur. `git commit` komutunu gizleyen bir script ya da alias üzerinden atılan commit durdurulmaz; bulgu o zaman bir sonraki turn sonunda ölçülür.
