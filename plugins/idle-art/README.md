@@ -23,10 +23,13 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
 | `stars` | Stars fly toward the viewer from the centre, growing from a grey `·` to a white `✦` as they near. |
 | `aquarium` | Fish of four shapes cross both ways, bubbles rise from them and grow, seaweed sways on the sand. |
 | `life` | Conway's Game of Life on a wrapping board of half blocks, two cells per row; newborn cells are pink, older ones violet. The board is seeded again when it dies out, repeats or reaches 300 generations. |
-| `cat` | A cat walks in slowly to the middle, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps twice, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out to the right and comes round again. |
+| `cat` | A cat walks in slowly to the middle, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps twice, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out to the right and comes round again. Each word stands in a speech bubble over its head. |
 
     ● Brewing… (8s)
-                      < meow >
+                     .------.
+                    ( meow )
+                     '------'
+                    /
                /\_/\
               ( o.o )
                > ^ <

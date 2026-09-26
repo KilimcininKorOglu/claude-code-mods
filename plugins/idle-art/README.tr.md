@@ -23,10 +23,13 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
 | `stars` | Yıldızlar merkezden izleyiciye doğru uçar. Yaklaştıkça gri bir `·` işaretinden beyaz bir `✦` işaretine büyür. |
 | `aquarium` | Dört şekilde balık iki yönde de geçer. Balıklardan çıkan kabarcıklar yükseldikçe büyür. Kumun üstünde yosunlar sallanır. |
 | `life` | Conway'in Game of Life'ı kenarları birbirine bağlı bir tahtada oynanır. Tahta yarım bloklarla çizilir, her satırda iki hücre vardır. Yeni doğan hücreler pembe, eski hücreler mordur. Tahta ölünce, kendini tekrar edince ya da 300 nesle ulaşınca yeniden tohumlanır. |
-| `cat` | Bir kedi yavaş yavaş yürüyerek ortaya gelir, oturur, göz kırpar ve `meow` der. Sonra her turda başka bir sırayla şebeklik yapar: yerde bir o yana bir bu yana yuvarlanır, iki kez zıplar, başından bir kalp yükselirken mırlar, sağa sola bakar. `MEOW!` der, sağdan yürüyüp çıkar ve yeniden gelir. |
+| `cat` | Bir kedi yavaş yavaş yürüyerek ortaya gelir, oturur, göz kırpar ve `meow` der. Sonra her turda başka bir sırayla şebeklik yapar: yerde bir o yana bir bu yana yuvarlanır, iki kez zıplar, başından bir kalp yükselirken mırlar, sağa sola bakar. `MEOW!` der, sağdan yürüyüp çıkar ve yeniden gelir. Her söz, başının üstünde bir konuşma balonunda çıkar. |
 
     ● Brewing… (8s)
-                      < meow >
+                     .------.
+                    ( meow )
+                     '------'
+                    /
                /\_/\
               ( o.o )
                > ^ <

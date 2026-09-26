@@ -41,8 +41,12 @@ describe('art', () => {
     }
     // Its face never leaves the band's 8 rows, and it stands in the middle (column 25 of 60) once it sits.
     expect(seen.some(f => f.split('\n').some(row => row.indexOf('( o.o )') === 25))).toBe(true)
-    expect(seen.some(f => f.includes('< meow >'))).toBe(true)
-    expect(seen.some(f => f.includes('< MEOW! >'))).toBe(true)
+    // Each word stands in a bubble over the head, its tail pointing down to the cat.
+    const meow = seen.find(f => f.includes('( meow )'))?.split('\n') ?? []
+    expect(meow.slice(0, 4).map(row => row.trimEnd())).toEqual([`${' '.repeat(32)}.------.`, `${' '.repeat(31)}( meow )`, `${' '.repeat(32)}'------'`, `${' '.repeat(31)}/`])
+    expect(meow[5]?.indexOf('( o.o )')).toBe(25)
+    expect(seen.some(f => f.includes('( MEOW! )'))).toBe(true)
+    expect(seen.some(f => f.includes('( purr~ )'))).toBe(true)
     expect(seen.some(f => f.includes('( -.- )=~'))).toBe(true)
     expect(seen.some(f => f.includes('♥'))).toBe(true)
     // It leaves: a frame with no cat, then it enters from the left edge again.

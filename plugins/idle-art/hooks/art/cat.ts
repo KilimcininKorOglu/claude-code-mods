@@ -39,8 +39,21 @@ function sprite(out: Frame, rows: readonly string[], x: number, y: number): void
   rows.forEach((row, i) => put(out, x, y + i, row, FUR))
 }
 
+/**
+ * A speech bubble over the cat's head, its tail pointing down to the head:
+ *
+ *      .------.
+ *     ( meow )
+ *      '------'
+ *     /
+ */
+export function bubbleRows(text: string): string[] {
+  const rule = '-'.repeat(text.length + 2)
+  return [` .${rule}.`, `( ${text} )`, ` '${rule}'`, '/']
+}
+
 function bubble(out: Frame, s: Stage, text: string): void {
-  put(out, s.center + SPRITE_COLS - 2, s.base - 1, `< ${text} >`, SPEECH)
+  bubbleRows(text).forEach((row, i) => put(out, s.center + 6, s.base - 4 + i, row, SPEECH))
 }
 
 function walkPhase(s: Stage, from: number, to: number): Phase {
