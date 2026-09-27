@@ -89,6 +89,19 @@ async function readLimit($: EngineInterface): Promise<number> {
   return typeof stored === 'number' && limitOf(String(stored)) !== undefined ? stored : DEFAULT_LIMIT_K
 }
 
+/**
+ * Reads the on/off setting and the limit from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it. `turn.step` runs on every model request
+ * and never reads the store; it uses the copy that `agent.spawn` and `turn.complete` refresh. A mod turned
+ * off there takes the ledger down here too, as `off` does.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.limitK = await readLimit($)
+  if (was && !state.enabled) await clearShown($)
+}
+
 async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
   state.enabled = on
   await $.store.set(ENABLED_KEY, on)
@@ -99,6 +112,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const arg = args.trim()
+  await readSettings($, state)
   if (arg === 'on' || arg === 'off') return setEnabled($, state, arg === 'on')
   if (arg.startsWith('limit')) return setLimit($, state, arg.slice(5).trim())
   if (arg !== '' && arg !== 'status') return USAGE
@@ -110,8 +124,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.limitK = await readLimit($)
+    await readSettings($, state)
     await $.command.register({
       name: 'subagent-ledger',
       description: 'What each subagent of this session spent: status, on, off, limit <k> (subagent-ledger)',
@@ -127,7 +140,9 @@ export const register: Register = on => {
   // The spawn names what the subagent is and draws it running; only its own turns say what it spent.
   on('agent.spawn', async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || r.agentId === undefined) return r
+    if (r.agentId === undefined) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     state.runs.set(r.agentId, { type: e.subagentType, description: e.description, model: r.model, turns: 0, ms: 0, tokens: 0, split: NO_SPLIT, status: 'running' })
     await show($, state)
     return r
@@ -141,7 +156,9 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || e.agentId === undefined) return r
+    if (e.agentId === undefined) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     await countTurn($, state, { agentId: e.agentId, durationMs: e.durationMs, reason: e.reason, usage: e.usage })
     return r
   })

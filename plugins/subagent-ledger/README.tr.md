@@ -44,10 +44,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=subagent-ledger}, agent.spawn, turn.step, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.sidebar.clear (via clearShown), $.sidebar.set (via show), $.store.get, $.store.set (via setEnabled, setLimit), $.ui.status (via clearShown, show)
+    ❯ ./register.ts calls: $.command.register, $.sidebar.clear (via clearShown), $.sidebar.set (via show), $.store.get (via readLimit, readSettings), $.store.set (via setEnabled, setLimit), $.ui.status (via clearShown, show)
 
 Reach L0, çizer ve hatırlar.
 

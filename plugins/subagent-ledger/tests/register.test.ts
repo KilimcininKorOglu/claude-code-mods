@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput, TurnUsage } from 'claude-code'
 
 import { addSplit, fmtDuration, fmtTok, limitOf, modelTone, NO_SPLIT, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
@@ -61,12 +61,16 @@ const totalKind = (line: Drawn | undefined): string | undefined => line?.parts?.
 /** A row's status word, the last part. */
 const statusWord = (line: Drawn | undefined): { text: string; kind?: string } | undefined => line?.parts?.at(-1)
 
-/** The status lines the mod wrote, newest last. */
-type World = { statuses: (string | undefined)[] }
+/** The status lines the mod wrote, newest last, and the store every window shares, which a test writes as another window. */
+type World = { statuses: (string | undefined)[]; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { statuses: [] }
-  mock.store(on, {})
+  const w: World = { statuses: [], store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
@@ -182,6 +186,30 @@ describe('subagent-ledger', () => {
     expect((await $.command.run(run(''))).text).toBe('off · limit 10k · no subagent ran yet')
     expect(w.statuses.at(-1)).toBe(undefined)
     expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or limit <k>')
+  })
+
+  withSidebar('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    const bar: Bar = { open: true, sections: [], cleared: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await spawn($, 'Explore', 'x')
+    await $.turn.complete(turn({ agentId: 'a-Explore' }))
+    expect(bar.sections).toEqual([])
+    // Turned on again there with a 10k limit, the next subagent is counted and its 10k total drawn red.
+    w.store.set('enabled', true)
+    w.store.set('limit', 10)
+    await spawn($, 'Plan', 'y')
+    await $.turn.complete(turn({ agentId: 'a-Plan' }))
+    expect(totalKind(bar.sections.at(-1)?.lines[0])).toBe('error')
+    const cleared = bar.cleared
+    // Off there again: the next subagent turn reads it and takes the ledger down, as off does here.
+    w.store.set('enabled', false)
+    await $.turn.complete(turn({ agentId: 'a-Plan' }))
+    expect(bar.cleared).toBe(cleared + 1)
+    expect((await $.command.run(run(''))).text).toContain('off · limit 10k · 1 subagent')
   })
 
   withSidebar('an open sidebar takes the ledger and the status line stays clear', async ($, on) => {
