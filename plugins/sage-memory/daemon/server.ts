@@ -16,6 +16,7 @@ import { remindRoutes } from './remind-routes.ts'
 import { memoryRoutes, type Route, type RouteInput, type Routes } from './routes.ts'
 import { createSetup, type Setup } from './setup.ts'
 import { createStores, type Stores } from './stores.ts'
+import { upkeepRoutes } from './upkeep-routes.ts'
 
 export type ServerOptions = {
   dir: string
@@ -80,6 +81,7 @@ function routesOf(state: State): Routes {
     ...readRoutes(state.stores, state.embeddings),
     ...remindRoutes(state.stores, state.embeddings),
     ...embedRoutes(state.embeddings, state.setup),
+    ...upkeepRoutes({ dir: state.layout.dir, stores: state.stores }),
   }
 }
 

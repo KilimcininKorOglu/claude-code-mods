@@ -45,18 +45,33 @@ export function relativePaths(root: string, paths: readonly string[]): string[] 
   return [...relative]
 }
 
+/** The memories with an `about_*` edge into one of the nodes, or into a symbol of one of the files. */
+function idsAbout(op: Op, nodes: readonly string[], files: readonly string[]): Set<string> {
+  const ids = new Set((sql(op.store.db, ABOUT_NODES).all(JSON.stringify(nodes)) as IdRow[]).map(row => row.id))
+  for (const path of files) {
+    for (const row of sql(op.store.db, ABOUT_SYMBOLS).all(`symbol:${path}#`, `symbol:${path}$`) as IdRow[]) ids.add(row.id)
+  }
+  return ids
+}
+
+/** The memories anchored to a symbol in one of the paths, or to a level `levelsOf` answers for it (a file or a directory). */
+function memoriesAbout(op: Op, relPaths: readonly string[], levelsOf: (path: string) => string[], visibility: Visibility, limit: number): Memory[] {
+  if (relPaths.length === 0) return []
+  const nodes = relPaths.flatMap(path => levelsOf(path).flatMap(level => [`file:${level}`, `dir:${level}`]))
+  return memoriesAmong(op, idsAbout(op, nodes, relPaths), visibility, limit)
+}
+
 /**
  * The memories anchored to one of the paths, to a symbol in it, or to a directory above it, most
  * important first. The paths are relative to the project root.
  */
 export function memoriesForPaths(op: Op, relPaths: readonly string[], visibility: Visibility, limit: number): Memory[] {
-  if (relPaths.length === 0) return []
-  const nodes = relPaths.flatMap(path => ancestorPaths(path).flatMap(level => [`file:${level}`, `dir:${level}`]))
-  const ids = new Set((sql(op.store.db, ABOUT_NODES).all(JSON.stringify(nodes)) as IdRow[]).map(row => row.id))
-  for (const path of relPaths) {
-    for (const row of sql(op.store.db, ABOUT_SYMBOLS).all(`symbol:${path}#`, `symbol:${path}$`) as IdRow[]) ids.add(row.id)
-  }
-  return memoriesAmong(op, ids, visibility, limit)
+  return memoriesAbout(op, relPaths, ancestorPaths, visibility, limit)
+}
+
+/** The memories anchored to one of the paths itself or to a symbol in it, not to a directory above it. */
+export function memoriesAnchoredTo(op: Op, relPaths: readonly string[], visibility: Visibility, limit: number): Memory[] {
+  return memoriesAbout(op, relPaths, path => [path], visibility, limit)
 }
 
 export type AudienceContext = { role?: string; mode?: string }

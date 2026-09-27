@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { layoutOf } from '../../hooks/shared/layout.ts'
-import type { AuditEntry, BackfillReport, Candidate, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult } from '../../hooks/shared/model.ts'
+import type { AuditEntry, BackfillReport, Candidate, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult, VerifyReport } from '../../hooks/shared/model.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from '../../hooks/shared/protocol.ts'
 import type { Runtime } from '../embedder.ts'
 import { call } from '../http.ts'
@@ -239,6 +239,57 @@ describe('candidate routes', () => {
       assert.equal(accepted.memory.scope, 'user')
       assert.equal((await d.value<Memory>('/memory/get', { project: d.beta, id: accepted.memory.id })).text, PREFERENCE)
       assert.deepEqual(await d.value('/candidates/list', { project: d.alpha }), [], 'the accepted proposal is no longer pending')
+    }))
+})
+
+describe('upkeep routes', () => {
+  const ENTRY = 'The app entry registers the router before the first request'
+
+  function sourceFile(project: ProjectRef, name: string): string {
+    mkdirSync(join(project.root, 'src'), { recursive: true })
+    const path = join(project.root, 'src', name)
+    writeFileSync(path, 'export {}\n')
+    return path
+  }
+
+  test('verify checks one memory by its id, or every anchored memory of both stores, and refuses a deleted one', () =>
+    withDaemon(async d => {
+      sourceFile(d.alpha, 'app.ts')
+      const kept = await d.remember(d.alpha, { text: ENTRY, anchors: [{ type: 'file', path: 'src/app.ts' }] })
+      const gone = await d.remember(d.alpha, { text: 'The old worker drains the job queue on shutdown', anchors: [{ type: 'file', path: 'src/worker.ts' }] })
+      const user = await d.remember(d.alpha, { text: 'Format shell scripts with the shfmt formatter', scope: 'user', anchors: [{ type: 'command', command: 'missing-tool-xyz -w' }] })
+      await d.remember(d.alpha, { text: MIGRATIONS })
+      const all = await d.value<VerifyReport>('/memory/verify', { project: d.alpha })
+      assert.deepEqual(
+        all.results.map(result => [result.memoryId, result.status]),
+        [
+          [kept.id, 'verified'],
+          [gone.id, 'stale'],
+          [user.id, 'stale'],
+        ],
+        'a memory with no anchor has nothing to check',
+      )
+      assert.deepEqual([all.staled, all.reactivated], [[gone.id, user.id], []])
+      assert.equal((await d.value<Memory>('/memory/get', { project: d.beta, id: user.id })).status, 'stale')
+      const one = await d.value<VerifyReport>('/memory/verify', { project: d.alpha, id: kept.id })
+      assert.deepEqual(one.results.map(result => result.memoryId), [kept.id])
+      await d.value('/memory/delete', { project: d.alpha, id: kept.id, force: true })
+      const deleted = await d.ask('/memory/verify', { project: d.alpha, id: kept.id })
+      assert.deepEqual([deleted.status, deleted.error], [409, `${kept.id} is deleted; recover it before verifying it`])
+    }))
+
+  test('verify-paths checks the memories anchored to the changed files alone', () =>
+    withDaemon(async d => {
+      const app = sourceFile(d.alpha, 'app.ts')
+      sourceFile(d.alpha, 'other.ts')
+      const changed = await d.remember(d.alpha, { text: ENTRY, anchors: [{ type: 'symbol', path: 'src/app.ts', symbol: 'main' }] })
+      const other = await d.remember(d.alpha, { text: 'The other module exports nothing yet', anchors: [{ type: 'file', path: 'src/other.ts' }] })
+      const report = await d.value<VerifyReport>('/memory/verify-paths', { project: d.alpha, paths: [app] })
+      assert.deepEqual([report.results.map(result => result.memoryId), report.staled], [[changed.id], [changed.id]], 'main is not in the file')
+      assert.equal((await d.value<Memory>('/memory/get', { project: d.alpha, id: other.id })).lastVerifiedAt, undefined)
+      rmSync(app)
+      writeFileSync(app, 'export function main() {}\n')
+      assert.deepEqual((await d.value<VerifyReport>('/memory/verify-paths', { project: d.alpha, paths: ['src/app.ts'] })).reactivated, [changed.id])
     }))
 })
 

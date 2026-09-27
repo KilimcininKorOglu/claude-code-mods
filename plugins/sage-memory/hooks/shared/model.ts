@@ -304,3 +304,20 @@ export type MemoryPage = { memories: Memory[]; nextCursor: string | null; total:
 export type GatheredPage = MemoryPage & { relations: GraphEdge[]; relationsScanned: number }
 
 export type StoreStats = { total: number; byStatus: Record<Status, number>; byKind: Record<string, number>; edges: number }
+
+/**
+ * How deep a check reads an anchor: `existence` whether its path is there and of the right kind,
+ * `content` also its content hash, symbol, command and agent, `git` also its git blob.
+ */
+export const VERIFY_DEPTHS = ['existence', 'content', 'git'] as const
+export type VerifyDepth = (typeof VERIFY_DEPTHS)[number]
+
+/** `verified` passed every check its depth runs, `stale` found the anchor broken, `unknown` could not tell. */
+export type VerificationStatus = 'verified' | 'stale' | 'unknown'
+
+export type AnchorVerification = { anchor: Anchor; status: VerificationStatus; reason: string; contentHash?: string; gitBlobHash?: string }
+
+export type MemoryVerification = { memoryId: string; status: VerificationStatus; checkedAt: string; anchors: AnchorVerification[] }
+
+/** What a verification found and changed: the memories it moved to stale, and the ones it moved back to active. */
+export type VerifyReport = { results: MemoryVerification[]; staled: string[]; reactivated: string[] }

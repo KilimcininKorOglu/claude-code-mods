@@ -25,6 +25,11 @@ function escapes(rel: string): boolean {
   return rel === '..' || rel.startsWith('../') || isAbsolute(rel)
 }
 
+/** Whether `target` is `root` or lies under it, compared as the two paths are written. */
+export function isInside(root: string, target: string): boolean {
+  return !escapes(relative(root, target))
+}
+
 /** One slash between segments. */
 export function slashes(path: string): string {
   return path.replace(/\/+/g, '/')
