@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
@@ -32,12 +32,19 @@ const run = (args: string): CommandRunInput => ({
   command: 'action-pin', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** `fails` makes api.github.com answer HTTP 403; `urls` holds every URL asked. */
-type World = { urls: string[]; logs: string[]; fails: boolean; readFails: boolean; files: Map<string, string> }
+/**
+ * `fails` makes api.github.com answer HTTP 403; `urls` holds every URL asked; `store` is the store every
+ * window shares, which a test writes as another window.
+ */
+type World = { urls: string[]; logs: string[]; fails: boolean; readFails: boolean; files: Map<string, string>; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { urls: [], logs: [], fails: false, readFails: false, files: new Map() }
-  mock.store(on, {})
+  const w: World = { urls: [], logs: [], fails: false, readFails: false, files: new Map(), store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -141,6 +148,20 @@ describe('action-pin', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
     expect(w.logs.at(-1)).toBe(`every action of ${WORKFLOW} is pinned to a commit now: actions/checkout@v4`)
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await edit($, WORKFLOW, '', '  - uses: actions/checkout@v4')
+    w.files.set(`${ROOT}/${WORKFLOW}`, '  - uses: actions/checkout@v4\n')
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toContain('actions/checkout@v4')
+    w.store.set('enabled', false)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect((await edit($, '.github/workflows/release.yml', '', '  - uses: actions/cache@v4')).context).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · 1 workflow(s) still use a moving ref')
   })
 
   test('a workflow the code deleted closes its finding, and an unreadable one keeps it', async ($, on) => {
