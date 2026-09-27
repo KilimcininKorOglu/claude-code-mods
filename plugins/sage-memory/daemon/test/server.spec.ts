@@ -170,6 +170,14 @@ describe('daemon server', () => {
     }
   })
 
+  test('a listener that closes while a probe connects reads as silent, not as a failure', async () => {
+    const socket = layoutOf(tempDir()).socket
+    const raw = await listenRaw(socket)
+    const found = probe(socket, 1000)
+    raw.server.close()
+    assert.equal((await found).state, 'silent')
+  })
+
   test('a lock whose process is gone is taken over', async () => {
     const dir = tempDir()
     writeFileSync(layoutOf(dir).lockFile, '2147483646')

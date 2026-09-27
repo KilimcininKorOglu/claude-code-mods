@@ -108,7 +108,10 @@ export type Probe = { state: 'alive'; hello: Hello } | { state: 'absent' } | { s
 
 const NO_LISTENER = new Set(['ECONNREFUSED', 'ENOENT', 'ENOTSOCK'])
 
-/** Asks the socket for `/hello`. Any failure but the three kinds above throws. */
+/** A listener took the connection and dropped it, as one that closes with the connection still in its backlog does. */
+const DROPPED = new Set(['ECONNRESET', 'EPIPE'])
+
+/** Asks the socket for `/hello`. Any failure but the kinds above throws. */
 export async function probe(socket: string, timeoutMs: number): Promise<Probe> {
   let answer: Answer
   try {
@@ -116,7 +119,7 @@ export async function probe(socket: string, timeoutMs: number): Promise<Probe> {
   } catch (err) {
     const code = codeOf(err)
     if (code !== undefined && NO_LISTENER.has(code)) return { state: 'absent' }
-    if (code === undefined || code === 'ECONNRESET') return { state: 'silent', reason: messageOf(err) }
+    if (code === undefined || DROPPED.has(code)) return { state: 'silent', reason: messageOf(err) }
     throw err
   }
   const hello = helloOf(answer.reply)
