@@ -1,11 +1,12 @@
-import type { Memory, VerifyReport } from '../hooks/shared/model.ts'
+import type { Memory, RemapReport, VerifyReport } from '../hooks/shared/model.ts'
 import { verifyScopeOf } from './claude-dirs.ts'
-import { conflict } from './errors.ts'
+import { conflict, refused } from './errors.ts'
 import { checkedOptions } from './hygiene.ts'
 import type { Hygiene } from './hygiene-jobs.ts'
 import { mustRead } from './op.ts'
 import { memoryStore, opFor, placesOf, type Places } from './places.ts'
-import { flag, optionalObject, optionalString, stringList, type Body } from './request.ts'
+import { movesMade, remapAnchors, type Remapped } from './remap.ts'
+import { flag, optionalObject, optionalString, requiredString, stringList, type Body } from './request.ts'
 import { memoriesAnchoredTo, relativePaths } from './retrieve.ts'
 import type { Route, Routes } from './routes.ts'
 import { selectMemories } from './rows.ts'
@@ -16,7 +17,8 @@ import { verifyMemories } from './verify.ts'
 
 /**
  * The routes that keep the stores true to the project: verifying anchors, on request and after a
- * file changed, and hygiene. A check reads the project and writes what it found in slices.
+ * file changed, carrying anchors after a command moved files, and hygiene. A check reads the
+ * project and writes what it found in slices.
  */
 
 export type UpkeepContext = { dir: string; stores: Stores; hygiene: Hygiene }
@@ -65,11 +67,27 @@ async function verifyPaths(context: UpkeepContext, body: Body): Promise<VerifyRe
   return verifyIn(context, places, places.project, memories)
 }
 
+const NOTHING_REMAPPED: Remapped = { moves: [], limited: 0, memories: [] }
+
+const NOTHING_VERIFIED: VerifyReport = { results: [], staled: [], reactivated: [] }
+
+/** Carries the anchors of the files a command moved, read from the directory it started in, then checks the moved memories again. */
+async function remap(context: UpkeepContext, body: Body): Promise<RemapReport> {
+  const places = placesOf(context.stores, body)
+  const cwd = requiredString(body, 'cwd')
+  if (!cwd.startsWith('/')) throw refused('cwd must be an absolute path')
+  const made = await movesMade(requiredString(body, 'command'), cwd)
+  const remapped = made.length === 0 ? NOTHING_REMAPPED : await remapAnchors(opFor(places, places.project), places.root, made)
+  const checked = remapped.memories.length === 0 ? NOTHING_VERIFIED : await verifyIn(context, places, places.project, remapped.memories)
+  return { moves: remapped.moves, limited: remapped.limited, staled: checked.staled, reactivated: checked.reactivated }
+}
+
 export function upkeepRoutes(context: UpkeepContext): Routes {
   const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
   return {
     '/memory/verify': post(body => verify(context, body)),
     '/memory/verify-paths': post(body => verifyPaths(context, body)),
+    '/memory/remap': post(body => remap(context, body)),
     '/memory/hygiene': post(body => {
       const request = { automatic: flag(body, 'automatic'), options: checkedOptions(optionalObject<Record<string, unknown>>(body, 'options')) }
       return context.hygiene.run(placesOf(context.stores, body), request)

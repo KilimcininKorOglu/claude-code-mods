@@ -1,7 +1,6 @@
 import type { Audience, Memory } from '../hooks/shared/model.ts'
-import { RequestError } from './errors.ts'
 import type { Op } from './op.ts'
-import { ancestorPaths, projectPath } from './paths.ts'
+import { ancestorPaths, projectPathIfInside } from './paths.ts'
 import { selectMemories, sql } from './rows.ts'
 import { searchStore, visibilityParams, type Visibility } from './search.ts'
 
@@ -36,11 +35,8 @@ export function memoriesAmong(op: Op, ids: Iterable<string>, visibility: Visibil
 export function relativePaths(root: string, paths: readonly string[]): string[] {
   const relative = new Set<string>()
   for (const path of paths) {
-    try {
-      relative.add(projectPath(root, path))
-    } catch (err) {
-      if (!(err instanceof RequestError && err.status === 400)) throw err
-    }
+    const rel = projectPathIfInside(root, path)
+    if (rel !== undefined) relative.add(rel)
   }
   return [...relative]
 }

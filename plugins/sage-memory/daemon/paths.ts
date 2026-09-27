@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import { refused } from './errors.ts'
+import { refused, RequestError } from './errors.ts'
 import { codeOf } from './log.ts'
 
 /** The real path of `path`, or of its nearest existing ancestor with the missing tail put back. */
@@ -49,6 +49,16 @@ export function projectPath(root: string, input: string): string {
   const named = relative(realRoot, join(canonical(dirname(raw)), basename(raw)))
   const rel = escapes(named) ? target : named
   return slashes(rel === '' ? '.' : rel)
+}
+
+/** The project path of `input`, or undefined when it leads outside the project root. */
+export function projectPathIfInside(root: string, input: string): string | undefined {
+  try {
+    return projectPath(root, input)
+  } catch (err) {
+    if (err instanceof RequestError && err.status === 400) return undefined
+    throw err
+  }
 }
 
 /** `a/b/c` → `['a/b/c', 'a/b', 'a']`; the root is `['.']`. */

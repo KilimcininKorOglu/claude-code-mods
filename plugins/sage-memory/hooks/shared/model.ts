@@ -375,3 +375,12 @@ export type HygieneReport = {
 
 /** What a hygiene request did in one store: ran it, started it in the background, or found one that runs now or ran within the hour. */
 export type HygieneRun = { state: 'done'; report: HygieneReport } | { state: 'started' } | { state: 'running' } | { state: 'recent'; lastAt: string }
+
+/** A move that took anchors with it, as paths relative to the project root, and the memories whose anchors moved. */
+export type RemapMove = { from: string; to: string; memories: string[] }
+
+/**
+ * What a remap did: the moves that took anchors with them, how many moves the hourly limit held
+ * back, and what checking the moved memories again changed.
+ */
+export type RemapReport = { moves: RemapMove[]; limited: number; staled: string[]; reactivated: string[] }

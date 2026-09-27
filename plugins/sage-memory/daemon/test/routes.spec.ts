@@ -1,10 +1,25 @@
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { layoutOf } from '../../hooks/shared/layout.ts'
-import type { AuditEntry, BackfillReport, Candidate, HygieneRun, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult, VerifyReport } from '../../hooks/shared/model.ts'
+import type {
+  AuditEntry,
+  BackfillReport,
+  Candidate,
+  HygieneRun,
+  Memory,
+  MemoryPage,
+  Ranking,
+  RemapReport,
+  RememberResult,
+  Resolution,
+  SearchHit,
+  StoreStats,
+  UpdateResult,
+  VerifyReport,
+} from '../../hooks/shared/model.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from '../../hooks/shared/protocol.ts'
 import type { Runtime } from '../embedder.ts'
 import { call } from '../http.ts'
@@ -286,6 +301,27 @@ describe('upkeep routes', () => {
       rmSync(app)
       writeFileSync(app, 'export function main() {}\n')
       assert.deepEqual((await d.value<VerifyReport>('/memory/verify-paths', { project: d.alpha, paths: ['src/app.ts'] })).reactivated, [changed.id])
+    }))
+
+  test('remap carries the anchors of a file a command moved and checks the moved memories again', () =>
+    withDaemon(async d => {
+      const app = sourceFile(d.alpha, 'app.ts')
+      const kept = await d.remember(d.alpha, { text: ENTRY, anchors: [{ type: 'file', path: 'src/app.ts' }] })
+      const broken = await d.remember(d.alpha, {
+        text: 'The old module moved its helpers into the entry file',
+        anchors: [{ type: 'file', path: 'src/app.ts' }, { type: 'file', path: 'src/old.ts' }],
+      })
+      renameSync(app, join(d.alpha.root, 'src', 'main.ts'))
+      const report = await d.value<RemapReport>('/memory/remap', { project: d.alpha, command: 'cd src && mv app.ts main.ts', cwd: d.alpha.root })
+      assert.deepEqual(
+        report.moves.map(move => [move.from, move.to, [...move.memories].sort()]),
+        [['src/app.ts', 'src/main.ts', [kept.id, broken.id].sort()]],
+      )
+      assert.deepEqual([report.limited, report.staled, report.reactivated], [0, [broken.id], []], 'src/old.ts was missing before the move')
+      const checked = await d.value<Memory>('/memory/get', { project: d.alpha, id: kept.id })
+      assert.deepEqual([checked.anchors.map(anchor => anchor.path), checked.status, checked.lastVerifiedAt !== undefined], [['src/main.ts'], 'active', true])
+      const relative = await d.ask('/memory/remap', { project: d.alpha, command: 'mv a b', cwd: 'src' })
+      assert.deepEqual([relative.status, relative.error], [400, 'cwd must be an absolute path'])
     }))
 })
 
