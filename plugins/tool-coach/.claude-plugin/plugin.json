@@ -1,6 +1,6 @@
 {
   "name": "tool-coach",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Stops the model from repeating a tool call that just failed with the same input, until a file or command has changed something. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

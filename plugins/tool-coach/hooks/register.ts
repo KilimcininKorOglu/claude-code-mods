@@ -30,22 +30,32 @@ const changedSomething = (tool: string, r: ToolCallResult): boolean => CHANGING.
  * drops every record.
  */
 async function coach($: EngineInterface, state: State, e: ToolCallInput, next: (e: ToolCallInput) => Promise<ToolCallResult>): Promise<ToolCallResult> {
-  if (!state.enabled) return next(e)
   const watched = !UNWATCHED.has(e.tool)
   const key = callKey(e as unknown as Record<string, unknown>)
   const failed = watched ? state.failures.get(key) : undefined
-  if (failed !== undefined) {
+  // Only a call the mod would refuse or record reads the setting; every other call runs as it is.
+  if (failed !== undefined && (await readSettings($, state))) {
     await toPerson($, e.tool, stoppedLines(e.tool), stoppedLines(e.tool)[0]?.text ?? '')
     return { deny: denyText(e.tool, failed) }
   }
   const r = await next(e)
   if (changedSomething(e.tool, r)) state.failures.clear()
-  else if (watched && r.isError === true) state.failures.set(key, errorOf(r.text))
+  else if (watched && r.isError === true && (await readSettings($, state))) state.failures.set(key, errorOf(r.text))
   return r
+}
+
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it. Answers whether the mod is on.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<boolean> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  return state.enabled
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
+  await readSettings($, state)
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     state.enabled = word === 'on'
@@ -61,7 +71,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'tool-coach', description: 'Refuse a failed tool call repeated unchanged: status, on, off (tool-coach)', argumentHint: '[on | off]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     return r
   })
 

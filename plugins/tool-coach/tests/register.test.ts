@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { callKey, errorOf } from '../hooks/coach.ts'
@@ -9,14 +9,21 @@ const run = (args: string): CommandRunInput => ({
   command: 'tool-coach', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** `failing` names the tools whose next call fails beneath the plugin; `runs` counts the calls that reached them. */
-type World = { failing: Set<string>; runs: number; logs: string[] }
+/**
+ * `failing` names the tools whose next call fails beneath the plugin; `runs` counts the calls that reached
+ * them; `store` is the store every window shares, which a test writes as another window.
+ */
+type World = { failing: Set<string>; runs: number; logs: string[]; store: Map<string, unknown> }
 
 const MISSING = '<tool_use_error>File does not exist. Note: your current working directory is /w.</tool_use_error>'
 
 function world(on: On): World {
-  const w: World = { failing: new Set(), runs: 0, logs: [] }
-  mock.store(on, {})
+  const w: World = { failing: new Set(), runs: 0, logs: [], store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -104,6 +111,23 @@ describe('tool-coach', () => {
     expect(w.runs).toBe(2)
     await $.turn.start({ text: 'again', turnId: 't2' } as never)
     await read($)
+    expect(w.runs).toBe(3)
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.failing.add('Read')
+    await read($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await read($)
+    expect(w.runs).toBe(2)
+    expect((await $.command.run(run(''))).text).toBe('off')
+    // Turned on again there, the next failure is kept and its repeat refused.
+    w.store.set('enabled', true)
+    await read($, { limit: 1 })
+    expect((await read($, { limit: 1 })).deny).toBeDefined()
     expect(w.runs).toBe(3)
   })
 

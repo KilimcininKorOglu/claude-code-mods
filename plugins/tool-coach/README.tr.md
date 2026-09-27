@@ -44,7 +44,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=tool-coach}, turn.start, tool.call
-    ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get (via readSettings), $.store.set (via runCommand), $.ui.log (via toPerson)
 
 Reach L0, çizer ve hatırlar.
 
