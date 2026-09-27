@@ -35,6 +35,10 @@ async function resolveRoot($: EngineInterface): Promise<string> {
   }
 }
 
+/**
+ * Reads the deck and the on/off setting from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it. The band's draw reads the copy this keeps.
+ */
 async function loadDeck($: EngineInterface, state: State): Promise<void> {
   state.counts = ((await $.store.get(countsKey(state.root))) as Counts | undefined) ?? {}
   state.pins = ((await $.store.get(pinsKey(state.root))) as string[] | undefined) ?? []
@@ -120,10 +124,13 @@ function sendPrompt($: EngineInterface, text: string): void {
 
 /**
  * Sends a pressed prompt and counts the press here, because the engine passes the plugin's own
- * `$.command.run` through every hook but this plugin's (measured on 2.1.282).
+ * `$.command.run` through every hook but this plugin's (measured on 2.1.282). A mod turned off in another
+ * window since the band was drawn counts nothing, and the band goes.
  */
 async function sendPressed($: EngineInterface, state: State, text: string): Promise<void> {
-  await countUse($, state, text)
+  await loadDeck($, state)
+  if (state.enabled) await countUse($, state, text)
+  else $.ui.invalidate('ui.render')
   sendPrompt($, text)
 }
 
@@ -193,9 +200,12 @@ export const register: Register = on => {
   // The engine prints the plugin name in front of command text, so the texts do not repeat it.
   on('command.run', { command: 'prompt-deck' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
+  // Each prompt of the person reads the deck first, so the band after this turn draws what the store holds.
   on('prompt.submit', async ($, e, next) => {
+    if (!isPersons(e.origin)) return next(e)
+    await loadDeck($, state)
     const text = normalize(e.text)
-    if (state.enabled && text !== undefined && isPersons(e.origin)) await countUse($, state, text)
+    if (state.enabled && text !== undefined) await countUse($, state, text)
     return next(e)
   })
 

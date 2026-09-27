@@ -160,6 +160,28 @@ describe('prompt-deck', () => {
     expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 7, last: 5 } })
   })
 
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    for (let i = 0; i < 3; i++) await $.prompt.submit(typed('devam et'))
+    const ui = await band($)
+    expect(await ui.find({ type: 'Button', key: 'deck:1' })).not.toBe(undefined)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.enabled = false
+    // A press on the band drawn before sends the prompt, counts nothing, and the band goes.
+    await ui.press({ key: 'deck:1' })
+    await w.clock.settle()
+    expect(w.entered.at(-1)?.text).toBe('devam et')
+    expect(await ui.find({ type: 'Button', key: 'deck:1' })).toBe(undefined)
+    expect((w.store['counts:/Users/u/app'] as Record<string, { n: number }>)['devam et']?.n).toBe(3)
+    // Another window turns the mod on and pins a prompt: this window's next prompt reads both.
+    w.store.enabled = true
+    w.store['pins:/Users/u/app'] = ['commitle']
+    await $.prompt.submit(typed('başka bir şey'))
+    expect((await ui.find({ type: 'Button', key: 'deck:1' }))?.props.label).toBe('commitle')
+    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (pinned)\n2. devam et (3)\n3. başka bir şey (1)')
+  })
+
   test('a prompt that reads as a command chain, and a send the engine refuses, go out as a plugin prompt', async ($, on) => {
     const w = world(on)
     await started($)
