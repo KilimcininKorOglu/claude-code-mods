@@ -12,10 +12,20 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 type Open = { root: string; doc: string; stale: Stale[] }
 
 /**
- * The on/off setting, the mode, the open findings by the doc's path on disk, whether the model is owed
- * a note for them, and the last error logged, so the same one is logged once.
+ * The on/off setting and the mode as the store held them at the last read, the open findings by the
+ * doc's path on disk, whether the model is owed a note for them, and the last error logged, so the same
+ * one is logged once.
  */
 type State = { enabled: boolean; mode: Mode; open: Map<string, Open>; owed: boolean; lastError?: string }
+
+/**
+ * Reads the on/off setting and the mode from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -228,6 +238,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each commit is checked for doc lines it made stale' : 'off: commits are not checked'
   }
   if (word !== '') return USAGE
+  await readSettings($, state)
   const open = state.open.size === 0 ? 'no doc is open' : `${[...openCounts(state)].map(([doc, n]) => `${doc} (${n})`).join(' · ')} still stale`
   return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}; it needs ripwire on PATH`
 }
@@ -238,8 +249,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'doc-drift-watch', description: 'Doc lines a commit made stale: status, on, off, mode note | deny (doc-drift-watch)', argumentHint: '[on | off | mode note | mode deny]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+    await readSettings($, state)
     return r
   })
 
@@ -247,6 +257,9 @@ export const register: Register = on => {
   on('command.run', { command: 'doc-drift-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    // Only a commit, or a guarded command while a finding is open, acts on a setting.
+    if (!isCommit(e.command) && (state.open.size === 0 || !isGuarded(e.command))) return next(e)
+    await readSettings($, state)
     if (!state.enabled) return next(e)
     const stopped = await gate($, state, e.command)
     if (stopped !== undefined) return stopped
@@ -263,7 +276,9 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || !state.enabled || state.open.size === 0) return r
+    if (e.agentId !== undefined || state.open.size === 0) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     await recheckOpen($, state)
     state.owed = state.open.size > 0
     return r

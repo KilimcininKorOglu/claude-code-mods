@@ -200,6 +200,21 @@ describe('doc-drift-watch', () => {
     expect(await $.tool.call({ tool: 'Bash', command: 'git push' })).toEqual({ result: 'ok' })
   })
 
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    w.rechecks = [STILL]
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('README.md (1)')
+    w.store.set('enabled', false)
+    const ran = w.argv.length
+    expect(await $.tool.call({ tool: 'Bash', command: 'git push' })).toEqual({ result: 'ok' })
+    expect(await $.tool.call({ tool: 'Bash', command: 'git commit -m y' })).toEqual({ result: 'ok' })
+    expect(w.argv).toHaveLength(ran)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · README.md (1) still stale; it needs ripwire on PATH')
+  })
+
   test('a commit that holds none of the open docs runs in deny mode', async ($, on) => {
     const w = world(on)
     await $.command.run(run('mode deny'))
