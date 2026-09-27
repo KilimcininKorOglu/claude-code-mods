@@ -9,7 +9,11 @@ A Claude Code Mod that has a small model rate how hard each of your prompts is, 
 3. Nothing is written to the session's settings. When the turn ends, the next one starts from the session's effort again, unless its own prompt is rated.
 4. A task notification, a plugin's prompt, or a prompt you type over a running turn is not rated, so its turn runs at the session's effort.
 5. When haiku does not answer, or answers something that is not a level, the turn runs at the session's effort, and one line says so.
-6. You see the level of each rated turn. With the [sidebar](../sidebar) open, it is a standing section: the level faint for `low`, green for `medium`, yellow for `high`, red for `xhigh` and `max`, the same colours session-watch gives the effort. The section goes when the turn ends, because the rated effort ends with it, and a turn that is not rated draws none. Otherwise it is a transcript line:
+6. You see the level of each rated turn. With the [sidebar](../sidebar) open, it is a standing section: the level faint for `low`, green for `medium`, yellow for `high`, red for `xhigh` and `max`, the same colours session-watch gives the effort. The section stands for the whole session and shows the effort of this turn while one runs, of the last ended turn, and the session's own:
+
+       this turn high · last turn low (session) · session low
+
+   Between turns it reads `last turn high · session low`. A turn that is not rated shows the session's effort with a faint `(session)` after it. `/effort-auto off` takes the section down. With the sidebar closed, a rated turn writes one transcript line at its start:
 
        effort-auto: this turn max · session low
 

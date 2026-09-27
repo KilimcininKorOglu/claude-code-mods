@@ -60,8 +60,24 @@ function levelPart(value: string | number | undefined): Part {
   return kind === undefined ? { text } : { text, kind }
 }
 
-/** The person's line: only the two levels coloured, each by how high it is; the words stay plain. */
-export function turnLine(level: Level, session: string | number | undefined): Line {
-  const parts: Part[] = [{ text: 'this turn ' }, levelPart(level), { text: ' · session ' }, levelPart(session)]
+/** The effort a main-loop turn ran at: the rated level, or the session's own when the turn was not rated. */
+export type TurnEffort = { value: string | number | undefined; rated: boolean }
+
+/** A turn's effort as parts: the level coloured, and ` (session)` faint after a level that was not rated. */
+function turnParts(t: TurnEffort): Part[] {
+  return t.rated ? [levelPart(t.value)] : [levelPart(t.value), { text: ' (session)', kind: 'dim' }]
+}
+
+/**
+ * The person's line: `this turn` while a turn runs, `last turn` once one ended, and the session's effort;
+ * only the levels coloured, each by how high it is, the words plain.
+ */
+export function effortLine(current: TurnEffort | undefined, last: TurnEffort | undefined, session: string | number | undefined): Line {
+  const parts: Part[] = [
+    ...(current === undefined ? [] : [{ text: 'this turn ' }, ...turnParts(current), { text: ' · ' }]),
+    ...(last === undefined ? [] : [{ text: 'last turn ' }, ...turnParts(last), { text: ' · ' }]),
+    { text: 'session ' },
+    levelPart(session),
+  ]
   return { text: parts.map(p => p.text).join(''), parts }
 }

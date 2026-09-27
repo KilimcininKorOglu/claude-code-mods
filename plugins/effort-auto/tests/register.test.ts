@@ -150,26 +150,34 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-withSidebar('an open sidebar holds the turn\'s level as a standing section, the level coloured, until the turn ends', async ($, on) => {
+withSidebar('an open sidebar holds this turn\'s and the last turn\'s effort for the whole session, the levels coloured', async ($, on) => {
   const w = world(on)
-  const sections: unknown[] = []
+  const sections: { lines: { text: string }[] }[] = []
   const cleared: unknown[] = []
-  on('sidebar.set', (_, e) => { sections.push(e); return { value: true } })
+  on('sidebar.set', (_, e) => { sections.push(e as never); return { value: true } })
   on('sidebar.clear', (_, e) => { cleared.push(e); return { value: undefined } })
   await started($)
   await prompt($, 'hard work')
   await step($)
   await step($)
-  expect(cleared).toEqual([])
-  // The rated effort ends with the turn, and its line with it, once.
+  expect(sections[0]).toEqual({
+    consumer: 'effort-auto', key: 'effort', title: 'effort', until: 'session', order: 6,
+    lines: [{ text: 'this turn max · session high', parts: [{ text: 'this turn ' }, { text: 'max', kind: 'error' }, { text: ' · ' }, { text: 'session ' }, { text: 'high', kind: 'warn' }] }],
+  })
+  // The turn's end keeps its level as the last turn's, and a turn that was not rated shows the session's.
   await turnEnds($)
-  expect(cleared).toEqual([{ consumer: 'effort-auto', key: 'effort' }])
   await prompt($, 'task done', 'task-notification')
   await step($)
-  expect(cleared).toHaveLength(1)
-  expect(sections).toEqual([{
-    consumer: 'effort-auto', key: 'effort', title: 'effort', until: 'session', order: 6,
-    lines: [{ text: 'this turn max · session high', parts: [{ text: 'this turn ' }, { text: 'max', kind: 'error' }, { text: ' · session ' }, { text: 'high', kind: 'warn' }] }],
-  }])
+  await turnEnds($)
+  expect(sections.map(s => s.lines[0]?.text)).toEqual([
+    'this turn max · session high',
+    'last turn max · session high',
+    'this turn high (session) · last turn max · session high',
+    'last turn high (session) · session high',
+  ])
+  expect(cleared).toEqual([])
   expect(w.logs).toEqual([])
+  // Off takes the line down.
+  await $.command.run(run('off'))
+  expect(cleared).toEqual([{ consumer: 'effort-auto', key: 'effort' }])
 })
