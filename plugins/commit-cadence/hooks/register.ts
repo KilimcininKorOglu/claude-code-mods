@@ -14,6 +14,23 @@ const CONSUMER = 'commit-cadence'
  */
 type State = { enabled: boolean; root: string; open: string[]; owed: boolean; keys: Set<string> }
 
+/** Forgets the reported paths and the note they owe, so a tree measured after `on` is reported again. */
+function forgetOpen(state: State): void {
+  state.open = []
+  state.owed = false
+}
+
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it. A mod turned off there forgets its finding here
+ * too, as `off` does.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  if (was && !state.enabled) forgetOpen(state)
+}
+
 /** The finding the person reads: the sidebar while it is open, else one transcript line. */
 async function toPerson($: EngineInterface, key: string, lines: { text: string; kind: 'error' | 'ok' }[], line: string): Promise<void> {
   try {
@@ -98,8 +115,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
   state.enabled = on
   await $.store.set(ENABLED_KEY, on)
   if (!on) {
-    state.open = []
-    state.owed = false
+    forgetOpen(state)
     await saveOpen($, state)
   }
   return on ? 'on: the tree is measured at the end of each turn' : 'off: the tree is not measured'
@@ -109,6 +125,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   const arg = args.trim()
   if (arg === 'on' || arg === 'off') return setEnabled($, state, arg === 'on')
   if (arg !== '' && arg !== 'status') return USAGE
+  await readSettings($, state)
   return statusText(state.enabled, await readTree($, state))
 }
 
@@ -117,7 +134,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     // The session's own directory, because a Bash cd moves what $.session.cwd() answers.
     state.root = await $.session.cwd()
     await loadOpen($, state)
@@ -136,13 +153,17 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     // A subagent's turn is its own loop's; only the main loop's end is the person's moment to commit.
-    if (state.enabled && e.agentId === undefined) await afterTurn($, state)
+    if (e.agentId !== undefined) return r
+    await readSettings($, state)
+    if (state.enabled) await afterTurn($, state)
     return r
   })
 
   // The note rides the next prompt, so the model reads it before it starts the next piece of work.
-  on('prompt.submit', async (_, e, next) => {
-    if (!state.enabled || !state.owed || state.open.length === 0) return next(e)
+  on('prompt.submit', async ($, e, next) => {
+    if (!state.owed || state.open.length === 0) return next(e)
+    await readSettings($, state)
+    if (!state.enabled) return next(e)
     state.owed = false
     return next({ ...e, context: [...(e.context ?? []), noteText(state.open)] })
   })

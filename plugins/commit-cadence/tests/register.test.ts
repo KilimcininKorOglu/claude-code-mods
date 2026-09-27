@@ -161,6 +161,29 @@ describe('commit-cadence', () => {
     expect(bar.sections.at(-1)?.lines).toEqual([{ text: 'the working tree is clean again', kind: 'ok' }])
   })
 
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const store: Record<string, unknown> = {}
+    const w = world(on, store)
+    await started($)
+    w.status = DIRTY
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    store.enabled = false
+    await $.turn.complete(turn())
+    expect(w.logs).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe(statusText(false, ['src/app.ts', 'src/new.ts']))
+    store.enabled = true
+    await $.turn.complete(turn())
+    expect(w.logs).toEqual(['2 uncommitted file(s): src/app.ts, src/new.ts'])
+    // Off again before the next prompt: the owed note is held back.
+    store.enabled = false
+    await $.prompt.submit(prompt())
+    expect(w.contexts.at(-1)).toBe(undefined)
+    // The off forgot the finding here, as /commit-cadence off does, so the same tree is reported after on.
+    store.enabled = true
+    await $.turn.complete(turn())
+    expect(w.logs).toEqual(['2 uncommitted file(s): src/app.ts, src/new.ts', '2 uncommitted file(s): src/app.ts, src/new.ts'])
+  })
+
   test('the finding is stored while it stands and removed once the tree is clean', async ($, on) => {
     const store: Record<string, unknown> = {}
     const w = world(on, store)

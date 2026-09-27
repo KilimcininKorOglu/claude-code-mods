@@ -38,10 +38,10 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.280:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get, $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get (via loadOpen, readSettings), $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
 
 Reach L2, it runs a process.
 

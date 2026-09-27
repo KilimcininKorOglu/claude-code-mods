@@ -38,10 +38,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get, $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get (via loadOpen, readSettings), $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
 
 Reach L2, bir process çalıştırır.
 
