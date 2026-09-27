@@ -24,8 +24,11 @@ const RULES_FILE = '/Users/u/.claude/rules/db.md'
 
 const run = (args: string): CommandRunInput => ({ command: 'context-restore', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
 
-/** Files on disk with their last write, what the model was last handed, and what the person read. */
-type World = { files: Map<string, { text: string; mtimeMs: number }>; calls: string[]; notes: string[][]; logs: string[]; bar: { open: boolean; lines: string[] } }
+/**
+ * Files on disk with their last write, what the model was last handed, and what the person read; `store`
+ * is the store every window shares, which a test writes as another window.
+ */
+type World = { files: Map<string, { text: string; mtimeMs: number }>; calls: string[]; notes: string[][]; logs: string[]; bar: { open: boolean; lines: string[] }; store: Map<string, unknown> }
 
 function world(on: On): World {
   const w: World = {
@@ -38,8 +41,13 @@ function world(on: On): World {
     notes: [],
     logs: [],
     bar: { open: false, lines: [] },
+    store: new Map(),
   }
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.env(on, { HOME: '/Users/u' })
   mock.clock(on, { now: T0 })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -197,6 +205,24 @@ describe('context-restore', () => {
     w.files.set(SKILL_FILE, { text: '# Rules\n\nRule two.\n', mtimeMs: T0 + 10 })
     expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await $.prompt.attachment({ type: 'instructions', text: `Contents of ${RULES_FILE} (user's private global instructions for all projects):\n\nUse parameters.`, origin: { kind: 'engine' } })
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    w.files.set(SKILL_FILE, { text: '# Rules\n\nRule two.\n', mtimeMs: T0 + 10 })
+    expect(await call($, 'rules-skill', SKILL)).toBe(SKILL)
+    w.files.set(RULES_FILE, { text: 'Use parameters, always.', mtimeMs: T0 + 10 })
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([])
+    expect((await $.command.run(run(''))).text?.startsWith('off')).toBe(true)
+    w.store.set('enabled', true)
+    expect(await call($, 'rules-skill', SKILL)).toBe(`Base directory for this skill: ${SKILL_DIR}\n\n# Rules\n\nRule two.\n`)
+    await prompt($)
+    expect(w.notes.at(-1)?.[0]?.endsWith('\n\nUse parameters, always.')).toBe(true)
   })
 
   withSidebar('an open sidebar takes the line and the transcript stays clean', async ($, on) => {

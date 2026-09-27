@@ -12,6 +12,14 @@ const USAGE = 'expects nothing (the status), on or off'
  */
 type State = { enabled: boolean; root: string; config: string; startedAt: number; rules: Map<string, { at: number; text: string }>; reads: Map<string, number>; last?: string }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -161,7 +169,9 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
-  return word === '' ? statusText(state.enabled, state.rules.size, state.last) : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return statusText(state.enabled, state.rules.size, state.last)
 }
 
 export const register: Register = on => {
@@ -170,7 +180,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     state.startedAt = await $.clock.now()
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     state.root = e.cwd
     state.config = (await $.env.get('CLAUDE_CONFIG_DIR')) || `${(await $.env.get('HOME')) ?? ''}/.claude`
     await $.command.register({ name: 'context-restore', description: 'The current text of a changed skill, command or rules file: status, on, off (context-restore)', argumentHint: '[on | off]', immediate: true })
@@ -183,6 +193,7 @@ export const register: Register = on => {
   // The engine loads each skill and command once and hands that copy at every call, also after its file changed.
   on('skill.prompt', async ($, e, next) => {
     const r = await next(e)
+    await readSettings($, state)
     if (!state.enabled) return r
     try {
       const text = await callText($, state, e.skill, r.text)
@@ -196,7 +207,9 @@ export const register: Register = on => {
   // A subagent's reads live in its own context, so only the main loop's count.
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || e.agentId !== undefined || r.deny !== undefined || r.isError === true) return r
+    if (e.agentId !== undefined || r.deny !== undefined || r.isError === true) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     try {
       await recordRead($, state, e.file_path)
     } catch (err) {
@@ -206,12 +219,16 @@ export const register: Register = on => {
   })
 
   on('prompt.attachment', { type: 'instructions' }, async ($, e, next) => {
+    await readSettings($, state)
     if (state.enabled) await recordRules($, state, e.text)
     return next(e)
   })
 
   // The notes go to the model alone; the person reads one line naming the files.
   on('prompt.submit', async ($, e, next) => {
+    // No rules file was recorded, so there is nothing to compare.
+    if (state.rules.size === 0) return next(e)
+    await readSettings($, state)
     if (!state.enabled) return next(e)
     const notes = await changeNotes($, state)
     return notes.length === 0 ? next(e) : next({ ...e, context: [...(e.context ?? []), ...notes] })
