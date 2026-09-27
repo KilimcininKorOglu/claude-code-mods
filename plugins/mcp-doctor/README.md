@@ -40,10 +40,10 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.280:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=mcp-doctor}, turn.complete, prompt.attachment{type=deferred_tools_delta}
-    ❯ ./register.ts calls: $.clock.after (via later, runCommand), $.command.register, $.command.run (via reconnect), $.sidebar.clear (via showBack), $.sidebar.set (via placeFailed, showBack), $.store.get, $.store.set (via setEnabled), $.tool.call (via measure), $.ui.log (via addFailures, later, measure, reconnect, showBack)
+    ❯ ./register.ts calls: $.clock.after (via later, runCommand), $.command.register, $.command.run (via reconnect), $.sidebar.clear (via showBack), $.sidebar.set (via placeFailed, showBack), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.call (via measure), $.ui.log (via addFailures, later, measure, reconnect, showBack)
 
 Reach L2, it drives Claude: it runs the `/mcp reconnect` command.
 

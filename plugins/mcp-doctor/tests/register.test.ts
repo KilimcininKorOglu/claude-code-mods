@@ -18,9 +18,11 @@ type Section = { key: string; lines: { text: string; kind?: string; parts?: { te
 
 /**
  * What ToolSearch answers (`failed`, `pending`, or `missing` for a build where it does not answer), what
- * `/mcp reconnect` does to it, and what the person read.
+ * `/mcp reconnect` does to it, what the person read, and the store every window shares, which a test
+ * writes as another window.
  */
 type World = {
+  store: Map<string, unknown>
   failed: { name: string; errorCode?: string; error?: string }[]
   pending: string[]
   missing: boolean
@@ -32,8 +34,12 @@ type World = {
 }
 
 function world(on: On): { w: World; clock: ReturnType<typeof mock.clock> } {
-  const w: World = { failed: [], pending: [], missing: false, reconnects: [], logs: [], bar: { open: false, sections: [], cleared: [] } }
-  mock.store(on, {})
+  const w: World = { store: new Map(), failed: [], pending: [], missing: false, reconnects: [], logs: [], bar: { open: false, sections: [], cleared: [] } }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   const clock = mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -152,6 +158,30 @@ describe('mcp-doctor', () => {
     expect(w.logs.at(-1)).toBe('plugin:playwright:playwright: not connected (Connection closed); /mcp-doctor reconnect plugin:playwright:playwright')
     await $.prompt.attachment({ type: 'deferred_tools_delta', text: '25 deferred tools are available again (MCP server reconnected — names announced earlier in this conversation): mcp__plugin_playwright_playwright__* (25). Load via ToolSearch as before.', origin: { kind: 'engine' } })
     expect(w.logs.at(-1)).toBe('plugin:playwright:playwright: connected again')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const { w, clock } = world(on)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    w.failed = [{ name: 'flaky' }]
+    await started($)
+    await settle(clock)
+    await $.turn.complete(turn())
+    await settle(clock)
+    await $.prompt.attachment({ type: 'deferred_tools_delta', text: FAILED_DELTA, origin: { kind: 'engine' } })
+    expect(w.logs).toEqual([])
+    expect((await $.command.run(run(''))).text?.startsWith('off')).toBe(true)
+    w.store.set('enabled', true)
+    await $.turn.complete(turn())
+    // Off again before the measure's timer fires: the measure reads nothing.
+    w.store.set('enabled', false)
+    await settle(clock)
+    expect(w.logs).toEqual([])
+    w.store.set('enabled', true)
+    await $.turn.complete(turn())
+    await settle(clock)
+    expect(w.logs).toEqual(['flaky: not connected (disconnected); /mcp-doctor reconnect flaky'])
   })
 
   test('a reconnect the engine refuses says so, and off reads nothing', async ($, on) => {

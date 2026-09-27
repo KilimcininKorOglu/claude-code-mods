@@ -12,6 +12,14 @@ const USAGE = 'expects nothing (the status), reconnect <server>, on or off'
  */
 type State = { enabled: boolean; failed: Map<string, string>; unplaced: Set<string>; toolSearch: 'ok' | 'missing'; chain: Promise<void> }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -71,7 +79,10 @@ async function dropFailures($: EngineInterface, state: State, isBack: (name: str
  * tool that cannot exist. A build where ToolSearch does not answer falls back to the attachments alone.
  */
 async function measure($: EngineInterface, state: State): Promise<void> {
-  if (!state.enabled || state.toolSearch === 'missing') return
+  if (state.toolSearch === 'missing') return
+  // The measure runs from a timer, so the setting is read when it fires.
+  await readSettings($, state)
+  if (!state.enabled) return
   let r
   try {
     r = await $.tool.call({ tool: 'ToolSearch', query: 'select:mcp-doctor-no-such-tool', max_results: 1 })
@@ -137,6 +148,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return `reconnecting ${name}`
   }
   if (word !== '') return USAGE
+  await readSettings($, state)
   return statusText(state.enabled, [...state.failed].map(([name, reason]) => ({ name, reason })))
 }
 
@@ -145,7 +157,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     await $.command.register({ name: 'mcp-doctor', description: 'MCP servers that are not connected: status, reconnect <server>, on, off (mcp-doctor)', argumentHint: '[reconnect <server> | on | off]', immediate: true })
     if (state.enabled) later($, state)
     return r
@@ -157,12 +169,15 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     // A subagent's turn ends inside the main loop's; the main loop's end is enough.
-    if (state.enabled && e.agentId === undefined) later($, state)
+    if (e.agentId !== undefined) return r
+    await readSettings($, state)
+    if (state.enabled) later($, state)
     return r
   })
 
   // The engine tells the model itself; the person reads the same fact here. The text is not changed.
   on('prompt.attachment', { type: 'deferred_tools_delta' }, async ($, e, next) => {
+    await readSettings($, state)
     if (state.enabled) {
       await fromDelta($, state, e.text)
       later($, state)
