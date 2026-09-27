@@ -584,6 +584,44 @@ describe('always', () => {
     expect(status.text).toMatch(/keep warm   on, always · /)
     expect(w.store.has('deadline:S1')).toBe(false)
   })
+
+  test("another session's off ends this session's endless loop within the minute, and no ping is paid", async ($, on) => {
+    const w = world(on, [warm, warm], { store: [['always', true]] })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    // Another session ran /cache-warm off: the switch is gone from the store every session shares.
+    w.store.delete('always')
+    await w.clock.advance(MIN)
+    expect(w.statuses.at(-1)).toBe(undefined)
+    await w.clock.advance(2 * HOUR)
+    expect(w.forks).toBe(0)
+    expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off · no cold write · context 201k tokens')
+  })
+
+  test('a run with no pane reads the switch before it pays for a ping', async ($, on) => {
+    const w = world(on, [warm], { store: [['always', true]] })
+    await $.session.start({ ...session, isInteractive: false })
+    await $.turn.complete(turn())
+    w.store.delete('always')
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(0)
+  })
+
+  test("another session's always starts the endless loop here at the next turn, and a window armed here holds", async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    w.store.set('always', true)
+    await $.turn.complete(turn())
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 50m/)
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(1)
+    // A window this session armed by hand is its own: another session's off leaves it running.
+    await $.command.run(run('cache-warm', '6h'))
+    w.store.delete('always')
+    await $.turn.complete(turn())
+    expect(w.statuses.at(-1)).toMatch(/^6h left · ping in 50m/)
+  })
 })
 
 describe('cold writes', () => {

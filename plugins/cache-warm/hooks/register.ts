@@ -151,12 +151,21 @@ async function pruneRequests($: EngineInterface, s: State, now: number): Promise
   }
 }
 
+/**
+ * Reads the always switch from the store and answers it. Every session of every project shares the
+ * switch, so it is read where it acts, and /cache-warm always or off in another session applies here.
+ */
+async function readAlways($: EngineInterface, s: State): Promise<boolean> {
+  s.always = (await $.store.get(KEY_ALWAYS)) === true
+  return s.always
+}
+
 async function restore($: EngineInterface, s: State, now: number): Promise<void> {
   const deadline = await $.store.get(deadlineKey(s))
   const every = await $.store.get(everyKey(s))
   s.deadline = typeof deadline === 'number' && deadline > now ? deadline : 0
   s.every = typeof every === 'number' && every >= MIN_PING_MS ? every : PING_AFTER_MS
-  s.always = (await $.store.get(KEY_ALWAYS)) === true
+  await readAlways($, s)
   s.lastRead = pingRecordOf(await $.store.get(lastKey(s)))
 }
 
@@ -173,6 +182,33 @@ async function stop($: EngineInterface, s: State, why: string | null, forgetAlwa
     await $.store.delete(KEY_ALWAYS)
   }
   await showStatus($, s)
+}
+
+/**
+ * Ends this session's endless loop once another session turned always off, before it pays for another
+ * ping; answers whether nothing runs any more. A window this session armed itself is its own, and runs on.
+ */
+async function endedElsewhere($: EngineInterface, s: State): Promise<boolean> {
+  if (!s.endless || (await readAlways($, s))) return false
+  s.endless = false
+  if (hasWindow(s)) return false
+  await stop($, s, null)
+  return true
+}
+
+/**
+ * Follows the always switch as the store holds it now: another session's /cache-warm off ends this
+ * session's endless loop, and its /cache-warm always starts one here, unless a window this session armed
+ * itself runs.
+ */
+async function followAlways($: EngineInterface, s: State): Promise<void> {
+  if (await endedElsewhere($, s)) return
+  if ((await readAlways($, s)) && !hasWindow(s)) await startEndless($, s)
+}
+
+/** The minute's redraw of a running window, which first ends a loop another session turned off. */
+async function redraw($: EngineInterface, s: State): Promise<void> {
+  if (!(await endedElsewhere($, s))) await showStatus($, s)
 }
 
 /** Schedules the next ping one period after the last request. */
@@ -217,7 +253,7 @@ async function settlePing($: EngineInterface, s: State, usage: Usage, now: numbe
 
 async function ping($: EngineInterface, s: State): Promise<void> {
   s.pending = null
-  if (!hasWindow(s)) return
+  if (!hasWindow(s) || (await endedElsewhere($, s))) return
   const now = await $.clock.now()
   // The window ended, or a request since the timer was set moved the ping later.
   if (isOver(s, now) || now - s.lastRequestAt < s.every - 1000) return arm($, s)
@@ -289,9 +325,10 @@ async function warmCommand($: EngineInterface, s: State, args: string): Promise<
     case 'error':
       return command.text
     case 'status':
+      await followAlways($, s)
       return statusText(s, await $.clock.now()) ?? idleText(s)
     case 'off': {
-      const wasAlways = s.always
+      const wasAlways = await readAlways($, s)
       s.renew = null
       await stop($, s, null, true)
       return wasAlways ? 'off, and no longer starts itself in any session' : 'off'
@@ -311,7 +348,7 @@ async function clearSession($: EngineInterface, s: State): Promise<void> {
   await stop($, s, null)
   resetForClear(s)
   s.sid = await $.session.id()
-  if (s.always) await startEndless($, s)
+  if (await readAlways($, s)) await startEndless($, s)
 }
 
 /** The origins of a message the person sent themselves, which is what arms a window again. */
@@ -379,8 +416,9 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
   // `always` runs until /cache-warm off, so a ping that failed stopped the loop for this turn alone:
   // the next turn starts it again. Without this the session keeps `always` stored while running no
   // loop, and the next cold write arms a 6h window in its place. A window the person armed by hand
-  // holds, because it is a window of its own.
-  if (s.always && !hasWindow(s)) await startEndless($, s)
+  // holds, because it is a window of its own. The switch is read from the store, so another session's
+  // /cache-warm always or off applies here too.
+  await followAlways($, s)
   if (usage) await measure($, s, usage, now)
   await arm($, s)
 }
@@ -451,7 +489,7 @@ export const register: Register = on => {
     if (s.always) await startEndless($, s)
     await registerCommands($)
     // A -p run draws nothing, so only an interactive session redraws on a timer, and only while a window runs.
-    if (e.isInteractive) $.clock.every(REDRAW_MS, () => { if (hasWindow(s)) void showStatus($, s) })
+    if (e.isInteractive) $.clock.every(REDRAW_MS, () => { if (hasWindow(s)) void redraw($, s) })
     await showStatus($, s)
     return r
   })
@@ -480,7 +518,10 @@ export const register: Register = on => {
 
   on('command.run', { command: 'cache-warm' }, async ($, e) => ({ text: await warmCommand($, s, String(e.args ?? '')) }))
 
-  on('command.run', { command: 'cache-status' }, async $ => ({ text: card(s, await $.clock.now()) }))
+  on('command.run', { command: 'cache-status' }, async $ => {
+    await followAlways($, s)
+    return { text: card(s, await $.clock.now()) }
+  })
 
   on('turn.step', async function* ($, e, next) {
     if (!e.agentId) await stampRequest($, s)
