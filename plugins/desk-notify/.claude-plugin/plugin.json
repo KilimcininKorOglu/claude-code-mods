@@ -1,6 +1,6 @@
 {
   "name": "desk-notify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sends a desktop notification when a question or a plan waits for your answer, and when a turn ends or fails. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

@@ -9,7 +9,8 @@ const run = (args: string): CommandRunInput => ({
 
 /**
  * The host beneath the mod: what `uname -s` and git answer, how a notification command exits (`throw` when
- * it is missing), every notification argv the mod ran, and the lines it logged.
+ * it is missing), every notification argv the mod ran, the lines it logged, and the store every window
+ * shares, which a test writes as another window.
  */
 type World = {
   uname: string
@@ -19,11 +20,16 @@ type World = {
   sent: string[][]
   logs: string[]
   clock: MockClock
+  store: Map<string, unknown>
 }
 
 function world(on: On, env: Record<string, string> = {}, store: Record<string, unknown> = {}): World {
-  const w: World = { uname: 'Darwin', commonDir: '/Users/u/app/.git', top: '/Users/u/app', notifyExit: 0, sent: [], logs: [], clock: mock.clock(on) }
-  mock.store(on, store)
+  const w: World = { uname: 'Darwin', commonDir: '/Users/u/app/.git', top: '/Users/u/app', notifyExit: 0, sent: [], logs: [], clock: mock.clock(on), store: new Map(Object.entries(store)) }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.env(on, env)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: '/Users/u/app/sub' }))
@@ -95,6 +101,21 @@ describe('desk-notify', () => {
     await w.clock.settle()
     expect(w.sent).toEqual([])
     expect((await $.command.run(run(''))).text).toContain('stop off')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one turned the question notice off, and this one never ran the command.
+    w.store.set('ask', false)
+    await ask($)
+    await w.clock.settle()
+    expect(w.sent).toEqual([])
+    expect((await $.command.run(run(''))).text).toContain('ask off')
+    w.store.set('ask', true)
+    await ask($)
+    await w.clock.settle()
+    expect(w.sent.map(a => a[2])).toEqual(['display notification "app" with title "Question awaiting your answer" subtitle "Claude Code"'])
   })
 
   test('Windows is read from its OS variable and gets a PowerShell toast', async ($, on) => {

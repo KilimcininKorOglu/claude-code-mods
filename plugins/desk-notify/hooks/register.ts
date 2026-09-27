@@ -30,8 +30,13 @@ async function send($: EngineInterface, state: State, n: Notice): Promise<void> 
   }
 }
 
-/** Sends the notification of one event while that event is on; the hook that calls it does not wait. */
-function notifyOn($: EngineInterface, state: State, event: Event, n: Notice): void {
+/**
+ * Sends the notification of one event while that event is on, as the store holds it now; the hook that
+ * calls it does not wait on the notification command.
+ */
+async function notifyOn($: EngineInterface, state: State, event: Event, n: Notice): Promise<void> {
+  if (state.platform === undefined) return
+  await readSettings($, state)
   if (state.on[event]) void send($, state, n)
 }
 
@@ -66,11 +71,16 @@ async function readPlatform($: EngineInterface): Promise<Platform | undefined> {
   }
 }
 
+/**
+ * Reads each event's on/off setting from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
 async function readSettings($: EngineInterface, state: State): Promise<void> {
   for (const ev of EVENTS) state.on[ev] = (await $.store.get(ev)) !== false
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  await readSettings($, state)
   if (args.trim() === '' || args.trim() === 'status') return statusText(state.platform, state.on)
   const setting = settingOf(args)
   if (setting === undefined) return USAGE
@@ -103,23 +113,23 @@ export const register: Register = on => {
   // The tool call runs before its question or approval blocks on the person, which is when the notice helps.
   // RegExp literals, because a headless /plugin-types lists neither tool, so a string matcher does not type.
   on('tool.call', { tool: /^AskUserQuestion$/ }, async ($, e, next) => {
-    notifyOn($, state, 'ask', askNotice(state.project))
+    await notifyOn($, state, 'ask', askNotice(state.project))
     return next(e)
   })
 
   on('tool.call', { tool: /^ExitPlanMode$/ }, async ($, e, next) => {
-    notifyOn($, state, 'plan', planNotice(state.project))
+    await notifyOn($, state, 'plan', planNotice(state.project))
     return next(e)
   })
 
   // The main loop's end; a subagent's end is SubagentStop, so it never lands here.
   on('classic.Stop', async ($, e, next) => {
-    notifyOn($, state, 'stop', stopNotice(state.project))
+    await notifyOn($, state, 'stop', stopNotice(state.project))
     return next(e)
   })
 
   on('classic.StopFailure', async ($, e, next) => {
-    notifyOn($, state, 'stop', failNotice(state.project, e.error_details ?? e.error, e.last_assistant_message))
+    await notifyOn($, state, 'stop', failNotice(state.project, e.error_details ?? e.error, e.last_assistant_message))
     return next(e)
   })
 }
