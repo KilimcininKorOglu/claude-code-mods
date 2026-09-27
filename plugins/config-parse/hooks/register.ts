@@ -31,6 +31,15 @@ async function shownRootOf($: EngineInterface, cwd: string): Promise<string> {
   }
 }
 
+/**
+ * Reads the on/off setting and the mode from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+}
+
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -108,8 +117,10 @@ async function closeOne($: EngineInterface, state: State, kind: Kind, shown: str
 /** Checks the file an edit touched, and adds the note when it no longer parses. */
 async function afterEdit($: EngineInterface, state: State, path: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
-  const kind = state.enabled ? kindOf(path) : undefined
+  const kind = kindOf(path)
   if (kind === undefined) return r
+  await readSettings($, state)
+  if (!state.enabled) return r
   const shown = shownPath(path, state.root ?? (await $.session.cwd()))
   const error = await checkFile($, state, kind, path)
   if (error === UNREAD) return r
@@ -189,6 +200,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each edited JSON, YAML, TOML and .env file is parsed' : 'off: edited files are not parsed'
   }
   if (word !== '') return USAGE
+  await readSettings($, state)
   const open = state.open.size === 0 ? 'no file is open' : `${[...state.open.keys()].join(' · ')} does not parse`
   return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
@@ -199,8 +211,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'config-parse', description: 'JSON, YAML, TOML and .env files an edit broke: status, on, off, mode note | deny (config-parse)', argumentHint: '[on | off | mode note | mode deny]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+    await readSettings($, state)
     state.root = await shownRootOf($, await $.session.cwd())
     return r
   })
@@ -217,7 +228,9 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || !state.enabled) return r
+    if (e.agentId !== undefined) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     await recheckOpen($, state)
     state.owed = state.open.size > 0
     return r
@@ -235,7 +248,9 @@ export const register: Register = on => {
    * answers for its own files alone, so an unrelated file's finding does not stop it.
    */
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
-    if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(e.command)) return next(e)
+    if (state.open.size === 0 || !isGuarded(e.command)) return next(e)
+    await readSettings($, state)
+    if (!state.enabled || state.mode !== 'deny') return next(e)
     await recheckOpen($, state)
     if (state.open.size === 0) return next(e)
     const scoped = await scopeOf($, state, e.command)

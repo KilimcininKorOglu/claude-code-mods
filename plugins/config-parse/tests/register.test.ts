@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
@@ -35,14 +35,28 @@ const run = (args: string): CommandRunInput => ({
 })
 
 /**
- * The text every read answers with, what python answers, what the index holds, the lines logged, and the
- * repository root git answers.
+ * The text every read answers with, what python answers, what the index holds, the lines logged, the
+ * repository root git answers, and the store every window shares, which a test writes as another window.
  */
-type World = { file: string; gone?: true; unreadable?: true; python: { exitCode: number; stderr: string }; staged: string[]; argv: (readonly string[])[]; logs: string[]; top: string }
+type World = {
+  file: string
+  gone?: true
+  unreadable?: true
+  python: { exitCode: number; stderr: string }
+  staged: string[]
+  argv: (readonly string[])[]
+  logs: string[]
+  top: string
+  store: Map<string, unknown>
+}
 
 function world(on: On): World {
-  const w: World = { file: '', python: { exitCode: 0, stderr: '' }, staged: ['package.json', '.env'], argv: [], logs: [], top: ROOT }
-  mock.store(on, {})
+  const w: World = { file: '', python: { exitCode: 0, stderr: '' }, staged: ['package.json', '.env'], argv: [], logs: [], top: ROOT, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -251,6 +265,20 @@ describe('config-parse', () => {
     await end('t2')
     expect(w.logs.slice(-2).sort()).toEqual(['ci.yml is gone, and its parse error with it', 'package.json is gone, and its parse error with it'])
     expect((await $.command.run(run(''))).text).toContain('no file is open')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = '{"a": 1,}'
+    await edit($, 'package.json')
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await bash($, 'git commit -m "wip"')).deny).toContain('package.json')
+    w.store.set('enabled', false)
+    expect((await bash($, 'git commit -m "wip"')).result).toBe('ran')
+    expect((await edit($, 'other.json')).context).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · package.json does not parse')
   })
 
   test('a Write of a broken file is checked too', async ($, on) => {
