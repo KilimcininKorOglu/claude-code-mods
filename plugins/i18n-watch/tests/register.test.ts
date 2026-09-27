@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { isCommit, isNarrowable, verdict } from '../hooks/locale.ts'
@@ -41,17 +41,21 @@ const run = (args: string): CommandRunInput => ({
 
 /**
  * Files by absolute path; `staged` is the index git answers with, `logs` the logged lines, `top` the
- * repository root git answers.
+ * repository root git answers, `store` the store every window shares, which a test writes as another window.
  */
-type World = { files: Map<string, string>; staged: string[]; reads: number; logs: string[]; top: string }
+type World = { files: Map<string, string>; staged: string[]; reads: number; logs: string[]; top: string; store: Map<string, unknown> }
 
 function isDirPath(w: World, path: string): boolean {
   return [...w.files.keys()].some(f => f.startsWith(`${path}/`))
 }
 
 function world(on: On, files: Record<string, string>): World {
-  const w: World = { files: new Map(Object.entries(files).map(([p, t]) => [`${ROOT}/${p}`, t])), staged: [], reads: 0, logs: [], top: ROOT }
-  mock.store(on, {})
+  const w: World = { files: new Map(Object.entries(files).map(([p, t]) => [`${ROOT}/${p}`, t])), staged: [], reads: 0, logs: [], top: ROOT, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -302,6 +306,19 @@ describe('i18n-watch', () => {
     expect((await bash($, 'git push')).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('every locale now has the keys src/Cart.vue lacked: checkout.fee')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, LOCALES)
+    await started($)
+    await edit(w, $, 'src/Cart.vue', '', "{{ $t('checkout.fee') }}")
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await bash($, 'git push')).deny).toContain('src/Cart.vue (checkout.fee:1)')
+    w.store.set('enabled', false)
+    expect((await bash($, 'git push')).result).toBe('ok')
+    expect((await edit(w, $, 'src/Other.vue', '', "{{ $t('checkout.tax') }}")).context).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · 1 file(s) still lack keys')
   })
 
   test('a broken locale file is skipped and logged once', async ($, on) => {

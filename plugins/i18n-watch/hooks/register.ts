@@ -29,9 +29,19 @@ type Open = { path: string; keys: string[]; lines: Lines }
  * `open` holds each reported file's claim, so an edit that adds the keys, and an edit that stops using
  * them, both close the finding. `root` is the directory the session started in, and locale files are
  * looked for under it. `shownRoot` is the git repository it lies in (`shownRootOf`), and a path is shown
- * against it. Both are read once, because a Bash `cd` moves `$.session.cwd()` away.
+ * against it. Both are read once, because a Bash `cd` moves `$.session.cwd()` away. `enabled` and `mode`
+ * are the settings as the store held them at the last read.
  */
 type State = { enabled: boolean; mode: Mode; catalog?: Catalog; reported: boolean; open: Map<string, Open>; root?: string; shownRoot?: string; owed: boolean }
+
+/**
+ * Reads the on/off setting and the mode from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+}
 
 /**
  * The git repository the session started in, so a file in a sibling directory of a session opened in a
@@ -171,15 +181,21 @@ async function recheckOpen($: EngineInterface, state: State, skip?: string): Pro
   }
 }
 
+/** A locale file changed: the catalog is read again, and every open finding is measured against it. */
+async function afterLocaleEdit($: EngineInterface, state: State, r: ToolCallResult): Promise<ToolCallResult> {
+  await readSettings($, state)
+  state.catalog = undefined
+  await recheckOpen($, state)
+  return r
+}
+
 /** Adds the note to an edit that calls translation keys a locale lacks. */
 async function afterEdit($: EngineInterface, state: State, path: string, before: string, after: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
-  if (isLocalePath(path)) {
-    state.catalog = undefined
-    await recheckOpen($, state)
-    return r
-  }
-  if (!state.enabled || !isSource(path)) return r
+  if (isLocalePath(path)) return afterLocaleEdit($, state, r)
+  if (!isSource(path)) return r
+  await readSettings($, state)
+  if (!state.enabled) return r
   const shown = shownPath(path, state.shownRoot ?? (await rootOf($, state)))
   // Every other file's finding is measured too, because this edit may have moved a key into one of them.
   await recheckOpen($, state, shown)
@@ -245,7 +261,9 @@ async function scopeOf($: EngineInterface, state: State, command: string): Promi
  * a key stops it, and there is no bypass.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
-  if (!state.enabled || state.open.size === 0 || !isGuarded(command)) return undefined
+  if (state.open.size === 0 || !isGuarded(command)) return undefined
+  await readSettings($, state)
+  if (!state.enabled) return undefined
   // Measured in both modes, so a finding the code or the locales settled does not stand in the pane.
   state.catalog = undefined
   await recheckOpen($, state)
@@ -279,7 +297,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each edit is checked for translation keys the locale files lack' : 'off: edits are not checked'
   }
   if (word.startsWith('mode')) return setMode($, state, word.slice(4).trim())
-  return word === '' ? statusText(state) : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return statusText(state)
 }
 
 export const register: Register = on => {
@@ -288,8 +308,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'i18n-watch', description: 'Translation keys an edit uses that locale files lack: status, on, off, mode (i18n-watch)', argumentHint: '[on | off | mode note | deny]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+    await readSettings($, state)
     const cwd = await $.session.cwd()
     state.root = cwd
     state.shownRoot = await shownRootOf($, cwd)
@@ -317,6 +336,7 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.agentId !== undefined) return r
     state.catalog = undefined
+    if (state.open.size > 0) await readSettings($, state)
     await recheckOpen($, state)
     state.owed = state.open.size > 0
     return r
