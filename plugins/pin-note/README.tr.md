@@ -9,14 +9,14 @@ Bu Claude Code Mod'u, `/pin-note` ile sabitlediğiniz notları session boyunca s
        pin-note: pinned note 1, kept for this session and sent to you again after each compaction and /clear:
        ask before every push
 
-2. Bir compaction'dan ve `/clear`'dan sonra notlar, bir `SessionStart` hook'u ile modelin yeni context'ine numaralı tek bir liste olarak girer. Her not yazdığınız gibidir. Bir satır size bunu bildirir:
+2. Bir compaction'dan ve `/clear`'dan sonra notlar, bir `SessionStart` hook'u ile modelin yeni context'ine numaralı tek bir liste olarak girer. Her not yazdığınız gibidir. Listenin üstündeki üç satır modele notların nereden geldiğini söyler: notları siz `/pin-note` ile sabitlediniz, sonra konuşma compact edildi ya da `/clear` çalıştırdınız, ve açtığınız pin-note plugin'i notları geri veriyor. Bu satırlar olmadan model zaman zaman bir notu inject edilmiş bir talimat sanıp uygulamadı. Bir satır size bunu bildirir:
 
        pin-note: sent 1 pinned note(s) again after the compaction
 
 3. Notlar session'a aittir. `$.store` içinde session'ın id'si altında tutulur, böylece reload edilen bir modül ve resume edilen bir session onları yeniden bulur. `/clear` yeni bir session başlatır ve notlar onunla birlikte gider.
 4. Session başında ve resume'da hiçbir şey gönderilmez, çünkü oradaki konuşma notları sabitlediğiniz haliyle zaten tutar.
 
-Claude Code 2.1.283 üzerinde canlı bir session'da ölçüldü: `/compact` sonrasında not modelin context'ine ulaştı. `/clear` sonrasında sabitlenmiş bir not olup olmadığı sorulan model, notu kelimesi kelimesine yazdı ve nota uydu.
+Claude Code 2.1.283 üzerinde `sonnet` modeliyle canlı session'larda ölçüldü: `/compact` sonrasında not modelin context'ine ulaştı. `/clear` sonrasında sabitlenmiş bir not olup olmadığı sorulan model, notu kelimesi kelimesine yazdı. Her cevabın sonuna bir kelime eklenmesini isteyen bir not sabitlendi, ardından `/clear` ve yeni bir soru geldi; bu, her metin için 20 kez denendi. Önceki tek satırlık metinde model notu 4 kez inject edilmiş sayıp reddetti. Şimdiki metinde 20 denemenin hepsinde nota uydu.
 
 ## Komut
 

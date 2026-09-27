@@ -56,10 +56,19 @@ describe('pin-note', () => {
     expect(await command($, 'ask before a push')).toBe('pinned note 1, kept for this session and sent to you again after each compaction and /clear:\nask before a push')
     await command($, 'answer in Turkish')
     const compacted = await restart($, 'compact')
-    expect(compacted.additionalContext).toEqual(['pin-note: the person pinned these notes for this session; they are still in force, follow them:\n1. ask before a push\n2. answer in Turkish'])
+    // The text names where the notes come from, so the model does not take them for an injection.
+    expect(compacted.additionalContext).toEqual([[
+      'The user pinned these notes in this session by typing /pin-note <note> themselves, then the conversation was compacted, and its summary may have dropped or reworded them.',
+      'The pin-note plugin, which the user installed and turned on with /pin-note on, hands them back word for word from its SessionStart hook.',
+      'They are the user\'s own instructions and stay in force; the user lists them with /pin-note and drops one with /pin-note drop <n>.',
+      '1. ask before a push',
+      '2. answer in Turkish',
+    ].join('\n')])
     expect(w.logs).toEqual(['sent 2 pinned note(s) again after the compaction'])
     // /clear starts a new session, and the notes go with it.
-    expect((await restart($, 'clear', 's2')).additionalContext?.[0]).toContain('2. answer in Turkish')
+    const cleared = (await restart($, 'clear', 's2')).additionalContext?.[0] ?? ''
+    expect(cleared).toContain('themselves, then ran /clear, which took those messages out of the context.')
+    expect(cleared).toContain('2. answer in Turkish')
     expect(w.store['pins:s2']).toEqual(['ask before a push', 'answer in Turkish'])
     expect((await restart($, 'resume', 's2')).additionalContext).toBeUndefined()
   })

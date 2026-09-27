@@ -73,6 +73,6 @@ export const register: Register = on => {
     await follow($, state, e.session_id, e.source)
     if (!state.enabled || state.pins.length === 0 || (e.source !== 'compact' && e.source !== 'clear')) return r
     $.ui.log(sentText(state.pins.length, e.source))
-    return { ...r, additionalContext: [...(r.additionalContext ?? []), contextText(state.pins)] }
+    return { ...r, additionalContext: [...(r.additionalContext ?? []), contextText(state.pins, e.source)] }
   })
 }

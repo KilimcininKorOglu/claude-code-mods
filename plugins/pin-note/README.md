@@ -9,14 +9,14 @@ A Claude Code Mod that keeps the notes you pin with `/pin-note` for the whole se
        pin-note: pinned note 1, kept for this session and sent to you again after each compaction and /clear:
        ask before every push
 
-2. After a compaction, and after `/clear`, the notes go into the model's new context through a `SessionStart` hook, as one numbered list, each note as you typed it. One line tells you:
+2. After a compaction, and after `/clear`, the notes go into the model's new context through a `SessionStart` hook, as one numbered list, each note as you typed it. Three lines above the list tell the model where the notes come from: you pinned them yourself with `/pin-note`, then the conversation was compacted or you ran `/clear`, and the pin-note plugin you turned on hands them back. Without those lines the model at times took a note for an injected instruction and did not follow it. One line tells you:
 
        pin-note: sent 1 pinned note(s) again after the compaction
 
 3. The notes belong to the session. They are kept in `$.store` under the session's id, so a reloaded module and a resumed session find them again. `/clear` starts a new session, and the notes go with it.
 4. Nothing is sent at a session's start or at a resume, because the conversation there still holds the notes as you pinned them.
 
-Measured on Claude Code 2.1.283 in a live session: after `/compact` the note reached the model's context, and after `/clear` the model, asked whether a note was pinned, wrote it word for word and followed it.
+Measured on Claude Code 2.1.283 in live sessions with the `sonnet` model: after `/compact` the note reached the model's context, and after `/clear` the model, asked whether a note was pinned, wrote it word for word. A note that asked for one word at the end of every reply was pinned, then `/clear` and a new question followed, 20 times for each text: with the earlier one-line text the model refused the note 4 times, calling it injected; with the current text it followed the note all 20 times.
 
 ## Command
 

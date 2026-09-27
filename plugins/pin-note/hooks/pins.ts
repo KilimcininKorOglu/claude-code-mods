@@ -44,9 +44,24 @@ export function noSuchText(index: number, count: number): string {
   return count === 0 ? `there is no note ${index}: no note is pinned` : `there is no note ${index}: notes 1 to ${count} are pinned`
 }
 
-/** The context the model reads after a compaction or /clear. */
-export function contextText(pins: readonly string[]): string {
-  return `pin-note: the person pinned these notes for this session; they are still in force, follow them:\n${numbered(pins)}`
+/** What took the messages that pinned the notes out of the context, as the model is told. */
+const CUT: Record<'compact' | 'clear', string> = {
+  clear: 'then ran /clear, which took those messages out of the context',
+  compact: 'then the conversation was compacted, and its summary may have dropped or reworded them',
+}
+
+/**
+ * The context the model reads after a compaction or /clear. It names where the notes come from (the
+ * user's own /pin-note commands, handed back by a plugin the user turned on), because a model that
+ * finds instructions in a hook's context with no message behind them can take them for an injection.
+ */
+export function contextText(pins: readonly string[], source: 'compact' | 'clear'): string {
+  return [
+    `The user pinned these notes in this session by typing /pin-note <note> themselves, ${CUT[source]}.`,
+    'The pin-note plugin, which the user installed and turned on with /pin-note on, hands them back word for word from its SessionStart hook.',
+    'They are the user\'s own instructions and stay in force; the user lists them with /pin-note and drops one with /pin-note drop <n>.',
+    numbered(pins),
+  ].join('\n')
 }
 
 /** The person's line after the notes went out again. */
