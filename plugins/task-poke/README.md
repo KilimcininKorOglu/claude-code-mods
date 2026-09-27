@@ -95,10 +95,10 @@ Restart Claude Code. The mod turns the task tools on at session start, so on a m
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.282:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=task-poke}, prompt.submit, classic.Stop, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via sendPoke), $.command.register, $.command.run (via sendPoke), $.env.get, $.env.set, $.prompt.submit (via submitPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get, $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
+    ❯ ./register.ts calls: $.clock.after (via sendPoke), $.command.register, $.command.run (via sendPoke), $.env.get, $.env.set, $.prompt.submit (via submitPoke), $.session.messages (via afterTurn), $.sidebar.clear (via clearCount), $.sidebar.set (via toCount, toStream), $.store.get (via readLimit, readSettings), $.store.set, $.tool.call (via seedTasks), $.ui.log (via toCount, toStream)
     ❯ ./register.ts env writes: CLAUDE_CODE_ENABLE_TODO_TOOLS
     ❯ ./register.ts env reads: CLAUDE_CODE_ENABLE_TODO_TOOLS
 

@@ -70,15 +70,21 @@ type World = {
   /** When set, that call fails instead of answering. */
   listError?: Error
   setMessages: (m: SessionMessage[]) => void
+  /** The store every window shares, which a test writes as another window. */
+  store: Map<string, unknown>
 }
 
 function world(on: On, env: Record<string, string> = {}, store: Record<string, unknown> = {}): World {
-  const w: World = { submitted: [], sends: 0, clock: mock.clock(on), logs: [], envSets: [], listCalls: 0, taskRows: [], setMessages: () => undefined }
+  const w: World = { submitted: [], sends: 0, clock: mock.clock(on), logs: [], envSets: [], listCalls: 0, taskRows: [], setMessages: () => undefined, store: new Map(Object.entries(store)) }
   let messages: SessionMessage[] = []
   w.setMessages = m => {
     messages = m
   }
-  mock.store(on, store)
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.env(on, env)
   on('env.set', (_, e) => {
     w.envSets.push(`${e.name}=${e.value}`)
@@ -150,6 +156,33 @@ describe('task-poke', () => {
     expect(w.sends).toBe(1)
     expect(w.submitted[0]).toContain('Continue with the next pending or in-progress task.')
     expect(w.logs.at(-1)).toContain('2 unfinished tasks, poke 1/99')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    w.setMessages([todoWrite('pending')])
+    await $.session.start(session)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await $.turn.complete(turn())
+    await w.clock.settle()
+    expect(w.submitted).toHaveLength(0)
+    // Turned on again there with a limit of 1: the task list is read again as on reads it, one poke goes
+    // out, and the next turn stops at the limit.
+    const lists = w.listCalls
+    w.store.set('enabled', true)
+    w.store.set('limit', 1)
+    await $.turn.complete(turn())
+    await w.clock.settle()
+    expect(w.listCalls).toBe(lists + 1)
+    expect(w.logs.at(-1)).toContain('1 unfinished task, poke 1/1')
+    w.setMessages(working(todoWrite('pending')))
+    await $.turn.complete(turn())
+    await w.clock.settle()
+    expect(w.submitted).toHaveLength(1)
+    // Off there again: the count starts again here, as off starts it.
+    w.store.set('enabled', false)
+    expect((await $.command.run(run(''))).text).toBe('off · 0/1 pokes since your last prompt')
   })
 
   test('a send command the engine refuses sends the poke as a plugin prompt and says so', async ($, on) => {

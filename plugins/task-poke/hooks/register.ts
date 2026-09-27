@@ -169,6 +169,33 @@ async function readLimit($: EngineInterface): Promise<number> {
   return typeof stored === 'number' && limitOf(String(stored)) !== undefined ? stored : DEFAULT_MAX_POKES
 }
 
+/** Starts the count of a new stretch: the person spoke, or the mod was turned on or off. */
+function resetCount(state: State): void {
+  state.pokes = 0
+  state.limitLogged = false
+  state.stalls = 0
+  state.stallLogged = false
+}
+
+/** What turning the mod on or off does: the count starts again, on reads the task list, off takes the count down. */
+async function followSwitch($: EngineInterface, state: State): Promise<void> {
+  resetCount(state)
+  if (state.enabled) await seedTasks($, state)
+  else await clearCount($)
+}
+
+/**
+ * Reads the on/off setting and the limit from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it. A switch flipped there does here what
+ * `on` and `off` do.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.max = await readLimit($)
+  if (state.enabled !== was) await followSwitch($, state)
+}
+
 /**
  * Reads the engine's own task list once, at the session's start, and keeps it as the list every later
  * turn is replayed over. A resumed session brings back tasks the transcript window no longer reaches,
@@ -227,23 +254,15 @@ export const register: Register = on => {
     stalls: 0, stallLogged: false, signature: '', background: 0,
   }
 
-  const resetCount = (): void => {
-    state.pokes = 0
-    state.limitLogged = false
-    state.stalls = 0
-    state.stallLogged = false
-  }
-
   on('session.start', async ($, e, next) => {
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.max = await readLimit($)
+    await readSettings($, state)
     // Claude Code offers TaskCreate and TodoWrite on some models only, and without them there is nothing
     // to count. Turn them on unless the user set the variable. It must be set before next(e).
     if (state.enabled && (await $.env.get('CLAUDE_CODE_ENABLE_TODO_TOOLS')) === undefined) {
       await $.env.set('CLAUDE_CODE_ENABLE_TODO_TOOLS', '1')
     }
     const r = await next(e)
-    resetCount()
+    resetCount(state)
     if (state.enabled) await seedTasks($, state)
     await $.command.register({
       name: 'task-poke',
@@ -256,12 +275,11 @@ export const register: Register = on => {
 
   on('command.run', { command: 'task-poke' }, async ($, e) => {
     const arg = String(e.args ?? '').trim()
+    await readSettings($, state)
     if (arg === 'on' || arg === 'off') {
       state.enabled = arg === 'on'
       await $.store.set(ENABLED_KEY, state.enabled)
-      resetCount()
-      if (state.enabled) await seedTasks($, state)
-      else await clearCount($)
+      await followSwitch($, state)
     } else if (arg.startsWith('limit')) {
       return { text: await setLimit($, state, arg.slice(5).trim()) }
     } else if (arg !== '' && arg !== 'status') {
@@ -273,7 +291,7 @@ export const register: Register = on => {
   // Only the origin is read. The prompt text passes through untouched. This hook never sees its own pokes.
   on('prompt.submit', async (_, e, next) => {
     const r = await next(e)
-    if (USER_ORIGINS.includes(e.origin.kind)) resetCount()
+    if (USER_ORIGINS.includes(e.origin.kind)) resetCount(state)
     return r
   })
 
@@ -286,7 +304,9 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || e.agentId !== undefined || e.reason !== 'answer') return r
+    if (e.agentId !== undefined || e.reason !== 'answer') return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     await afterTurn($, state)
     return r
   })
