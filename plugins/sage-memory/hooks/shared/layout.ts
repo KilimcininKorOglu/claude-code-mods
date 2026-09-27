@@ -11,7 +11,9 @@ export type Layout = {
   lockFile: string
   logFile: string
   globalDb: string
+  /** What `/sage-memory setup` installs: the embedding package under `node_modules`, and its model under `models`. */
   runtimeDir: string
+  modelsDir: string
 }
 
 /** The longest socket path `$.http.fetch` takes ("near 100 B at most"), below the OS limits too. */
@@ -26,6 +28,7 @@ export function layoutOf(dir: string): Layout {
     logFile: `${dir}/daemon.log`,
     globalDb: `${dir}/global.db`,
     runtimeDir: `${dir}/runtime`,
+    modelsDir: `${dir}/runtime/models`,
   }
 }
 

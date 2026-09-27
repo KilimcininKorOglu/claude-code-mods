@@ -1,13 +1,15 @@
 import { STATUSES, type FileMemories, type GatheredPage, type GraphEdge, type Memory, type Scope, type SearchHit, type Status } from '../hooks/shared/model.ts'
+import type { Embeddings } from './embeddings.ts'
 import { refused } from './errors.ts'
 import { fileMatches, groupFileMatches } from './for-file.ts'
+import { searchHybrid } from './hybrid.ts'
 import { listPage, storeStats, type ListOptions } from './listing.ts'
 import { opFor, placesOf, type Places } from './places.ts'
 import { findRelated, graphFor } from './related.ts'
 import { flag, flagOr, optionalCount, optionalKind, optionalScope, optionalString, optionalText, requiredString, statusList, stringList, type Body } from './request.ts'
 import { memoriesForPaths, relativePaths } from './retrieve.ts'
 import type { Route, Routes } from './routes.ts'
-import { EVERY_POLICY, interleave, searchStore, type Visibility } from './search.ts'
+import { EVERY_POLICY, interleave, type Visibility } from './search.ts'
 import type { Store, Stores } from './stores.ts'
 
 /**
@@ -28,17 +30,14 @@ function readerVisibility(body: Body, statuses: readonly Status[]): Visibility {
   return { statuses, policies: EVERY_POLICY, audienceScoped: true, sessionId: optionalString(body, 'sessionId'), allSessions: flag(body, 'allSessions') }
 }
 
-/** Both stores' hits merged rank by rank; with one channel, a hit's score is its place in the list. */
-function search(stores: Stores, body: Body): SearchHit[] {
+/** Both stores searched through the text index and, while embeddings are on, the vector channel too. */
+async function search(stores: Stores, embeddings: Embeddings, body: Body): Promise<SearchHit[]> {
   const places = placesOf(stores, body)
   const query = optionalText(body, 'query')
   const limit = optionalCount(body, 'limit', 100) ?? 20
   const visibility = readerVisibility(body, flag(body, 'includeStale') ? ['active', 'stale'] : ['active'])
-  const merged = interleave(searchStore(places.project.db, query, visibility, limit), searchStore(places.global.db, query, visibility, limit)).slice(0, limit)
-  return merged.map((memory, index) => {
-    const lexicalScore = merged.length <= 1 ? 1 : 1 - index / (merged.length - 1)
-    return { memory, lexicalScore, vectorScore: null, finalScore: lexicalScore, source: 'lexical' as const }
-  })
+  const semantic = await embeddings.semantic(query, [places.project, places.global])
+  return searchHybrid([places.project.db, places.global.db], query, visibility, limit, semantic)
 }
 
 function forPath(stores: Stores, body: Body): Memory[] {
@@ -127,11 +126,11 @@ function gather(stores: Stores, body: Body): GatheredPage {
   return { ...page, relations: pageRelations(places, scanned), relationsScanned: scanned.length }
 }
 
-export function readRoutes(stores: Stores): Routes {
+export function readRoutes(stores: Stores, embeddings: Embeddings): Routes {
   const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
   return {
-    '/memory/search': post(body => search(stores, body).map(hit => hit.memory)),
-    '/memory/explain': post(body => search(stores, body)),
+    '/memory/search': post(async body => (await search(stores, embeddings, body)).map(hit => hit.memory)),
+    '/memory/explain': post(body => search(stores, embeddings, body)),
     '/memory/for-path': post(body => forPath(stores, body)),
     '/memory/for-file': post(body => forFile(stores, body)),
     '/memory/graph': post(body => graph(stores, body)),

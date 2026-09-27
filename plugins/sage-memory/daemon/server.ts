@@ -3,6 +3,9 @@ import { chmodSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { layoutOf, type Layout } from '../hooks/shared/layout.ts'
 import { MAX_BODY_BYTES, PROTOCOL, type Hello, type ServerFile, type Status } from '../hooks/shared/protocol.ts'
+import { embedRoutes } from './embed-routes.ts'
+import { transformersRuntime, type Runtime } from './embedder.ts'
+import { createEmbeddings, type Embeddings } from './embeddings.ts'
 import { RequestError } from './errors.ts'
 import { inodeOf, readIfExists, writeAtomic } from './files.ts'
 import { authorized, parseBody, probe, readBody, send } from './http.ts'
@@ -11,6 +14,7 @@ import { log, messageOf } from './log.ts'
 import { readRoutes } from './read-routes.ts'
 import { remindRoutes } from './remind-routes.ts'
 import { memoryRoutes, type Route, type RouteInput, type Routes } from './routes.ts'
+import { createSetup, type Setup } from './setup.ts'
 import { createStores, type Stores } from './stores.ts'
 
 export type ServerOptions = {
@@ -22,6 +26,8 @@ export type ServerOptions = {
   protocol?: number
   /** How long the election waits for a live process that holds the lock. */
   lockWaitMs?: number
+  /** The embedding runtime: transformers.js under `runtime/` unless a test gives its own. */
+  runtime?: Runtime
 }
 
 export type Started =
@@ -36,6 +42,8 @@ type State = {
   hello: Hello
   token: string
   stores: Stores
+  embeddings: Embeddings
+  setup: Setup
   server: Server
   /** The inode of the socket this daemon listens on, so it removes that socket file and no other. */
   ino: number | undefined
@@ -56,7 +64,7 @@ const DRAIN_MS = 5000
 
 function statusOf(state: State): Status {
   const { pid, version, protocol, startedAt } = state.hello
-  return { pid, version, protocol, uptimeMs: Date.now() - Date.parse(startedAt), stores: state.stores.names() }
+  return { pid, version, protocol, uptimeMs: Date.now() - Date.parse(startedAt), stores: state.stores.names(), embedding: state.embeddings.state() }
 }
 
 function routesOf(state: State): Routes {
@@ -68,9 +76,10 @@ function routesOf(state: State): Routes {
     '/hello': { method: 'GET', auth: false, handle: () => state.hello },
     '/status': { method: 'POST', auth: true, handle: () => statusOf(state) },
     '/shutdown': { method: 'POST', auth: true, handle: shutdown },
-    ...memoryRoutes(state.stores),
-    ...readRoutes(state.stores),
-    ...remindRoutes(state.stores),
+    ...memoryRoutes(state.stores, state.embeddings),
+    ...readRoutes(state.stores, state.embeddings),
+    ...remindRoutes(state.stores, state.embeddings),
+    ...embedRoutes(state.embeddings, state.setup),
   }
 }
 
@@ -106,9 +115,13 @@ async function dispatch(state: State, routes: Routes, req: IncomingMessage, res:
   }
 }
 
+/** The idle close waits while setup or an embedding fill still runs, since no request marks that work. */
 function armIdle(state: State): void {
   clearTimeout(state.idle)
-  state.idle = setTimeout(() => void close(state, 'idle'), state.options.idleMs)
+  state.idle = setTimeout(() => {
+    if (state.setup.running() || state.embeddings.busy()) armIdle(state)
+    else void close(state, 'idle')
+  }, state.options.idleMs)
 }
 
 function onRequest(state: State, routes: Routes, req: IncomingMessage, res: ServerResponse): void {
@@ -149,6 +162,8 @@ async function shutDown(state: State, reason: string): Promise<void> {
   const cut = setTimeout(() => state.server.closeAllConnections(), DRAIN_MS)
   await drained
   clearTimeout(cut)
+  await state.setup.stop()
+  await state.embeddings.close()
   state.stores.closeAll()
   log('closed')
 }
@@ -209,7 +224,11 @@ function newState(layout: Layout, options: ServerOptions): State {
     startedAt: new Date().toISOString(),
   }
   const token = randomBytes(16).toString('hex')
-  return { layout, options, hello, token, stores: createStores(layout.dir), server: createServer(), ino: undefined, inflight: 0, done: deferred() }
+  const stores = createStores(layout.dir)
+  const runtime = options.runtime ?? transformersRuntime(layout)
+  const embeddings = createEmbeddings(runtime)
+  const setup = createSetup({ dir: layout.dir, runtime, embeddings, stores })
+  return { layout, options, hello, token, stores, embeddings, setup, server: createServer(), ino: undefined, inflight: 0, done: deferred() }
 }
 
 async function serve(layout: Layout, options: ServerOptions): Promise<Started> {

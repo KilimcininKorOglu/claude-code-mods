@@ -1,8 +1,9 @@
 import type { ServerResponse } from 'node:http'
-import type { AuditEntry, BackfillFilter, Candidate, Decision, ProposeInput, RememberInput, UpdatePatch } from '../hooks/shared/model.ts'
+import type { AuditEntry, BackfillFilter, Candidate, Decision, Memory, ProposeInput, RememberInput, UpdatePatch } from '../hooks/shared/model.ts'
 import { accept, listCandidates, propose, reject, resolve } from './candidates.ts'
 import { markReminded } from './contexts.ts'
 import { recordReminder, recordUse } from './counters.ts'
+import type { Embeddings } from './embeddings.ts'
 import type { Op } from './op.ts'
 import { candidateStore, memoryStore, opFor, placesOf, storeForScope, type Places } from './places.ts'
 import { backfill, recoverMemory } from './recover.ts'
@@ -26,6 +27,15 @@ function run<T>(stores: Stores, body: Body, pick: (places: Places) => Store, wor
   return transaction(store, () => work(opFor(places, store)))
 }
 
+/** Runs `work` as `run` does, then embeds the memory it answers, after the commit and outside the transaction. */
+async function write<T extends { memory?: Memory }>(stores: Stores, embeddings: Embeddings, body: Body, pick: (places: Places) => Store, work: (op: Op) => T): Promise<T> {
+  const places = placesOf(stores, body)
+  const store = pick(places)
+  const result = await transaction(store, () => work(opFor(places, store)))
+  if (result.memory !== undefined) await embeddings.afterWrite(store, [result.memory])
+  return result
+}
+
 /** Runs `work` on each store in turn, the project's first. */
 async function both<T>(stores: Stores, body: Body, work: (op: Op) => T): Promise<{ project: T; user: T }> {
   const places = placesOf(stores, body)
@@ -38,16 +48,15 @@ function sessionOf(body: Body): string | undefined {
   return optionalString(body, 'sessionId')
 }
 
-export function memoryRoutes(stores: Stores): Routes {
+export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
   const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
   const input = <T>(body: Body): T => requiredObject<T>(body, 'input')
+  const byId = (body: Body): ((places: Places) => Store) => places => memoryStore(places, requiredString(body, 'id'))
   return {
-    '/memory/remember': post(body => run(stores, body, places => storeForScope(places, input<RememberInput>(body).scope), op => remember(op, input<RememberInput>(body)))),
-    '/memory/get': post(body => run(stores, body, places => memoryStore(places, requiredString(body, 'id')), op => readMemory(op.store.db, requiredString(body, 'id')))),
+    '/memory/remember': post(body => write(stores, embeddings, body, places => storeForScope(places, input<RememberInput>(body).scope), op => remember(op, input<RememberInput>(body)))),
+    '/memory/get': post(body => run(stores, body, byId(body), op => readMemory(op.store.db, requiredString(body, 'id')))),
     '/memory/update': post(body =>
-      run(stores, body, places => memoryStore(places, requiredString(body, 'id')), op =>
-        updateMemory(op, { id: requiredString(body, 'id'), patch: requiredObject<UpdatePatch>(body, 'patch'), sessionId: sessionOf(body) }),
-      ),
+      write(stores, embeddings, body, byId(body), op => updateMemory(op, { id: requiredString(body, 'id'), patch: requiredObject<UpdatePatch>(body, 'patch'), sessionId: sessionOf(body) })),
     ),
     '/memory/delete': post(body =>
       run(stores, body, places => memoryStore(places, requiredString(body, 'id')), op => ({
@@ -63,11 +72,11 @@ export function memoryRoutes(stores: Stores): Routes {
       return run(stores, body, places => storeForScope(places, scope), op => clear(op, { scope, force: flag(body, 'force') }))
     }),
     '/memory/recover': post(body =>
-      run(stores, body, places => memoryStore(places, requiredString(body, 'id')), op => recoverMemory(op, { id: requiredString(body, 'id'), reason: optionalString(body, 'reason'), sessionId: sessionOf(body) })),
+      write(stores, embeddings, body, byId(body), op => recoverMemory(op, { id: requiredString(body, 'id'), reason: optionalString(body, 'reason'), sessionId: sessionOf(body) })),
     ),
     '/memory/backfill': post(body => both(stores, body, op => backfill(op, { filter: optionalObject<BackfillFilter>(body, 'filter'), apply: flag(body, 'apply') }))),
     ...counterRoutes(stores, post),
-    ...candidateRoutes(stores, post),
+    ...candidateRoutes(stores, embeddings, post),
     '/audit': post(async body => {
       const limit = optionalCount(body, 'limit', 1000) ?? 50
       const logs = await both(stores, body, op => readAudit(op.store.db, limit))
@@ -105,7 +114,7 @@ function counterRoutes(stores: Stores, post: Post): Routes {
   }
 }
 
-function candidateRoutes(stores: Stores, post: Post): Routes {
+function candidateRoutes(stores: Stores, embeddings: Embeddings, post: Post): Routes {
   const byId = (body: Body): ((places: Places) => Store) => places => candidateStore(places, requiredString(body, 'id'))
   const proposeStore = (body: Body, places: Places): Store => {
     const proposal = requiredObject<ProposeInput>(body, 'input')
@@ -117,7 +126,7 @@ function candidateRoutes(stores: Stores, post: Post): Routes {
       return [...lists.project, ...lists.user].sort((a: Candidate, b: Candidate) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0))
     }),
     '/candidates/propose': post(body => run(stores, body, places => proposeStore(body, places), op => propose(op, requiredObject<ProposeInput>(body, 'input')))),
-    '/candidates/accept': post(body => run(stores, body, byId(body), op => accept(op, requiredString(body, 'id')))),
+    '/candidates/accept': post(body => write(stores, embeddings, body, byId(body), op => accept(op, requiredString(body, 'id')))),
     '/candidates/reject': post(body => run(stores, body, byId(body), op => ({ rejected: reject(op, { id: requiredString(body, 'id'), reason: optionalString(body, 'reason') ?? 'rejected' }) }))),
     '/candidates/resolve': post(body =>
       run(stores, body, byId(body), op => resolve(op, { id: requiredString(body, 'id'), decision: requiredString(body, 'decision') as Decision, reason: optionalString(body, 'reason') })),

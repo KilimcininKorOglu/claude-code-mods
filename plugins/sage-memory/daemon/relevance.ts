@@ -1,4 +1,4 @@
-import type { Anchor, Kind, Memory, Persistence } from '../hooks/shared/model.ts'
+import type { Anchor, Kind, Memory, Persistence, SearchHit } from '../hooks/shared/model.ts'
 import { tokenize } from '../hooks/shared/text.ts'
 import { clamp01 } from './rules.ts'
 
@@ -163,6 +163,41 @@ export function memoryQueryRelevance(memory: Memory, query: string): Relevance {
   if (matches.matched.length === 0) return NONE
   const tier = TIERS.find(candidate => candidate.applies(matches))
   return tier ? { strength: tier.strength(matches), reasons: evidenceOf(matches) } : NONE
+}
+
+/**
+ * The cosine at which a vector hit is as strong as the relation floor. Measured on the
+ * multilingual model with 147 memory texts, 15 targeted and 15 unrelated Turkish questions: from
+ * 0.50 no unrelated question found a memory, and 8 of the 15 targeted ones found their own.
+ */
+export const SEMANTIC_PIVOT_COSINE = 0.5
+/**
+ * The cosine at which a vector hit is as strong as a prompt reminder's relevance floor: 9 of the
+ * 15 targeted questions reach it with their own memory, and 3 of the 15 unrelated ones with some
+ * memory. A vector hit below it can pass no reminder gate.
+ */
+export const SEMANTIC_FLOOR_COSINE = 0.46
+const SEMANTIC_SLOPE = (RELATION_FLOOR - TURN_MIN_RELEVANCE) / (SEMANTIC_PIVOT_COSINE - SEMANTIC_FLOOR_COSINE)
+/** Semantics never claims the certainty of an exact anchor match. */
+const SEMANTIC_MAX_STRENGTH = 0.94
+
+/**
+ * A vector hit's cosine on the scale every channel shares: the line through the floor (0.62) and
+ * the pivot (0.85), capped below an exact anchor. SAGE's line was calibrated for MiniLM, whose
+ * cosines run higher; on the multilingual model it would put 0.62 at a cosine of 0.155, where
+ * unrelated questions already find memories.
+ */
+export function memorySemanticRelevance(cosine: number | null): Relevance {
+  if (cosine === null || !Number.isFinite(cosine)) return NONE
+  const strength = Math.min(SEMANTIC_MAX_STRENGTH, RELATION_FLOOR + (cosine - SEMANTIC_PIVOT_COSINE) * SEMANTIC_SLOPE)
+  return strength > 0 ? { strength, reasons: [`query:semantic-cosine:${cosine.toFixed(2)}`] } : NONE
+}
+
+/** A search hit's relevance: the stronger of its lexical and semantic evidence, with the reasons of both. */
+export function hitRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string): Relevance {
+  const lexical = memoryQueryRelevance(hit.memory, query)
+  const semantic = memorySemanticRelevance(hit.vectorScore)
+  return { strength: Math.max(lexical.strength, semantic.strength), reasons: [...lexical.reasons, ...semantic.reasons] }
 }
 
 function structuralKeys(memory: Memory): Set<string> {

@@ -5,10 +5,12 @@ import { existsSync, readFileSync, renameSync, rmSync, statSync, utimesSync, wri
 import { createServer, type Server, type Socket } from 'node:net'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { layoutOf } from '../../hooks/shared/layout.ts'
 import { MAX_BODY_BYTES, PROTOCOL } from '../../hooks/shared/protocol.ts'
 import { call, probe } from '../http.ts'
 import { startServer, type Started } from '../server.ts'
+import { fakeRuntime } from './fake-runtime.ts'
 import { cleanUp, serverFileOf, tempDir, waitFor } from './support.ts'
 
 after(cleanUp)
@@ -208,6 +210,23 @@ describe('daemon server', () => {
     assert.equal(existsSync(layoutOf(dir).socket), false)
     assert.equal(existsSync(layoutOf(dir).serverFile), false)
     assert.equal((await probe(layoutOf(dir).socket, 1000)).state, 'absent')
+  })
+
+  test('the idle close waits while setup runs, and comes once it ended', async () => {
+    const dir = tempDir()
+    const fake = fakeRuntime(false)
+    let release = (): void => undefined
+    fake.hold = new Promise(resolve => {
+      release = resolve
+    })
+    const started = await startServer({ dir, version: VERSION, idleMs: 150, runtime: fake })
+    if (!started.owned) throw new Error(`the daemon of pid ${started.hello.pid} kept the socket`)
+    assert.equal((await post(dir, '/embed/setup', started.token)).status, 200)
+    await sleep(500)
+    assert.deepEqual([existsSync(layoutOf(dir).socket), fake.loads.length], [true, 1], 'the daemon is still up while the model downloads')
+    release()
+    await started.closed
+    assert.equal(existsSync(layoutOf(dir).socket), false)
   })
 
   test('/shutdown answers first, then closes the daemon', async () => {

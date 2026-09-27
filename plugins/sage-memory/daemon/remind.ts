@@ -1,22 +1,14 @@
-import type { Memory, Ranked, Ranking, Rejection, Status, SubagentRanking } from '../hooks/shared/model.ts'
+import type { Memory, Ranked, Ranking, Rejection, SearchHit, Status, SubagentRanking } from '../hooks/shared/model.ts'
 import { textKey } from '../hooks/shared/text.ts'
 import { remindedIn } from './contexts.ts'
+import { searchHybrid } from './hybrid.ts'
 import type { Op } from './op.ts'
 import { descending } from './order.ts'
 import { findRelated } from './related.ts'
-import {
-  MIN_IMPORTANCE,
-  MIN_SCORE,
-  RELATION_FLOOR,
-  TURN_MIN_RELEVANCE,
-  memoryQueryRelevance,
-  memoryStructuralRelevance,
-  pathAnchorRelation,
-  reminderScore,
-  turnScore,
-} from './relevance.ts'
+import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
 import { alwaysMemories, memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
-import { REMINDED_POLICY, interleave, searchStore, type Visibility } from './search.ts'
+import { REMINDED_POLICY, type Visibility } from './search.ts'
+import type { SemanticQuery } from './vectors.ts'
 
 /**
  * Ranking the memories a reminder may carry, for the three moments a reminder goes out: after a
@@ -25,8 +17,11 @@ import { REMINDED_POLICY, interleave, searchStore, type Visibility } from './sea
  * it sent. Ported from SAGE's tool-result and turn-context middlewares.
  */
 
-/** The two stores a reminder reads, the session it is for, and the loop whose context it goes to. */
-export type Readers = { project: Op; user: Op; sessionId?: string; loop?: string }
+/**
+ * The two stores a reminder reads, the session it is for, the loop whose context it goes to, and
+ * the vector of its query while embeddings are on.
+ */
+export type Readers = { project: Op; user: Op; sessionId?: string; loop?: string; semantic?: SemanticQuery }
 
 type Found = { memory: Memory; op: Op; relationStrength: number; reasons: string[] }
 
@@ -131,15 +126,22 @@ function pathChannel(readers: Readers, request: ToolsRequest, statuses: readonly
   }
 }
 
-/** Memories the query finds in either store, each weighed by the evidence the query holds for it. */
+/** The store a memory lives in: the user scope in the global store, every other scope in the project's. */
+function opOf(readers: Readers, memory: Memory): Op {
+  return memory.scope === 'user' ? readers.user : readers.project
+}
+
+function hitsFor(readers: Readers, query: string, visibility: Visibility, limit: number): SearchHit[] {
+  return searchHybrid([readers.project.store.db, readers.user.store.db], query, visibility, limit, readers.semantic)
+}
+
+/** Memories the query finds in either store, each weighed by the stronger of its lexical and semantic evidence. */
 function queryChannel(readers: Readers, request: ToolsRequest, found: Map<string, Found>): void {
   if (request.query.trim() === '') return
-  const limit = Math.max(request.limit * 8, 64)
-  for (const op of [readers.project, readers.user]) {
-    for (const memory of searchStore(op.store.db, request.query, visibilityFor(readers, ['active']), limit)) {
-      const relevance = memoryQueryRelevance(memory, request.query)
-      addFound(found, { memory, op, relationStrength: relevance.strength, reasons: relevance.reasons.length > 0 ? relevance.reasons : ['query:insufficient-evidence'] })
-    }
+  for (const hit of hitsFor(readers, request.query, visibilityFor(readers, ['active']), Math.max(request.limit * 8, 64))) {
+    const relevance = hitRelevance(hit, request.query)
+    const reasons = relevance.reasons.length > 0 ? relevance.reasons : ['query:insufficient-evidence']
+    addFound(found, { memory: hit.memory, op: opOf(readers, hit.memory), relationStrength: relevance.strength, reasons })
   }
 }
 
@@ -188,13 +190,11 @@ export type PromptRequest = { query: string; limit: number }
  */
 export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking {
   if (request.query.trim() === '') return { candidates: [], rejected: [] }
-  const visibility = visibilityFor(readers, ['active'])
-  const hits = interleave(searchStore(readers.project.store.db, request.query, visibility, request.limit), searchStore(readers.user.store.db, request.query, visibility, request.limit))
-  const ranked = hits
-    .filter(memory => memory.kind !== 'memory_review')
-    .map(memory => {
-      const relevance = memoryQueryRelevance(memory, request.query)
-      return { memory, relationStrength: relevance.strength, score: turnScore(memory, relevance.strength), reasons: relevance.reasons }
+  const ranked = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2)
+    .filter(hit => hit.memory.kind !== 'memory_review')
+    .map(hit => {
+      const relevance = hitRelevance(hit, request.query)
+      return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
     })
     .sort(byScore)
   const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])

@@ -2,11 +2,14 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { layoutOf } from '../../hooks/shared/layout.ts'
 import type { AuditEntry, BackfillReport, Candidate, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult } from '../../hooks/shared/model.ts'
-import type { ProjectRef } from '../../hooks/shared/protocol.ts'
+import type { EmbedStatus, ProjectRef, SetupJob, Status } from '../../hooks/shared/protocol.ts'
+import type { Runtime } from '../embedder.ts'
 import { call } from '../http.ts'
 import { startServer } from '../server.ts'
+import { fakeRuntime, toward } from './fake-runtime.ts'
 import { cleanUp, tempDir } from './support.ts'
 
 after(cleanUp)
@@ -34,10 +37,11 @@ function projectIn(base: string, name: string): ProjectRef {
   return { key: `${name}-0000aaaa`, name, root, commonDir: join(root, '.git') }
 }
 
-async function withDaemon(work: (daemon: Daemon) => Promise<void>): Promise<void> {
+/** A daemon for `work`; without a runtime it reads the real one from its own empty directory, so embeddings are off. */
+async function withDaemon(work: (daemon: Daemon) => Promise<void>, runtime?: Runtime): Promise<void> {
   const base = tempDir()
   const dir = join(base, 'data')
-  const started = await startServer({ dir, version: '9.9.9', idleMs: 60_000 })
+  const started = await startServer({ dir, version: '9.9.9', idleMs: 60_000, runtime })
   if (!started.owned) throw new Error(`the daemon of pid ${started.hello.pid} kept the socket`)
   const ask = async (path: string, body: object): Promise<Reply> => {
     const answer = await call(layoutOf(dir).socket, path, { method: 'POST', token: started.token, body: JSON.stringify(body), timeoutMs: 5000 })
@@ -236,4 +240,51 @@ describe('candidate routes', () => {
       assert.equal((await d.value<Memory>('/memory/get', { project: d.beta, id: accepted.memory.id })).text, PREFERENCE)
       assert.deepEqual(await d.value('/candidates/list', { project: d.alpha }), [], 'the accepted proposal is no longer pending')
     }))
+})
+
+/** Polls `/embed/status` as the hooks module does, until the setup job ends. */
+async function setupEnded(d: Daemon): Promise<EmbedStatus> {
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const status = await d.value<EmbedStatus>('/embed/status', {})
+    if (status.setup.state !== 'running') return status
+    if (Date.now() >= deadline) throw new Error('the setup job did not end in 5000 ms')
+    await sleep(20)
+  }
+}
+
+describe('embedding routes', () => {
+  test('without the runtime embeddings are off, and a search answers from the text index alone', () =>
+    withDaemon(async d => {
+      assert.deepEqual(await d.value<EmbedStatus>('/embed/status', {}), { embedding: { state: 'off' }, setup: { state: 'idle' } })
+      assert.deepEqual((await d.value<Status>('/status', {})).embedding, { state: 'off' })
+      await d.remember(d.alpha, { text: MIGRATIONS })
+      assert.deepEqual((await d.value<SearchHit[]>('/memory/explain', { project: d.alpha, query: 'migrations' })).map(hit => hit.source), ['lexical'])
+    }))
+
+  test('a remembered memory is embedded at once, and a question with no word in common finds it', () => {
+    const fake = fakeRuntime()
+    const question = 'veritabanı şemasını ne zaman güncellerim'
+    fake.vectors.set(MIGRATIONS, toward(0, 1))
+    fake.vectors.set(question, toward(0, 0.62))
+    return withDaemon(async d => {
+      const memory = await d.remember(d.alpha, { text: MIGRATIONS })
+      const hits = await d.value<SearchHit[]>('/memory/explain', { project: d.alpha, query: question })
+      assert.deepEqual(hits.map(hit => [hit.memory.id, hit.source, hit.vectorScore?.toFixed(2)]), [[memory.id, 'vector', '0.62']])
+      assert.deepEqual((await d.value<EmbedStatus>('/embed/status', {})).embedding, { state: 'ready', modelId: 'fake/model', dims: 16 })
+    }, fake)
+  })
+
+  test('setup runs as a job the status route reports, and embeds what was written before it', () => {
+    const fake = fakeRuntime(false)
+    return withDaemon(async d => {
+      await d.remember(d.alpha, { text: MIGRATIONS })
+      await d.remember(d.alpha, { text: PREFERENCE, scope: 'user' })
+      const started = await d.value<SetupJob>('/embed/setup', {})
+      assert.equal(started.state, 'running')
+      const status = await setupEnded(d)
+      assert.deepEqual([status.setup.state, status.setup.state === 'done' && status.setup.indexed], ['done', 2])
+      assert.deepEqual(status.embedding, { state: 'ready', modelId: 'fake/model', dims: 16 })
+    }, fake)
+  })
 })
