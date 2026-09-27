@@ -16,7 +16,7 @@ export type Chair = { label: string; via: 'fork' | 'complete'; state: ChairState
 export type Run = { id: number; question: string; startedAt: number; seats: Seat[]; chair: Chair; verdict?: string; endedAt?: number }
 
 /** A sidebar line, as the sidebar contract spells it; kept here so this file stays free of `$`. */
-export type Kind = 'ok' | 'warn' | 'error' | 'dim'
+export type Kind = 'ok' | 'warn' | 'error' | 'dim' | 'info'
 export type Part = { text: string; kind?: Kind }
 export type Line = { text: string; kind?: Kind; parts?: readonly Part[] }
 
@@ -47,10 +47,10 @@ function seatTail(s: Seat): string {
 
 /**
  * The model's colour by family, as session-watch and subagent-ledger give it: opus red, fable yellow,
- * sonnet green, haiku faint; a Gemini model has none.
+ * sonnet green, haiku faint, and the whole Gemini family blue.
  */
 function modelTone(label: string): Kind | undefined {
-  const families: [RegExp, Kind][] = [[/opus/i, 'error'], [/fable/i, 'warn'], [/sonnet/i, 'ok'], [/haiku/i, 'dim']]
+  const families: [RegExp, Kind][] = [[/opus/i, 'error'], [/fable/i, 'warn'], [/sonnet/i, 'ok'], [/haiku/i, 'dim'], [/^(?:gemini|gemma)-/i, 'info']]
   return families.find(([family]) => family.test(label))?.[1]
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "council",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Asks a council of models about a hard problem, when the model calls its tool or you run /council <question>: Claude models, and Gemini models when gemini-core has a key, answer in parallel, and the model of the session writes one verdict from their answers. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
