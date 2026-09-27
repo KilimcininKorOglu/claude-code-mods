@@ -45,8 +45,23 @@ function seatTail(s: Seat): string {
   return s.why === undefined ? '' : `: ${s.why}`
 }
 
+/**
+ * The model's colour by family, as session-watch and subagent-ledger give it: opus red, fable yellow,
+ * sonnet green, haiku faint; a Gemini model has none.
+ */
+function modelTone(label: string): Kind | undefined {
+  const families: [RegExp, Kind][] = [[/opus/i, 'error'], [/fable/i, 'warn'], [/sonnet/i, 'ok'], [/haiku/i, 'dim']]
+  return families.find(([family]) => family.test(label))?.[1]
+}
+
+/** A model's label as a part, coloured by its family. */
+function modelPart(label: string): Part {
+  const kind = modelTone(label)
+  return kind === undefined ? { text: label } : { text: label, kind }
+}
+
 function seatLine(s: Seat): Line {
-  return line([{ text: `${s.label} · ${s.via} · ` }, { text: s.state, kind: SEAT_KIND[s.state] }, { text: seatTail(s) }])
+  return line([modelPart(s.label), { text: ` · ${s.via} · ` }, { text: s.state, kind: SEAT_KIND[s.state] }, { text: seatTail(s) }])
 }
 
 const CHAIR_WORD: Record<ChairState, { text: string; kind: Kind }> = {
@@ -59,7 +74,7 @@ const CHAIR_WORD: Record<ChairState, { text: string; kind: Kind }> = {
 function chairLine(c: Chair): Line {
   const word = CHAIR_WORD[c.state]
   const tail = c.state === 'answered' ? ` ${secs(c.ms ?? 0)}` : c.why === undefined ? '' : `: ${c.why}`
-  return line([{ text: `chair · ${c.label} · ${c.via} · ` }, word, { text: tail }])
+  return line([{ text: 'chair · ' }, modelPart(c.label), { text: ` · ${c.via} · ` }, word, { text: tail }])
 }
 
 function headLine(run: Run, now: number): Line {
