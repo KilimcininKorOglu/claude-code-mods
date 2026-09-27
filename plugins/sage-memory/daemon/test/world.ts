@@ -5,6 +5,7 @@ import type { Memory, RememberInput, RememberResult } from '../../hooks/shared/m
 import type { ProjectRef } from '../../hooks/shared/protocol.ts'
 import type { Op } from '../op.ts'
 import { remember } from '../remember.ts'
+import type { Readers } from '../remind.ts'
 import { readMemory, sql } from '../rows.ts'
 import { createStores, transaction, type Store, type Stores } from '../stores.ts'
 import { tempDir } from './support.ts'
@@ -21,6 +22,10 @@ export type World = {
   global: Store
   /** Runs `work` in one transaction of `store` (the project's by default). */
   run: <T>(work: (op: Op) => T, store?: Store) => Promise<T>
+  /** An operation for a read, outside any transaction. */
+  op: (store?: Store) => Op
+  /** Both stores as a reminder reads them. */
+  readers: (sessionId?: string, loop?: string) => Readers
   remember: (input: RememberInput, store?: Store) => Promise<RememberResult>
   read: (id: string, store?: Store) => Memory
   edges: (store?: Store) => string[]
@@ -37,10 +42,13 @@ export function world(): World {
   const project = stores.project(ref)
   const global = stores.global()
   let tick = Date.parse('2026-09-01T00:00:00.000Z')
-  const run = <T>(work: (op: Op) => T, store: Store = project): Promise<T> => {
+  const op = (store: Store = project): Op => {
     tick += 1000
-    const now = new Date(tick).toISOString()
-    return transaction(store, () => work({ store, root: store === global ? undefined : root, now }))
+    return { store, root: store === global ? undefined : root, now: new Date(tick).toISOString() }
+  }
+  const run = <T>(work: (op: Op) => T, store: Store = project): Promise<T> => {
+    const next = op(store)
+    return transaction(store, () => work(next))
   }
   const read = (id: string, store: Store = project): Memory => {
     const memory = readMemory(store.db, id)
@@ -57,7 +65,9 @@ export function world(): World {
     project,
     global,
     run,
-    remember: (input, store) => run(op => remember(op, input), store),
+    op,
+    readers: (sessionId, loop) => ({ project: op(project), user: op(global), sessionId, loop }),
+    remember: (input, store) => run(next => remember(next, input), store),
     read,
     edges,
     close: () => stores.closeAll(),

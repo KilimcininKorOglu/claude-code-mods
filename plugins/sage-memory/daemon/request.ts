@@ -1,4 +1,5 @@
 import { isProjectKey } from '../hooks/shared/layout.ts'
+import { KINDS, SCOPES, STATUSES, type Kind, type Scope, type Status } from '../hooks/shared/model.ts'
 import type { ProjectRef } from '../hooks/shared/protocol.ts'
 import { refused } from './errors.ts'
 
@@ -12,18 +13,31 @@ export function requiredString(body: Body, key: string): string {
   return value
 }
 
-export function optionalString(body: Body, key: string): string | undefined {
+/** The field `key`, undefined while the body leaves it out; a value `is` refuses is refused as not `expected`. */
+function given<T>(body: Body, key: string, is: (value: unknown) => value is T, expected: string): T | undefined {
   const value = body[key]
-  if (value === undefined || value === null) return undefined
-  if (typeof value !== 'string') throw refused(`${key} must be a string`)
+  if (value === undefined) return undefined
+  if (!is(value)) throw refused(`${key} must be ${expected}`)
   return value
+}
+
+const isString = (value: unknown): value is string => typeof value === 'string'
+
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean'
+
+/** A string field; a null reads as left out too. */
+export function optionalString(body: Body, key: string): string | undefined {
+  return body[key] === null ? undefined : given(body, key, isString, 'a string')
 }
 
 /** True only for a literal `true`: a flag is never set by accident. */
 export function flag(body: Body, key: string): boolean {
-  const value = body[key]
-  if (value !== undefined && typeof value !== 'boolean') throw refused(`${key} must be true or false`)
-  return value === true
+  return flagOr(body, key, false)
+}
+
+/** A flag that holds `fallback` while the body leaves it out. */
+export function flagOr(body: Body, key: string, fallback: boolean): boolean {
+  return given(body, key, isBoolean, 'true or false') ?? fallback
 }
 
 export function requiredObject<T>(body: Body, key: string): T {
@@ -43,10 +57,37 @@ export function stringList(body: Body, key: string): string[] {
 }
 
 export function optionalCount(body: Body, key: string, max: number): number | undefined {
-  const value = body[key]
-  if (value === undefined) return undefined
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > max) throw refused(`${key} must be a whole number from 1 to ${max}`)
-  return value
+  const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= max
+  return given(body, key, isCount, `a whole number from 1 to ${max}`)
+}
+
+/** A text field that may be empty, such as a query that lists everything. */
+export function optionalText(body: Body, key: string): string {
+  return optionalString(body, key) ?? ''
+}
+
+function oneOf<T extends string>(values: readonly T[], value: string, key: string): T {
+  if (!(values as readonly string[]).includes(value)) throw refused(`${key} must be one of: ${values.join(', ')}`)
+  return value as T
+}
+
+function optionalChoice<T extends string>(body: Body, key: string, values: readonly T[]): T | undefined {
+  const value = optionalString(body, key)
+  return value === undefined ? undefined : oneOf(values, value, key)
+}
+
+export function optionalScope(body: Body): Scope | undefined {
+  return optionalChoice(body, 'scope', SCOPES)
+}
+
+export function optionalKind(body: Body): Kind | undefined {
+  return optionalChoice(body, 'kind', KINDS)
+}
+
+/** A list of statuses, each a known one; absent answers the fallback. */
+export function statusList(body: Body, key: string, fallback: readonly Status[]): Status[] {
+  if (body[key] === undefined) return [...fallback]
+  return stringList(body, key).map(status => oneOf(STATUSES, status, key))
 }
 
 /** The project a request is about; its key names the store directory and its root anchors paths. */

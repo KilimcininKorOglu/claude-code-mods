@@ -8,6 +8,8 @@ import { inodeOf, readIfExists, writeAtomic } from './files.ts'
 import { authorized, parseBody, probe, readBody, send } from './http.ts'
 import { takeLock } from './lock.ts'
 import { log, messageOf } from './log.ts'
+import { readRoutes } from './read-routes.ts'
+import { remindRoutes } from './remind-routes.ts'
 import { memoryRoutes, type Route, type RouteInput, type Routes } from './routes.ts'
 import { createStores, type Stores } from './stores.ts'
 
@@ -67,6 +69,8 @@ function routesOf(state: State): Routes {
     '/status': { method: 'POST', auth: true, handle: () => statusOf(state) },
     '/shutdown': { method: 'POST', auth: true, handle: shutdown },
     ...memoryRoutes(state.stores),
+    ...readRoutes(state.stores),
+    ...remindRoutes(state.stores),
   }
 }
 

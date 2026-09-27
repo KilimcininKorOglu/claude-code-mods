@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
+import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
 import { isProjectKey, layoutOf, projectDirOf } from '../hooks/shared/layout.ts'
 import type { ProjectRef } from '../hooks/shared/protocol.ts'
 import { writeAtomic } from './files.ts'
@@ -25,11 +25,17 @@ export type Stores = {
   names: () => string[]
 }
 
-/** Opens a database file, sets the pragmas and brings its schema up to date. */
+/** SQLite's own `lower()` folds ASCII alone; a listing filter compares text the way JavaScript folds it. */
+function unicodeLower(value: SQLOutputValue): SQLInputValue {
+  return typeof value === 'string' ? value.normalize('NFKC').toLowerCase() : value
+}
+
+/** Opens a database file, sets the pragmas, adds `unicode_lower`, and brings its schema up to date. */
 export function openDatabase(file: string): DatabaseSync {
   const db = new DatabaseSync(file)
   try {
     applyPragmas(db)
+    db.function('unicode_lower', { deterministic: true }, unicodeLower)
     migrate(db)
   } catch (err) {
     db.close()

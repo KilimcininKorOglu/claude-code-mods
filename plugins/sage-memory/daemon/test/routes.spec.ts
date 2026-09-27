@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import { layoutOf } from '../../hooks/shared/layout.ts'
-import type { AuditEntry, BackfillReport, Candidate, Memory, RememberResult, Resolution, UpdateResult } from '../../hooks/shared/model.ts'
+import type { AuditEntry, BackfillReport, Candidate, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult } from '../../hooks/shared/model.ts'
 import type { ProjectRef } from '../../hooks/shared/protocol.ts'
 import { call } from '../http.ts'
 import { startServer } from '../server.ts'
@@ -172,6 +172,45 @@ describe('what a request is refused for', () => {
       const recovered = await d.value<{ memory: Memory; noop: boolean }>('/memory/recover', { project: d.alpha, id: memory.id })
       assert.deepEqual([recovered.memory.status, recovered.noop], ['active', false])
       assert.equal((await d.ask('/memory/update', { project: d.alpha, id: memory.id, patch: { importance: 0.9 } })).status, 200)
+    }))
+})
+
+describe('read and reminder routes', () => {
+  test('a search reads both stores rank by rank, and the explained search scores each hit by its place', () =>
+    withDaemon(async d => {
+      const project = await d.remember(d.alpha, { text: 'Use pnpm workspaces for the monorepo packages' })
+      const user = await d.remember(d.alpha, { text: PREFERENCE, scope: 'user' })
+      assert.deepEqual((await d.value<Memory[]>('/memory/search', { project: d.alpha, query: 'pnpm' })).map(m => m.id), [project.id, user.id])
+      const explained = await d.value<SearchHit[]>('/memory/explain', { project: d.beta, query: 'pnpm' })
+      assert.deepEqual(explained.map(hit => [hit.memory.id, hit.lexicalScore, hit.source]), [[user.id, 1, 'lexical']], 'another project finds the user memory alone')
+    }))
+
+  test('what a context was reminded of is held back until the context starts over', () =>
+    withDaemon(async d => {
+      mkdirSync(join(d.alpha.root, 'src'), { recursive: true })
+      const memory = await d.remember(d.alpha, { text: 'The app entry must register the router first', anchors: [{ type: 'file', path: 'src/app.ts' }] })
+      const ask = { project: d.alpha, sessionId: 's1', loop: 'main', paths: [join(d.alpha.root, 'src/app.ts')], query: 'src/app.ts app.ts app', limit: 8 }
+      assert.deepEqual((await d.value<Ranking>('/remind/tools', ask)).candidates.map(c => c.memory.id), [memory.id])
+      assert.deepEqual(await d.value('/memory/reminded', { project: d.alpha, ids: [memory.id], trigger: 'tool_batch', sessionId: 's1', loop: 'main' }), { counted: 1 })
+      assert.deepEqual((await d.value<Ranking>('/remind/tools', ask)).rejected.map(r => r.gate), ['reminded'])
+      assert.deepEqual(await d.value('/context/new', { project: d.alpha, sessionId: 's1', loop: 'main' }), { epoch: 1 })
+      assert.equal((await d.value<Ranking>('/remind/tools', ask)).candidates.length, 1)
+      assert.equal((await d.value<Memory>('/memory/get', { project: d.alpha, id: memory.id })).reminderCount, 1)
+    }))
+
+  test('a listing pages with its cursor and refuses one it did not write; a file outside the project is refused', () =>
+    withDaemon(async d => {
+      for (const text of ['The build pipeline caches pnpm stores', 'Releases are tagged from main on Tuesday', PREFERENCE]) await d.remember(d.alpha, { text })
+      const first = await d.value<MemoryPage>('/memory/list', { project: d.alpha, limit: 2 })
+      assert.deepEqual([first.memories.length, first.total], [2, 3])
+      const second = await d.value<MemoryPage>('/memory/list', { project: d.alpha, limit: 2, cursor: first.nextCursor })
+      assert.deepEqual([second.memories.length, second.nextCursor], [1, null])
+      const bad = await d.ask('/memory/list', { project: d.alpha, cursor: 'nope' })
+      assert.deepEqual([bad.status, bad.error], [400, 'the cursor is not one a listing wrote'])
+      const outside = await d.ask('/memory/for-file', { project: d.alpha, path: '/etc/hosts' })
+      assert.deepEqual([outside.status, outside.error], [400, 'the path is outside the project root'])
+      const stats = await d.value<{ project: StoreStats; user: StoreStats }>('/memory/stats', { project: d.alpha })
+      assert.deepEqual([stats.project.total, stats.user.total], [3, 0])
     }))
 })
 

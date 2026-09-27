@@ -256,3 +256,51 @@ export type BackfillReport = {
 }
 
 export type AuditEntry = { at: string; action: string; memoryId?: string; sessionId?: string; detail?: unknown }
+
+/**
+ * A memory a reminder may carry: how strongly it relates to the request (0 to 1), its reminder
+ * score, and the evidence that brought it (`anchor:`, `query:` and `graph:` reasons).
+ */
+export type Ranked = { memory: Memory; relationStrength: number; score: number; reasons: string[] }
+
+/** A candidate a gate held back from a reminder, and why. */
+export type Rejection = { id: string; gate: 'duplicate' | 'belowScore' | 'reminded'; reason: string }
+
+/** What the daemon ranks for one reminder, best first, and what its gates held back. */
+export type Ranking = { candidates: Ranked[]; rejected: Rejection[] }
+
+/** The memories a subagent starts with: the ones written for its role or mode, then the ones about its task. */
+export type SubagentRanking = { audience: Memory[]; task: Ranked[] }
+
+/** One edge of the memory graph. */
+export type GraphEdge = { from: string; to: string; relation: string; weight: number; createdAt: string }
+
+/** One search hit with its score per channel; the vector channel stays empty until embeddings are set up. */
+export type SearchHit = { memory: Memory; lexicalScore: number | null; vectorScore: number | null; finalScore: number; source: 'lexical' | 'vector' | 'both' }
+
+export type FileMatchVia = 'scope_file' | 'anchor_file' | 'scope_symbol' | 'anchor_symbol' | 'anchor_directory' | 'mention'
+
+/** A pending review of a memory, shown beside it. */
+export type PendingReview = { candidateId: string; reason: string; suggestedAction: 'delete' | 'archive' | 'update' | 'investigate'; ageDays: number }
+
+export type FileMatch = { memory: Memory; matchedVia: FileMatchVia; matchStrength: number; supersededByActiveId?: string; pendingReview?: PendingReview }
+
+/** The memories about one file: anchored to it or its directories, to a symbol in it, or naming it. */
+export type FileMemories = {
+  filePath: string
+  primaryMatches: FileMatch[]
+  symbolMatches: FileMatch[]
+  relatedMatches: FileMatch[]
+  totalCount: number
+  activeCount: number
+  supersededCount: number
+  reviewPendingCount: number
+}
+
+/** One page of a listing, newest change first; `nextCursor` reads the next page. */
+export type MemoryPage = { memories: Memory[]; nextCursor: string | null; total: number; statusCounts: Record<string, number> }
+
+/** A page of memories with the graph edges of its first ten. */
+export type GatheredPage = MemoryPage & { relations: GraphEdge[]; relationsScanned: number }
+
+export type StoreStats = { total: number; byStatus: Record<Status, number>; byKind: Record<string, number>; edges: number }
