@@ -547,6 +547,17 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "pin-note",
+      "source": "./plugins/pin-note",
+      "description": "Keeps the notes you pin with /pin-note for the whole session and sends them to the model again, word for word, after each compaction and /clear. Off until /pin-note on.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }

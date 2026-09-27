@@ -1,0 +1,11 @@
+{
+  "name": "pin-note",
+  "version": "0.1.0",
+  "description": "Keeps the notes you pin with /pin-note for the whole session and sends them to the model again, word for word, after each compaction and /clear. Off until /pin-note on. Needs function hooks (early access).",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}
