@@ -1,0 +1,4 @@
+{
+  "description": "sage-memory: the memory daemon link, memory injection, the consolidator and the /sage-memory command. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "modules": ["./register.tsx"]
+}

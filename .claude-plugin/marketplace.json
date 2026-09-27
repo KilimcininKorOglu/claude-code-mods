@@ -558,6 +558,19 @@
         "function-hooks",
         "hooks-module"
       ]
+    },
+    {
+      "name": "sage-memory",
+      "source": "./plugins/sage-memory",
+      "description": "Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn.",
+      "category": "productivity",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "memory",
+        "background"
+      ]
     }
   ]
 }
