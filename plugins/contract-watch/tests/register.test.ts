@@ -104,6 +104,19 @@ describe('contract-watch', () => {
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
   })
 
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toContain('parse changed from 1 to 2 parameter(s)')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 signature(s) have callers to check; it needs ripwire on PATH')
+    w.store.set('mode', 'note')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · 1 signature(s) have callers to check; it needs ripwire on PATH')
+  })
+
   test('in note mode a commit attempt closes a finding the model fixed, and stops nothing', async ($, on) => {
     const w = world(on)
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))

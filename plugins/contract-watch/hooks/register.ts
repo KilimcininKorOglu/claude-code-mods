@@ -13,10 +13,18 @@ type Open = { root: string; rel: string; sym: string }
 type Blocking = { root: string; rel: string; line: string }
 
 /**
- * The last error logged, so the same one is logged once, the mode, the symbols the gate holds, and the
- * lines the model is owed a note for, measured at the turn's end.
+ * The last error logged, so the same one is logged once, the mode as the store held it at the last read,
+ * the symbols the gate holds, and the lines the model is owed a note for, measured at the turn's end.
  */
 type State = { lastError?: string; mode: Mode; open: Map<string, Open>; owed: string[] }
+
+/**
+ * Reads the mode from the store, which every window shares, so a change made in another window applies
+ * here at the next hook that acts on it. The on/off setting is read fresh by `isEnabled`.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -179,6 +187,7 @@ function withNotes(r: ToolCallResult, notes: readonly string[]): ToolCallResult 
  */
 async function atGitCommand($: EngineInterface, state: State, command: string): Promise<string | undefined> {
   if (state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
+  await readSettings($, state)
   const lines = await recheckOpen($, state)
   if (state.mode !== 'deny' || lines.length === 0) return undefined
   const scoped = await scopeOf($, lines, command)
@@ -209,7 +218,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: a changed signature brings its callers to the model' : 'off: signatures are not checked'
   }
   if (word.startsWith('mode')) return setMode($, state, word.slice(4).trim())
-  return word === '' ? statusText($, state) : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return statusText($, state)
 }
 
 export const register: Register = on => {
@@ -218,7 +229,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'contract-watch', description: 'Callers of a changed signature: status, on, off, mode (contract-watch)', argumentHint: '[on | off | mode note | deny]' })
-    state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+    await readSettings($, state)
     return r
   })
 
