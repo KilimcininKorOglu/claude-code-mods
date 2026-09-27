@@ -11,6 +11,7 @@ A Claude Code Mod that opens one shared pane beside the transcript and draws wha
 5. A button runs a slash command: pressing `[ stop ]` of `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` runs `/bg-tasks stop b1` as the person would, and the command's first answer line shows at the foot of the pane, faint. A command that did not run shows `/<command> did not run: <error>` there, with `did not run` in red. The mod that offers the button serves that command itself. The label turns red under the pointer, so what a press would run is plain before the press.
 6. The three lifetimes: `session` stands at the top until the mod replaces or clears it, `stream` joins the log under it, `turn` goes when the turn ends.
 7. Every stream entry is also written to this project's own log file, `~/.claude/sidebar/<project>-<YYYY-MM-DD>.log`, one JSON object per line. When the pane opens, the newest 10 entries of that project's logs come back into the stream, each with the day and time it was first written, so a session started tomorrow still shows what yesterday found. A restored entry is not written to the log again. The day is the day of the write, so a session that runs past midnight writes the new day's file. Every write reads the file again first, so two sessions of one project on one day keep each other's lines; a file that is there and cannot be read is not written over. A `clear` that takes stream entries down writes one line of its own to the log (`{"at", "cleared": {consumer, key}}`): the entries stay in the file as history, and the restore leaves out every entry of that key written before the line, also when the line sits in a newer day's file. A closed finding therefore does not come back beside its own closing line. `/sidebar log` prints the file's path and its newest 10 entries, the cleared ones among them.
+8. The model reads the pane through the tool `mcp__sidebar__read`, listed from the session's start without ToolSearch. Its description tells the model to call it when you refer to what the sidebar shows, so you do not paste the pane into the prompt. It answers the pane's content as plain text: each section's heading, its rows indented, the line between the standing sections and the stream as `---`, a button as `[ label ]`; colours do not survive. `/sidebar snapshot` gives the same text as the command's answer, which the model also reads. A closed sidebar answers that it holds nothing. Measured on Claude Code 2.1.283 in a live session: asked what the sidebar showed, the model called the tool at once and quoted the ctx line word for word.
 
 ## The API other mods use
 
@@ -64,6 +65,7 @@ Limits per section: 50 lines and 5 buttons; the lines left out are counted in th
     /sidebar on | off   the same, named
     /sidebar status     on or off, how many sections are up and how many entries the stream holds
     /sidebar log        the path of this project's log of today, and its newest 10 entries
+    /sidebar snapshot   the pane's content as plain text, for you to copy and for the model to read
 
 ## Install
 
@@ -84,8 +86,8 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.280:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
-    ❯ ./register.tsx hooks: engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via showPane), $.ui.panes (via closePane), $.ui.resolve
+    ❯ ./register.tsx hooks: engine.create, session.start, tool.describe{tool=/"^mcp__sidebar__read$"/}, tool.call{tool=/"^mcp__sidebar__read$"/}, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
+    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.store.get, $.store.set, $.tool.register, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via showPane), $.ui.panes (via closePane), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: HOME
 
@@ -93,7 +95,7 @@ Reach L2, it writes a file.
 
     1. Reads:    the sections other mods hand over, the clock for a stream entry's own time, HOME, the session's directory, and this project's own log files under ~/.claude/sidebar
     2. Runs:     the slash command a button names, through $.command.run, on the person's press only
-    3. Sends:    nothing
+    3. Sends:    nothing off the machine; the pane's text goes into the model's context when the model calls mcp__sidebar__read or you run /sidebar snapshot
     4. Persists: in $.store, whether the sidebar is open; in ~/.claude/sidebar, one log file per project and day, holding the stream entries other mods wrote and one line per clear that took entries down
     5. Hostile input: a section comes from another plugin and is read as data: the consumer, key and title are checked, every line and button of another shape is dropped, the text is folded to one line and wrapped to the width, and the counts are capped. A log line is read the same way, so a hand-edited or truncated file loses that line and nothing else.
 

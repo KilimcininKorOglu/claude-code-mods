@@ -11,6 +11,7 @@ Transcript'in yanında tek bir paylaşılan pane açan ve diğer her mod'un oray
 5. Bir button bir slash komutu çalıştırır: `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` için `[ stop ]` basışı `/bg-tasks stop b1` komutunu kişi gibi çalıştırır ve komutun ilk cevap satırı pane'in altında soluk görünür. Çalışmayan bir komut orada `/<command> did not run: <error>` gösterir, `did not run` kırmızı çizilir. Button'u sunan mod o komutu kendisi karşılar. Etiket işaretçi altında kırmızıya döner, yani bir basışın ne çalıştıracağı basıştan önce açıktır.
 6. Üç ömür: `session` mod onu değiştirene ya da temizleyene kadar üstte durur, `stream` altındaki log'a katılır, `turn` tur bitince gider.
 7. Her stream entry'si ayrıca bu projenin kendi log dosyasına yazılır, `~/.claude/sidebar/<project>-<YYYY-MM-DD>.log`, satır başına bir JSON object. Pane açıldığında o projenin log'larının en yeni 10 entry'si stream'e geri gelir, her biri ilk yazıldığı gün ve saatle, yani yarın başlayan bir session dün bulunanı yine gösterir. Geri gelen bir entry log'a yeniden yazılmaz. Gün, yazmanın günüdür, yani gece yarısını geçen bir session yeni günün dosyasına yazar. Her yazma dosyayı önce yeniden okur, yani aynı gün aynı projenin iki session'ı birbirinin satırlarını korur; var olan ama okunamayan bir dosyanın üstüne yazılmaz. Stream entry'lerini kaldıran bir `clear`, log'a kendi satırını yazar (`{"at", "cleared": {consumer, key}}`): entry'ler geçmiş olarak dosyada kalır, ve restore o key'in bu satırdan önce yazılmış her entry'sini dışarıda bırakır, satır daha yeni bir günün dosyasında olsa da. Böylece kapanmış bir bulgu kendi kapanış satırının yanında geri gelmez. `/sidebar log` dosyanın path'ini ve en yeni 10 entry'sini yazar, temizlenmiş olanlar da dahil.
+8. Model pane'i `mcp__sidebar__read` tool'u ile okur. Tool session başından beri ToolSearch olmadan listelenir. Açıklaması modele, sidebar'da görünen bir şeye atıf yaptığınızda onu çağırmasını söyler; böylece pane'i prompt'a yapıştırmazsınız. Tool pane'in içeriğini düz metin olarak döner: her section'ın başlığı, altında girintili satırları, sabit section'lar ile stream arasındaki çizgi `---` olarak, bir buton `[ label ]` olarak; renkler korunmaz. `/sidebar snapshot` aynı metni komutun cevabı olarak verir, model onu da okur. Kapalı bir sidebar hiçbir şey tutmadığını söyler. Claude Code 2.1.283 üzerinde canlı bir session'da ölçüldü: sidebar'da ne yazdığı sorulan model tool'u hemen çağırdı ve ctx satırını kelimesi kelimesine aktardı.
 
 ## Diğer mod'ların kullandığı API
 
@@ -64,6 +65,7 @@ Section başına sınırlar: 50 satır ve 5 button; dışarıda kalan satırlar 
     /sidebar on | off   aynısı, adlandırılmış
     /sidebar status     on ya da off, kaç section durduğu ve stream'in kaç entry tuttuğu
     /sidebar log        bu projenin bugünkü log'unun path'i ve en yeni 10 entry'si
+    /sidebar snapshot   pane'in içeriği düz metin olarak, kopyalamanız ve modelin okuması için
 
 ## Kurulum
 
@@ -84,8 +86,8 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
-    ❯ ./register.tsx hooks: engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.store.get, $.store.set, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via showPane), $.ui.panes (via closePane), $.ui.resolve
+    ❯ ./register.tsx hooks: engine.create, session.start, tool.describe{tool=/"^mcp__sidebar__read$"/}, tool.call{tool=/"^mcp__sidebar__read$"/}, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete
+    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.command.run (via pressButton), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.store.get, $.store.set, $.tool.register, $.ui.close (via closePane), $.ui.invalidate, $.ui.open (via showPane), $.ui.panes (via closePane), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: HOME
 
@@ -93,7 +95,7 @@ Reach L2, bir dosya yazar.
 
     1. Okur:     diğer mod'ların verdiği section'ları, bir stream entry'sinin kendi saati için saati, HOME, session'ın dizinini ve ~/.claude/sidebar altındaki bu projenin kendi log dosyalarını
     2. Çalıştırır: bir button'ın adlandırdığı slash komutunu, $.command.run üzerinden, yalnız kişinin basışıyla
-    3. Gönderir: hiçbir şey
+    3. Gönderir: makineden dışarı hiçbir şey; model mcp__sidebar__read'i çağırdığında ya da /sidebar snapshot çalıştırdığınızda pane'in metni modelin context'ine girer
     4. Saklar:   $.store içinde sidebar'ın açık olup olmadığını; ~/.claude/sidebar içinde proje ve gün başına bir log dosyası, diğer mod'ların yazdığı stream entry'lerini ve entry kaldıran her clear için bir satırı tutar
     5. Düşman girdi: bir section başka bir plugin'den gelir ve veri olarak okunur: consumer, key ve title kontrol edilir, başka biçimde her satır ve button düşürülür, metin tek satıra katlanır ve genişliğe wrap edilir, sayılar sınırlanır. Bir log satırı da aynı okunur, yani elle düzenlenmiş ya da kesilmiş bir dosya yalnız o satırı kaybeder, başka bir şeyi değil.
 

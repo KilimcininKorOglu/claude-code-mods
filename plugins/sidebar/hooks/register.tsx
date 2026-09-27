@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { clearLineOf, drawn, dropTurn, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropTurn, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -10,7 +10,18 @@ const PANE_TITLE = 'Sidebar'
 
 const OPEN_KEY = 'open'
 
-const USAGE = 'expects nothing (open or close), on, off, status or log'
+const USAGE = 'expects nothing (open or close), on, off, status, log or snapshot'
+
+/** The tool the model reads the pane through, listed from the session's start. */
+const READ_TOOL = 'read'
+
+const READ_DESCRIPTION = [
+  "Read the sidebar: the pane the person sees beside the transcript, where the installed mods show the session's state (context, tokens, cost, effort, limits, cache), their open findings and the stream of their entries.",
+  'You get its whole content as plain text, as it stands now.',
+  'Call it when the person refers to what the sidebar or the pane shows, instead of asking them to paste it.',
+].join(' ')
+
+const READ_SCHEMA = { type: 'object', properties: {} }
 
 /** Where the logs of every project live, under the person's own Claude directory, named after the mod. */
 const LOG_DIR = '.claude/sidebar'
@@ -159,6 +170,12 @@ async function restoreLog($: EngineInterface, state: State): Promise<void> {
   if (found.length > 0) $.ui.invalidate('ui.render')
 }
 
+/** What the pane holds now, as plain text; a closed sidebar holds nothing. */
+function snapshotOf(state: State): string {
+  if (!state.open) return 'the sidebar is closed, so it holds nothing; /sidebar on opens it'
+  return snapshotText(drawn(state.board, state.stream, SNAPSHOT_COLUMNS, MAX_BOARD_LINES))
+}
+
 /** The newest entries of this project's log of today, or why there is no log. */
 async function logText($: EngineInterface, state: State): Promise<string> {
   const file = logFileAt(state.dir, state.project, await $.clock.now())
@@ -169,6 +186,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   const word = args.trim()
   if (word === 'on' || word === 'off') return setOpen($, state, word === 'on')
   if (word === 'log') return logText($, state)
+  if (word === 'snapshot') return snapshotOf(state)
   if (word === 'status') return state.open ? `on, ${state.board.size} section(s), ${state.stream.length} in the stream` : 'off'
   return word === '' ? setOpen($, state, !state.open) : USAGE
 }
@@ -312,10 +330,17 @@ export const register: Register = on => {
     const open = (await $.store.get(OPEN_KEY)) === true
     if (open) await takeSections($, state)
     const r = await next(e)
-    await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status, log (sidebar)', argumentHint: '[on | off | status | log]' })
+    await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status, log, snapshot (sidebar)', argumentHint: '[on | off | status | log | snapshot]' })
+    // Declared once at the start, so the tool list the prompt cache holds does not change mid-session.
+    await $.tool.register({ name: READ_TOOL, description: READ_DESCRIPTION, inputSchema: READ_SCHEMA })
     if (open) await showPane($, state)
     return r
   })
+
+  // A plugin's tool waits behind ToolSearch by default; this one is listed, so the model reads the pane at once.
+  on('tool.describe', { tool: /^mcp__sidebar__read$/ }, async (_, e, next) => ({ ...(await next(e)), isDeferred: false }))
+
+  on('tool.call', { tool: /^mcp__sidebar__read$/ }, async () => ({ result: snapshotOf(state) }))
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'sidebar' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))

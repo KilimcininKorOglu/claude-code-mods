@@ -375,6 +375,20 @@ export function drawn(board: Board, stream: readonly Kept[], columns: number, ro
   return [...out, { id: DIVIDER_ID, head: dividerText(columns), rows: [], buttons: [], divider: true }, ...entries]
 }
 
+/** The width a snapshot is drawn at: wide enough that a line is seldom wrapped, as no pane is this wide. */
+export const SNAPSHOT_COLUMNS = 200
+
+/**
+ * The pane's content as plain text, for the model and for the person to copy: each section's heading,
+ * then its rows indented, the divider as a rule, and a button as `[ label ]`. Colours do not survive.
+ */
+export function snapshotText(sections: readonly Drawn[]): string {
+  if (sections.length === 0) return EMPTY_TEXT
+  return sections
+    .map(one => (one.divider === true ? '---' : [one.head, ...one.rows.map(r => `  ${r.text}`), ...one.buttons.map(b => `  [ ${b.label} ]`)].join('\n')))
+    .join('\n\n')
+}
+
 /**
  * The stream with the new entry at its head, cut to what it keeps in memory. A consumer over its own
  * count drops its own oldest entry, so a talkative mod never evicts another mod's finding.

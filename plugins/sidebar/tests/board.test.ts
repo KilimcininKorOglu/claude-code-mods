@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -146,6 +146,13 @@ describe('board', () => {
     const last = cutOne?.rows.at(-1)
     expect(last?.text.endsWith('…')).toBe(true)
     expect(last?.parts?.at(-1)).toEqual({ text: `${'y'.repeat(7)}…`, tone: 'error' })
+  })
+
+  test('a snapshot is the pane as plain text: headings, indented rows, the divider and the buttons', () => {
+    const board = boardOf(section({ lines: [{ text: 'ctx 29%', parts: [{ text: 'ctx ' }, { text: '29%', kind: 'ok' }] }], buttons: [{ label: 'fix', command: 'x' }] }))
+    const text = snapshotText(drawn(board, [], SNAPSHOT_COLUMNS, MAX_BOARD_LINES))
+    expect(text).toBe('edit-loop: the 5th edit\n  ctx 29%\n  [ fix ]')
+    expect(snapshotText([])).toBe(EMPTY_TEXT)
   })
 
   test('an info part keeps its tone', () => {
