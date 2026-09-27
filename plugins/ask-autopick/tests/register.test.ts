@@ -14,13 +14,18 @@ const SIZE = { question: 'Boyut?', options: [{ label: 'Büyük (Önerilen)' }, {
 
 /**
  * The dialog beneath the mod: it stays open until the test answers it with `answer`, and records whether
- * it was left open when the call returned. `logs` holds the lines the mod wrote.
+ * it was left open when the call returned. `logs` holds the lines the mod wrote; `store` is the store
+ * every window shares, which a test writes as another window.
  */
-type World = { clock: MockClock; logs: string[]; answer?: (label: string) => void }
+type World = { clock: MockClock; logs: string[]; store: Map<string, unknown>; answer?: (label: string) => void }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { clock: mock.clock(on), logs: [] }
-  mock.store(on, store)
+  const w: World = { clock: mock.clock(on), logs: [], store: new Map(Object.entries(store)) }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -82,6 +87,34 @@ describe('ask-autopick', () => {
     expect(w.logs).toEqual(['a question has no recommended first option or takes several answers, so it waits for you past 10 min'])
     w.answer?.('Mavi (Recommended)')
     expect(((await call) as Answered).context).toBe(undefined)
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one turned the mod on with a 3-minute wait.
+    w.store.set('enabled', true)
+    w.store.set('minutes', 3)
+    const call = ask($, [COLOR])
+    await w.clock.advance(3 * 60_000)
+    expect(((await call) as Answered).result?.answers).toEqual({ 'Renk?': 'Mavi (Recommended)' })
+    expect((await $.command.run(run(''))).text).toBe('on · a question unanswered for 3 min gets its recommended option')
+    w.store.set('enabled', false)
+    const waiting = ask($, [COLOR])
+    await w.clock.advance(60 * 60_000)
+    w.answer?.('Kırmızı')
+    expect(((await waiting) as Answered).result?.answers).toEqual({ 'Renk?': 'Kırmızı' })
+    expect((await $.command.run(run(''))).text).toBe('off · questions wait for you; /ask-autopick on picks the recommended option after 3 min')
+    // Turned off in another window while a question waits: the wait runs out and the question stays.
+    w.store.set('enabled', true)
+    const logged = w.logs.length
+    const left = ask($, [COLOR])
+    await w.clock.advance(60_000)
+    w.store.set('enabled', false)
+    await w.clock.advance(3 * 60_000)
+    w.answer?.('Kırmızı')
+    expect(((await left) as Answered).result?.answers).toEqual({ 'Renk?': 'Kırmızı' })
+    expect(w.logs.length).toBe(logged)
   })
 
   test('the wait is set in minutes, kept, and a value out of range is refused', async ($, on) => {

@@ -7,6 +7,17 @@ const MINUTES_KEY = 'minutes'
 /** Off until the person turns it on, and the wait in minutes. */
 type State = { enabled: boolean; minutes: number }
 
+/**
+ * Reads the on/off setting and the wait from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  // Only a stored true turns the mod on, so a fresh install answers nothing for the person.
+  state.enabled = (await $.store.get(ENABLED_KEY)) === true
+  const stored = await $.store.get(MINUTES_KEY)
+  state.minutes = typeof stored === 'number' && minutesOf(String(stored)) !== undefined ? stored : DEFAULT_MINUTES
+}
+
 /** What the person reads: an entry in the shared sidebar's stream while it is open, else one transcript line. */
 async function toPerson($: EngineInterface, key: string, line: Line): Promise<void> {
   try {
@@ -33,6 +44,9 @@ async function answerOrPick($: EngineInterface, state: State, questions: Questio
     timer?.cancel()
     return first
   }
+  // Turned off in another window during the wait: the question stays for the person.
+  await readSettings($, state)
+  if (!state.enabled) return pending
   // The abandoned dialog settles on its own; its result is not the call's any more.
   pending.catch(() => undefined)
   await toPerson($, 'picked', pickedLine(minutes, answers))
@@ -41,6 +55,8 @@ async function answerOrPick($: EngineInterface, state: State, questions: Questio
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const arg = args.trim()
+  // The status after a change also shows the other setting as the store holds it.
+  await readSettings($, state)
   if (arg === 'on' || arg === 'off') {
     state.enabled = arg === 'on'
     await $.store.set(ENABLED_KEY, state.enabled)
@@ -58,10 +74,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    // Only a stored true turns the mod on, so a fresh install answers nothing for the person.
-    state.enabled = (await $.store.get(ENABLED_KEY)) === true
-    const stored = await $.store.get(MINUTES_KEY)
-    state.minutes = typeof stored === 'number' && minutesOf(String(stored)) !== undefined ? stored : DEFAULT_MINUTES
+    await readSettings($, state)
     await $.command.register({
       name: 'ask-autopick',
       description: 'Pick the recommended option of a question left unanswered: status, on, off, <minutes> (ask-autopick)',
@@ -76,6 +89,7 @@ export const register: Register = on => {
 
   // A RegExp literal, because a headless /plugin-types lists no AskUserQuestion, so a string matcher does not type.
   on('tool.call', { tool: /^AskUserQuestion$/ }, async ($, e, next) => {
+    await readSettings($, state)
     if (!state.enabled) return next(e)
     const questions = (e as unknown as { questions?: Question[] }).questions ?? []
     const answers = picksOf(questions)
