@@ -100,9 +100,9 @@ export function copyName(path: string, mtimeMs: number): string {
   return `${hash(`${path}\0${mtimeMs}`)}.png`
 }
 
-/** A name for the BMP of one picture at one box of cells. */
-export function bmpName(path: string, mtimeMs: number, columns: number, rows: number): string {
-  return `${hash(`${path}\0${mtimeMs}\0${columns}x${rows}`)}.bmp`
+/** A name for the BMP of one picture at one size in pixels. */
+export function bmpName(path: string, mtimeMs: number, width: number, height: number): string {
+  return `${hash(`${path}\0${mtimeMs}\0${width}x${height}`)}.bmp`
 }
 
 function hash(text: string): string {
@@ -154,6 +154,95 @@ export function halfBlocks(bmp: Bitmap, columns: number, rows: number): string {
       words[at] = UPPER_HALF
       words[at + 1] = pixel(bmp, x, y * 2)
       words[at + 2] = pixel(bmp, x, y * 2 + 1)
+    }
+  }
+  return base64(new Uint8Array(words.buffer))
+}
+
+/**
+ * The block characters a cell is drawn with, by how finely they split it. The finer sextant (U+1FB00)
+ * and octant (U+1CD00) families lie beyond the Basic Multilingual Plane, which `Raster` refuses
+ * (measured on 2.1.283: "holds code point 118089, beyond the Basic Multilingual Plane").
+ */
+export type Glyphs = 'half' | 'quadrant'
+
+/** Pixels one cell holds across and down for each family. */
+export const GLYPHS: Readonly<Record<Glyphs, { across: number; down: number }>> = {
+  half: { across: 1, down: 2 },
+  quadrant: { across: 2, down: 2 },
+}
+
+export const isGlyphs = (value: unknown): value is Glyphs => typeof value === 'string' && Object.hasOwn(GLYPHS, value)
+
+/** Quadrant characters by mask: bit 0 upper left, 1 upper right, 2 lower left, 3 lower right. */
+const QUADRANTS = [
+  0x20, 0x2598, 0x259d, 0x2580, 0x2596, 0x258c, 0x259e, 0x259b, 0x2597, 0x259a, 0x2590, 0x259c, 0x2584, 0x2599, 0x259f, 0x2588,
+]
+
+/** The quadrant character for a mask of lit pixels. */
+export function quadrant(mask: number): number {
+  return QUADRANTS[mask] ?? 0x20
+}
+
+const channel = (color: number, k: number): number => (color >> (16 - k * 8)) & 0xff
+
+/** The channel (0 red, 1 green, 2 blue) whose values spread widest, with its lowest and highest value. */
+function widest(pixels: readonly number[]): { k: number; low: number; high: number } {
+  let best = { k: 0, low: 0, high: 0 }
+  for (let k = 0; k < 3; k++) {
+    const values = pixels.map(p => channel(p, k))
+    const low = Math.min(...values)
+    const high = Math.max(...values)
+    if (high - low > best.high - best.low) best = { k, low, high }
+  }
+  return best
+}
+
+/** The mean colour of some pixels, `0x00RRGGBB`. */
+function mean(pixels: readonly number[]): number {
+  if (pixels.length === 0) return 0
+  const sum = [0, 1, 2].map(k => pixels.reduce((s, p) => s + channel(p, k), 0) / pixels.length)
+  return (Math.round(sum[0] ?? 0) << 16) | (Math.round(sum[1] ?? 0) << 8) | Math.round(sum[2] ?? 0)
+}
+
+/**
+ * One cell's pixels as two colours: split at the middle of the channel that spreads widest, the higher
+ * side lit in the glyph's colour, the lower the background. A cell of one colour lights nothing.
+ */
+export function splitCell(pixels: readonly number[]): { mask: number; fg: number; bg: number } {
+  const { k, low, high } = widest(pixels)
+  const middle = (low + high) / 2
+  let mask = 0
+  pixels.forEach((p, i) => {
+    if (high > low && channel(p, k) > middle) mask |= 1 << i
+  })
+  const lit = pixels.filter((_, i) => (mask >> i) & 1)
+  const dark = pixels.filter((_, i) => !((mask >> i) & 1))
+  return { mask, fg: lit.length === 0 ? mean(dark) : mean(lit), bg: mean(dark) }
+}
+
+/** The pixels of one cell in reading order. */
+function cellPixels(bmp: Bitmap, x: number, y: number, across: number, down: number): number[] {
+  const out: number[] = []
+  for (let dy = 0; dy < down; dy++) {
+    for (let dx = 0; dx < across; dx++) out.push(pixel(bmp, x * across + dx, y * down + dy))
+  }
+  return out
+}
+
+/**
+ * The picture as `columns * rows` cells of one glyph family, packed as `RasterProps.cells` takes them;
+ * the BMP holds `across` by `down` pixels a cell. A half block keeps each pixel's own colour; a quadrant
+ * cell's four pixels share two.
+ */
+export function blockCells(bmp: Bitmap, columns: number, rows: number, glyphs: Glyphs): string {
+  if (glyphs === 'half') return halfBlocks(bmp, columns, rows)
+  const { across, down } = GLYPHS[glyphs]
+  const words = new Uint32Array(columns * rows * 3)
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < columns; x++) {
+      const cell = splitCell(cellPixels(bmp, x, y, across, down))
+      words.set([quadrant(cell.mask), cell.fg, cell.bg], (y * columns + x) * 3)
     }
   }
   return base64(new Uint8Array(words.buffer))

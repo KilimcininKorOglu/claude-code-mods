@@ -1,9 +1,13 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { absolute, allBytes, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, isImagePath, isPng, pngSize, readBmp, screenshotPath, sipsSize, type Size } from './shot.ts'
+import { absolute, allBytes, blockCells, bmpName, cells, commandImagePaths, copyName, GLYPHS, hasGraphics, isGlyphs, isImagePath, isPng, pngSize, readBmp, screenshotPath, sipsSize, type Glyphs, type Size } from './shot.ts'
 
 const ENABLED_KEY = 'enabled'
+const GLYPHS_KEY = 'glyphs'
 
-const USAGE = 'expects nothing (the status), on or off'
+/** Quadrants hold twice the pixels of a half block across, in two colours a cell. */
+const DEFAULT_GLYPHS: Glyphs = 'quadrant'
+
+const USAGE = 'expects nothing (the status), on, off, or glyphs half | quadrant'
 
 /** The Playwright screenshot tool, as a plugin install and as a plain MCP server name it. */
 const SCREENSHOT_TOOL = /^mcp__(plugin_playwright_)?playwright__browser_take_screenshot$/
@@ -24,7 +28,7 @@ type State = {
   shots: Map<string, Shot>
   enabled: boolean
   /**
-   * The half-block cells of each picture at the newest box it was drawn in, keyed by the tool row: one
+   * The block cells of each picture at the newest box it was drawn in, keyed by the tool row: one
    * grid per picture, dropped with its picture, so a resize replaces a grid instead of adding one.
    */
   grids: Map<string, { box: string; grid: string }>
@@ -32,6 +36,8 @@ type State = {
   root: string
   /** The terminal takes the kitty graphics protocol, so the picture itself is drawn. */
   graphics: boolean
+  /** The block characters of a terminal without it. */
+  glyphs: Glyphs
   lastError?: string
 }
 
@@ -86,22 +92,24 @@ async function tempDir($: EngineInterface): Promise<string> {
   return dir
 }
 
-/** A BMP of the picture at exactly `columns * rows * 2` pixels, made once per picture and box. */
-async function bmpCopy($: EngineInterface, shot: Shot, box: Box): Promise<string> {
-  const out = `${await tempDir($)}/${bmpName(shot.png, shot.stamp, box.columns, box.rows)}`
+/** A BMP of the picture with exactly the pixels the box's cells hold, made once per picture and size. */
+async function bmpCopy($: EngineInterface, shot: Shot, box: Box, glyphs: Glyphs): Promise<string> {
+  const width = box.columns * GLYPHS[glyphs].across
+  const height = box.rows * GLYPHS[glyphs].down
+  const out = `${await tempDir($)}/${bmpName(shot.png, shot.stamp, width, height)}`
   if (await $.fs.exists(out)) return out
-  await sips($, ['-z', String(box.rows * 2), String(box.columns), '-s', 'format', 'bmp', shot.png, '--out', out])
+  await sips($, ['-z', String(height), String(width), '-s', 'format', 'bmp', shot.png, '--out', out])
   return out
 }
 
-/** The half-block cells for one picture at one box, kept while the picture is and until the box changes. */
+/** The block cells for one picture at one box, kept while the picture is and until the box or the glyphs change. */
 async function gridFor($: EngineInterface, state: State, id: string, shot: Shot, box: Box, key: string): Promise<string | undefined> {
   const kept = state.grids.get(id)
   if (kept?.box === key) return kept.grid
   try {
-    const bmp = readBmp(allBytes((await $.fs.read(await bmpCopy($, shot, box), { as: 'bytes' })).base64))
+    const bmp = readBmp(allBytes((await $.fs.read(await bmpCopy($, shot, box, state.glyphs), { as: 'bytes' })).base64))
     if (bmp === undefined) throw new Error(`${shot.source}: sips wrote a BMP this reader does not take`)
-    const grid = halfBlocks(bmp, box.columns, box.rows)
+    const grid = blockCells(bmp, box.columns, box.rows, state.glyphs)
     state.grids.set(id, { box: key, grid })
     return grid
   } catch (err) {
@@ -136,6 +144,16 @@ async function remember($: EngineInterface, state: State, id: string, paths: rea
 
 const answered = (r: ToolCallResult): boolean => r.deny === undefined && r.isError !== true
 
+/** Stores the block characters and redraws; every grid is made again for the new family. */
+async function setGlyphs($: EngineInterface, state: State, word: string): Promise<string> {
+  if (!isGlyphs(word)) return `glyphs expects half or quadrant; now ${state.glyphs}`
+  await $.store.set(GLYPHS_KEY, word)
+  state.glyphs = word
+  $.ui.invalidate('ui.render')
+  const { across, down } = GLYPHS[word]
+  return `glyphs ${word}: ${across}x${down} pixels a cell on a terminal without the kitty graphics protocol`
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
   if (word === 'on' || word === 'off') {
@@ -144,17 +162,20 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     $.ui.invalidate('ui.render')
     return word === 'on' ? 'on: saved and read pictures draw under their tool row' : 'off: no picture is drawn'
   }
-  const how = state.graphics ? 'this terminal draws the picture itself' : 'this terminal has no kitty graphics protocol, so a picture is drawn as half-block cells'
+  if (word.startsWith('glyphs')) return setGlyphs($, state, word.slice('glyphs'.length).trim())
+  const how = state.graphics ? 'this terminal draws the picture itself' : `this terminal has no kitty graphics protocol, so a picture is drawn as ${state.glyphs} block cells`
   return word === '' ? `${state.enabled ? 'on' : 'off'}; ${state.shots.size} picture(s) this session; ${how}` : USAGE
 }
 
 export const register: Register = on => {
-  const state: State = { shots: new Map(), enabled: true, grids: new Map(), root: '', graphics: false }
+  const state: State = { shots: new Map(), enabled: true, grids: new Map(), root: '', graphics: false, glyphs: DEFAULT_GLYPHS }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    await $.command.register({ name: 'shot-inline', description: 'Pictures under their tool row: status, on, off (shot-inline)', argumentHint: '[on | off]' })
+    await $.command.register({ name: 'shot-inline', description: 'Pictures under their tool row: status, on, off, glyphs (shot-inline)', argumentHint: '[on | off | glyphs half|quadrant]' })
     state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    const glyphs = await $.store.get(GLYPHS_KEY)
+    state.glyphs = isGlyphs(glyphs) ? glyphs : DEFAULT_GLYPHS
     state.root = await $.session.cwd()
     state.graphics = hasGraphics((await $.env.get('TERM')) ?? '', (await $.env.get('TERM_PROGRAM')) ?? '', (await $.env.get('KITTY_WINDOW_ID')) ?? '')
     return r
@@ -192,7 +213,7 @@ export const register: Register = on => {
     const drawn = await next(e)
     const { Box, Image, Raster } = $.ui.resolve(e)
     const box = cells(shot.size, Math.min(80, Math.max(10, (e.viewport?.columns ?? 84) - 4)))
-    const key = `${e.requestId}:${box.columns}x${box.rows}`
+    const key = `${e.requestId}:${box.columns}x${box.rows}:${state.glyphs}`
     const grid = state.graphics ? undefined : await gridFor($, state, e.requestId, shot, box, key)
     return (
       <Box flexDirection="column">

@@ -78,6 +78,9 @@ function world(on: On, graphics = true): World {
   return w
 }
 
+/** A Raster's packed cells as words: glyph, foreground, background per cell. */
+const cellWords = (cells: unknown): number[] => [...new Uint32Array(Uint8Array.from(atob(String(cells ?? '')), c => c.charCodeAt(0)).buffer)]
+
 async function started($: Engine): Promise<void> {
   await $.session.start({ surface: null, isInteractive: true, cwd: ROOT })
 }
@@ -119,10 +122,10 @@ describe('shot-inline', () => {
     expect((await $.command.run(run('off'))).text).toBe('off: no picture is drawn')
     await $.tool.call({ tool: 'Read', file_path: `${ROOT}/.playwright-mcp/shot.png`, tool_use_id: 't7' } as never)
     expect(await (await row($, 't7')).find({ type: 'Image' })).toBe(undefined)
-    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on or off')
+    expect((await $.command.run(run('x'))).text).toBe('expects nothing (the status), on, off, or glyphs half | quadrant')
   })
 
-  test('a terminal without the kitty protocol draws the picture as half-block cells, made once per box', async ($, on) => {
+  test('a terminal without the kitty protocol draws the picture as quadrant cells, made once per box', async ($, on) => {
     const w = world(on, false)
     w.files.set(`${ROOT}/tiny.png`, { base64: pngHead(16, 16), size: 90 })
     await started($)
@@ -132,13 +135,25 @@ describe('shot-inline', () => {
     expect(await ui.find({ type: 'Image' })).toBe(undefined)
     expect(raster?.props.columns).toBe(2)
     expect(raster?.props.rows).toBe(1)
-    const bytes = Uint8Array.from(atob(String(raster?.props.cells ?? '')), c => c.charCodeAt(0))
-    expect([...new Uint32Array(bytes.buffer)]).toEqual([0x2580, 0x0a0000, 0x0a0000, 0x2580, 0x140000, 0x140000])
+    // Two pixels across a cell: the brighter right column is lit, the left one is the background.
+    expect(w.argv.some(a => a.startsWith(`sips -z 2 4 -s format bmp ${ROOT}/tiny.png --out `))).toBe(true)
+    expect(cellWords(raster?.props.cells)).toEqual([0x2590, 0x140000, 0x0a0000, 0x2590, 0x280000, 0x1e0000])
     const sipsRuns = w.argv.filter(a => a.includes('format bmp')).length
     await ui.unmount()
     await row($, 't8')
     expect(w.argv.filter(a => a.includes('format bmp'))).toHaveLength(sipsRuns)
-    expect((await $.command.run(run(''))).text).toBe('on; 1 picture(s) this session; this terminal has no kitty graphics protocol, so a picture is drawn as half-block cells')
+    expect((await $.command.run(run(''))).text).toBe('on; 1 picture(s) this session; this terminal has no kitty graphics protocol, so a picture is drawn as quadrant block cells')
+  })
+
+  test('glyphs half keeps each pixel\'s own colour, and a bad family is refused', async ($, on) => {
+    const w = world(on, false)
+    w.files.set(`${ROOT}/tiny.png`, { base64: pngHead(16, 16), size: 90 })
+    await started($)
+    await $.tool.call({ tool: 'Read', file_path: `${ROOT}/tiny.png`, tool_use_id: 't8' } as never)
+    expect((await $.command.run(run('glyphs half'))).text).toBe('glyphs half: 1x2 pixels a cell on a terminal without the kitty graphics protocol')
+    expect((await $.command.run(run('glyphs octant'))).text).toBe('glyphs expects half or quadrant; now half')
+    expect(cellWords((await (await row($, 't8')).find({ type: 'Raster' }))?.props.cells)).toEqual([0x2580, 0x0a0000, 0x0a0000, 0x2580, 0x140000, 0x140000])
+    expect(w.argv.at(-1)).toMatch(/^sips -z 2 2 -s format bmp /)
   })
 
   test('a resize replaces a picture\'s cells instead of keeping one grid per size', async ($, on) => {

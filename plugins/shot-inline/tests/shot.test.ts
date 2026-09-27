@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { absolute, allBytes, base64, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, headBytes, pngSize, readBmp, screenshotPath, sipsSize } from '../hooks/shot.ts'
+import { absolute, allBytes, base64, blockCells, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, headBytes, pngSize, quadrant, readBmp, screenshotPath, sipsSize, splitCell } from '../hooks/shot.ts'
 
 tier('user')
 
@@ -91,6 +91,24 @@ describe('shot', () => {
     const grid = halfBlocks(readBmp(bmp24(2, 2, (x, y) => [x * 100, y * 100, 7])) ?? { width: 0, height: 0, offset: 0, topDown: true, step: 3, stride: 0, bytes: new Uint8Array() }, 2, 1)
     const words = new Uint32Array(allBytes(grid).slice().buffer)
     expect([...words]).toEqual([0x2580, 0x000007, 0x006407, 0x2580, 0x640007, 0x646407])
+  })
+
+  test('splits a cell at the channel that spreads widest, the brighter side lit', async () => {
+    // Red spreads 0..200, blue barely: the two red pixels are the glyph.
+    expect(splitCell([0x000010, 0xc80012, 0x000011, 0xc80013])).toEqual({ mask: 0b1010, fg: 0xc80013, bg: 0x000011 })
+    expect(splitCell([0x333333, 0x333333, 0x333333, 0x333333])).toEqual({ mask: 0, fg: 0x333333, bg: 0x333333 })
+  })
+
+  test('names the quadrant character of each mask', async () => {
+    expect([0, 1, 6, 10, 15].map(m => String.fromCodePoint(quadrant(m)))).toEqual([' ', '▘', '▞', '▐', '█'])
+  })
+
+  test('packs a picture into quadrant cells of two by two pixels', async () => {
+    // Left column dark, right column bright: every cell is a right half block.
+    const bmp = readBmp(bmp24(4, 2, x => (x % 2 === 0 ? [0, 0, 0] : [200, 200, 200])))
+    if (bmp === undefined) throw new Error('no bmp')
+    const bytes = allBytes(blockCells(bmp, 2, 1, 'quadrant'))
+    expect([...new Uint32Array(bytes.buffer, bytes.byteOffset, 6)]).toEqual([0x2590, 0xc8c8c8, 0, 0x2590, 0xc8c8c8, 0])
   })
 
   test('writes and reads standard padded base64', async () => {
