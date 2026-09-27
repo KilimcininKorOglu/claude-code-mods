@@ -18,7 +18,7 @@ The picture appears 3 seconds into a turn, so a short turn shows nothing, and it
 
 | Scene | What moves |
 |---|---|
-| `matrix` | A stream of half-width katakana and digits falls in green in every column, a bright head over a long fading trail, over a faint field of the same glyphs that fills the band; the glyphs flicker. |
+| `matrix` | Streams of half-width katakana and digits fall in green, a bright head over a fading trail; glyphs under a trail flicker. |
 | `fire` | Heat rises from a hidden row under the band and cools on the way up, drawn from `.` to `@` and from dark red to pale yellow. |
 | `aquarium` | A school of fish of four shapes crosses both ways, bubbles rise from them and from the sand and grow, tall seaweed sways on the sand, and the surface ripples on the top row. |
 | `cat` | A garden: two kittens play back and forth on the grass, one on each side, a ball of yarn rolls at their feet, and a butterfly drifts over them. A big cat walks in slowly to the middle, head first, sits and blinks, and says `meow`; then its tricks in a new order each round: it rolls on the ground and back, jumps three times, purrs with a heart floating up, and looks left and right. It says `MEOW!`, walks out slowly to the right and comes round again. Each word stands in a speech bubble over its head. A round takes about 38 seconds, and `random` waits for the cat to walk out before it moves on. |
