@@ -41,23 +41,43 @@ function outputOf(r: ToolCallResult<'Bash'>): string {
   return `${stdout}\n${stderr}`
 }
 
-/** Reads one finished fetch command and answers the model's note, if a bot filter refused it. */
-async function measure($: EngineInterface, state: State, command: string, output: string): Promise<string | undefined> {
+/** The URL and status of one finished fetch command a bot filter refused, for a host not reported yet. */
+function findingOf(state: State, command: string, output: string): { url: string; status: string } | undefined {
   if (!isFetch(command) || hasUserAgent(command)) return undefined
   const url = urlOf(command)
   if (url === undefined) return undefined
   const status = statusIn(output)
-  if (status === undefined) return undefined
-  const host = hostOf(url)
-  if (state.noted.has(host)) return undefined
-  state.noted.add(host)
+  if (status === undefined || state.noted.has(hostOf(url))) return undefined
+  return { url, status }
+}
+
+/**
+ * Reads one finished fetch command and answers the model's note, if a bot filter refused it. The
+ * setting is read only for a finding, so a Bash call that is no refused fetch never reads the store.
+ */
+async function measure($: EngineInterface, state: State, command: string, output: string): Promise<string | undefined> {
+  const found = findingOf(state, command, output)
+  if (found === undefined) return undefined
+  await readSettings($, state)
+  if (!state.enabled) return undefined
+  const { url, status } = found
+  state.noted.add(hostOf(url))
   // The note goes to the model, the line to the person: neither reads the other's channel.
   await toPerson($, url, status)
   return noteText(url, status)
 }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const arg = args.trim()
+  await readSettings($, state)
   if (arg === 'on' || arg === 'off') {
     state.enabled = arg === 'on'
     await $.store.set(ENABLED_KEY, state.enabled)
@@ -72,7 +92,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     await $.command.register({
       name: 'ua-fallback',
       description: 'The fallback User-Agent after a curl or wget a filter refused: status, on, off (ua-fallback)',
@@ -90,7 +110,7 @@ export const register: Register = on => {
   // text, which stays as it is.
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || r.deny !== undefined) return r
+    if (r.deny !== undefined) return r
     const note = await measure($, state, e.command, outputOf(r))
     return note === undefined ? r : { ...r, context: [...(r.context ?? []), note] }
   })

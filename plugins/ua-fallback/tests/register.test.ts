@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { hasUserAgent, hostOf, isFetch, logText, sidebarLines, statusIn, statusText, urlOf } from '../hooks/fetch.ts'
@@ -30,12 +30,19 @@ const run = (args: string): CommandRunInput => ({
   command: 'ua-fallback', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The logged lines, and the Bash result the world answers with. */
-type World = { logs: string[]; result: { stdout: string; stderr: string }; isError?: true }
+/**
+ * The logged lines, the Bash result the world answers with, and the store every window shares, which a
+ * test writes as another window.
+ */
+type World = { logs: string[]; result: { stdout: string; stderr: string }; isError?: true; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { logs: [], result: { stdout: '', stderr: '' } }
-  mock.store(on, {})
+  const w: World = { logs: [], result: { stdout: '', stderr: '' }, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -122,6 +129,19 @@ describe('ua-fallback', () => {
     expect((await $.tool.call(bash('curl https://other.com'))).context).toBe(undefined)
     expect(w.logs).toHaveLength(1)
     expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on or off')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.result = { stdout: '403 Forbidden', stderr: '' }
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    expect((await $.tool.call(bash('curl https://example.com'))).context).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off · no filtered request yet')
+    w.store.set('enabled', true)
+    expect((await $.tool.call(bash('curl https://example.com'))).context).toHaveLength(1)
+    expect(w.logs).toHaveLength(1)
   })
 
   withSidebar('an open sidebar takes the finding and the transcript stays clean', async ($, on) => {
