@@ -3,13 +3,15 @@ import { DatabaseSync } from 'node:sqlite'
 import { isProjectKey, layoutOf, projectDirOf } from '../hooks/shared/layout.ts'
 import type { ProjectRef } from '../hooks/shared/protocol.ts'
 import { writeAtomic } from './files.ts'
+import { log, messageOf } from './log.ts'
 import { applyPragmas, migrate } from './schema.ts'
 
 /**
- * One open database: its file, the connection, when a request last used it, its write queue, and
- * how many queued writes have not finished (a store with one is never closed as idle).
+ * One open database: its file, the connection, when a request last used it, its write queue, how
+ * many queued writes have not finished (a store with one is never closed as idle), and the audit
+ * rows written since the audit log was last cut.
  */
-export type Store = { name: string; file: string; db: DatabaseSync; lastUsed: number; queue: Promise<void>; pending: number }
+export type Store = { name: string; file: string; db: DatabaseSync; lastUsed: number; queue: Promise<void>; pending: number; auditWrites: number }
 
 export type Stores = {
   /** The cross-project store (`user` scope). */
@@ -50,6 +52,33 @@ export function serial<T>(store: Store, work: () => Promise<T> | T): Promise<T> 
   return run
 }
 
+/**
+ * Runs `work` in its own queued `BEGIN IMMEDIATE` transaction, committed when it returns and
+ * rolled back when it throws. The work is synchronous, so nothing interleaves with it.
+ */
+export function transaction<T>(store: Store, work: () => T): Promise<T> {
+  return serial(store, () => {
+    store.db.exec('BEGIN IMMEDIATE')
+    try {
+      const result = work()
+      store.db.exec('COMMIT')
+      return result
+    } catch (err) {
+      rollBack(store)
+      throw err
+    }
+  })
+}
+
+/** A failed statement can end the transaction itself; a rollback that then fails is logged, and the first error stays the one thrown. */
+function rollBack(store: Store): void {
+  try {
+    store.db.exec('ROLLBACK')
+  } catch (err) {
+    log(`${store.name}: the rollback failed after an error: ${messageOf(err)}`)
+  }
+}
+
 function recordProject(dir: string, ref: ProjectRef): void {
   const text = JSON.stringify({ key: ref.key, name: ref.name, root: ref.root, commonDir: ref.commonDir, updatedAt: new Date().toISOString() }, null, 2)
   writeAtomic(`${projectDirOf(dir, ref.key)}/project.json`, `${text}\n`)
@@ -61,7 +90,7 @@ export function createStores(dir: string): Stores {
 
   const use = (name: string, file: string): Store => {
     const known = open.get(name)
-    const store = known ?? { name, file, db: openDatabase(file), lastUsed: 0, queue: Promise.resolve(), pending: 0 }
+    const store = known ?? { name, file, db: openDatabase(file), lastUsed: 0, queue: Promise.resolve(), pending: 0, auditWrites: 0 }
     store.lastUsed = Date.now()
     open.set(name, store)
     return store

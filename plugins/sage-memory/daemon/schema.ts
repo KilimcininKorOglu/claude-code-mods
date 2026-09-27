@@ -13,9 +13,10 @@ const PRAGMAS = `
 
 /**
  * Version 1. `memories.data` holds the whole record as JSON and is the source of truth; the other
- * columns are copies for filtering and sorting. `memories_fts` follows `text` and `tags` through
- * triggers. `reminders` records which memory a loop of a session was already given in the
- * current context epoch, so a memory goes to a context once.
+ * columns are copies for filtering and sorting. `memories_fts` follows `text`, `tags` and
+ * `audience` through triggers; the update trigger runs only when one of them changed, so a write
+ * that leaves them alone costs no reindex. `reminders` records which memory a loop of a session
+ * was already given in the current context epoch, so a memory goes to a context once.
  */
 const SCHEMA_V1 = `
   CREATE TABLE memories (
@@ -43,19 +44,21 @@ const SCHEMA_V1 = `
   CREATE INDEX memories_rank ON memories (importance DESC, updated_at DESC);
 
   CREATE VIRTUAL TABLE memories_fts USING fts5 (
-    text, tags,
+    text, tags, audience,
     content = 'memories', content_rowid = 'rowid',
     tokenize = 'porter unicode61 remove_diacritics 2'
   );
   CREATE TRIGGER memories_fts_insert AFTER INSERT ON memories BEGIN
-    INSERT INTO memories_fts (rowid, text, tags) VALUES (new.rowid, new.text, new.tags);
+    INSERT INTO memories_fts (rowid, text, tags, audience) VALUES (new.rowid, new.text, new.tags, COALESCE(new.audience, ''));
   END;
   CREATE TRIGGER memories_fts_delete AFTER DELETE ON memories BEGIN
-    INSERT INTO memories_fts (memories_fts, rowid, text, tags) VALUES ('delete', old.rowid, old.text, old.tags);
+    INSERT INTO memories_fts (memories_fts, rowid, text, tags, audience) VALUES ('delete', old.rowid, old.text, old.tags, COALESCE(old.audience, ''));
   END;
-  CREATE TRIGGER memories_fts_update AFTER UPDATE OF text, tags ON memories BEGIN
-    INSERT INTO memories_fts (memories_fts, rowid, text, tags) VALUES ('delete', old.rowid, old.text, old.tags);
-    INSERT INTO memories_fts (rowid, text, tags) VALUES (new.rowid, new.text, new.tags);
+  CREATE TRIGGER memories_fts_update AFTER UPDATE ON memories
+  WHEN old.text IS NOT new.text OR old.tags IS NOT new.tags OR old.audience IS NOT new.audience
+  BEGIN
+    INSERT INTO memories_fts (memories_fts, rowid, text, tags, audience) VALUES ('delete', old.rowid, old.text, old.tags, COALESCE(old.audience, ''));
+    INSERT INTO memories_fts (rowid, text, tags, audience) VALUES (new.rowid, new.text, new.tags, COALESCE(new.audience, ''));
   END;
 
   CREATE TABLE edges (
@@ -63,9 +66,10 @@ const SCHEMA_V1 = `
     to_node TEXT NOT NULL,
     relation TEXT NOT NULL,
     weight REAL NOT NULL,
+    created_at TEXT NOT NULL,
     PRIMARY KEY (from_node, to_node, relation)
   );
-  CREATE INDEX edges_to ON edges (to_node);
+  CREATE INDEX edges_to ON edges (to_node, relation);
 
   CREATE TABLE audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -85,7 +89,7 @@ const SCHEMA_V1 = `
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
-  CREATE INDEX candidates_status ON candidates (status);
+  CREATE INDEX candidates_status ON candidates (status, created_at DESC);
   CREATE INDEX candidates_target ON candidates (target_memory_id);
 
   CREATE TABLE vectors (

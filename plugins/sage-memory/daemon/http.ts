@@ -1,16 +1,8 @@
 import { timingSafeEqual } from 'node:crypto'
 import { request, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { Hello } from '../hooks/shared/protocol.ts'
+import { RequestError } from './errors.ts'
 import { codeOf, messageOf } from './log.ts'
-
-/** A failure the daemon answers with its own HTTP status. */
-export class RequestError extends Error {
-  status: number
-  constructor(status: number, message: string) {
-    super(message)
-    this.status = status
-  }
-}
 
 /**
  * Reads a request body up to `limit` bytes. A longer body is drained, not kept, and rejects with

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
-import { canonicalText, collapseSpace, normalizeTags, textKey, tokenize } from '../../hooks/shared/text.ts'
+import { allTerms, canonicalText, collapseSpace, normalizeTags, textKey, tokenize } from '../../hooks/shared/text.ts'
 
 describe('text normalization', () => {
   test('collapses whitespace and trims', () => {
@@ -21,8 +21,9 @@ describe('text normalization', () => {
     assert.deepEqual(tokenize('Edit snake_case in foo.bar, go to edge-case'), ['edit', 'snake_case', 'foo.bar', 'edge-case'])
   })
 
-  test('terms are distinct and case folded', () => {
+  test('terms are distinct and case folded, and the full term list keeps the repeats', () => {
     assert.deepEqual(tokenize('Cache cache CACHE warm'), ['cache', 'warm'])
+    assert.deepEqual(allTerms('Cache cache CACHE warm'), ['cache', 'cache', 'cache', 'warm'])
   })
 
   test('tags lose the hash, case and repeats', () => {

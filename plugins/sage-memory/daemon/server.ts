@@ -3,10 +3,12 @@ import { chmodSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { layoutOf, type Layout } from '../hooks/shared/layout.ts'
 import { MAX_BODY_BYTES, PROTOCOL, type Hello, type ServerFile, type Status } from '../hooks/shared/protocol.ts'
+import { RequestError } from './errors.ts'
 import { inodeOf, readIfExists, writeAtomic } from './files.ts'
-import { authorized, parseBody, probe, readBody, RequestError, send } from './http.ts'
+import { authorized, parseBody, probe, readBody, send } from './http.ts'
 import { takeLock } from './lock.ts'
 import { log, messageOf } from './log.ts'
+import { memoryRoutes, type Route, type RouteInput, type Routes } from './routes.ts'
 import { createStores, type Stores } from './stores.ts'
 
 export type ServerOptions = {
@@ -23,10 +25,6 @@ export type ServerOptions = {
 export type Started =
   | { owned: true; token: string; close: (reason: string) => Promise<void>; closed: Promise<void> }
   | { owned: false; hello: Hello }
-
-type RouteInput = { body: Record<string, unknown>; res: ServerResponse }
-type Route = { method: 'GET' | 'POST'; auth: boolean; handle: (input: RouteInput) => unknown }
-type Routes = Record<string, Route>
 
 type Deferred = { promise: Promise<void>; resolve: () => void; reject: (err: unknown) => void }
 
@@ -68,6 +66,7 @@ function routesOf(state: State): Routes {
     '/hello': { method: 'GET', auth: false, handle: () => state.hello },
     '/status': { method: 'POST', auth: true, handle: () => statusOf(state) },
     '/shutdown': { method: 'POST', auth: true, handle: shutdown },
+    ...memoryRoutes(state.stores),
   }
 }
 

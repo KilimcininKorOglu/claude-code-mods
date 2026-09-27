@@ -22,13 +22,21 @@ export function canonicalText(text: string): string {
 }
 
 /**
- * The distinct terms of a text for scoring: NFKC, lowercase, split on anything that is not a
+ * The terms of a text for scoring, repeats kept: NFKC, lowercase, split on anything that is not a
  * letter, a digit, `_`, `.` or `-` (so `snake_case`, `edge-case` and `foo.bar` stay whole), and
  * terms of fewer than 3 characters dropped, because those match nearly every text.
  */
+export function allTerms(text: string): string[] {
+  return text
+    .normalize('NFKC')
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}_.-]+/u)
+    .filter(term => term.length >= 3)
+}
+
+/** The distinct terms of a text (`allTerms` without repeats). */
 export function tokenize(text: string): string[] {
-  const terms = text.normalize('NFKC').toLowerCase().split(/[^\p{L}\p{N}_.-]+/u)
-  return [...new Set(terms.filter(term => term.length >= 3))]
+  return [...new Set(allTerms(text))]
 }
 
 /** Tags lowercased, a leading `#` dropped, blanks and repeats removed. */
