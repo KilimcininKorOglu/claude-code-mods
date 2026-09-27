@@ -12,7 +12,8 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
     cost $0.07
     model opus-5-5[1m] · effort medium
     Claude Code 2.1.282
-    sessions: 2 others · 1 busy (cors-fix) · 1 idle
+    sessions: 2 others · 1 busy · 1 idle
+      cors-fix
     main · 1 untracked · no upstream
 
 - `ctx`: the input tokens of the last reply over the model's context window, and their share. Green under 50%, yellow from 50% to 80%, red above 80%. The engine reports all three (`$.session.usage().context`); the mod computes none of them. After it come the cache read and cache write tokens of the main loop's last model request, the one that holds the window now, and that request's cache hit (`CH`, the same measure as on the tokens line). The request's uncached input (in a cached session the few tokens past the cache, often 1 or 2) and its output are left to the tokens line. A subagent's request has a window of its own and does not change the line. With the request's split on it, only the two percentages are coloured. Before the first reply the line reads `ctx: no reply yet`.
@@ -21,7 +22,7 @@ A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): 
 - `cost`: the session's cost in US dollars, as `/cost` totals it.
 - `model`: the main loop's model, and the effort of the main loop's last model request: `low` to `max`, a budget, `no effort setting` for a model without one, or `effort: not read yet` when nothing names one. Before the first request, the line shows the effort the transcript's last response recorded (a resumed session), else `CLAUDE_CODE_EFFORT_LEVEL`, else the settings' `effortLevel`. When a hook beneath session-watch sent that request at another effort than the session's setting, such as effort-auto, the line shows both, the setting faint: `effort low (session medium)`. The model's name is coloured by family, the dearest the warmest: opus red, fable yellow, sonnet green, haiku faint. The effort level is coloured by how hard it asks: `low` faint, `medium` green, `high` yellow, `xhigh` and `max` red. Colouring one word needs sidebar 0.11.0 or later; an older sidebar draws the line in one colour.
 - `Claude Code`: the engine's version.
-- `sessions`: the other live Claude Code sessions of this machine, which spend the same account's usage limits: how many, the busy ones by name in yellow (at most three, the rest an ellipsis), the idle ones counted. Read from Claude Code's registry, `<config dir>/sessions/<pid>.json`; a file whose pid no longer runs (a crashed session leaves it) is left out, checked with one `ps`. No other session writes no line.
+- `sessions`: the other live Claude Code sessions of this machine, which spend the same account's usage limits: how many, the busy ones counted in yellow, the idle ones counted, then each busy one by name on its own indented line (at most three, the rest as `+N more`). Read from Claude Code's registry, `<config dir>/sessions/<pid>.json`; a file whose pid no longer runs (a crashed session leaves it) is left out, checked with one `ps`. No other session writes no line.
 - The git line: the branch (or `detached at <sha>`), the staged, modified, untracked and conflicted files, and the commits ahead of and behind the upstream (`↑1 ↓0`, or `no upstream`). Yellow while the tree has changes, green when it is clean. Outside a repository it reads `git: this folder is not a git repository`, also where git itself speaks another language, because git runs in the C locale.
 
 **A status line** in place of the section while the sidebar is closed or not installed:

@@ -12,7 +12,8 @@ Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u
     cost $0.07
     model opus-5-5[1m] · effort medium
     Claude Code 2.1.282
-    sessions: 2 others · 1 busy (cors-fix) · 1 idle
+    sessions: 2 others · 1 busy · 1 idle
+      cors-fix
     main · 1 untracked · no upstream
 
 - `ctx`: son cevabın input token'ı, modelin context window'u ve ikisinin oranı. %50 altı yeşil, %50 ile %80 arası sarı, %80 üstü kırmızı. Üç değeri de engine verir (`$.session.usage().context`), mod hiçbirini hesaplamaz. Ardından main loop'un son model isteğinin, yani pencereyi şu an tutan isteğin cache read ve cache write token'ları ve o isteğin cache hit'i gelir (`CH`, tokens satırındakiyle aynı ölçü). İsteğin cache'lenmemiş input'u (cache'li bir oturumda cache'in ötesindeki birkaç token, çoğu zaman 1 ya da 2) ve output'u tokens satırında kalır. Bir subagent'ın isteğinin kendi penceresi vardır ve satırı değiştirmez. İsteğin değerleri satırdayken yalnız iki yüzde renklenir. İlk cevaptan önce satır `ctx: no reply yet` yazar.
@@ -21,7 +22,7 @@ Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u
 - `cost`: session'ın maliyeti, `/cost`'un toplamı olarak ABD doları.
 - `model`: main loop'un modeli ve main loop'un son model request'inin effort'u: `low` ile `max` arası, bir budget, effort'u olmayan bir model için `no effort setting`, ya da hiçbir şey bir effort söylemiyorsa `effort: not read yet`. İlk request'ten önce satır, transcript'teki son cevabın kaydettiği effort'u gösterir (devam ettirilen bir session); yoksa `CLAUDE_CODE_EFFORT_LEVEL`, o da yoksa settings'teki `effortLevel` değerini. session-watch'ın altındaki bir hook o request'i session ayarından farklı bir effort ile gönderdiyse, örneğin effort-auto, satır ikisini birden gösterir, ayar soluk: `effort low (session medium)`. Modelin adı ailesine göre renklenir, en pahalısı en sıcak renkte: opus kırmızı, fable sarı, sonnet yeşil, haiku soluk. Effort seviyesi ne kadar zorladığına göre renklenir: `low` soluk, `medium` yeşil, `high` sarı, `xhigh` ve `max` kırmızı. Tek bir kelimeyi renklendirmek için sidebar 0.11.0 veya sonrası gerekir; daha eski bir sidebar satırı tek renkle çizer.
 - `Claude Code`: engine'in sürümü.
-- `sessions`: bu makinedeki, aynı hesabın kullanım limitlerini harcayan diğer canlı Claude Code session'ları: kaç tane oldukları, meşgul olanlar sarı renkte adlarıyla (en çok üçü, gerisi üç nokta), boşta olanlar sayı olarak. Claude Code'un kayıtlarından okunur, `<config dizini>/sessions/<pid>.json`; pid'i artık çalışmayan bir dosya (çöken bir session onu geride bırakır) tek bir `ps` ile kontrol edilip dışarıda bırakılır. Başka session yoksa satır yazılmaz.
+- `sessions`: bu makinedeki, aynı hesabın kullanım limitlerini harcayan diğer canlı Claude Code session'ları: kaç tane oldukları, meşgul olanlar sarı renkte sayı olarak, boşta olanlar sayı olarak, ardından her meşgul session kendi girintili satırında adıyla (en çok üçü, gerisi `+N more`). Claude Code'un kayıtlarından okunur, `<config dizini>/sessions/<pid>.json`; pid'i artık çalışmayan bir dosya (çöken bir session onu geride bırakır) tek bir `ps` ile kontrol edilip dışarıda bırakılır. Başka session yoksa satır yazılmaz.
 - Git satırı: branch (ya da `detached at <sha>`), staged, modified, untracked ve conflicted dosyalar, upstream'in önünde ve arkasında olan commit'ler (`↑1 ↓0`, ya da `no upstream`). Ağaçta değişiklik varken sarı, temizken yeşil. Bir repository dışında `git: this folder is not a git repository` yazar. Git başka bir dilde konuşan bir makinede de böyledir, çünkü git C locale'i ile çalışır.
 
 **Bir status line**, sidebar kapalıyken ya da kurulu değilken bölümün yerine:

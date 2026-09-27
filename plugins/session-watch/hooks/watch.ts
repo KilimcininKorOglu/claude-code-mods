@@ -453,22 +453,24 @@ export function otherSessionOf(text: string, ownId: string): OtherSession | unde
 const MAX_BUSY_NAMED = 3
 
 /**
- * The other live sessions on one line: how many, the busy ones by name in yellow, because they spend the
- * same usage limits now, and the idle ones counted. Undefined while no other session runs.
+ * The other live sessions: one line with how many, the busy count in yellow, because they spend the same
+ * usage limits now, and the idle ones counted; then each busy one by name on its own indented line.
+ * Empty while no other session runs.
  */
-export function sessionsLine(others: readonly OtherSession[]): Line | undefined {
-  if (others.length === 0) return undefined
+export function sessionsLines(others: readonly OtherSession[]): Line[] {
+  if (others.length === 0) return []
   const busy = others.filter(o => o.busy)
-  const named = busy.slice(0, MAX_BUSY_NAMED).map(o => o.place).join(', ') + (busy.length > MAX_BUSY_NAMED ? ', …' : '')
-  const busyParts = busy.length === 0 ? [] : [part(' · ', undefined), part(`${busy.length} busy`, 'warn'), part(` (${named})`, 'dim')]
+  const busyParts = busy.length === 0 ? [] : [part(' · ', undefined), part(`${busy.length} busy`, 'warn')]
   const idle = others.length - busy.length
-  return partsLine([part(`sessions: ${others.length} other${others.length === 1 ? '' : 's'}`, undefined), ...busyParts, ...(idle === 0 ? [] : [part(` · ${idle} idle`, 'dim')])])
+  const head = partsLine([part(`sessions: ${others.length} other${others.length === 1 ? '' : 's'}`, undefined), ...busyParts, ...(idle === 0 ? [] : [part(` · ${idle} idle`, 'dim')])])
+  const names = busy.slice(0, MAX_BUSY_NAMED).map(o => ({ text: `  ${o.place}`, kind: 'dim' as const }))
+  const rest = busy.length > MAX_BUSY_NAMED ? [{ text: `  +${busy.length - MAX_BUSY_NAMED} more`, kind: 'dim' as const }] : []
+  return [head, ...names, ...rest]
 }
 
 /** The reading as the sidebar section's lines, in the order the person reads them. */
 export function sidebarLines(r: Reading): Line[] {
-  const sessions = sessionsLine(r.others ?? [])
-  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort, r.sent), { text: `Claude Code ${r.version}` }, ...(sessions === undefined ? [] : [sessions]), gitLine(r.git)]
+  return [contextLine(r.context, r.last), tokensLine(r.split, r.seeding), costLine(r.costUsd), modelLine(r.model, r.effort, r.sent), { text: `Claude Code ${r.version}` }, ...sessionsLines(r.others ?? []), gitLine(r.git)]
 }
 
 /**

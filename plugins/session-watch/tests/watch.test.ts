@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import {
-  addSplit, cacheHit, otherSessionOf, sessionsLine, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
+  addSplit, cacheHit, otherSessionOf, sessionsLines, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
 } from '../hooks/watch.ts'
 
@@ -136,11 +136,11 @@ describe('other sessions', () => {
     expect(otherSessionOf(JSON.stringify({ sessionId: 'b' }), 'a')).toBe(undefined)
   })
 
-  test('no other session writes no line; past three busy ones the rest are an ellipsis', () => {
-    expect(sessionsLine([])).toBe(undefined)
+  test('no other session writes no line; each busy one gets its own line, and past three the rest are counted', () => {
+    expect(sessionsLines([])).toEqual([])
     const busy = (place: string) => ({ pid: 1, sessionId: place, busy: true, place })
-    expect(sessionsLine(['a', 'b', 'c', 'd'].map(busy))?.text).toBe('sessions: 4 others · 4 busy (a, b, c, …)')
-    expect(sessionsLine([{ pid: 1, sessionId: 'x', busy: false, place: 'x' }])?.text).toBe('sessions: 1 other · 1 idle')
+    expect(sessionsLines(['a', 'b', 'c', 'd', 'e'].map(busy)).map(l => l.text)).toEqual(['sessions: 5 others · 5 busy', '  a', '  b', '  c', '  +2 more'])
+    expect(sessionsLines([{ pid: 1, sessionId: 'x', busy: false, place: 'x' }]).map(l => l.text)).toEqual(['sessions: 1 other · 1 idle'])
   })
 })
 

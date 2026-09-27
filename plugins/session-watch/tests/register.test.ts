@@ -246,7 +246,8 @@ describe('session-watch', () => {
     w.live = [100, 200, 300]
     await started($, w)
     const lines = w.bar.lines.at(-1) ?? []
-    expect(lines.at(-2)).toEqual({ text: 'sessions: 2 others · 1 busy (cors-fix) · 1 idle', parts: [{ text: 'sessions: 2 others' }, { text: ' · ' }, { text: '1 busy', kind: 'warn' }, { text: ' (cors-fix)', kind: 'dim' }, { text: ' · 1 idle', kind: 'dim' }] })
+    expect(lines.at(-3)).toEqual({ text: 'sessions: 2 others · 1 busy · 1 idle', parts: [{ text: 'sessions: 2 others' }, { text: ' · ' }, { text: '1 busy', kind: 'warn' }, { text: ' · 1 idle', kind: 'dim' }] })
+    expect(lines.at(-2)).toEqual({ text: '  cors-fix', kind: 'dim' })
   })
 
   test('totals kept before thinking was counted keep their counts and take the thinking alone; another session keeps its own', async ($, on) => {
