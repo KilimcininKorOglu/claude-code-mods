@@ -55,12 +55,19 @@ const CLONE: Record<string, string> = {
   'turkish-native': '1.2.0',
 }
 
-/** The logged lines of the person's channel, the paths read, and the record file of this world. */
-type World = { logs: string[]; reads: string[]; record: string }
+/**
+ * The logged lines of the person's channel, the paths read, the record file of this world, and the store
+ * every window shares, which a test writes as another window.
+ */
+type World = { logs: string[]; reads: string[]; record: string; store: Map<string, unknown> }
 
 function world(on: On, record: string, env: Record<string, string> = { HOME: '/Users/u' }): World {
-  const w: World = { logs: [], reads: [], record }
-  mock.store(on, {})
+  const w: World = { logs: [], reads: [], record, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.env(on, env)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -158,6 +165,24 @@ describe('mod-doctor', () => {
     expect(w.logs).toHaveLength(2)
   })
 
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, RECORD)
+    await started($)
+    expect(w.logs).toHaveLength(1)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    w.store.set('marketplace', 'turkish-native')
+    const reads = w.reads.length
+    await $.turn.complete(turn())
+    expect(w.reads.length).toBe(reads)
+    // Turned on again there, this window measures the stored scope at its next turn's end.
+    w.store.set('enabled', true)
+    await $.turn.complete(turn())
+    expect(w.logs.at(-1)).toBe('1 plugin(s) are behind their clone: turkish-native 1.0.0 → 1.2.0')
+    w.store.set('enabled', false)
+    expect((await $.command.run(run(''))).text).toContain('off · turkish-native · 1 of 1 plugin(s) behind')
+  })
+
   test('a scope with no installed plugin says so, and off measures nothing', async ($, on) => {
     const w = world(on, RECORD)
     await started($)
@@ -201,5 +226,17 @@ describe('mod-doctor', () => {
     expect(w.logs).toEqual([])
     await $.command.run(run('off'))
     expect(bar.cleared).toBe(1)
+  })
+
+  withSidebar('an off another window stored takes the section down at the next turn end, as off does here', async ($, on) => {
+    const w = world(on, RECORD)
+    const bar: Bar = { open: true, sections: [], cleared: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    expect(bar.sections).toHaveLength(1)
+    w.store.set('enabled', false)
+    await $.turn.complete(turn())
+    expect(bar.cleared).toBe(1)
+    expect(bar.sections).toHaveLength(1)
   })
 })

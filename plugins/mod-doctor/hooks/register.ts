@@ -152,6 +152,18 @@ async function readScope($: EngineInterface): Promise<string> {
   return typeof stored === 'string' && marketplaceOf(stored) !== undefined ? stored : ALL
 }
 
+/**
+ * Reads the on/off setting and the scope from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it. A mod turned off there takes its section
+ * down here too, as `off` does.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.scope = await readScope($)
+  if (was && !state.enabled) await clearShown($, state)
+}
+
 async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
   state.enabled = on
   await $.store.set(ENABLED_KEY, on)
@@ -162,6 +174,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const arg = args.trim()
+  await readSettings($, state)
   if (arg === 'on' || arg === 'off') return setEnabled($, state, arg === 'on')
   if (arg.startsWith('marketplace')) return setScope($, state, arg.slice(11).trim())
   if (arg !== '' && arg !== 'status') return USAGE
@@ -178,8 +191,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.scope = await readScope($)
+    await readSettings($, state)
     state.cwd = e.cwd
     state.config = configDirOf(await $.env.get('CLAUDE_CONFIG_DIR'), await $.env.get('HOME'))
     await $.command.register({
@@ -203,7 +215,9 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (state.enabled && e.agentId === undefined && state.config !== '') await check($, state)
+    if (e.agentId !== undefined || state.config === '') return r
+    await readSettings($, state)
+    if (state.enabled) await check($, state)
     return r
   })
 }
