@@ -89,8 +89,18 @@ async function readLimit($: EngineInterface): Promise<number> {
   return typeof stored === 'number' && limitOf(String(stored)) !== undefined ? stored : DEFAULT_LIMIT_KB
 }
 
+/**
+ * Reads the on/off setting and the limit from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.limitKb = await readLimit($)
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const arg = args.trim()
+  await readSettings($, state)
   if (arg === 'on' || arg === 'off') {
     state.enabled = arg === 'on'
     await $.store.set(ENABLED_KEY, state.enabled)
@@ -106,8 +116,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.limitKb = await readLimit($)
+    await readSettings($, state)
     await $.command.register({
       name: 'output-flood',
       description: 'A Bash result over a size limit: status, on, off, limit <kb> (output-flood)',
@@ -126,6 +135,8 @@ export const register: Register = on => {
   // because a failing test run exits non-zero and is the largest output of all.
   on('classic.PostToolBatch', async ($, e, next) => {
     const r = await next(e)
+    if (!e.tool_calls.some(call => bashCommand(call) !== undefined)) return r
+    await readSettings($, state)
     if (!state.enabled) return r
     const notes: string[] = []
     for (const call of e.tool_calls) {

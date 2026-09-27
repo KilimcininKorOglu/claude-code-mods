@@ -39,10 +39,10 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.282:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=output-flood}, classic.PostToolBatch
-    ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setLimit), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get (via readLimit, readSettings), $.store.set (via runCommand, setLimit), $.ui.log (via toPerson)
 
 Reach L1, reads the session.
 

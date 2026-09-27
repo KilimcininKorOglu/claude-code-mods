@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { adviceFor, fmtKb, limitOf, logText, sidebarLines, sizeOf, statusText } from '../hooks/flood.ts'
@@ -30,12 +30,16 @@ const run = (args: string): CommandRunInput => ({
   command: 'output-flood', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** The logged lines. */
-type World = { logs: string[] }
+/** The logged lines, and the store every window shares, which a test writes as another window. */
+type World = { logs: string[]; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { logs: [] }
-  mock.store(on, {})
+  const w: World = { logs: [], store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -145,6 +149,20 @@ describe('output-flood', () => {
     expect((await $.command.run(run('off'))).text).toBe('off: results are not measured')
     expect(await bash($, 'du -a /', record('x'.repeat(2 * 1024)))).toBe(undefined)
     expect((await $.command.run(run('what'))).text).toBe('expects nothing (the status), on, off or limit <kb>')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one set a 1 KB limit, and this one never ran the command.
+    w.store.set('limit', 1)
+    expect((await bash($, 'ls -R /', record('x'.repeat(2 * 1024))))?.[0]).toContain('over the 1 KB limit')
+    w.store.set('enabled', false)
+    expect(await bash($, 'du -a /', record('x'.repeat(2 * 1024)))).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off · limit 1 KB · 1 result(s) over it, 2.0 KB in all')
+    w.store.set('enabled', true)
+    expect(await bash($, 'find /', record('x'.repeat(2 * 1024)))).toHaveLength(1)
+    expect(w.logs).toHaveLength(2)
   })
 
   withSidebar('an open sidebar takes the finding and the transcript stays clean', async ($, on) => {
