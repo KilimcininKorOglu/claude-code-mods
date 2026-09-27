@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf } from 'claude-code'
 
 tier('user')
@@ -34,8 +34,11 @@ function bmp24(width: number, height: number): string {
   return btoa(String.fromCharCode(...b))
 }
 
-/** Files on a fake disk, the commands run, the lines logged. */
-type World = { files: Map<string, { base64: string; size: number }>; argv: string[]; logs: string[]; failNext: boolean; reads: string[]; cwd: string }
+/**
+ * Files on a fake disk, the commands run, the lines logged, and the store every window shares, which a
+ * test writes as another window.
+ */
+type World = { files: Map<string, { base64: string; size: number }>; argv: string[]; logs: string[]; failNext: boolean; reads: string[]; cwd: string; store: Map<string, unknown> }
 
 /** The picture is drawn as pixels when the terminal takes the kitty graphics protocol. */
 function world(on: On, graphics = true): World {
@@ -46,8 +49,13 @@ function world(on: On, graphics = true): World {
     failNext: false,
     reads: [],
     cwd: ROOT,
+    store: new Map(),
   }
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: w.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -154,6 +162,27 @@ describe('shot-inline', () => {
     expect((await $.command.run(run('glyphs octant'))).text).toBe('glyphs expects half or quadrant; now half')
     expect(cellWords((await (await row($, 't8')).find({ type: 'Raster' }))?.props.cells)).toEqual([0x2580, 0x0a0000, 0x0a0000, 0x2580, 0x140000, 0x140000])
     expect(w.argv.at(-1)).toMatch(/^sips -z 2 2 -s format bmp /)
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, false)
+    w.files.set(`${ROOT}/tiny.png`, { base64: pngHead(16, 16), size: 90 })
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await $.tool.call({ tool: 'Read', file_path: `${ROOT}/tiny.png`, tool_use_id: 't11' } as never)
+    expect(await (await row($, 't11')).find({ type: 'Raster' })).toBe(undefined)
+    // Turned on again there with half blocks, the next picture is drawn with them.
+    w.store.set('enabled', true)
+    w.store.set('glyphs', 'half')
+    await $.tool.call({ tool: 'Read', file_path: `${ROOT}/tiny.png`, tool_use_id: 't12' } as never)
+    const shown = await row($, 't12')
+    expect(cellWords((await shown.find({ type: 'Raster' }))?.props.cells)).toEqual([0x2580, 0x0a0000, 0x0a0000, 0x2580, 0x140000, 0x140000])
+    // Off there again: the next picture's tool call reads it, and the row drawn before loses its picture, as off does here.
+    w.store.set('enabled', false)
+    await $.tool.call({ tool: 'Read', file_path: `${ROOT}/tiny.png`, tool_use_id: 't13' } as never)
+    expect(await shown.find({ type: 'Raster' })).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off; 1 picture(s) this session; this terminal has no kitty graphics protocol, so a picture is drawn as half block cells')
   })
 
   test('a resize replaces a picture\'s cells instead of keeping one grid per size', async ($, on) => {

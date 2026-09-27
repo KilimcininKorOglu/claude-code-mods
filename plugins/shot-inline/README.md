@@ -45,7 +45,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=shot-inline}, tool.call{tool=Read}, tool.call{tool=Bash}, tool.call{tool=/"^mcp__(plugin_playwright_)?playwright__browser_take_screenshot$"/}, ui.render{component=ToolUse}
-    ❯ ./register.tsx calls: $.command.register, $.env.get, $.fs.exists (via bmpCopy, pngCopy, prepare), $.fs.read (via gridFor, measure), $.fs.stat (via prepare), $.process.run (via sips, tempDir), $.session.cwd, $.store.get, $.store.set (via runCommand, setGlyphs), $.ui.invalidate (via remember, runCommand, setGlyphs), $.ui.log (via report), $.ui.resolve
+    ❯ ./register.tsx calls: $.command.register, $.env.get, $.fs.exists (via bmpCopy, pngCopy, prepare), $.fs.read (via gridFor, measure), $.fs.stat (via prepare), $.process.run (via sips, tempDir), $.session.cwd, $.store.get (via readSettings), $.store.set (via runCommand, setGlyphs), $.ui.invalidate (via readSettings, remember, runCommand, setGlyphs), $.ui.log (via report), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: KITTY_WINDOW_ID, TERM, TERM_PROGRAM, TMPDIR
 

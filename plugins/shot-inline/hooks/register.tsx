@@ -154,8 +154,24 @@ async function setGlyphs($: EngineInterface, state: State, word: string): Promis
   return `glyphs ${word}: ${across}x${down} pixels a cell on a terminal without the kitty graphics protocol`
 }
 
+/**
+ * Reads the on/off setting and the block characters from the store, which every window shares, so a
+ * change made in another window applies here at the next hook that acts on it. A row is drawn with what
+ * its own tool call read, because `ui.render` runs on every redraw and never reads the store; a changed
+ * setting redraws the rows, as `on`, `off` and `glyphs` do. Answers whether the mod is on.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<boolean> {
+  const was = `${state.enabled}:${state.glyphs}`
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  const glyphs = await $.store.get(GLYPHS_KEY)
+  state.glyphs = isGlyphs(glyphs) ? glyphs : DEFAULT_GLYPHS
+  if (`${state.enabled}:${state.glyphs}` !== was) $.ui.invalidate('ui.render')
+  return state.enabled
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
+  await readSettings($, state)
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
     state.enabled = word === 'on'
@@ -173,9 +189,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'shot-inline', description: 'Pictures under their tool row: status, on, off, glyphs (shot-inline)', argumentHint: '[on | off | glyphs half|quadrant]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    const glyphs = await $.store.get(GLYPHS_KEY)
-    state.glyphs = isGlyphs(glyphs) ? glyphs : DEFAULT_GLYPHS
+    await readSettings($, state)
     state.root = await $.session.cwd()
     state.graphics = hasGraphics((await $.env.get('TERM')) ?? '', (await $.env.get('TERM_PROGRAM')) ?? '', (await $.env.get('KITTY_WINDOW_ID')) ?? '')
     return r
@@ -186,24 +200,27 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Read' }, async ($, e, next) => {
     const r = await next(e)
-    if (state.enabled && answered(r) && isImagePath(e.file_path)) await remember($, state, e.tool_use_id, [e.file_path], await $.session.cwd())
+    if (!answered(r) || !isImagePath(e.file_path) || !(await readSettings($, state))) return r
+    await remember($, state, e.tool_use_id, [e.file_path], await $.session.cwd())
     return r
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
-    const paths = state.enabled && answered(r) ? commandImagePaths(e.command) : []
+    const paths = answered(r) ? commandImagePaths(e.command) : []
+    if (paths.length === 0 || !(await readSettings($, state))) return r
     // A Bash command runs where its shell stands, which a `cd` moves, so its paths read against that.
-    if (paths.length > 0) await remember($, state, e.tool_use_id, paths, await $.session.cwd())
+    await remember($, state, e.tool_use_id, paths, await $.session.cwd())
     return r
   })
 
   on('tool.call', { tool: SCREENSHOT_TOOL }, async ($, e, next) => {
     const r = await next(e)
-    const path = state.enabled && answered(r) ? screenshotPath(r.text ?? '') : undefined
+    const path = answered(r) ? screenshotPath(r.text ?? '') : undefined
+    if (path === undefined || !(await readSettings($, state))) return r
     // The Playwright server writes a relative path under the directory it started in, the session's own,
     // which a Bash `cd` does not move.
-    if (path !== undefined) await remember($, state, e.tool_use_id, [path], state.root)
+    await remember($, state, e.tool_use_id, [path], state.root)
     return r
   })
 
