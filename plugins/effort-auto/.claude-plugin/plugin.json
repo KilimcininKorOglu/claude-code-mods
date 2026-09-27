@@ -1,6 +1,6 @@
 {
   "name": "effort-auto",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Has a small model rate how hard each prompt is and runs that turn at the matching effort, on the models whose prompt cache survives an effort change. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",

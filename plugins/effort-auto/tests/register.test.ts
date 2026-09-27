@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { keepsCacheAcrossEffort, levelOf, raterPrompt } from '../hooks/effort.ts'
@@ -13,13 +13,18 @@ const USAGE = { input_tokens: 90, output_tokens: 2, cache_read_input_tokens: 0, 
 
 /**
  * `reply` is the rater's answer, or null for a rater that fails; `asked` holds each rating request;
- * `sent` holds the effort each model request went out with; `logs` holds the transcript lines.
+ * `sent` holds the effort each model request went out with; `logs` holds the transcript lines; `store`
+ * is the store every window shares, which a test writes as another window.
  */
-type World = { reply: string | null; asked: { model: string; effort?: string; prompt: string }[]; sent: (string | number | undefined)[]; logs: string[] }
+type World = { reply: string | null; asked: { model: string; effort?: string; prompt: string }[]; sent: (string | number | undefined)[]; logs: string[]; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { reply: 'max', asked: [], sent: [], logs: [] }
-  mock.store(on, {})
+  const w: World = { reply: 'max', asked: [], sent: [], logs: [], store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -124,6 +129,24 @@ describe('effort-auto', () => {
       "the rater did not answer (api-error), so this turn keeps the session's effort",
       'the rater answered "it depends", so this turn keeps the session\'s effort',
     ])
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await prompt($, 'hard work')
+    await step($)
+    await turnEnds($)
+    expect(w.asked).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe('off')
+    w.store.set('enabled', true)
+    await prompt($, 'hard work')
+    await step($)
+    expect(w.asked).toHaveLength(1)
+    expect(w.sent).toEqual(['high', 'max'])
+    expect((await $.command.run(run(''))).text).toBe('on')
   })
 
   test('off rates nothing, and the command answers its state', async ($, on) => {

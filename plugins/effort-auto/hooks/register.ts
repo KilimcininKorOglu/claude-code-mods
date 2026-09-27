@@ -45,6 +45,20 @@ async function dropLine($: EngineInterface, state: State): Promise<void> {
   }
 }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it. A mod turned off there drops its rating and its
+ * line, as `off` does.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  if (state.enabled || !was) return
+  state.level = undefined
+  state.current = undefined
+  await dropLine($, state)
+}
+
 /** The level the rater gives a prompt, or undefined when it did not answer with one. */
 async function rate($: EngineInterface, text: string): Promise<Level | undefined> {
   const r = await $.model.complete({ model: RATER_MODEL, system: RATER_SYSTEM, prompt: raterPrompt(text), effort: 'low', maxTokens: 16, timeoutMs: RATE_TIMEOUT_MS })
@@ -67,7 +81,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     if (word === 'off') await dropLine($, state)
     return word === 'on' ? "on: each prompt is rated and its turn runs at that effort" : "off: every turn runs at the session's effort"
   }
-  return word === '' ? (state.enabled ? 'on' : 'off') : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return state.enabled ? 'on' : 'off'
 }
 
 export const register: Register = on => {
@@ -76,7 +92,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'effort-auto', description: "Run each turn at the effort its prompt needs: status, on, off (effort-auto)", argumentHint: '[on | off]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     return r
   })
 
@@ -85,8 +101,11 @@ export const register: Register = on => {
 
   // Only the person's own prompt, typed while the session is idle, is rated: a prompt typed over a running
   // turn, a task notification or a plugin's prompt leaves the next turn at the session's effort. So is a
-  // prompt of a session whose model would lose its cache, as the last main-loop request named it.
+  // prompt of a session whose model would lose its cache, as the last main-loop request named it. Every
+  // prompt reads the setting, so the turn it starts runs as the store says; turn.step, which runs at each
+  // model request, does not read the store.
   on('prompt.submit', async ($, e, next) => {
+    await readSettings($, state)
     const typed = e.origin.kind === 'composer' || e.origin.kind === 'bridge'
     const cacheSafe = state.model === undefined || keepsCacheAcrossEffort(state.model)
     if (state.enabled && typed && e.turnId === undefined && cacheSafe) {
