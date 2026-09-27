@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
@@ -30,12 +30,19 @@ const run = (args: string): CommandRunInput => ({
   command: 'sql-concat-watch', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 },
 })
 
-/** `file` is the edited file's text after the edit; `readFails` makes the read fail, `gone` deletes it. */
-type World = { file: string; readFails: boolean; gone: boolean; reads: number; logs: string[] }
+/**
+ * `file` is the edited file's text after the edit; `readFails` makes the read fail, `gone` deletes it;
+ * `store` is the store every window shares, which a test writes as another window.
+ */
+type World = { file: string; readFails: boolean; gone: boolean; reads: number; logs: string[]; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { file: '', readFails: false, gone: false, reads: 0, logs: [] }
-  mock.store(on, {})
+  const w: World = { file: '', readFails: false, gone: false, reads: 0, logs: [], store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: ROOT }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -228,6 +235,20 @@ describe('sql-concat-watch', () => {
     expect(w.logs.at(-1)).toBe('the SQL built from strings is gone from src/users.ts: src/users.ts:1')
     await prompt('fourth')
     expect(notes[3]).toEqual([])
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.file = `${QUERY}\n`
+    await edit($, 'src/users.ts', 'const q = ""', QUERY)
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).deny).toContain('src/users.ts:1')
+    w.store.set('enabled', false)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
+    expect((await edit($, 'src/other.ts', 'const q = ""', QUERY)).context).toBe(undefined)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · 1 file(s) still build SQL from strings')
   })
 
   test('a failed read leaves the line number out and is logged once', async ($, on) => {

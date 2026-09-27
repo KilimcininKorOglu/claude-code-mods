@@ -10,12 +10,22 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 type Finding = { path: string; lines: string[]; places: string[] }
 
 /**
- * The on/off setting read at session start, the mode, whether a read error was logged, the open findings
- * by shown path, whether the model is owed a note for them, and the root read once at the session's start
- * (`shownRootOf`). A path is shown against that root, not against `$.session.cwd()`, because a Bash `cd`
- * moves the session's directory and would then leave every path outside it written in full.
+ * The on/off setting and the mode as the store held them at the last read, whether a read error was
+ * logged, the open findings by shown path, whether the model is owed a note for them, and the root read
+ * once at the session's start (`shownRootOf`). A path is shown against that root, not against
+ * `$.session.cwd()`, because a Bash `cd` moves the session's directory and would then leave every path
+ * outside it written in full.
  */
 type State = { enabled: boolean; mode: Mode; reported: boolean; open: Map<string, Finding>; owed: boolean; root?: string }
+
+/**
+ * Reads the on/off setting and the mode from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+}
 
 /**
  * The git repository the session started in, so a file in a sibling directory of a session opened in a
@@ -117,7 +127,9 @@ async function noteFor($: EngineInterface, state: State, path: string, before: s
 
 /** Adds the note to an edit whose new lines build SQL from strings, and closes what a later edit fixed. */
 async function afterEdit($: EngineInterface, state: State, path: string, before: string, after: string, r: ToolCallResult): Promise<ToolCallResult> {
-  if (r.deny !== undefined || r.isError === true || !state.enabled) return r
+  if (r.deny !== undefined || r.isError === true) return r
+  await readSettings($, state)
+  if (!state.enabled) return r
   const found = isSource(path) ? await noteFor($, state, path, before, after) : undefined
   await closeResolved($, state, found?.shown)
   return found === undefined ? r : { ...r, context: [...(r.context ?? []), found.note] }
@@ -159,7 +171,9 @@ async function scopeOf($: EngineInterface, state: State, command: string): Promi
  * there is no bypass.
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
-  if (!state.enabled || state.mode !== 'deny' || state.open.size === 0 || !isGuarded(command)) return undefined
+  if (state.open.size === 0 || !isGuarded(command)) return undefined
+  await readSettings($, state)
+  if (!state.enabled || state.mode !== 'deny') return undefined
   await closeResolved($, state)
   if (state.open.size === 0) return undefined
   const scoped = await scopeOf($, state, command)
@@ -191,7 +205,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each edit is checked for SQL built from strings' : 'off: edits are not checked'
   }
   if (word.startsWith('mode')) return setMode($, state, word.slice(4).trim())
-  return word === '' ? statusText(state) : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return statusText(state)
 }
 
 export const register: Register = on => {
@@ -200,8 +216,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'sql-concat-watch', description: 'SQL an edit builds from strings: status, on, off, mode (sql-concat-watch)', argumentHint: '[on | off | mode note | deny]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+    await readSettings($, state)
     state.root = await shownRootOf($, await $.session.cwd())
     return r
   })
@@ -215,7 +230,9 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || !state.enabled) return r
+    if (e.agentId !== undefined) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     await closeResolved($, state)
     state.owed = state.open.size > 0
     return r
