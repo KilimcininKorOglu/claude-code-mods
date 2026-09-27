@@ -24,6 +24,17 @@ type State = {
   dir?: string
 }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it. A changed setting redraws the replies, as
+ * `on` and `off` do.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  if (state.enabled !== was) $.ui.invalidate('ui.render')
+}
+
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
 }
@@ -91,6 +102,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: mermaid blocks render under their reply after each turn' : 'off: mermaid blocks stay text'
   }
   if (word !== '') return USAGE
+  await readSettings($, state)
   const mmdc = state.hasMmdc === undefined ? 'mmdc not checked yet' : state.hasMmdc ? 'mmdc found' : 'mmdc missing'
   return `${state.enabled ? 'on' : 'off'}; ${mmdc}; ${state.ready.size} rendered, ${state.failed.size} failed this session`
 }
@@ -101,7 +113,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'diagram-render', description: 'Mermaid blocks as pictures: status, on, off (diagram-render)', argumentHint: '[on | off]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     return r
   })
 
@@ -110,13 +122,16 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (!state.enabled || e.agentId !== undefined) return r
+    if (e.agentId !== undefined) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     want(state, mermaidBlocks(e.answer))
     // Not awaited: mmdc takes seconds, and the next prompt must not wait for it.
     void drain($, state)
     return r
   })
 
+  // A render runs at every redraw and scroll, so it reads the setting the last turn's end read, not the store.
   on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
     const blocks = state.enabled && e.surface === 'terminal' ? mermaidBlocks(e.props.text) : []
     if (blocks.length === 0 || e.surface !== 'terminal') return next(e)

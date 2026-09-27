@@ -18,12 +18,19 @@ const BAD = '```mermaid\ngraph TD\n  A-->\n```'
 
 const turn = (answer: string): TurnCompleteInput => ({ answer, durationMs: 10, isAborted: false, turnId: 't1', reason: 'answer' })
 
-/** The commands run, the files written, the lines logged; `mmdc` false means it is not installed. */
-type World = { argv: string[]; written: Map<string, string>; logs: string[]; mmdc: boolean; clock: MockClock }
+/**
+ * The commands run, the files written, the lines logged; `mmdc` false means it is not installed; `store`
+ * is the store every window shares, which a test writes as another window.
+ */
+type World = { argv: string[]; written: Map<string, string>; logs: string[]; mmdc: boolean; clock: MockClock; store: Map<string, unknown> }
 
 function world(on: On): World {
-  mock.store(on, {})
-  const w: World = { argv: [], written: new Map(), logs: [], mmdc: true, clock: mock.clock(on, { now: 0 }) }
+  const w: World = { argv: [], written: new Map(), logs: [], mmdc: true, clock: mock.clock(on, { now: 0 }), store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
@@ -78,6 +85,31 @@ describe('diagram-render', () => {
     expect(w.logs).toEqual(['a diagram was not rendered: Error: Parse error on line 2:'])
     expect(await (await reply($, 'm2', BAD)).find({ type: 'Image' })).toBe(undefined)
     expect((await $.command.run(run(''))).text).toBe('on; mmdc found; 0 rendered, 1 failed this session')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await $.turn.complete(turn(GOOD))
+    await w.clock.settle()
+    expect(w.argv).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe('off; mmdc not checked yet; 0 rendered, 0 failed this session')
+    w.store.set('enabled', true)
+    await $.turn.complete(turn(GOOD))
+    await w.clock.settle()
+    expect(w.argv).toHaveLength(2)
+    const shown = await reply($, 'm3', GOOD)
+    expect(await shown.find({ type: 'Image' })).not.toBe(undefined)
+    // A render reads the setting the last turn's end read: the off applies there, and the reply drawn
+    // before it is drawn again without its picture.
+    w.store.set('enabled', false)
+    await $.turn.complete(turn(GOOD))
+    await w.clock.settle()
+    expect(w.argv).toHaveLength(2)
+    expect(await shown.find({ type: 'Image' })).toBe(undefined)
+    expect(await (await reply($, 'm4', GOOD)).find({ type: 'Image' })).toBe(undefined)
   })
 
   test('without mmdc it says once how to install it, and off renders nothing', async ($, on) => {

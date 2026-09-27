@@ -36,10 +36,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, command.run{command=diagram-render}, turn.complete, ui.render{component=AssistantMessage}
-    ❯ ./register.tsx calls: $.command.register, $.env.get (via workDir), $.fs.read (via renderOne), $.fs.write (via renderOne), $.process.run (via mmdcReady, renderOne), $.store.get, $.store.set (via runCommand), $.ui.invalidate (via drain, runCommand), $.ui.log (via drain, mmdcReady), $.ui.resolve
+    ❯ ./register.tsx calls: $.command.register, $.env.get (via workDir), $.fs.read (via renderOne), $.fs.write (via renderOne), $.process.run (via mmdcReady, renderOne), $.store.get (via readSettings), $.store.set (via runCommand), $.ui.invalidate (via drain, readSettings, runCommand), $.ui.log (via drain, mmdcReady), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: TMPDIR
 
