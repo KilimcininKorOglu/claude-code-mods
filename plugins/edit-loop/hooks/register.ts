@@ -13,6 +13,14 @@ const USAGE = 'expects nothing (the status), on or off'
 type State = { counts: Counts; enabled: boolean; root?: string }
 
 /**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
+/**
  * The git repository the session started in, so a file in a sibling directory of a session opened in a
  * subdirectory still reads short; the session's own directory where git does not answer.
  */
@@ -54,6 +62,7 @@ async function toPerson($: EngineInterface, key: string, title: string, lines: L
  */
 async function afterEdit($: EngineInterface, state: State, agentId: string | undefined, path: string, r: ToolCallResult): Promise<ToolCallResult> {
   if (r.deny !== undefined || r.isError === true) return r
+  await readSettings($, state)
   if (!state.enabled) return r
   const count = countEdit(state.counts, agentId, path)
   if (count !== WARN_THRESHOLD && count !== THRESHOLD) return r
@@ -74,7 +83,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     state.enabled = word === 'on'
     return word === 'on' ? 'on: the fifth edit of one file in a turn gets a note' : 'off: edits are not counted'
   }
-  return word === '' ? (state.enabled ? 'on' : 'off') : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return state.enabled ? 'on' : 'off'
 }
 
 export const register: Register = on => {
@@ -83,7 +94,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'edit-loop', description: 'A note at the fifth edit of one file in a turn: status, on, off (edit-loop)', argumentHint: '[on | off]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     state.root = await shownRootOf($)
     return r
   })

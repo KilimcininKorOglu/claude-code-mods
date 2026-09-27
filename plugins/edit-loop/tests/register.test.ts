@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 import { countEdit, sectionKey, shownPath, THRESHOLD, WARN_THRESHOLD } from '../hooks/loop.ts'
@@ -15,13 +15,18 @@ const NOTE = 'edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, r
 
 /**
  * `fail` makes the next edit fail beneath the plugin; `logs` holds the lines the person sees; `cwd` is the
- * session's directory; `top` is what `git rev-parse --show-toplevel` answers, undefined outside a repository.
+ * session's directory; `top` is what `git rev-parse --show-toplevel` answers, undefined outside a repository;
+ * `store` is the store every window shares, which a test writes as another window.
  */
-type World = { fail: boolean; logs: string[]; cwd: string; top?: string }
+type World = { fail: boolean; logs: string[]; cwd: string; top?: string; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { fail: false, logs: [], cwd: ROOT }
-  mock.store(on, {})
+  const w: World = { fail: false, logs: [], cwd: ROOT, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: w.cwd }))
@@ -150,6 +155,20 @@ describe('edit-loop', () => {
     for (let i = 0; i < 3; i++) await edit($, `${ROOT}/plugins/a/x.ts`)
     for (let i = 0; i < 3; i++) await edit($, `${ROOT}/plugins/b/x.ts`)
     expect(w.logs).toEqual(['3rd edit of x.ts in this turn', `3rd edit of ${ROOT}/plugins/b/x.ts in this turn`])
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    for (let i = 0; i < 5; i++) expect((await edit($)).context).toBe(undefined)
+    expect(w.logs).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe('off')
+    w.store.set('enabled', true)
+    for (let i = 0; i < 4; i++) await edit($)
+    expect((await edit($)).context).toEqual([NOTE])
+    expect((await $.command.run(run(''))).text).toBe('on')
   })
 
   test('a subagent counts apart from the main loop, and off counts nothing', async ($, on) => {
