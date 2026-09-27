@@ -32,12 +32,18 @@ type World = {
   endsWithAgent: boolean
   /** What `$.session.messages({ agentId })` answers. */
   agentMessages: { role: string; text: string }[]
+  /** The store every window shares, which a test writes as another window. */
+  store: Map<string, unknown>
 }
 
 function world(on: On): World {
-  const w: World = { clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }), statuses: [], panes: [], stopped: [], consents: [], stopFails: false, next: 0, endsWithAgent: false, agentMessages: [] }
+  const w: World = { clock: mock.clock(on, { now: Date.parse('2026-09-19T10:00:00Z') }), statuses: [], panes: [], stopped: [], consents: [], stopFails: false, next: 0, endsWithAgent: false, agentMessages: [], store: new Map() }
   on('session.messages', () => ({ value: w.agentMessages }) as never)
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.status', (_, e) => { w.statuses.push(e.text); return { value: undefined } })
@@ -170,6 +176,24 @@ describe('bg-tasks', () => {
     await background($, 'sleep 700')
     expect((await $.command.run(run('list'))).text).toBe('off\nno background shell task is running')
     expect((await $.command.run(run('x'))).text).toBe('expects nothing (the pane), list, stop <id>, on or off')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await background($, 'sleep 600')
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    expect((await $.command.run(run('stop b1'))).text).toBe('no running task with id b1')
+    expect(w.stopped).toEqual([])
+    await w.clock.advance(30_000)
+    expect(w.statuses.at(-1)).toBe(undefined)
+    await background($, 'sleep 700')
+    expect((await $.command.run(run('list'))).text).toBe('off\nno background shell task is running')
+    w.store.set('enabled', true)
+    await background($, 'npm run dev')
+    expect(w.statuses.at(-1)).toBe('1 running · oldest <1m (npm run dev)')
+    expect((await $.command.run(run('list'))).text).toBe('on\nb3     <1m  model  npm run dev')
   })
 
   withSidebar('an open sidebar takes the task list and the status line stays empty', async ($, on) => {

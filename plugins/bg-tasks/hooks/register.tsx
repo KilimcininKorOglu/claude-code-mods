@@ -16,6 +16,15 @@ const TICK_MS = 30_000
 type State = { tasks: Map<string, Task>; enabled: boolean; message?: string }
 
 /**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it. A mod turned off drops its list, as `off` does.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  if (!state.enabled) state.tasks.clear()
+}
+
+/**
  * The background task a Bash call started, by the model's `run_in_background` or the person's Ctrl+B,
  * and whether the engine ends it with the final answer of the subagent that started it.
  */
@@ -160,6 +169,8 @@ async function stopById($: EngineInterface, state: State, id: string): Promise<s
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const word = args.trim()
+  // The pane, a stop and the list start from the setting as the store holds it.
+  await readSettings($, state)
   if (word.startsWith('stop ')) return stopById($, state, word.slice(5).trim())
   if (word === 'on' || word === 'off') {
     await $.store.set(ENABLED_KEY, word === 'on')
@@ -168,8 +179,8 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     await changed($, state)
     return word === 'on' ? 'on: background shell tasks started from now on are listed' : 'off: background tasks are not listed'
   }
-  if (word === 'list') return `${state.enabled ? 'on' : 'off'}\n${listText([...state.tasks.values()], await $.clock.now())}`
-  return word === '' ? togglePane($, state) : USAGE
+  if (word !== 'list') return word === '' ? togglePane($, state) : USAGE
+  return `${state.enabled ? 'on' : 'off'}\n${listText([...state.tasks.values()], await $.clock.now())}`
 }
 
 function paneTree(els: Elements, state: State, now: number, onStop: (task: Task) => void) {
@@ -192,8 +203,8 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'bg-tasks', description: 'Background shell tasks: the pane with stop buttons, list, stop <id>, on, off (bg-tasks)', argumentHint: '[list | stop <id> | on | off]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    $.clock.every(TICK_MS, () => void showStatus($, state))
+    await readSettings($, state)
+    $.clock.every(TICK_MS, () => void readSettings($, state).then(() => showStatus($, state)))
     return r
   })
 
@@ -203,7 +214,9 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const r = await next(e)
     const started = startedTask(r)
-    if (!state.enabled || started === undefined) return r
+    if (started === undefined) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     const agentId = (e as { agentId?: string }).agentId
     state.tasks.set(started.id, { ...started, label: labelOf(e.command), startedAt: await $.clock.now(), ...(agentId === undefined ? {} : { agentId }) })
     await changed($, state)
