@@ -59,8 +59,18 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
   return on ? `on: a prompt over ${state.limit} characters goes to a file` : 'off: every prompt reaches the model as it is'
 }
 
+/**
+ * Reads the on/off setting and the limit from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.limit = Number(await $.store.get(LIMIT_KEY)) || DEFAULT_LIMIT
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   const [word = '', arg = ''] = args.trim().split(/\s+/)
+  await readSettings($, state)
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
   if (word === 'limit') return setLimit($, state, arg)
   return word === '' ? `${state.enabled ? 'on' : 'off'} · limit ${state.limit} characters` : USAGE
@@ -72,8 +82,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'prompt-offload', description: 'Long pasted prompts to a file: status, on, off, limit <n> (prompt-offload)', argumentHint: '[on | off | limit <n>]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.limit = Number(await $.store.get(LIMIT_KEY)) || DEFAULT_LIMIT
+    await readSettings($, state)
     return r
   })
 
@@ -81,7 +90,9 @@ export const register: Register = on => {
   on('command.run', { command: 'prompt-offload' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('prompt.submit', async ($, e, next) => {
-    if (!state.enabled || !isPersons(e.origin) || !isLong(e.text, state.limit)) return next(e)
+    if (!isPersons(e.origin)) return next(e)
+    await readSettings($, state)
+    if (!state.enabled || !isLong(e.text, state.limit)) return next(e)
     return next({ ...e, text: await offload($, state, e.text) })
   })
 }

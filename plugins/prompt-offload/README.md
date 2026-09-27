@@ -34,10 +34,10 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=prompt-offload}, prompt.submit
-    ❯ ./register.ts calls: $.clock.now (via offload), $.command.register, $.env.get (via tempDir), $.fs.write (via offload), $.process.run (via tempDir), $.store.get, $.store.set (via setEnabled, setLimit), $.ui.log (via offload, report)
+    ❯ ./register.ts calls: $.clock.now (via offload), $.command.register, $.env.get (via tempDir), $.fs.write (via offload), $.process.run (via tempDir), $.store.get (via readSettings), $.store.set (via setEnabled, setLimit), $.ui.log (via offload, report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: TMPDIR
 

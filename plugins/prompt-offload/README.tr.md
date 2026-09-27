@@ -34,10 +34,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=prompt-offload}, prompt.submit
-    ❯ ./register.ts calls: $.clock.now (via offload), $.command.register, $.env.get (via tempDir), $.fs.write (via offload), $.process.run (via tempDir), $.store.get, $.store.set (via setEnabled, setLimit), $.ui.log (via offload, report)
+    ❯ ./register.ts calls: $.clock.now (via offload), $.command.register, $.env.get (via tempDir), $.fs.write (via offload), $.process.run (via tempDir), $.store.get (via readSettings), $.store.set (via setEnabled, setLimit), $.ui.log (via offload, report)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: TMPDIR
 

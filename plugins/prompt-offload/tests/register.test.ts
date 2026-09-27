@@ -11,12 +11,19 @@ const run = (args: string): CommandRunInput => ({
 
 const typed = (text: string, origin: PromptOrigin = { kind: 'composer' }): PromptSubmitInput => ({ text, wait: false, origin })
 
-/** What reached the engine beneath the plugin, what was written, and what was logged. */
-type World = { entered: string[]; files: Map<string, string>; argv: string[]; logs: string[]; failWrite: boolean }
+/**
+ * What reached the engine beneath the plugin, what was written, what was logged, and the store every
+ * window shares, which a test writes as another window.
+ */
+type World = { entered: string[]; files: Map<string, string>; argv: string[]; logs: string[]; failWrite: boolean; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { entered: [], files: new Map(), argv: [], logs: [], failWrite: false }
-  mock.store(on, {})
+  const w: World = { entered: [], files: new Map(), argv: [], logs: [], failWrite: false, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.clock(on, { now: Date.parse('2026-09-20T10:00:00Z') })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -69,6 +76,24 @@ describe('prompt-offload', () => {
     expect(w.entered).toEqual(['kısa bir istek', long, long])
     expect(w.files.size).toBe(0)
     expect((await $.command.run(run(''))).text).toBe('off · limit 2000 characters')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one set a 600 limit, and this one never ran the command.
+    w.store.set('limit', 600)
+    await $.prompt.submit(typed('a'.repeat(700)))
+    expect(w.files.size).toBe(1)
+    w.store.set('enabled', false)
+    const long = 'b'.repeat(3000)
+    await $.prompt.submit(typed(long))
+    expect(w.entered.at(-1)).toBe(long)
+    expect(w.files.size).toBe(1)
+    expect((await $.command.run(run(''))).text).toBe('off · limit 600 characters')
+    w.store.set('enabled', true)
+    await $.prompt.submit(typed(long))
+    expect(w.files.size).toBe(2)
   })
 
   test('the limit is set by hand and kept, and a failed write leaves the prompt as it is', async ($, on) => {
