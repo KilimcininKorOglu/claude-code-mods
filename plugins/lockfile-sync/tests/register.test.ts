@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
@@ -54,6 +54,8 @@ type World = {
   lockCommit: string; sinceLock: string
   /** What every package manager answers, or `throws` for one that cannot start; `treeMoved` puts the pair's files off HEAD. */
   tool: Ran | 'throws'; treeMoved: boolean
+  /** The store every window shares, which a test writes as another window. */
+  store: Map<string, unknown>
 }
 
 type Ran = { exitCode: number; stdout: string; stderr: string }
@@ -95,9 +97,13 @@ function world(on: On): World {
     argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false, staged: ['package.json'],
     lockCommit: 'a1b2c3', sinceLock: DEP_DIFF,
     // A failure no check reads, so the manifest's diff decides unless a test says otherwise.
-    tool: { exitCode: 2, stdout: '', stderr: 'unrelated' }, treeMoved: false,
+    tool: { exitCode: 2, stdout: '', stderr: 'unrelated' }, treeMoved: false, store: new Map(),
   }
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.cwd', () => ({ value: ROOT }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
@@ -251,6 +257,21 @@ describe('lockfile-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('a later change brought the lockfiles along: package-lock.json')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('package-lock.json behind package.json')
+    w.store.set('enabled', false)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).result).toBe('ok')
+    const before = w.argv.length
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m more' })).context).toBe(undefined)
+    expect(w.argv.length).toBe(before)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · package-lock.json still behind')
   })
 
   test('a commit that holds none of the open manifests runs, and a push still stops', async ($, on) => {

@@ -11,14 +11,23 @@ const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 type Open = { key: string; stale: Stale[] }
 
 /**
- * The on/off setting read at session start, the mode, and the last error logged, so the same one is
- * logged once. `open` holds every finding still standing, one per commit that left a lockfile out, so a
+ * The on/off setting and the mode as the store held them at the last read, and the last error logged, so
+ * the same one is logged once. `open` holds every finding still standing, one per commit that left a lockfile out, so a
  * later commit that brings its lockfiles along closes it, and in `deny` mode it also holds the gate shut.
  * A later commit adds its own finding beside them and never writes over one. `owed` says the model is
  * owed a note for the findings that stood at the turn's end. `lastToolError` is the last package manager
  * failure logged, so the same one is logged once.
  */
 type State = { enabled: boolean; mode: Mode; lastError?: string; lastToolError?: string; open: Open[]; owed: boolean }
+
+/**
+ * Reads the on/off setting and the mode from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+}
 
 /** Every pair the open findings name. */
 const pairsOf = (state: State): Stale[] => state.open.flatMap(o => o.stale)
@@ -333,6 +342,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each commit is checked for manifests whose lockfile it left out' : 'off: commits are not checked'
   }
   if (word !== '') return USAGE
+  await readSettings($, state)
   const stale = pairsOf(state)
   const open = stale.length === 0 ? 'no lockfile is open' : `${stale.map(s => s.lock).join(' · ')} still behind`
   return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
@@ -344,8 +354,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'lockfile-sync', description: 'Manifests a commit changes without their lockfile: status, on, off, mode note | deny (lockfile-sync)', argumentHint: '[on | off | mode note | mode deny]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+    await readSettings($, state)
     return r
   })
 
@@ -358,7 +367,9 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || !state.enabled) return r
+    if (e.agentId !== undefined) return r
+    if (state.open.length > 0) await readSettings($, state)
+    if (!state.enabled) return r
     state.owed = await recheckNow($, state)
     return r
   })
@@ -372,6 +383,9 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    // Only a commit, or a guarded command while a finding is open, acts on a setting.
+    if (!isCommit(e.command) && (state.open.length === 0 || !isGuarded(e.command))) return next(e)
+    await readSettings($, state)
     const stopped = await gate($, state, e.command)
     if (stopped !== undefined) return stopped
     if (!state.enabled || !isCommit(e.command)) return next(e)
