@@ -88,8 +88,14 @@ async function afterTurn($: EngineInterface, state: State, reason: string): Prom
   state.pending?.cancel()
   state.pending = $.clock.after(wait === undefined ? pokeDelay(state.pokes) : wait.until - now, () => {
     state.pending = undefined
-    sendPoke($)
+    void pokeIfOn($, state)
   })
+}
+
+/** Sends the continue prompt when its timer fires, unless the mod was turned off meanwhile in any window. */
+async function pokeIfOn($: EngineInterface, state: State): Promise<void> {
+  await readSettings($, state)
+  if (state.enabled) sendPoke($)
 }
 
 /** Writes the limit the person set; it holds across sessions, because it lives in $.store. */
@@ -107,22 +113,33 @@ async function readLimit($: EngineInterface): Promise<number> {
   return typeof stored === 'number' && limitOf(String(stored)) !== undefined ? stored : DEFAULT_MAX_POKES
 }
 
+/** Starts the count again; a continue prompt still waiting is not sent once the person spoke, or turned the mod off. */
+function resetCount(state: State): void {
+  state.pokes = 0
+  state.limitLogged = false
+  state.pending?.cancel()
+  state.pending = undefined
+}
+
+/**
+ * Reads the on/off setting and the limit from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it. A mod turned off there starts its count
+ * again here, as `off` does.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  const was = state.enabled
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.max = await readLimit($)
+  if (was && !state.enabled) resetCount(state)
+}
+
 export const register: Register = on => {
   const state: State = { enabled: true, max: DEFAULT_MAX_POKES, pokes: 0, limitLogged: false }
 
-  const resetCount = (): void => {
-    state.pokes = 0
-    state.limitLogged = false
-    // A continue prompt still waiting is not sent once the person spoke, or turned the mod off.
-    state.pending?.cancel()
-    state.pending = undefined
-  }
-
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.max = await readLimit($)
-    resetCount()
+    await readSettings($, state)
+    resetCount(state)
     await $.command.register({
       name: 'error-poke',
       description: 'Continue automatically after a turn an API error killed: status, on, off, limit (error-poke)',
@@ -135,10 +152,12 @@ export const register: Register = on => {
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'error-poke' }, async ($, e) => {
     const arg = String(e.args ?? '').trim()
+    // The status after a change also shows the other setting as the store holds it.
+    await readSettings($, state)
     if (arg === 'on' || arg === 'off') {
       state.enabled = arg === 'on'
       await $.store.set(ENABLED_KEY, state.enabled)
-      resetCount()
+      resetCount(state)
     } else if (arg.startsWith('limit')) {
       return { text: await setLimit($, state, arg.slice(5).trim()) }
     } else if (arg !== '') {
@@ -152,7 +171,7 @@ export const register: Register = on => {
   on('prompt.submit', async (_, e, next) => {
     const r = await next(e)
     const kind = (e.origin as { kind?: string } | undefined)?.kind
-    if (kind !== undefined && USER_ORIGINS.includes(kind)) resetCount()
+    if (kind !== undefined && USER_ORIGINS.includes(kind)) resetCount(state)
     return r
   })
 
@@ -160,6 +179,7 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.agentId !== undefined) return r
     state.lastReason = e.reason
+    await readSettings($, state)
     if (state.enabled) await afterTurn($, state, e.reason)
     return r
   })

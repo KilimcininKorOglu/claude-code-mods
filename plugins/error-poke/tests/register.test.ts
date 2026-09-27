@@ -33,12 +33,13 @@ const run = (args: string): CommandRunInput => ({
 /**
  * The prompts that reached the engine (through the mod's `send` command, or submitted), how many went
  * through `send`, the logged lines, `sendFails` to make the engine refuse that command, `drop` to make it
- * refuse a submitted prompt, and the clock.
+ * refuse a submitted prompt, the clock, and the store every window shares, which a test writes as another
+ * window.
  */
-type World = { sent: string[]; sends: number; logs: string[]; sendFails?: true; drop?: string; clock: MockClock; limits: SessionRateLimit[]; lastText: string }
+type World = { sent: string[]; sends: number; logs: string[]; sendFails?: true; drop?: string; clock: MockClock; limits: SessionRateLimit[]; lastText: string; store: Map<string, unknown> }
 
 function world(on: On): World {
-  const w: World = { sent: [], sends: 0, logs: [], clock: mock.clock(on), limits: [], lastText: 'API Error: 529 Overloaded.' }
+  const w: World = { sent: [], sends: 0, logs: [], clock: mock.clock(on), limits: [], lastText: 'API Error: 529 Overloaded.', store: new Map() }
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000 }, rateLimits: w.limits } }))
   on('session.messages', () => ({ value: [{ role: 'assistant', text: w.lastText, toolUses: [] }] }) as never)
   on('command.run', { command: 'error-poke:send' }, (_, e) => {
@@ -47,7 +48,11 @@ function world(on: On): World {
     w.sends += 1
     return {}
   })
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
@@ -180,6 +185,32 @@ describe('error-poke', () => {
     await $.command.run(run('on'))
     await ended($, w, 'error', 't2')
     expect(w.sent).toEqual([POKE_TEXT])
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await ended($, w, 'error')
+    expect(w.sent).toEqual([])
+    expect((await $.command.run(run(''))).text).toBe('off · 0/99 continue prompts since your last prompt · last turn: error')
+    // On again with a limit of 1: one prompt goes out, and the next failure stops at the limit.
+    w.store.set('enabled', true)
+    w.store.set('limit', 1)
+    await ended($, w, 'error', 't2')
+    await ended($, w, 'error', 't3')
+    expect(w.sent).toEqual([POKE_TEXT])
+    expect(w.logs.at(-1)).toBe('stopped after 1 continue prompts; the API keeps failing. Send a prompt to reset the count.')
+    expect((await $.command.run(run(''))).text).toBe('on · 1/1 continue prompts since your last prompt · last turn: error')
+    // A prompt waiting on its timer is not sent once another window turned the mod off.
+    await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })
+    await $.turn.complete({ answer: 'done', durationMs: 10, isAborted: false, turnId: 't4', reason: 'error' })
+    w.store.set('enabled', false)
+    await w.clock.advance(MAX_DELAY_MS)
+    expect(w.sent).toEqual([POKE_TEXT, 'go'])
+    // The off read there starts the count again, as /error-poke off does.
+    expect((await $.command.run(run(''))).text).toBe('off · 0/1 continue prompts since your last prompt · last turn: error')
   })
 
   test('the limit the person sets holds, and an argument it cannot read changes nothing', async ($, on) => {
