@@ -1,12 +1,13 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Op } from './op.ts'
-import { sql } from './rows.ts'
+import { selectIds, sql } from './rows.ts'
 
 /**
  * Context epochs: which memories each loop of a session (the main loop, or a subagent by its id)
  * was already reminded of since its context last started over. A compaction or `/clear` starts a
  * new epoch, so a memory goes to one context once. Kept in the project's store for the memories
- * of both stores; a memory id is unique across them.
+ * of both stores; a memory id is unique across them. Hygiene drops a session's records once Claude
+ * Code deleted its transcript, since the session can no longer be resumed.
  */
 
 const EPOCH = 'SELECT epoch FROM contexts WHERE session_id = ? AND loop_id = ?'
@@ -46,4 +47,22 @@ export function remindedIn(db: DatabaseSync, sessionId: string | undefined, loop
 export function markReminded(op: Op, reminder: { sessionId: string; loop: string; ids: readonly string[]; trigger: string }): void {
   const epoch = epochOf(op.store.db, reminder.sessionId, reminder.loop)
   for (const id of new Set(reminder.ids)) sql(op.store.db, MARK).run(reminder.sessionId, reminder.loop, epoch, id, reminder.trigger, op.now)
+}
+
+const RECORDED = 'SELECT session_id AS id FROM reminders UNION SELECT session_id FROM contexts'
+
+/** Every session the store keeps reminder records of. */
+export function recordedSessions(db: DatabaseSync): string[] {
+  return selectIds(db, RECORDED)
+}
+
+/** Drops every reminder record of the sessions; answers how many of them had any. */
+export function forgetSessions(op: Op, sessionIds: readonly string[]): number {
+  let forgotten = 0
+  for (const id of sessionIds) {
+    const reminders = Number(sql(op.store.db, 'DELETE FROM reminders WHERE session_id = ?').run(id).changes)
+    const contexts = Number(sql(op.store.db, 'DELETE FROM contexts WHERE session_id = ?').run(id).changes)
+    if (reminders + contexts > 0) forgotten++
+  }
+  return forgotten
 }

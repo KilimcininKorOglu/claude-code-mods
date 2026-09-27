@@ -321,3 +321,57 @@ export type MemoryVerification = { memoryId: string; status: VerificationStatus;
 
 /** What a verification found and changed: the memories it moved to stale, and the ones it moved back to active. */
 export type VerifyReport = { results: MemoryVerification[]; staled: string[]; reactivated: string[] }
+
+/** The settings of a hygiene run; a field left out takes SAGE's default. */
+export type HygieneOptions = {
+  /** Check the anchors of the active memories and of the ones verification made stale. Default true. */
+  verify?: boolean
+  /** Default `existence`. */
+  verifyDepth?: VerifyDepth
+  /** Merge memories of one kind that say the same thing in other words. Default true. */
+  nearDedup?: boolean
+  /** A stale memory untouched this many days gets a review. Default 90. */
+  staleReviewDays?: number
+  /** A memory under 0.5 confidence untouched this many days gets a review. Default 30. */
+  lowConfidenceReviewDays?: number
+  /** A memory reminded `unusedMinReminders` times and never used gets a review this many days after it was last reminded. Default 30. */
+  unusedReviewDays?: number
+  /** Default 10. */
+  unusedMinReminders?: number
+  /** A session memory without `expiresAt` is deleted this many days after its last change. Default 7. */
+  sessionRetentionDays?: number
+  /** Tombstones this many days old are removed for good. Off unless given. */
+  purgeDeletedAfterDays?: number
+}
+
+/** What one hygiene run changed in one store; every count is of memories written, or of sessions for `sessionsForgotten`. */
+export type HygieneReport = {
+  store: 'project' | 'user'
+  automatic: boolean
+  startedAt: string
+  completedAt: string
+  depth: VerifyDepth | 'off'
+  checked: number
+  verified: number
+  staled: number
+  reactivated: number
+  /** Superseded by an active memory of the same text. */
+  merged: number
+  /** Superseded by a near-duplicate. */
+  nearMerged: number
+  /** Survivors of a near-duplicate merge that took a longer text, and were embedded again. */
+  rewritten: number
+  contradictions: number
+  reviewsOpened: number
+  sessionDeleted: number
+  purged: number
+  /** Sessions whose transcripts Claude Code deleted, and whose reminder records went with them. */
+  sessionsForgotten: number
+  /** What the run left undone, and why. */
+  notes: string[]
+  /** The daemon closed before the run ended; the counts are what it did until then. */
+  stopped?: boolean
+}
+
+/** What a hygiene request did in one store: ran it, started it in the background, or found one that runs now or ran within the hour. */
+export type HygieneRun = { state: 'done'; report: HygieneReport } | { state: 'started' } | { state: 'running' } | { state: 'recent'; lastAt: string }

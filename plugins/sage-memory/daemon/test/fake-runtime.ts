@@ -15,6 +15,8 @@ export type FakeRuntime = Runtime & {
   failLoad?: string
   /** A load waits for this before it answers. */
   hold?: Promise<void>
+  /** An embed call waits for this before it answers. */
+  embedHold?: Promise<void>
   loads: LoadOptions[]
   /** Every text embedded, in order. */
   embedded: string[]
@@ -76,6 +78,7 @@ export function fakeRuntime(present = true): FakeRuntime {
     modelId: 'fake/model',
     dims: DIMS,
     embed: async texts => {
+      await fake.embedHold
       const message = fake.failNext
       fake.failNext = undefined
       if (message !== undefined) throw new Error(message)

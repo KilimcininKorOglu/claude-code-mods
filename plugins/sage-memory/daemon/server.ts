@@ -9,6 +9,7 @@ import { createEmbeddings, type Embeddings } from './embeddings.ts'
 import { RequestError } from './errors.ts'
 import { inodeOf, readIfExists, writeAtomic } from './files.ts'
 import { authorized, parseBody, probe, readBody, send } from './http.ts'
+import { createHygiene, type Hygiene } from './hygiene-jobs.ts'
 import { takeLock } from './lock.ts'
 import { log, messageOf } from './log.ts'
 import { readRoutes } from './read-routes.ts'
@@ -45,6 +46,7 @@ type State = {
   stores: Stores
   embeddings: Embeddings
   setup: Setup
+  hygiene: Hygiene
   server: Server
   /** The inode of the socket this daemon listens on, so it removes that socket file and no other. */
   ino: number | undefined
@@ -81,7 +83,7 @@ function routesOf(state: State): Routes {
     ...readRoutes(state.stores, state.embeddings),
     ...remindRoutes(state.stores, state.embeddings),
     ...embedRoutes(state.embeddings, state.setup),
-    ...upkeepRoutes({ dir: state.layout.dir, stores: state.stores }),
+    ...upkeepRoutes({ dir: state.layout.dir, stores: state.stores, hygiene: state.hygiene }),
   }
 }
 
@@ -117,11 +119,11 @@ async function dispatch(state: State, routes: Routes, req: IncomingMessage, res:
   }
 }
 
-/** The idle close waits while setup or an embedding fill still runs, since no request marks that work. */
+/** The idle close waits while setup, an embedding fill or a hygiene run still runs, since no request marks that work. */
 function armIdle(state: State): void {
   clearTimeout(state.idle)
   state.idle = setTimeout(() => {
-    if (state.setup.running() || state.embeddings.busy()) armIdle(state)
+    if (state.setup.running() || state.embeddings.busy() || state.hygiene.running()) armIdle(state)
     else void close(state, 'idle')
   }, state.options.idleMs)
 }
@@ -164,6 +166,7 @@ async function shutDown(state: State, reason: string): Promise<void> {
   const cut = setTimeout(() => state.server.closeAllConnections(), DRAIN_MS)
   await drained
   clearTimeout(cut)
+  await state.hygiene.stop()
   await state.setup.stop()
   await state.embeddings.close()
   state.stores.closeAll()
@@ -230,7 +233,8 @@ function newState(layout: Layout, options: ServerOptions): State {
   const runtime = options.runtime ?? transformersRuntime(layout)
   const embeddings = createEmbeddings(runtime)
   const setup = createSetup({ dir: layout.dir, runtime, embeddings, stores })
-  return { layout, options, hello, token, stores, embeddings, setup, server: createServer(), ino: undefined, inflight: 0, done: deferred() }
+  const hygiene = createHygiene({ dir: layout.dir, embeddings })
+  return { layout, options, hello, token, stores, embeddings, setup, hygiene, server: createServer(), ino: undefined, inflight: 0, done: deferred() }
 }
 
 async function serve(layout: Layout, options: ServerOptions): Promise<Started> {

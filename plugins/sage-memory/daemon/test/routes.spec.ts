@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { layoutOf } from '../../hooks/shared/layout.ts'
-import type { AuditEntry, BackfillReport, Candidate, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult, VerifyReport } from '../../hooks/shared/model.ts'
+import type { AuditEntry, BackfillReport, Candidate, HygieneRun, Memory, MemoryPage, Ranking, RememberResult, Resolution, SearchHit, StoreStats, UpdateResult, VerifyReport } from '../../hooks/shared/model.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from '../../hooks/shared/protocol.ts'
 import type { Runtime } from '../embedder.ts'
 import { call } from '../http.ts'
@@ -261,15 +261,11 @@ describe('upkeep routes', () => {
       await d.remember(d.alpha, { text: MIGRATIONS })
       const all = await d.value<VerifyReport>('/memory/verify', { project: d.alpha })
       assert.deepEqual(
-        all.results.map(result => [result.memoryId, result.status]),
-        [
-          [kept.id, 'verified'],
-          [gone.id, 'stale'],
-          [user.id, 'stale'],
-        ],
+        Object.fromEntries(all.results.map(result => [result.memoryId, result.status])),
+        { [kept.id]: 'verified', [gone.id]: 'stale', [user.id]: 'stale' },
         'a memory with no anchor has nothing to check',
       )
-      assert.deepEqual([all.staled, all.reactivated], [[gone.id, user.id], []])
+      assert.deepEqual([[...all.staled].sort(), all.reactivated], [[gone.id, user.id].sort(), []])
       assert.equal((await d.value<Memory>('/memory/get', { project: d.beta, id: user.id })).status, 'stale')
       const one = await d.value<VerifyReport>('/memory/verify', { project: d.alpha, id: kept.id })
       assert.deepEqual(one.results.map(result => result.memoryId), [kept.id])
@@ -290,6 +286,36 @@ describe('upkeep routes', () => {
       rmSync(app)
       writeFileSync(app, 'export function main() {}\n')
       assert.deepEqual((await d.value<VerifyReport>('/memory/verify-paths', { project: d.alpha, paths: ['src/app.ts'] })).reactivated, [changed.id])
+    }))
+})
+
+type HygieneRuns = { project: HygieneRun; user: HygieneRun }
+
+/** Waits until the audit log of both stores holds `count` completed hygiene reports. */
+async function hygieneCompleted(d: Daemon, count: number): Promise<void> {
+  const deadline = Date.now() + 5000
+  for (;;) {
+    const entries = await d.value<AuditEntry[]>('/audit', { project: d.alpha, limit: 100 })
+    if (entries.filter(entry => entry.action === 'memory.hygiene_completed').length >= count) return
+    if (Date.now() >= deadline) throw new Error(`${count} hygiene runs did not complete in 5000 ms`)
+    await sleep(20)
+  }
+}
+
+describe('hygiene route', () => {
+  test('an automatic run starts in the background at most once an hour per store, and one asked for runs at once', () =>
+    withDaemon(async d => {
+      await d.remember(d.alpha, { text: MIGRATIONS })
+      assert.deepEqual(await d.value<HygieneRuns>('/memory/hygiene', { project: d.alpha, automatic: true }), { project: { state: 'started' }, user: { state: 'started' } })
+      await hygieneCompleted(d, 2)
+      const again = await d.value<HygieneRuns>('/memory/hygiene', { project: d.alpha, automatic: true })
+      assert.deepEqual([again.project.state, again.user.state], ['recent', 'recent'])
+      const other = await d.value<HygieneRuns>('/memory/hygiene', { project: d.beta, automatic: true })
+      assert.deepEqual([other.project.state, other.user.state], ['started', 'recent'], 'beta has a store of its own, and the user store is shared')
+      const asked = await d.value<HygieneRuns>('/memory/hygiene', { project: d.alpha, options: { verifyDepth: 'content' } })
+      assert.deepEqual([asked.project.state, asked.project.state === 'done' && asked.project.report.depth], ['done', 'content'])
+      const refused = await d.ask('/memory/hygiene', { project: d.alpha, options: { retentionDays: 90 } })
+      assert.deepEqual([refused.status, refused.error], [400, 'options take no retentionDays'])
     }))
 })
 

@@ -10,7 +10,7 @@ import type { Store } from './stores.ts'
 export type Op = { store: Store; root: string | undefined; now: string }
 
 /** The store a name is shown as in messages: `user` for the global store, `project` otherwise. */
-export function storeLabel(store: Store): string {
+export function storeLabel(store: Store): 'user' | 'project' {
   return store.name === 'global' ? 'user' : 'project'
 }
 

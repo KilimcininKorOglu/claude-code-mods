@@ -65,6 +65,11 @@ export function selectMemories(db: DatabaseSync, query: string, ...params: SQLIn
   return rows.map(parseMemory)
 }
 
+/** The `id` column of every row a complete `SELECT ... AS id ...` query answers, in its order. */
+export function selectIds(db: DatabaseSync, query: string, ...params: SQLInputValue[]): string[] {
+  return (sql(db, query).all(...params) as Array<{ id: string }>).map(row => row.id)
+}
+
 /** The stored form of an audience, compared with `IS` so no audience matches no audience. */
 export function audienceKey(memory: Pick<Memory, 'audience'>): string | null {
   return memory.audience ? JSON.stringify(memory.audience) : null

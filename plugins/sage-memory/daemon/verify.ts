@@ -149,11 +149,12 @@ async function verifyAnchor(context: Context, anchor: Anchor): Promise<AnchorVer
   }
 }
 
-/** Checks each memory's anchors at the depth given, one memory after another. */
-export async function verifyMemories(scope: VerifyScope, memories: readonly Memory[], depth: VerifyDepth, checkedAt: string): Promise<Checked[]> {
+/** Checks each memory's anchors at the depth given, one memory after another, until `stopping` answers true. */
+export async function verifyMemories(scope: VerifyScope, memories: readonly Memory[], depth: VerifyDepth, checkedAt: string, stopping = (): boolean => false): Promise<Checked[]> {
   const context = await contextFor(scope, memories, depth)
   const checks: Checked[] = []
   for (const memory of memories) {
+    if (stopping()) break
     const anchors: AnchorVerification[] = []
     for (const anchor of memory.anchors) anchors.push(await verifyAnchor(context, anchor))
     checks.push({ result: { memoryId: memory.id, status: aggregate(anchors), checkedAt, anchors }, status: memory.status, anchors: memory.anchors })
