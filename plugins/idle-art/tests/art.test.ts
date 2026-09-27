@@ -1,5 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import { SCENES } from '../hooks/art/scenes.ts'
+import { mirrored } from '../hooks/art/cat.ts'
 import { rngOf, runsOf, sceneDone, textOf } from '../hooks/art/grid.ts'
 import { configOf, parseArgs, pickStyle, STYLES } from '../hooks/config.ts'
 import { bytesOf, decodeGif } from '../hooks/gif.ts'
@@ -31,44 +32,53 @@ describe('art', () => {
     }
   })
 
-  test('the cat walks in to the middle, meows, rolls, and walks out to come round again', () => {
+  test('the big cat walks in to the middle, meows, rolls, and walks out, while kittens, yarn and a butterfly play', () => {
     const anim = SCENES.cat(60, 8, rngOf(3))
     const seen: string[] = []
     for (let i = 0; i < 600; i++) {
       anim.step()
       seen.push(textOf(anim.frame()))
     }
-    // Its face never leaves the band's 8 rows, and it stands in the middle (column 25 of 60) once it sits.
-    expect(seen.some(f => f.split('\n').some(row => row.indexOf('( o.o )') === 25))).toBe(true)
-    // Each word stands in a bubble over the head, its tail pointing down to the cat.
+    // It sits in the middle: its face row starts at column 24 of 60 (the 13-column cat from column 23).
+    expect(seen.some(f => f.split('\n').some(row => row.indexOf('(  o   o  )') === 24))).toBe(true)
+    // Each word stands in a bubble beside its head, the tail pointing down to the cat.
     const meow = seen.find(f => f.includes('( meow )'))?.split('\n') ?? []
-    expect(meow.slice(0, 4).map(row => row.trimEnd())).toEqual([`${' '.repeat(32)}.------.`, `${' '.repeat(31)}( meow )`, `${' '.repeat(32)}'------'`, `${' '.repeat(31)}/`])
-    expect(meow[5]?.indexOf('( o.o )')).toBe(25)
+    expect(meow.slice(0, 3).map(row => row.trimEnd().slice(37))).toEqual([' .------.', '( meow )', " '------'"])
+    expect(meow[3]?.slice(37, 38)).toBe('/')
     expect(seen.some(f => f.includes('( MEOW! )'))).toBe(true)
     expect(seen.some(f => f.includes('( purr~ )'))).toBe(true)
-    expect(seen.some(f => f.includes('( -.- )=~'))).toBe(true)
+    expect(seen.some(f => f.includes('( -.- )'))).toBe(true)
     expect(seen.some(f => f.includes('♥'))).toBe(true)
     // It walks head first: the head leads to the right, the tail trails on the left.
-    expect(seen.some(f => f.split('\n').some(row => row.startsWith(' __( o.o )')))).toBe(true)
-    expect(seen.some(f => f.includes('( o.o )__'))).toBe(false)
+    expect(seen.some(f => f.includes('______( o.o )'))).toBe(true)
+    expect(seen.some(f => f.includes('( o.o )______'))).toBe(false)
+    // Kittens walk both ways facing where they go; the yarn rolls on the grass and the butterfly beats its wings.
+    expect(seen.some(f => f.includes('__( o.o )'))).toBe(true)
+    expect(seen.some(f => /\( o\.o \)__(?!_)/.test(f))).toBe(true)
+    expect(seen.every(f => f.includes('@'))).toBe(true)
+    expect(seen.some(f => f.includes('}{')) && seen.some(f => f.includes(')('))).toBe(true)
+  })
+
+  test('a kitten turned round is the same kitten seen from the other side', () => {
+    expect(mirrored(' __( o.o )', 10)).toBe('( o.o )__ ')
+    expect(mirrored('    /\\_/\\ ', 10)).toBe(' /\\_/\\    ')
   })
 
   test('the cat walks out slowly to the right, and only then does random take the next scene', () => {
     const anim = SCENES.cat(60, 8, rngOf(3))
-    const faces: number[] = []
+    const heads: number[] = []
     let ms = 0
     for (; ms < 120_000; ms += 100) {
       anim.step(100)
-      const col = textOf(anim.frame()).split('\n').map(row => row.indexOf('( o.o )')).find(c => c >= 0) ?? -1
-      faces.push(col)
+      heads.push(textOf(anim.frame()).split('\n').map(row => row.indexOf('______')).find(c => c >= 0) ?? -1)
       if (anim.wrapped?.() === true) break
     }
-    // The round ends after 20 seconds, with the head at the right edge on the way out, a cell each 200 ms.
+    // The round ends after 20 seconds, with the big cat on its way out to the right, a cell each 200 ms.
     expect(ms).toBeGreaterThan(20_000)
-    const out = faces.slice(-40).filter(c => c >= 0)
-    expect(out.length).toBeGreaterThanOrEqual(20)
+    const out = heads.slice(-40).filter(c => c >= 0)
+    expect(out.length).toBeGreaterThanOrEqual(15)
     expect(out.every((c, i) => i === 0 || c - (out[i - 1] ?? 0) <= 1)).toBe(true)
-    expect(out.at(-1)).toBeGreaterThan(50)
+    expect(out.at(-1)).toBeGreaterThan(40)
     // At 20 seconds the round is still on, so random does not cut the cat off mid-show.
     const midway = SCENES.cat(60, 8, rngOf(3))
     for (let t = 0; t < 20_000; t += 100) midway.step(100)

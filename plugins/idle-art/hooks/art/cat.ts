@@ -1,46 +1,73 @@
 import { blankFrame, put, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
 
 const FUR = '#ffb86b'
+const KITTEN_FUR = ['#e9ecef', '#adb5bd']
 const SPEECH = '#ffffff'
 const HEART = '#ff6b9d'
+const GRASS = '#51cf66'
+const YARN = '#ff6b6b'
+const BUTTERFLY = '#f783ac'
 
-/** Every sprite is 4 rows by 10 columns, drawn with its last row on the band's last row. */
-const SPRITE_ROWS = 4
-const SPRITE_COLS = 10
+/** The big cat's sprites are 5 rows tall, drawn with their last row just over the ground row. */
+const SPRITE_ROWS = 5
+/** The sitting cat's width, which places it in the middle. */
+const SIT_COLS = 13
 
-/** The cat walking right, its head ahead and its tail behind, two steps. */
+/** The big cat walking right, its head ahead and its tail behind, two steps. */
 const WALK = [
+  ['           /\\_/\\', '    ______( o.o )', '  ~(            )', '    (__________)', '     /\\ /\\  /\\ /\\'],
+  ['           /\\_/\\', '    ______( o.o )', '  ~(            )', '    (__________)', '     || ||  || ||'],
+]
+const WALK_COLS = 19
+
+/** The big cat sitting; `eyes` is three characters, its first and last the two eyes. */
+function sitting(eyes: string): string[] {
+  const [l = 'o', , r = 'o'] = [...eyes]
+  return ['  /\\_____/\\', ` (  ${l}   ${r}  )`, ' (  = ^ =  )', '  )       (', ' (__(_|_)__)~']
+}
+
+/** The big cat rolling on the ground: on one side, on its back with its paws up, on the other side, on its back. */
+const ROLL = [
+  ['', '        /\\_/\\', '  _____( -.- )', ' (____________)=~', "   `----------'"],
+  ['  |\\/|    |\\/|', ' (            )~', ' (   ( o.o )  )', '  \\__________/', ''],
+  ['', '   /\\_/\\', '  ( -.- )_____', '~=(____________)', "   `----------'"],
+  ['  |\\/|    |\\/|', ' (            )~', ' (   ( ^.^ )  )', '  \\__________/', ''],
+]
+
+/** A kitten walking right, two steps, 4 rows tall. */
+const KITTEN = [
   ['    /\\_/\\ ', ' __( o.o )', '~(      ) ', '  /\\  /\\  '],
   ['    /\\_/\\ ', ' __( o.o )', '~(      ) ', '  ||  ||  '],
 ]
-
-/** The cat sitting, its eyes given. */
-function sitting(eyes: string): string[] {
-  return [' /\\_/\\    ', `( ${eyes} )   `, ' > ^ <    ', ' (_|_)~   ']
-}
-
-/** The cat rolling on the ground: on one side, on its back with its paws up, on the other side, on its back. */
-const ROLL = [
-  ['          ', '  /\\_/\\   ', ' ( -.- )=~', '  `----\'  '],
-  ['  /\\  /\\  ', ' (      )~', ' ( o.o )  ', '  \\/"\\/   '],
-  ['          ', '   /\\_/\\  ', '~=( -.- ) ', '  `----\'  '],
-  ['  /\\  /\\  ', ' (      )~', ' ( ^.^ )  ', '  \\/"\\/   '],
-]
+const KITTEN_COLS = 10
 
 /** Cells a walking cat moves per tick. */
 const WALK_SPEED = 0.5
 
+const MIRROR: Record<string, string> = { '/': '\\', '\\': '/', '(': ')', ')': '(', '<': '>', '>': '<', '{': '}', '}': '{' }
+
+/** A sprite row seen from the other side. */
+export function mirrored(row: string, width: number): string {
+  return [...row.padEnd(width)].reverse().map(c => MIRROR[c] ?? c).join('')
+}
+
 /** One part of the show: how many ticks it lasts, and how its tick-th frame is drawn. */
 type Phase = { ticks: number; draw: (t: number, out: Frame) => void }
 
-type Stage = { w: number; h: number; center: number; base: number }
+/** The band, the sitting cat's column, the big cat's top row, and the ground row. */
+type Stage = { w: number; h: number; center: number; base: number; ground: number }
 
-function sprite(out: Frame, rows: readonly string[], x: number, y: number): void {
-  rows.forEach((row, i) => put(out, x, y + i, row, FUR))
+function sprite(out: Frame, rows: readonly string[], x: number, y: number, color = FUR): void {
+  rows.forEach((row, i) => {
+    // Only the blanks around a row let what is behind it show, so a kitten is not cut by the cat's box,
+    // and does not show through the cat's body either.
+    const lead = row.length - row.trimStart().length
+    put(out, x + lead, y + i, row.trim(), color)
+  })
 }
 
 /**
- * A speech bubble over the cat's head, its tail pointing down to the head:
+ * A speech bubble beside the cat's head, its tail pointing down to the head:
  *
  *      .------.
  *     ( meow )
@@ -53,7 +80,7 @@ export function bubbleRows(text: string): string[] {
 }
 
 function bubble(out: Frame, s: Stage, text: string): void {
-  bubbleRows(text).forEach((row, i) => put(out, s.center + 6, s.base - 4 + i, row, SPEECH))
+  bubbleRows(text).forEach((row, i) => put(out, s.center + SIT_COLS + 1, s.base - 2 + i, row, SPEECH))
 }
 
 function walkPhase(s: Stage, from: number, to: number): Phase {
@@ -102,7 +129,7 @@ function purrPhase(s: Stage): Phase {
     draw: (t, out) => {
       sprite(out, sitting('^.^'), s.center, s.base)
       bubble(out, s, 'purr~')
-      put(out, s.center + 3, s.base - 1 - Math.floor(t / 8), '♥', HEART)
+      put(out, s.center + 6, s.base - 1 - Math.floor(t / 8), '♥', HEART)
     },
   }
 }
@@ -126,7 +153,7 @@ function tricks(s: Stage, rng: Rng): Phase[] {
 /** One round: walk in to the middle, sit and blink, meow, the tricks, meow again, walk out. */
 function show(s: Stage, rng: Rng): Phase[] {
   return [
-    walkPhase(s, -SPRITE_COLS, s.center),
+    walkPhase(s, -WALK_COLS, s.center),
     sitPhase(s),
     meowPhase(s, 'meow', 'o.o'),
     ...tricks(s, rng),
@@ -135,21 +162,69 @@ function show(s: Stage, rng: Rng): Phase[] {
   ]
 }
 
+/** Where a thing that walks back and forth over `span` cells stands at `clock`, and which way it faces. */
+export function bounce(start: number, speed: number, span: number, clock: number): { x: number; dir: 1 | -1 } {
+  const period = 2 * Math.max(1, span)
+  const p = (((start + speed * clock) % period) + period) % period
+  return p < span ? { x: Math.round(p), dir: 1 } : { x: Math.round(period - p), dir: -1 }
+}
+
+/** The ground: grass tufts over the band's last row. */
+function groundRow(w: number, rng: Rng): string {
+  return Array.from({ length: w }, () => ['_', '_', ',', '"', '_', '.'][Math.floor(rng() * 6)] as string).join('')
+}
+
 /**
- * A cat: it walks in slowly to the middle of the band, sits and blinks, says meow, rolls on the ground,
- * jumps, purrs with a heart, looks about, says MEOW and walks out, then comes round again.
+ * Two kittens playing back and forth on the ground, each facing the way it walks: one left of the place the
+ * big cat sits, one right of it, so they never walk into each other or over the sitting cat.
+ */
+function kittens(out: Frame, s: Stage, clock: number): void {
+  const yards = [{ from: 0, to: s.center - KITTEN_COLS - 1, speed: 0.3 }, { from: s.center + SIT_COLS + 1, to: s.w - KITTEN_COLS, speed: 0.45 }]
+  yards.forEach((yard, i) => {
+    const span = yard.to - yard.from
+    if (span < 2) return
+    const { x, dir } = bounce(span * 0.4, yard.speed, span, clock)
+    const rows = KITTEN[Math.floor(clock / 2) % 2] as string[]
+    sprite(out, dir === 1 ? rows : rows.map(r => mirrored(r, KITTEN_COLS)), yard.from + x, s.ground - 4, KITTEN_FUR[i])
+  })
+}
+
+/** A ball of yarn rolling back and forth on the ground, its loose thread behind it. */
+function yarn(out: Frame, s: Stage, clock: number): void {
+  const { x, dir } = bounce(s.w * 0.6, 0.35, Math.max(1, s.w - 1), clock)
+  put(out, x - dir * 2, s.ground - 1, '~', YARN)
+  put(out, x - dir, s.ground - 1, '~', YARN)
+  put(out, x, s.ground - 1, '@', YARN)
+}
+
+/** A butterfly drifting across the top rows, its wings beating. */
+function butterfly(out: Frame, s: Stage, clock: number): void {
+  const x = Math.floor((clock * 0.4) % (s.w + 4)) - 2
+  const y = Math.round(1 + Math.sin(clock / 5))
+  put(out, x, y, Math.floor(clock / 3) % 2 === 0 ? '}{' : ')(', BUTTERFLY)
+}
+
+/**
+ * A cat and its garden: the big cat walks in slowly to the middle of the band, sits and blinks, says meow,
+ * rolls on the ground, jumps, purrs with a heart, looks about, says MEOW and walks out, then comes round
+ * again, while two kittens play on the grass, a ball of yarn rolls and a butterfly drifts over them.
  */
 export function cat(w: number, h: number, rng: Rng): Animation {
-  const s: Stage = { w, h, center: Math.max(0, Math.floor((w - SPRITE_COLS) / 2)), base: h - SPRITE_ROWS }
+  const ground = h - 1
+  const s: Stage = { w, h, center: Math.max(0, Math.floor((w - SIT_COLS) / 2)), base: ground - SPRITE_ROWS, ground }
+  const grass = groundRow(w, rng)
   let phases = show(s, rng)
   let index = 0
   let t = 0
+  let clock = 0
   let wrapped = false
 
   // `t` counts steps of STEP_MS within the phase, with a fraction between them, so a walk moves on every frame.
   // A round that ends says so through `wrapped`, so `random` moves on only once the cat has walked out.
   const step = (dtMs?: number): void => {
-    t += unitsOf(dtMs)
+    const u = unitsOf(dtMs)
+    t += u
+    clock += u
     wrapped = false
     for (let ticks = phases[index]?.ticks ?? 0; t >= ticks; ticks = phases[index]?.ticks ?? 0) {
       t -= ticks
@@ -164,7 +239,12 @@ export function cat(w: number, h: number, rng: Rng): Animation {
 
   const frame = (): Frame => {
     const out = blankFrame(w, h)
+    put(out, 0, ground, grass, GRASS)
+    kittens(out, s, clock)
+    butterfly(out, s, clock)
     phases[index]?.draw(t, out)
+    // The yarn rolls in front, at the cats' feet, so no cat hides it.
+    yarn(out, s, clock)
     return out
   }
 
