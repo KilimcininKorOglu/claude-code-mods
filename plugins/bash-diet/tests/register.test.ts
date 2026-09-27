@@ -23,11 +23,17 @@ type World = {
   /** Whether the session start ran to its end and registered the command. */
   registered: boolean
   now: number
+  /** The store every window shares, which a test writes as another window. */
+  store: Map<string, unknown>
 }
 
 function world(on: On): World {
-  const w: World = { stdout: '', stderr: '', exitCode: 0, files: new Map(), ran: [], logs: [], statuses: [], decisions: {}, mtimes: new Map(), registered: false, now: new Date(2026, 8, 25, 14, 30).getTime() }
-  mock.store(on, {})
+  const w: World = { stdout: '', stderr: '', exitCode: 0, files: new Map(), ran: [], logs: [], statuses: [], decisions: {}, mtimes: new Map(), registered: false, now: new Date(2026, 8, 25, 14, 30).getTime(), store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.env(on, { TMPDIR: `${TMP}/`, HOME: '/Users/u' })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => { w.registered = true; return { value: { command: e.name } } })
@@ -140,6 +146,27 @@ describe('bash-diet', () => {
     expect(stdoutOf(await bash($, './build.sh'))).toBe(NOISY)
     expect((await $.command.run(run('exclude ^('))).text).toContain('not a valid regex')
     expect((await $.command.run(run('what'))).text).toContain('expects nothing')
+  })
+
+  test('a setting another window stored applies here at the next Bash call, and a change here keeps what it stored', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.stdout = NOISY
+    // Every window shares the store: another one excluded the script, and this one never ran the command.
+    w.store.set('excludes', ['./build.sh'])
+    expect(stdoutOf(await bash($, './build.sh'))).toBe(NOISY)
+    expect(stdoutOf(await bash($, './other.sh'))).toBe('step\nretrying (×40)\ndone')
+    // An exclude made here joins the stored list instead of writing this session's older copy over it.
+    await $.command.run(run('exclude ./deploy.sh'))
+    expect(w.store.get('excludes')).toEqual(['./build.sh', './deploy.sh'])
+    // The same for trust: another project's trusted file stays trusted after this one is trusted.
+    put(w, PROJECT_RULES, ruleFile('^./build.sh', 'ok'))
+    w.store.set('trusted', { '/Users/u/other/.bash-diet/filters.json': 'sha256-of-other' })
+    await $.command.run(run('trust'))
+    expect(Object.keys(w.store.get('trusted') as object).sort()).toEqual(['/Users/u/app/.bash-diet/filters.json', '/Users/u/other/.bash-diet/filters.json'])
+    w.store.set('enabled', false)
+    expect(stdoutOf(await bash($, './other.sh'))).toBe(NOISY)
+    expect((await $.command.run(run(''))).text).toMatch(/^off/)
   })
 
   test('a failed run stays an error with its exit code, and its full output is kept in a file', async ($, on) => {

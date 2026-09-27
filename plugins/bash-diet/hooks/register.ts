@@ -422,6 +422,19 @@ async function activeRules($: EngineInterface, state: State): Promise<Rule[]> {
   return state.files.filter(f => isTrusted(state, f)).flatMap(f => f.rules)
 }
 
+/**
+ * Reads the on/off setting, the excludes and the trusted rule files from the store, which every window
+ * shares: a change made in another window applies here at the next Bash call, and a change made here
+ * starts from what the store holds, so it never writes this session's older copy over another window's.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  const stored = await $.store.get(EXCLUDES_KEY)
+  state.excludes = Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : []
+  const trusted = await $.store.get(TRUSTED_KEY)
+  state.trusted = typeof trusted === 'object' && trusted !== null ? (trusted as Record<string, string>) : {}
+}
+
 async function setTrusted($: EngineInterface, state: State, trusted: Record<string, string>): Promise<void> {
   state.trusted = trusted
   await $.store.set(TRUSTED_KEY, trusted)
@@ -482,6 +495,7 @@ function subcommand($: EngineInterface, state: State, word: string, rest: string
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  await readSettings($, state)
   const text = args.trim()
   if (text === '') return statusText(state.enabled, state.excludes, sessionText(state.calls, state.rawChars, state.shownChars))
   const [word = '', ...rest] = text.split(/\s+/)
@@ -490,7 +504,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 
 /** Filters one Bash call; everything the plan leaves alone runs as the model wrote it. */
 async function filterCall($: EngineInterface, state: State, e: ToolCallInput & { tool: 'Bash' }, next: (e: ToolCallInput) => Promise<ToolCallResult<'Bash'>>): Promise<ToolCallResult<'Bash'>> {
-  const plan = state.enabled && e.run_in_background !== true ? planFor(e.command, await activeRules($, state)) : undefined
+  if (e.run_in_background === true) return next(e)
+  await readSettings($, state)
+  const plan = state.enabled ? planFor(e.command, await activeRules($, state)) : undefined
   if (plan === undefined || (plan.target !== undefined && isExcluded(state.excludes, plan.target.words))) return next(e)
   const command = await withPlanFlags($, e.command, plan)
   const r = await next(command === e.command ? e : { ...e, command })
@@ -502,11 +518,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    const stored = await $.store.get(EXCLUDES_KEY)
-    state.excludes = Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : []
-    const trusted = await $.store.get(TRUSTED_KEY)
-    state.trusted = typeof trusted === 'object' && trusted !== null ? (trusted as Record<string, string>) : {}
+    await readSettings($, state)
     const places = await locate($)
     state.places = places
     state.files = ruleFilesOf(places)
@@ -523,8 +535,9 @@ export const register: Register = on => {
   })
 
   // The note reaches the model at startup, resume, /clear and after a compaction, while the mod is on.
-  on('classic.SessionStart', async (_$, e, next) => {
+  on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
+    await readSettings($, state)
     return state.enabled ? { ...r, additionalContext: [...(r.additionalContext ?? []), AWARENESS] } : r
   })
 
