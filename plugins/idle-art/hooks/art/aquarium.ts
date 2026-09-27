@@ -11,6 +11,7 @@ const FISH_COLORS = ['#ffa94d', '#ffd43b', '#66d9e8', '#f783ac', '#b197fc']
 const BUBBLE = '#a5d8ff'
 const WEED = ['#2f9e44', '#51cf66']
 const SAND = '#c9a66b'
+const SURFACE = '#339af0'
 
 type Fish = { x: number; y: number; dir: 1 | -1; speed: number; shape: number; color: string }
 type Bubble = { x: number; y: number }
@@ -24,7 +25,7 @@ function newFish(rng: Rng, w: number, h: number, anywhere: boolean): Fish {
   const shape = below(rng, SHAPES.length)
   const len = (SHAPES[shape]?.right.length ?? 3)
   const edge = dir === 1 ? -len : w
-  return { x: anywhere ? below(rng, w) : edge, y: below(rng, Math.max(1, h - 1)), dir, speed: 0.15 + rng() * 0.35, shape, color: pick(rng, FISH_COLORS) }
+  return { x: anywhere ? below(rng, w) : edge, y: 1 + below(rng, Math.max(1, h - 2)), dir, speed: 0.3 + rng() * 0.6, shape, color: pick(rng, FISH_COLORS) }
 }
 
 function fishText(f: Fish): string {
@@ -42,11 +43,19 @@ function bubbleGlyph(y: number, h: number): string {
   return y > h * 0.33 ? 'o' : 'O'
 }
 
-/** An aquarium: fish crossing both ways, bubbles rising from them, seaweed swaying on the sand. */
+/** The water's surface, its ripple moving one cell each sway. */
+function surfaceRow(w: number, shift: number): string {
+  return Array.from({ length: w }, (_, x) => ((x + shift) % 4 === 0 ? '-' : '~')).join('')
+}
+
+/**
+ * An aquarium: fish crossing both ways, bubbles rising from them and from the sand, seaweed swaying on the
+ * sand, and the water's surface rippling on the top row.
+ */
 export function aquarium(w: number, h: number, rng: Rng): Animation {
-  const fish = Array.from({ length: Math.max(2, Math.floor(w / 14)) }, () => newFish(rng, w, h, true))
+  const fish = Array.from({ length: Math.max(3, Math.floor(w / 7)) }, () => newFish(rng, w, h, true))
   const bubbles: Bubble[] = []
-  const weeds: Weed[] = Array.from({ length: Math.max(2, Math.floor(w / 10)) }, () => ({ x: below(rng, w), height: 1 + below(rng, Math.max(1, Math.floor(h / 2))), phase: below(rng, 2) }))
+  const weeds: Weed[] = Array.from({ length: Math.max(3, Math.floor(w / 5)) }, () => ({ x: below(rng, w), height: 1 + below(rng, Math.max(1, h - 3)), phase: below(rng, 2) }))
   const sand = Array.from({ length: w }, () => pick(rng, ['.', ',', '_', '.', ' ']))
   let tick = 0
 
@@ -56,18 +65,20 @@ export function aquarium(w: number, h: number, rng: Rng): Animation {
     fish.forEach((f, i) => {
       f.x += f.dir * f.speed * u
       if (isGone(f, w)) fish[i] = newFish(rng, w, h, false)
-      else if (rng() < 0.02 * u) bubbles.push({ x: Math.round(f.dir === 1 ? f.x + fishText(f).length : f.x - 1), y: f.y })
+      else if (rng() < 0.05 * u) bubbles.push({ x: Math.round(f.dir === 1 ? f.x + fishText(f).length : f.x - 1), y: f.y })
     })
+    if (rng() < (w / 40) * 0.3 * u) bubbles.push({ x: below(rng, w), y: h - 2 })
     for (let i = bubbles.length - 1; i >= 0; i--) {
       const b = bubbles[i] as Bubble
       b.y -= 0.3 * u
-      if (b.y < 0) bubbles.splice(i, 1)
+      if (b.y < 1) bubbles.splice(i, 1)
     }
   }
 
   const frame = (): Frame => {
     const out = blankFrame(w, h)
     put(out, 0, h - 1, sand.join(''), SAND)
+    put(out, 0, 0, surfaceRow(w, Math.floor(tick / SWAY_TICKS)), SURFACE)
     const sway = Math.floor(tick / SWAY_TICKS)
     for (const wd of weeds) {
       for (let k = 0; k < wd.height; k++) put(out, wd.x, h - 2 - k, (k + wd.phase + sway) % 2 === 0 ? '(' : ')', WEED[k % 2] as string)
