@@ -115,9 +115,10 @@ describe('config', () => {
   test('a missing or broken setting takes its default, and only a stored false turns the mod off', () => {
     expect(configOf(undefined, undefined, undefined, [])).toEqual({ enabled: true, style: 'random', delaySec: 3 })
     expect(configOf(false, 'rainbow', 99, [])).toEqual({ enabled: false, style: 'random', delaySec: 3 })
-    expect(configOf('no', 'stars', 0, [])).toEqual({ enabled: true, style: 'stars', delaySec: 0 })
-    // A scene that is gone (the Game of Life, removed) reads as random.
+    expect(configOf('no', 'fire', 0, [])).toEqual({ enabled: true, style: 'fire', delaySec: 0 })
+    // A scene that is gone (the Game of Life, the stars, removed) reads as random.
     expect(configOf(true, 'life', 3, []).style).toBe('random')
+    expect(configOf(true, 'stars', 3, []).style).toBe('random')
     // A stored clip name holds only while the clip is saved.
     expect(configOf(true, 'kitty', 3, ['kitty']).style).toBe('kitty')
     expect(configOf(true, 'kitty', 3, []).style).toBe('random')

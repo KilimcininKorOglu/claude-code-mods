@@ -20,7 +20,6 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
 |---|---|
 | `matrix` | Yarım genişlikte katakana ve rakamlardan oluşan akışlar yeşil renkte düşer. Her akışın parlak bir başı ve solan bir kuyruğu vardır. Kuyruğun altındaki karakterler titrer. |
 | `fire` | Isı, band'in altındaki gizli bir satırdan yükselir ve yukarı çıktıkça soğur. `.` ile `@` arasındaki karakterlerle, koyu kırmızıdan açık sarıya kadar çizilir. |
-| `stars` | Yıldızlar merkezden izleyiciye doğru uçar. Yaklaştıkça gri bir `·` işaretinden beyaz bir `✦` işaretine büyür. |
 | `aquarium` | Dört şekilde balık iki yönde de geçer. Balıklardan çıkan kabarcıklar yükseldikçe büyür. Kumun üstünde yosunlar sallanır. |
 | `cat` | Bir kedi, kafası önde, yavaş yavaş yürüyerek ortaya gelir, oturur, göz kırpar ve `meow` der. Sonra her turda başka bir sırayla şebeklik yapar: yerde bir o yana bir bu yana yuvarlanır, üç kez zıplar, başından bir kalp yükselirken mırlar, sağa sola bakar. `MEOW!` der, sağa doğru yavaş yavaş yürüyüp sahneden çıkar ve yeniden gelir. Her söz, başının üstünde bir konuşma balonunda çıkar. Bir tur yaklaşık 34 saniye sürer. `random`, başka sahneye geçmeden önce kedinin sahneden çıkmasını bekler. |
 
@@ -34,7 +33,7 @@ Resim bir turn'ün 3. saniyesinde çıkar, bu yüzden kısa bir turn hiçbir şe
                > ^ <
                (_|_)~
 
-Band en fazla 8 satır kaplar ve terminalin tüm genişliğini kullanır. Terminalde daha az satır varsa daha alçak çizilir. Bir klip band'in ortasında durur. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir. Sahneler saniyede yaklaşık 60 kare çizilir ve her biri geçen süre kadar ilerler. Böylece yağmur, yıldızlar, balıklar ve kedi her karede bir adım kayar. Ateşin ısısı saniyede on kez değişir, bir klip de kendi kare sürelerine göre değişir.
+Band en fazla 8 satır kaplar ve terminalin tüm genişliğini kullanır. Terminalde daha az satır varsa daha alçak çizilir. Bir klip band'in ortasında durur. 3 satırdan kısa bir band'e hiçbir şey çizmez. Yalnız terminalde çizer ve açık bir anketin önünden çekilir. Sahneler saniyede yaklaşık 60 kare çizilir ve her biri geçen süre kadar ilerler. Böylece yağmur, balıklar ve kedi her karede bir adım kayar. Ateşin ısısı saniyede on kez değişir, bir klip de kendi kare sürelerine göre değişir.
 
 ## Kendi GIF'lerin
 
@@ -60,7 +59,7 @@ Klip adı küçük harf, rakam ve tire içerir, en fazla 24 karakterdir. Yerleş
 
     /idle-art                          durum: açık ya da kapalı, stil, gecikme
     /idle-art on | off                 çizimi aç ya da kapat
-    /idle-art <sahne ya da klip>       her zaman onu çiz: matrix, fire, stars, aquarium, cat ya da kayıtlı bir klip
+    /idle-art <sahne ya da klip>       her zaman onu çiz: matrix, fire, aquarium, cat ya da kayıtlı bir klip
     /idle-art random                   her turn ve yaklaşık her 20 saniyede yeni bir sahne ya da klip (varsayılan)
     /idle-art delay <n>                turn'ün n. saniyesinde başla, 0 ile 60 arası (varsayılan 3)
     /idle-art import <gif yolu> <ad>   bir GIF'i klibe çevir ve o adla sakla
@@ -119,7 +118,7 @@ Reach L2: 4 MiB'tan büyük bir GIF'i okumak için `base64` çalıştırır.
 - Her kare, çözülür çözülmez hücrelerine indirilir. Böylece büyük bir GIF bellekte aynı anda yalnız bir karenin piksellerini tutar. Bir GIF'ten en fazla 500 kare okunur.
 - Uzun bir GIF, 90.000 karakter sınırı yüzünden kare kaybeder. Hareketi aynı sürede kalır, ama daha kaba adımlarla ilerler.
 - Renkleri terminal kendi paletiyle çizer. True color desteklemeyen bir terminal, 256 rengi içinden en yakın olanı gösterir.
-- `matrix` yarım genişlikte katakana, `stars` ise `∗` ve `✦` çizer. Bu karakterleri içermeyen bir font yerlerine yedek bir karakter çizer.
+- `matrix` yarım genişlikte katakana çizer. Bu karakterleri içermeyen bir font yerlerine yedek bir karakter çizer.
 
 ## Geliştirme
 
