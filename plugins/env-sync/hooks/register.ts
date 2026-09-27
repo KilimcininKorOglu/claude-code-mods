@@ -7,12 +7,21 @@ const MODE_KEY = 'mode'
 const USAGE = 'expects nothing (the status), on, off or mode note | deny'
 
 /**
- * The on/off setting read at session start, the mode, and the last error logged, so the same one is
- * logged once. `open` holds the variables the last finding named, so a commit that adds them all
- * closes it, and in `deny` mode it also holds the gate shut. `owed` is the reference file the model is
- * owed a note against, set at the turn's end while the finding stands.
+ * The on/off setting and the mode as the store held them at the last read, and the last error logged,
+ * so the same one is logged once. `open` holds the variables the last finding named, so a commit that
+ * adds them all closes it, and in `deny` mode it also holds the gate shut. `owed` is the reference file
+ * the model is owed a note against, set at the turn's end while the finding stands.
  */
 type State = { enabled: boolean; mode: Mode; lastError?: string; open: Open[]; owed?: string }
+
+/**
+ * Reads the on/off setting and the mode from the store, which every window shares, so a change made in
+ * another window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+  state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+}
 
 /** The repository and its HEAD before the commit; `head` is empty before the first commit. */
 type Before = { root: string; head: string }
@@ -229,6 +238,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each commit is checked for env reads .env.example lacks' : 'off: commits are not checked'
   }
   if (word !== '') return USAGE
+  await readSettings($, state)
   const open = state.open.length === 0 ? 'no variable is open' : `${state.open.map(o => o.name).join(' · ')} still missing`
   return `${state.enabled ? 'on' : 'off'} · mode ${state.mode} · ${open}`
 }
@@ -239,8 +249,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'env-sync', description: 'Env variables a commit reads that .env.example lacks: status, on, off, mode note | deny (env-sync)', argumentHint: '[on | off | mode note | mode deny]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
-    state.mode = modeOf(String(await $.store.get(MODE_KEY))) ?? 'note'
+    await readSettings($, state)
     return r
   })
 
@@ -253,7 +262,9 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || !state.enabled || state.open.length === 0) return r
+    if (e.agentId !== undefined || state.open.length === 0) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     state.owed = await recheckNow($, state)
     return r
   })
@@ -267,6 +278,9 @@ export const register: Register = on => {
   })
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    // Only a commit, or a guarded command while a finding is open, acts on a setting.
+    if (!isCommit(e.command) && (state.open.length === 0 || !isGuarded(e.command))) return next(e)
+    await readSettings($, state)
     const stopped = await gate($, state, e.command)
     if (stopped !== undefined) return stopped
     if (!state.enabled || !isCommit(e.command)) return next(e)

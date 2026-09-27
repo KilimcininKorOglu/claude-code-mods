@@ -1,4 +1,4 @@
-import { describe, expect, mock, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
+import { describe, expect, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
 tier('user')
@@ -46,16 +46,21 @@ const SOURCE = 'const k = process.env.STRIPE_KEY\nconst d = process.env.DB_URL\n
 
 /**
  * `head` moves to `next` when the commit runs; `files` are the files on disk; `showFails` makes git show fail;
- * `notRepo` makes the directory no repository.
+ * `notRepo` makes the directory no repository; `store` is the store every window shares, which a test
+ * writes as another window.
  */
-type World = { head: string; next: string; files: Map<string, string>; staged: string[]; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean }
+type World = { head: string; next: string; files: Map<string, string>; staged: string[]; argv: string[]; logs: string[]; commitFails: boolean; showFails: boolean; notRepo: boolean; store: Map<string, unknown> }
 
 function world(on: On): World {
   const w: World = {
     head: 'aaa', next: 'bbb', files: new Map([[`${ROOT}/.env.example`, 'DB_URL=postgres://localhost/app\n'], [PAY, SOURCE]]),
-    staged: ['src/pay.ts'], argv: [], logs: [], commitFails: false, showFails: false, notRepo: false,
+    staged: ['src/pay.ts'], argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, store: new Map(),
   }
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('session.cwd', () => ({ value: `${ROOT}/src` }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
@@ -176,6 +181,21 @@ describe('env-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git merge main' })).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('.env.example now lists the variables it lacked: STRIPE_KEY')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m pay' })
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('STRIPE_KEY')
+    w.store.set('enabled', false)
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).result).toBe('ok')
+    const before = w.argv.length
+    w.next = 'ccc'
+    expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m more' })).context).toBe(undefined)
+    expect(w.argv.length).toBe(before)
+    expect((await $.command.run(run(''))).text).toBe('off · mode deny · STRIPE_KEY still missing')
   })
 
   test('a commit that holds none of the reading files runs, and a push still stops', async ($, on) => {
