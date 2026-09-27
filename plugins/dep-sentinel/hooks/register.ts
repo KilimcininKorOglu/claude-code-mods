@@ -43,12 +43,21 @@ const GO_PARENT_TRIES = 4
 type Outcome = { reasons: Reason[]; failure?: Failure }
 
 /**
- * The packages an earlier install could not check, each with the install it came from, so the check can
- * be run again: by a later install of the same package, by the gate itself and at each turn's end.
- * `owed` says the model is owed a note for the packages that were still open at the turn's end. A package
- * is keyed by its ecosystem and name (`openKey`), because npm and PyPI can each hold a package of one name.
+ * The mode as the store held it at the last read, and the packages an earlier install could not check,
+ * each with the install it came from, so the check can be run again: by a later install of the same
+ * package, by the gate itself and at each turn's end. `owed` says the model is owed a note for the
+ * packages that were still open at the turn's end. A package is keyed by its ecosystem and name
+ * (`openKey`), because npm and PyPI can each hold a package of one name.
  */
 type State = { mode: Mode; open: Map<string, Install>; owed: boolean }
+
+/**
+ * Reads the mode from the store, which every window shares, so a change made in another window applies
+ * here at the next hook that acts on it. The on/off setting is read fresh by `isEnabled`.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+}
 
 /** The key of an open package: two ecosystems' packages of one name are two findings. */
 function openKey(p: Install): string {
@@ -212,6 +221,7 @@ async function recheckOpen($: EngineInterface, state: State, now: number): Promi
  */
 async function gate($: EngineInterface, state: State, command: string): Promise<string | undefined> {
   if (state.open.size === 0 || !isGuarded(command) || !(await isEnabled($))) return undefined
+  await readSettings($, state)
   await recheckOpen($, state, await $.clock.now())
   if (state.mode !== 'deny' || state.open.size === 0) return undefined
   return gateText(openNames(state))
@@ -237,7 +247,9 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     return word === 'on' ? 'on: each install is checked against its registry and OSV.dev' : 'off: installs run unchecked'
   }
   if (word.startsWith('mode')) return setMode($, state, word.slice(4).trim())
-  return word === '' ? statusText($, state) : USAGE
+  if (word !== '') return USAGE
+  await readSettings($, state)
+  return statusText($, state)
 }
 
 export const register: Register = on => {
@@ -246,7 +258,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'dep-sentinel', description: 'Package installs checked before they run: status, on, off, mode (dep-sentinel)', argumentHint: '[on | off | mode note | deny]' })
-    state.mode = (await $.store.get(MODE_KEY)) === 'deny' ? 'deny' : 'note'
+    await readSettings($, state)
     return r
   })
 

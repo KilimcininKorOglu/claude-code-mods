@@ -71,10 +71,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, turn.complete, prompt.submit, tool.call{tool=Bash}
-    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.process.run (via npmView), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get, $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.process.run (via npmView), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get (via isEnabled, readSettings), $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
 
 Reach L3, network'e çıkar.
 

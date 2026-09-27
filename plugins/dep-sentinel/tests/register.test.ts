@@ -39,8 +39,11 @@ const run = (args: string): CommandRunInput => ({
 const LODASH = { 'dist-tags': { latest: '4.17.21' }, versions: { '4.17.15': {}, '4.17.21': {} }, time: { created: '2012-04-23T00:00:00Z' } }
 const OSV_BAD = { vulns: [{ id: 'GHSA-29mw-wpgm-hmr9', affected: [{ ranges: [{ events: [{ introduced: '0' }, { fixed: '4.17.21' }] }] }] }] }
 
-/** Registry answers by URL, the URLs asked, and what reached the shell. */
-type World = { answers: Map<string, { status: number; body: unknown }>; osv: unknown; asked: string[]; ran: string[]; logs: string[]; down: boolean; downFor?: string }
+/**
+ * Registry answers by URL, the URLs asked, and what reached the shell; `store` is the store every window
+ * shares, which a test writes as another window.
+ */
+type World = { answers: Map<string, { status: number; body: unknown }>; osv: unknown; asked: string[]; ran: string[]; logs: string[]; down: boolean; downFor?: string; store: Map<string, unknown> }
 
 function world(on: On): World {
   const w: World = {
@@ -50,8 +53,13 @@ function world(on: On): World {
     ran: [],
     logs: [],
     down: false,
+    store: new Map(),
   }
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   mock.clock(on, { now: NOW })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -215,6 +223,19 @@ describe('dep-sentinel', () => {
     expect(w.logs.at(-1)).toBe('the registry and OSV.dev answered for the packages that stayed unchecked: lodash')
     await prompt('fourth')
     expect(notes[3]).toEqual([])
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    w.down = true
+    await $.tool.call({ tool: 'Bash', command: 'npm i lodash' })
+    // Every window shares the store: another one turned deny mode on, and this one never ran the command.
+    w.store.set('mode', 'deny')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).deny).toContain('installed unchecked: lodash')
+    expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 package(s) still unchecked; npm, PyPI, Go, crates.io and Packagist installs are checked')
+    w.store.set('mode', 'note')
+    expect((await $.tool.call({ tool: 'Bash', command: 'git push' })).result).toBe('ok')
+    expect((await $.command.run(run(''))).text).toBe('on · mode note · 1 package(s) still unchecked; npm, PyPI, Go, crates.io and Packagist installs are checked')
   })
 
   test('in deny mode a commit stops while a package stayed unchecked, and runs once a later install checked it', async ($, on) => {
