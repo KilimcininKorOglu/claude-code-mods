@@ -150,7 +150,7 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-withSidebar('an open sidebar holds this turn\'s and the last turn\'s effort for the whole session, the levels coloured', async ($, on) => {
+withSidebar('an open sidebar holds this turn\'s effort while it runs and the last turn\'s after it for the whole session, the levels coloured', async ($, on) => {
   const w = world(on)
   const sections: { lines: { text: string }[] }[] = []
   const cleared: unknown[] = []
@@ -172,7 +172,7 @@ withSidebar('an open sidebar holds this turn\'s and the last turn\'s effort for 
   expect(sections.map(s => s.lines[0]?.text)).toEqual([
     'this turn max · session high',
     'last turn max · session high',
-    'this turn high (session) · last turn max · session high',
+    'this turn high (session) · session high',
     'last turn high (session) · session high',
   ])
   expect(cleared).toEqual([])

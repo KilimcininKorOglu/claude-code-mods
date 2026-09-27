@@ -9,11 +9,12 @@ Bu Claude Code Mod'u, yazdığınız her prompt'un zorluğunu küçük bir model
 3. Session ayarlarına hiçbir şey yazılmaz. Turn bitince sonraki turn yine session'ın effort'uyla başlar, kendi prompt'u puanlanırsa o seviyeyi alır.
 4. Task notification'ları, plugin'lerin gönderdiği prompt'lar ve çalışan bir turn'ün üstüne yazdığınız prompt'lar puanlanmaz. Bu turn'ler session'ın effort'uyla çalışır.
 5. Haiku cevap vermezse ya da seviye olmayan bir şey söylerse turn session'ın effort'uyla çalışır ve bunu bir satır bildirir.
-6. Puanlanan her turn'ün seviyesini görürsünüz. [sidebar](../sidebar) açıksa seviye kalıcı bir bölümde durur: `low` soluk, `medium` yeşil, `high` sarı, `xhigh` ve `max` kırmızı; session-watch'ın effort'a verdiği renklerle aynı. Bölüm session boyunca durur. Bir turn çalışırken o turn'ün, biten son turn'ün ve session'ın kendi effort'unu gösterir:
+6. Puanlanan her turn'ün seviyesini görürsünüz. [sidebar](../sidebar) açıksa seviye kalıcı bir bölümde durur: `low` soluk, `medium` yeşil, `high` sarı, `xhigh` ve `max` kırmızı; session-watch'ın effort'a verdiği renklerle aynı. Bölüm session boyunca durur. Bir turn çalışırken o turn'ün effort'unu session'ın kendi effort'unun yanında gösterir; turn'ler arasında biten son turn'ün effort'unu gösterir:
 
-       this turn high · last turn low (session) · session low
+       this turn high · session low
+       last turn high · session low
 
-   Turn'ler arasında `last turn high · session low` yazar. Puanlanmayan bir turn session'ın effort'unu, ardından soluk bir `(session)` ile gösterir. `/effort-auto off` bölümü kaldırır. Sidebar kapalıysa puanlanan her turn başında transcript'e bir satır yazar:
+   Puanlanmayan bir turn session'ın effort'unu, ardından soluk bir `(session)` ile gösterir. `/effort-auto off` bölümü kaldırır. Sidebar kapalıysa puanlanan her turn başında transcript'e bir satır yazar:
 
        effort-auto: this turn max · session low
 

@@ -69,15 +69,11 @@ function turnParts(t: TurnEffort): Part[] {
 }
 
 /**
- * The person's line: `this turn` while a turn runs, `last turn` once one ended, and the session's effort;
- * only the levels coloured, each by how high it is, the words plain.
+ * The person's line: `this turn` while a turn runs, else `last turn` once one ended, and the session's
+ * effort; only the levels coloured, each by how high it is, the words plain.
  */
 export function effortLine(current: TurnEffort | undefined, last: TurnEffort | undefined, session: string | number | undefined): Line {
-  const parts: Part[] = [
-    ...(current === undefined ? [] : [{ text: 'this turn ' }, ...turnParts(current), { text: ' · ' }]),
-    ...(last === undefined ? [] : [{ text: 'last turn ' }, ...turnParts(last), { text: ' · ' }]),
-    { text: 'session ' },
-    levelPart(session),
-  ]
+  const shown = current === undefined ? (last === undefined ? [] : [{ text: 'last turn ' }, ...turnParts(last), { text: ' · ' }]) : [{ text: 'this turn ' }, ...turnParts(current), { text: ' · ' }]
+  const parts: Part[] = [...shown, { text: 'session ' }, levelPart(session)]
   return { text: parts.map(p => p.text).join(''), parts }
 }
