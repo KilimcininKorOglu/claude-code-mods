@@ -210,7 +210,7 @@ export function createSidebar(redraw: () => void, now: () => Promise<number>, lo
 
 /** The colour of a line's tone; `dim` has none of its own and is drawn faint instead. */
 function toneColor(tone: Row['tone']): string | undefined {
-  return { ok: 'green', warn: 'yellow', error: 'red' }[tone as 'ok' | 'warn' | 'error']
+  return { ok: 'green', warn: 'yellow', error: 'red', info: 'blue' }[tone as 'ok' | 'warn' | 'error' | 'info']
 }
 
 function sectionTree(els: Elements, one: Drawn, press: (command: string, args?: string) => void, first: number) {

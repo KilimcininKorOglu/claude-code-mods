@@ -54,7 +54,8 @@ function isName(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 64 && NAME.test(value)
 }
 
-const isKind = (kind: unknown): kind is SidebarKind => kind === 'ok' || kind === 'warn' || kind === 'error' || kind === 'dim'
+const KINDS: readonly unknown[] = ['ok', 'warn', 'error', 'dim', 'info']
+const isKind = (kind: unknown): kind is SidebarKind => KINDS.includes(kind)
 
 /** Parts of a line this long at most; the rest joins the last one. */
 const MAX_PARTS = 16

@@ -5,8 +5,8 @@
  * not installed, where the call throws), so the caller keeps its own way of showing the same finding.
  */
 
-/** How a line or a part of one is coloured: `ok` green, `warn` yellow, `error` red, `dim` faint. */
-export type SidebarKind = 'ok' | 'warn' | 'error' | 'dim'
+/** How a line or a part of one is coloured: `ok` green, `warn` yellow, `error` red, `dim` faint, `info` blue. */
+export type SidebarKind = 'ok' | 'warn' | 'error' | 'dim' | 'info'
 
 /** A piece of a line in its own colour; a part without `kind` takes the line's. */
 export type SidebarPart = { text: string; kind?: SidebarKind }

@@ -24,7 +24,7 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
       consumer: 'my-mod',              // your mod's name, drawn in the section heading
       key: 'src-users.ts',             // names the section inside your mod; [A-Za-z0-9._:-]
       title: 'SQL built from strings', // the heading beside the consumer
-      lines: findings.map(text => ({ text, kind: 'error' })), // kind: 'ok' | 'warn' | 'error' | 'dim', or absent
+      lines: findings.map(text => ({ text, kind: 'error' })), // kind: 'ok' | 'warn' | 'error' | 'dim' | 'info' (blue), or absent
       buttons: [{ label: 'fix', command: 'my-mod', args: 'fix src/users.ts' }], // optional
       until: 'stream',                 // 'stream' logs it, 'session' keeps it standing, 'turn' drops it at the turn's end
       order: 50,                       // smaller is higher inside your group; 100 when absent

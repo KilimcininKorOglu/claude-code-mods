@@ -148,6 +148,11 @@ describe('board', () => {
     expect(last?.parts?.at(-1)).toEqual({ text: `${'y'.repeat(7)}…`, tone: 'error' })
   })
 
+  test('an info part keeps its tone', () => {
+    expect(kept(section({ lines: [{ text: '', parts: [{ text: 'gemini-3.8-flash', kind: 'info' }] }] })).lines)
+      .toEqual([{ text: 'gemini-3.8-flash', parts: [{ text: 'gemini-3.8-flash', kind: 'info' }] }])
+  })
+
   test('a part of another shape is dropped, and a line whose parts are all dropped draws its text', () => {
     expect(kept(section({ lines: [{ text: 'plain', parts: [{ text: '' }, { text: 3 } as unknown as { text: string }, { text: 'x', kind: 'pink' } as unknown as { text: string }] }] })).lines)
       .toEqual([{ text: 'x', parts: [{ text: 'x' }] }])
