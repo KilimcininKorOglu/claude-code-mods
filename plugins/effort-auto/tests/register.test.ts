@@ -169,7 +169,7 @@ withSidebar('an open sidebar holds the turn\'s level as a standing section, the 
   expect(cleared).toHaveLength(1)
   expect(sections).toEqual([{
     consumer: 'effort-auto', key: 'effort', title: 'effort', until: 'session', order: 6,
-    lines: [{ text: 'this turn max · session high', parts: [{ text: 'this turn ' }, { text: 'max', kind: 'error' }, { text: ' · session high', kind: 'dim' }] }],
+    lines: [{ text: 'this turn max · session high', parts: [{ text: 'this turn ' }, { text: 'max', kind: 'error' }, { text: ' · session ' }, { text: 'high', kind: 'warn' }] }],
   }])
   expect(w.logs).toEqual([])
 })

@@ -53,8 +53,15 @@ export type Line = { text: string; kind?: Tone; parts?: Part[] }
 /** The colours session-watch gives the same levels (`effortTone`), so both lines read alike. */
 const TONE: Record<Level, Tone> = { low: 'dim', medium: 'ok', high: 'warn', xhigh: 'error', max: 'error' }
 
-/** The person's line: the turn's level coloured by how high it is, the session's level faint. */
+/** A level as a part in its own colour; a budget or no setting stays plain. */
+function levelPart(value: string | number | undefined): Part {
+  const text = String(value ?? 'default')
+  const kind = typeof value === 'string' ? TONE[value as Level] : undefined
+  return kind === undefined ? { text } : { text, kind }
+}
+
+/** The person's line: only the two levels coloured, each by how high it is; the words stay plain. */
 export function turnLine(level: Level, session: string | number | undefined): Line {
-  const parts: Part[] = [{ text: 'this turn ' }, { text: level, kind: TONE[level] },{ text: ` · session ${String(session ?? 'default')}`, kind: 'dim' }]
+  const parts: Part[] = [{ text: 'this turn ' }, levelPart(level), { text: ' · session ' }, levelPart(session)]
   return { text: parts.map(p => p.text).join(''), parts }
 }
