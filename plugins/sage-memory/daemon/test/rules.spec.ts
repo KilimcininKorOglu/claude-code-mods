@@ -126,4 +126,10 @@ describe('when two texts are one memory', () => {
     assert.equal(isPossiblyContradictory(a, `${a} from the queue`), false)
     assert.equal(isPossiblyContradictory('The webhook handler doesn\'t retry failed payment events', 'The webhook handler does retry failed payment events'), true)
   })
+
+  test('a claim with other numbers is a contradiction, however short the numbers', () => {
+    assert.equal(isPossiblyContradictory('Retry the upload 3 times before failing the job', 'Retry the upload 5 times before failing the job'), true)
+    assert.equal(isPossiblyContradictory('The pool keeps 100 connections for each worker', 'The pool keeps 200 connections for each worker'), true)
+    assert.equal(isPossiblyContradictory('Node 22.18 is the lowest version with type stripping on', 'Type stripping is on from Node 22.18, the lowest version'), false, 'the same number in other words')
+  })
 })

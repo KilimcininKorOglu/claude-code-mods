@@ -333,16 +333,23 @@ const NEGATIONS = new Set([
   'wouldn',
 ])
 
+/** The numbers a text states, in their order: every run of digits with its decimal parts, however short. */
+function numbersOf(text: string): string {
+  return (text.normalize('NFKC').match(/\p{Nd}+(?:\.\p{Nd}+)*/gu) ?? []).join(' ')
+}
+
 /**
- * Two near-identical claims of opposite polarity ("is stable" and "is not stable"): both of at
- * least five terms, overlapping by 0.72, and a negation cue among the terms only one of them has.
- * Such a pair is never merged.
+ * Two near-identical claims that cannot both hold: both of at least five terms, overlapping by
+ * 0.72, and either stating other numbers ("3 times" and "5 times", numbers the terms leave out
+ * when they are short) or of opposite polarity ("is stable" and "is not stable", a negation cue
+ * among the terms only one of them has). Such a pair is never merged.
  */
 export function isPossiblyContradictory(a: string, b: string): boolean {
   const left = new Set(tokenize(a))
   const right = new Set(tokenize(b))
   if (left.size < 5 || right.size < 5) return false
   if (tokenOverlap(a, b) < NEAR_DUPLICATE_ANCHORED) return false
+  if (numbersOf(a) !== numbersOf(b)) return true
   const onlyLeft = [...left].filter(term => !right.has(term))
   const onlyRight = [...right].filter(term => !left.has(term))
   const negates = (terms: string[]): boolean => terms.some(term => NEGATIONS.has(term))

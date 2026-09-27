@@ -107,7 +107,8 @@ function exactMatch(op: Op, draft: Draft): Memory | undefined {
 
 /**
  * The strongest near-duplicate among the scope's 64 most important memories and the 32 the text
- * search ranks closest. A pair of opposite polarity is never one memory.
+ * search ranks closest. A pair that cannot both hold (other numbers, the opposite polarity) is
+ * never one memory.
  */
 function nearMatch(op: Op, draft: Draft): Memory | undefined {
   const owner = draft.ownerSessionId ?? null

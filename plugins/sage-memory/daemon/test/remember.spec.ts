@@ -67,6 +67,15 @@ describe('remember', () => {
     w.close()
   })
 
+  test('a claim with another number stays a second memory, and the first keeps its own', async () => {
+    const w = world()
+    const a = await w.remember({ text: 'Retry the upload 3 times before failing the job' })
+    const b = await w.remember({ text: 'Retry the upload 5 times before failing the job' })
+    assert.equal(b.outcome, 'added')
+    assert.deepEqual([w.read(a.memory.id).text, b.memory.text], ['Retry the upload 3 times before failing the job', 'Retry the upload 5 times before failing the job'])
+    w.close()
+  })
+
   test('writing a stale memory again makes it active', async () => {
     const w = world()
     const { memory } = await w.remember({ text: MIGRATIONS })
