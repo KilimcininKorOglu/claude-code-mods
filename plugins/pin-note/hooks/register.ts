@@ -29,7 +29,16 @@ async function addPin($: EngineInterface, state: State, text: string): Promise<s
   return addedText(state.pins.length, text)
 }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) === true
+}
+
 async function runCommand($: EngineInterface, state: State, action: Action): Promise<string> {
+  await readSettings($, state)
   if (action.kind === 'enable') {
     await $.store.set(ENABLED_KEY, action.on)
     state.enabled = action.on
@@ -57,7 +66,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'pin-note', description: 'Pin notes the model gets again after each compaction and /clear: list, on, off, drop <n>, or a note (pin-note)', argumentHint: '[<note> | drop <n> | on | off]' })
-    state.enabled = (await $.store.get(ENABLED_KEY)) === true
+    await readSettings($, state)
     state.sessionId = await $.session.id()
     state.pins = await loadPins($, state.sessionId)
     return r
@@ -71,7 +80,9 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.agent_id !== undefined) return r
     await follow($, state, e.session_id, e.source)
-    if (!state.enabled || state.pins.length === 0 || (e.source !== 'compact' && e.source !== 'clear')) return r
+    if (state.pins.length === 0 || (e.source !== 'compact' && e.source !== 'clear')) return r
+    await readSettings($, state)
+    if (!state.enabled) return r
     $.ui.log(sentText(state.pins.length, e.source))
     return { ...r, additionalContext: [...(r.additionalContext ?? []), contextText(state.pins, e.source)] }
   })

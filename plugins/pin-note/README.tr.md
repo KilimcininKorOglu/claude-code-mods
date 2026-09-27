@@ -46,7 +46,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=pin-note}, classic.SessionStart
-    ❯ ./register.ts calls: $.command.register, $.session.id, $.store.get, $.store.set (via runCommand, savePins), $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.session.id, $.store.get (via loadPins, readSettings), $.store.set (via runCommand, savePins), $.ui.log
 
 Reach L0; ağ yok, dosya yok, süreç yok.
 

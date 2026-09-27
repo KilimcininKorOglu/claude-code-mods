@@ -46,7 +46,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=pin-note}, classic.SessionStart
-    ❯ ./register.ts calls: $.command.register, $.session.id, $.store.get, $.store.set (via runCommand, savePins), $.ui.log
+    ❯ ./register.ts calls: $.command.register, $.session.id, $.store.get (via loadPins, readSettings), $.store.set (via runCommand, savePins), $.ui.log
 
 Reach L0, no network, no files, no processes.
 

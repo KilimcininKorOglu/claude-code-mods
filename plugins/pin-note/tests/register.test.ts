@@ -94,6 +94,18 @@ describe('pin-note', () => {
     expect(await command($, '')).toBe('on · 1 pinned note(s):\n1. from before')
   })
 
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, { enabled: true, 'pins:s1': ['kept'] })
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.enabled = false
+    expect((await restart($, 'compact')).additionalContext).toBeUndefined()
+    expect(await command($, '')).toBe('off: /pin-note on to pin notes and have them sent again · 1 pinned note(s):\n1. kept')
+    expect(await command($, 'another')).toBe('off: turn it on with /pin-note on first')
+    w.store.enabled = true
+    expect((await restart($, 'compact')).additionalContext?.[0]).toContain('1. kept')
+  })
+
   test('off keeps the notes but sends none', async ($, on) => {
     world(on, { enabled: true, 'pins:s1': ['kept'] })
     await started($)
