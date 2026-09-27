@@ -5,14 +5,19 @@ tier('user')
 
 /**
  * The engine's commands: `tiny` hands the model a prompt as a prompt command does, `boom` throws,
- * every other one answers at once as a local command does.
+ * every other one answers at once as a local command does. `store` is the store every window shares,
+ * which a test writes as another window.
  */
-type World = { ran: string[]; logs: string[]; prompts: string[]; tools: string[] }
+type World = { ran: string[]; logs: string[]; prompts: string[]; tools: string[]; store: Map<string, unknown> }
 
 function world($: Engine, on: On): { w: World; clock: ReturnType<typeof mock.clock> } {
-  const w: World = { ran: [], logs: [], prompts: [], tools: [] }
+  const w: World = { ran: [], logs: [], prompts: [], tools: [], store: new Map() }
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__slash-chain__${e.name}` } } })
-  mock.store(on, {})
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   const clock = mock.clock(on, { now: 1_000_000 })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
@@ -189,6 +194,21 @@ describe('slash-chain', () => {
     await settle(clock)
     await $.command.run(typed('tiny', ''))
     expect(w.prompts).toEqual(['answer in one word', 'answer in one word'])
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const { w, clock } = world($, on)
+    await started($)
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    await $.command.run(typed('context', '&& /cost'))
+    await settle(clock)
+    expect(w.ran).toEqual(['context && /cost'])
+    expect((await $.command.run(typed('slash-chain', ''))).text).toMatch(/^off/)
+    w.store.set('enabled', true)
+    await $.command.run(typed('context', '&& /cost'))
+    await settle(clock)
+    expect(w.ran).toEqual(['context && /cost', 'context', 'cost'])
   })
 
   test('off leaves the command as the engine handed it', async ($, on) => {

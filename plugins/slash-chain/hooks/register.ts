@@ -97,10 +97,20 @@ async function runStep($: EngineInterface, state: State, r: Running): Promise<vo
   afterRun($, state, r)
 }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
 /** The typed first command of a chain runs with its own arguments alone; the steps after it wait their turn. */
 async function runFirst($: EngineInterface, state: State, e: CommandRunInput, next: Next): Promise<CommandRunResult> {
   const chain = parseChain(e.args)
-  if (!state.enabled || chain.rest.length === 0) return next(e)
+  if (chain.rest.length === 0) return next(e)
+  await readSettings($, state)
+  if (!state.enabled) return next(e)
   const step = { command: e.command, args: chain.head }
   const r = startStep(state, step, chain.rest, 1, chain.rest.length + 1)
   $.ui.log(stepText(1, r.total, step))
@@ -127,6 +137,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
   if (word === 'stop') return cancel($, state)
   if (word !== '') return USAGE
+  await readSettings($, state)
   const r = state.running
   return statusText(state.enabled, r === undefined ? undefined : { step: r.step, index: r.index, total: r.total, wait: r.wait })
 }
@@ -154,7 +165,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     await $.command.register({ name: COMMAND, description: 'Runs /a && /b one after another: status, stop, on, off (slash-chain)', argumentHint: '[stop | on | off]', immediate: true })
     // Declared once at the start, so the tool list the prompt cache holds does not change mid-session.
     await $.tool.register({ name: FAIL_TOOL, description: FAIL_DESCRIPTION, inputSchema: FAIL_SCHEMA })

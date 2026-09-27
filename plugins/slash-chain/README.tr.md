@@ -53,10 +53,10 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 ## Nereye uzanır
 
-Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, tool.describe{tool=mcp__slash-chain__fail}, tool.call{tool=mcp__slash-chain__fail}, command.run{command=slash-chain}, command.run{args=/"(?:^|\\s)&&\\s*\\/[A-Za-z0-9_:.-]+(?=\\s|$)"/}, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit
-    ❯ ./register.ts calls: $.clock.after (via advance), $.command.register, $.command.run (via runStep), $.store.get, $.store.set (via setEnabled), $.tool.register, $.ui.log (via advance, cancel, runFirst, stop)
+    ❯ ./register.ts calls: $.clock.after (via advance), $.command.register, $.command.run (via runStep), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register, $.ui.log (via advance, cancel, runFirst, stop)
 
 Reach L2, Claude'u yönlendirir: zincirlediğiniz slash komutlarını çalıştırır.
 
