@@ -179,6 +179,14 @@ async function stop($: EngineInterface, state: State, pid: number): Promise<stri
   return `sent SIGTERM to ${pid}; SIGKILL follows in 5 s if it still runs`
 }
 
+/**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
 async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
   state.enabled = on
   await $.store.set(ENABLED_KEY, on)
@@ -200,7 +208,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+    await readSettings($, state)
     state.root = await rootOf($, e.cwd)
     state.sid = await $.session.id()
     const config = configDirOf(await $.env.get('CLAUDE_CONFIG_DIR'), await $.env.get('HOME'))
@@ -216,7 +224,9 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     // A server this session started shows at the end of the turn that started it.
-    if (state.enabled && e.agentId === undefined) later($, state)
+    if (e.agentId !== undefined) return r
+    await readSettings($, state)
+    if (state.enabled) later($, state)
     return r
   })
 }

@@ -37,10 +37,10 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.280:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=orphan-server}, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via later, stop), $.clock.now (via listenersIn, readProc, runCommand, show, toSidebar), $.command.register, $.env.get, $.process.run (via output, rootOf), $.session.id, $.sidebar.clear (via toSidebar), $.sidebar.set (via toSidebar, toStream), $.store.get, $.store.set (via setEnabled), $.ui.log (via later, show, stop, toStream)
+    ❯ ./register.ts calls: $.clock.after (via later, stop), $.clock.now (via listenersIn, readProc, runCommand, show, toSidebar), $.command.register, $.env.get, $.process.run (via output, rootOf), $.session.id, $.sidebar.clear (via toSidebar), $.sidebar.set (via toSidebar, toStream), $.store.get (via readSettings), $.store.set (via setEnabled), $.ui.log (via later, show, stop, toStream)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 

@@ -26,6 +26,8 @@ type World = {
   signals: string[]
   logs: string[]
   bar: { open: boolean; sections: Section[]; cleared: string[] }
+  /** The store every window shares, which a test writes as another window. */
+  store: Map<string, unknown>
 }
 
 const PYTHON = '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python'
@@ -71,8 +73,12 @@ function signal(w: World, argv: readonly string[]): void {
 }
 
 function world(on: On): { w: World; clock: ReturnType<typeof mock.clock> } {
-  const w: World = { procs: [], transcript: TRANSCRIPT, greps: [], signals: [], logs: [], bar: { open: false, sections: [], cleared: [] } }
-  mock.store(on, {})
+  const w: World = { procs: [], transcript: TRANSCRIPT, greps: [], signals: [], logs: [], bar: { open: false, sections: [], cleared: [] }, store: new Map() }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => {
+    w.store.set(e.key, e.value)
+    return { value: undefined }
+  })
   const clock = mock.clock(on, { now: NOW })
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/u' : undefined }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -159,6 +165,24 @@ describe('orphan-server', () => {
     await clock.advance(1)
     expect(w.signals).toEqual(['kill -TERM 3214', 'kill -KILL 3214'])
     expect(w.logs.at(-1)).toBe('stopped :8787 Python -m http.server 8787')
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const { w, clock } = world(on)
+    await started($)
+    await clock.settle()
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    w.store.set('enabled', false)
+    w.procs = [server()]
+    await $.turn.complete(turn())
+    await clock.settle()
+    expect(w.greps).toEqual([])
+    expect(w.logs).toEqual([])
+    // Turned on again there, this window reads the servers at its next turn's end.
+    w.store.set('enabled', true)
+    await $.turn.complete(turn())
+    await clock.settle()
+    expect(w.logs).toHaveLength(1)
   })
 
   test('a pid the system gave to another process since the scan gets no signal', async ($, on) => {
