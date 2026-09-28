@@ -894,7 +894,7 @@ async function consolidate($: EngineInterface, state: State, answer: string, tur
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
     return
   }
-  for (const input of additionsOf(r.text, await $.session.id())) await writeOne($, state, input)
+  for (const input of additionsOf(r.text, await $.session.id(), root)) await writeOne($, state, input)
 }
 
 /** The memories the curator audits: those anchored to the turn's written files, then the targets of pending candidates. */
@@ -944,7 +944,7 @@ async function curate($: EngineInterface, state: State, answer: string, written:
     return
   }
   const tally = emptyTally()
-  for (const step of stepsOf(r.text, targets, await $.session.id())) await applyStep($, state, step, tally)
+  for (const step of stepsOf(r.text, targets, { sessionId: await $.session.id(), root: state.project?.root ?? '' })) await applyStep($, state, step, tally)
   const line = tallyLine(tally)
   if (line !== undefined) await toStream($, 'curator', { text: line, kind: 'ok' })
 }

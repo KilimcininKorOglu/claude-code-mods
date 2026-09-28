@@ -227,26 +227,41 @@ function trimmed(value: unknown, max: number): string | undefined {
   return typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, max) : undefined
 }
 
-function anchorOf(raw: unknown): Anchor | undefined {
+/** A path inside the project, relative to its root, or undefined for one that lies outside it. */
+function projectPath(root: string, path: string): string | undefined {
+  const relative = relativeTo(root, path)
+  return relative.startsWith('/') || relative === '..' || relative.startsWith('../') ? undefined : relative
+}
+
+/** A command anchor with its command, or a path anchor (a symbol one with its symbol too) inside the project. */
+function withTarget(type: AnchorType, value: Record<string, unknown>, root: string): Anchor | undefined {
+  const command = trimmed(value.command, 300)
+  if (type === 'command') return command === undefined ? undefined : { type, command: safeCommand(command) }
+  const raw = trimmed(value.path, 500)
+  const path = raw === undefined ? undefined : projectPath(root, raw)
+  const symbol = trimmed(value.symbol, 300)
+  if (path === undefined || (type === 'symbol' && symbol === undefined)) return undefined
+  return symbol === undefined ? { type, path } : { type, path, symbol }
+}
+
+/**
+ * One anchor the model named, or undefined for one the daemon would refuse: a type the consolidator may
+ * not name, a missing target, or a path outside the project. The daemon refuses the whole memory for one
+ * such anchor, so it is dropped here and the memory is still written.
+ */
+function anchorOf(raw: unknown, root: string): Anchor | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const value = raw as Record<string, unknown>
   const type = value.type as AnchorType
-  if (!ANCHOR_TYPES.includes(type) || type === 'agent') return undefined
-  const command = trimmed(value.command, 300)
-  const anchor: Anchor = { type }
-  const path = trimmed(value.path, 500)
-  const symbol = trimmed(value.symbol, 300)
-  if (path !== undefined) anchor.path = path
-  if (symbol !== undefined) anchor.symbol = symbol
-  if (command !== undefined) anchor.command = safeCommand(command)
-  return anchor
+  return ANCHOR_TYPES.includes(type) && type !== 'agent' ? withTarget(type, value, root) : undefined
 }
 
 /** At most five anchors of the types the consolidator may name; a user memory keeps none that names a path. */
-export function anchorsOf(value: unknown, scope: 'project' | 'user'): Anchor[] {
+export function anchorsOf(value: unknown, scope: 'project' | 'user', root: string): Anchor[] {
   if (!Array.isArray(value)) return []
-  const anchors = value.slice(0, MAX_ANCHORS).map(anchorOf).filter((anchor): anchor is Anchor => anchor !== undefined)
-  return scope === 'user' ? anchors.filter(anchor => !PATH_ANCHOR_TYPES.includes(anchor.type)) : anchors
+  // Refused anchors go first, so five usable ones are kept even when the model named broken ones before them.
+  const anchors = value.map(raw => anchorOf(raw, root)).filter((anchor): anchor is Anchor => anchor !== undefined)
+  return (scope === 'user' ? anchors.filter(anchor => !PATH_ANCHOR_TYPES.includes(anchor.type)) : anchors).slice(0, MAX_ANCHORS)
 }
 
 function tagsOf(value: unknown): string[] | undefined {
@@ -271,7 +286,7 @@ export function keptOf(text: string): Op[] {
 }
 
 /** One memory the model kept, as the input `remember` takes, or nothing without a text. */
-export function additionOf(op: Op, sessionId: string): RememberInput | undefined {
+export function additionOf(op: Op, sessionId: string, root: string): RememberInput | undefined {
   const text = trimmed(op.text, 2000)
   if (text === undefined) return undefined
   const scope = op.scope === 'user' ? 'user' : 'project'
@@ -283,16 +298,16 @@ export function additionOf(op: Op, sessionId: string): RememberInput | undefined
     importance: importanceOf(op.priority),
     confidence: confidenceOf(op.confidence),
     persistence: 'long_lived',
-    anchors: anchorsOf(op.anchors, scope),
+    anchors: anchorsOf(op.anchors, scope, root),
     sources: [{ type: 'session', sessionId }],
   }
 }
 
-/** The memories an answer kept, at most five. */
-export function additionsOf(text: string, sessionId: string): RememberInput[] {
+/** The memories an answer kept, at most five; `root` is the project's, which each path anchor must lie under. */
+export function additionsOf(text: string, sessionId: string, root: string): RememberInput[] {
   return keptOf(text)
     .slice(0, MAX_ADDS)
-    .map(op => additionOf(op, sessionId))
+    .map(op => additionOf(op, sessionId, root))
     .filter((input): input is RememberInput => input !== undefined)
 }
 

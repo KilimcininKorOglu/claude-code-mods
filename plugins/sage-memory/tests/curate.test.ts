@@ -12,7 +12,7 @@ function memory(id: string, permanent = false): Memory {
 }
 
 const SHOWN = [memory('a'), memory('b'), memory('p', true)]
-const steps = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), SHOWN, 's1')
+const steps = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), SHOWN, { sessionId: 's1', root: '/repo' })
 
 describe('curate', () => {
   test('a memory the session made wrong is deleted, never one the curator was not shown or a permanent one', () => {
@@ -48,6 +48,24 @@ describe('curate', () => {
   test('a recalibration holds scores to 0..1, marks a stale status as a review, and keeps a permanent memory from being archived', () => {
     expect(steps([{ action: 'recalibrate', targetId: 'a', importance: -2, status: 'stale' }, { action: 'recalibrate', targetId: 'p', status: 'archived' }, { action: 'keep', targetId: 'b' }])).toEqual([
       { kind: 'update', id: 'a', patch: { status: 'stale', staleReason: 'review', importance: 0 }, count: 'recalibrated' },
+    ])
+  })
+
+  test('an anchor the daemon would refuse is dropped and the memory is still written', () => {
+    const anchors = [
+      { type: 'file', path: '/repo/src/a.ts' },
+      { type: 'file', path: '/tmp/elsewhere/b.ts' },
+      { type: 'file', path: '../sibling/c.ts' },
+      { type: 'command' },
+      { type: 'command', command: 'make test' },
+      { type: 'symbol', path: 'src/a.ts' },
+      { type: 'symbol', path: 'src/a.ts', symbol: 'run' },
+    ]
+    const [merge] = steps([{ action: 'merge', targetIds: ['a'], text: 'One fact.', anchors }])
+    expect(merge?.kind === 'replace' ? merge.inputs[0]?.anchors : undefined).toEqual([
+      { type: 'file', path: 'src/a.ts' },
+      { type: 'command', command: 'make test' },
+      { type: 'symbol', path: 'src/a.ts', symbol: 'run' },
     ])
   })
 

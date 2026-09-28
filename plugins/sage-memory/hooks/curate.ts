@@ -75,7 +75,10 @@ function shownOf(targets: readonly Memory[]): Shown {
   return { all, retirable }
 }
 
-function inputOf(raw: Op, sessionId: string): RememberInput | undefined {
+/** Who writes a new memory and the project root its path anchors must lie under. */
+export type Writer = { sessionId: string; root: string }
+
+function inputOf(raw: Op, writer: Writer): RememberInput | undefined {
   if (typeof raw.text !== 'string' || raw.text.trim() === '') return undefined
   return {
     text: raw.text.trim(),
@@ -84,9 +87,9 @@ function inputOf(raw: Op, sessionId: string): RememberInput | undefined {
     importance: importanceOf(raw.priority),
     confidence: typeof raw.confidence === 'number' ? confidenceOf(raw.confidence) : 0.85,
     tags: Array.isArray(raw.tags) ? raw.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 3) : undefined,
-    anchors: anchorsOf(raw.anchors, 'project'),
+    anchors: anchorsOf(raw.anchors, 'project', writer.root),
     persistence: 'long_lived',
-    sources: [{ type: 'session', sessionId }],
+    sources: [{ type: 'session', sessionId: writer.sessionId }],
   }
 }
 
@@ -109,15 +112,15 @@ function contradictStep(op: Op, shown: Shown): Step | undefined {
   return deleteStep({ ...op, reason: `contradicted by ${other}${typeof op.reason === 'string' ? `: ${op.reason}` : ''}` }, shown)
 }
 
-function mergeStep(op: Op, shown: Shown, sessionId: string): Step | undefined {
+function mergeStep(op: Op, shown: Shown, writer: Writer): Step | undefined {
   const replaced = Array.isArray(op.targetIds) ? [...new Set(op.targetIds.filter(shown.retirable))] : []
-  const input = inputOf(op, sessionId)
+  const input = inputOf(op, writer)
   return replaced.length === 0 || input === undefined ? undefined : { kind: 'replace', replaced, inputs: [input], count: 'merged' }
 }
 
-function splitStep(op: Op, shown: Shown, sessionId: string): Step | undefined {
+function splitStep(op: Op, shown: Shown, writer: Writer): Step | undefined {
   const items = Array.isArray(op.items) ? op.items.slice(0, MAX_SPLIT) : []
-  const inputs = items.map(item => (typeof item === 'object' && item !== null ? inputOf(item as Op, sessionId) : undefined)).filter((input): input is RememberInput => input !== undefined)
+  const inputs = items.map(item => (typeof item === 'object' && item !== null ? inputOf(item as Op, writer) : undefined)).filter((input): input is RememberInput => input !== undefined)
   return shown.retirable(op.targetId) && inputs.length > 0 ? { kind: 'replace', replaced: [op.targetId], inputs, count: 'split' } : undefined
 }
 
@@ -138,7 +141,7 @@ function recalibrateStep(op: Op, shown: Shown): Step | undefined {
   return Object.keys(patch).length > 0 ? { kind: 'update', id, patch, count: 'recalibrated' } : undefined
 }
 
-const STEPS: Record<string, (op: Op, shown: Shown, sessionId: string) => Step | undefined> = {
+const STEPS: Record<string, (op: Op, shown: Shown, writer: Writer) => Step | undefined> = {
   update: rewriteStep,
   delete: deleteStep,
   // SAGE's name for a memory the session made obsolete; an answer that still uses it deletes the memory.
@@ -150,11 +153,11 @@ const STEPS: Record<string, (op: Op, shown: Shown, sessionId: string) => Step | 
 }
 
 /** The steps of a curator answer, at most fifteen operations; `keep` and anything unknown do nothing. */
-export function stepsOf(text: string, targets: readonly Memory[], sessionId: string): Step[] {
+export function stepsOf(text: string, targets: readonly Memory[], writer: Writer): Step[] {
   const shown = shownOf(targets)
   return operationsOf(text)
     .slice(0, MAX_OPS)
-    .map(op => (typeof op.action === 'string' ? STEPS[op.action]?.(op, shown, sessionId) : undefined))
+    .map(op => (typeof op.action === 'string' ? STEPS[op.action]?.(op, shown, writer) : undefined))
     .filter((step): step is Step => step !== undefined)
 }
 
