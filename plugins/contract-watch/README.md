@@ -1,31 +1,31 @@
 # contract-watch
 
-A Claude Code Mod that tells the model which callers to check after it changes a function signature. When an Edit changes the parameters of a function, the mod asks [ripwire](https://github.com/redhat-et/ripwire) who calls it and adds the callers to the Edit's result, before a build or a test finds them.
+The model adds a parameter to a function, the edit looks fine, and three callers elsewhere in the code are now broken; you find out when the build or a test fails. This mod catches it at the edit: when an Edit changes a function's parameters, it asks [ripwire](https://github.com/redhat-et/ripwire) who calls that function and puts the callers right into the Edit's result.
 
 ## What it does
 
-1. The mod hooks the Edit tool. After a successful edit it compares the one-line function definitions in `old_string` and `new_string`: Go `func`, JS and TS functions, arrow functions and class methods, Python `def`, Rust `fn`, Java methods and PHP functions.
-2. A function both strings define with other parameters is a changed signature. A body edit runs nothing.
+1. It watches the Edit tool. After a successful edit it compares the one-line function definitions in `old_string` and `new_string`: Go `func`, JS and TS functions, arrow functions and class methods, Python `def`, Rust `fn`, Java methods and PHP functions.
+2. A function that both strings define with different parameters is a changed signature. An edit that only touches a body runs nothing.
 3. For each changed signature it runs `ripwire <repo root> --edit-check=<file>:<name>` by argv. ripwire compares the definition with git HEAD and lists the callers.
-4. When ripwire reports `status="contract-change"`, the model reads this note after the Edit's result:
+4. When ripwire reports `status="contract-change"`, the model reads this note right after the Edit's result:
 
        contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; check each caller: main (main.go:5), other (main.go:9).
 
-   A caller is named with the definition it sits in; at most 10 are named, the rest counted. When ripwire marks a caller `incompatible="1"`, every folded definition it sees disagrees with the new arity, and those callers come first, under their own sentence:
+   Each caller is named with the definition it sits in; at most 10 are named and the rest are counted. When ripwire marks a caller `incompatible="1"`, every folded definition it sees disagrees with the new arity. Those callers come first, under a sentence of their own:
 
        contract-watch: parse changed from 1 to 2 parameter(s) since the last commit; these callers do not match the new arity: main (main.go:5). Other callers of that name, which the call graph binds by name and may belong to another type: other (lib.go:9). Check each.
 
-   The second group matters in a codebase where several types define a method of one name: the call graph binds a call by its name, so `Messaging::sendAlert` reads the same as `SNMP_Monitor::sendAlert`. Neither group is dropped.
-5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the finding alone, without the instruction:
+   The second group matters in a codebase where several types define a method with the same name: the call graph binds a call by its name, so `Messaging::sendAlert` reads the same as `SNMP_Monitor::sendAlert`. Neither group is dropped.
+5. At the same moment you get one line in the transcript, so you see what the model was told. It holds the finding alone, without the instruction:
 
        contract-watch: parse changed from 1 to 2 parameter(s); do not match: main (main.go:5); same name: other (lib.go:9)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, that finding goes there instead, the change on the first line (the old parameter count faint, the new one yellow), the marked callers' names in red under it and the same-named ones faint after a `same name, may be another type` line, each with its `(file:line)` faint, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. With the [sidebar](../sidebar) open, the finding goes into its stream instead and the transcript stays clean. The first line shows the change (the old parameter count faint, the new one yellow). Under it come the marked callers' names in red, then the same-named ones in faint text after a `same name, may be another type` line, each with its `(file:line)` faint. The entry stays until newer ones push it off the pane. Without the sidebar, the line lands in the transcript as above.
 
 The note lists every caller, not only the ones ripwire proves incompatible: in a live check on Go, ripwire reported `incompatible="0"` while both callers still passed one argument (measured with ripwire on 2.1.278).
 
-7. The mod holds every reported signature open and closes it itself, in both modes. At the next `git commit`, `git push` or `git merge` the model runs, and before that command runs, ripwire measures each open symbol again. A symbol no caller misses any more closes with a green line, and the sidebar entry of the finding is dropped:
+7. The mod holds every reported signature open and closes it itself, in both modes. At the next `git commit`, `git push` or `git merge` the model runs, and before that command runs, ripwire measures each open symbol again. A symbol that no caller misses any more closes with a green line, and its sidebar entry is dropped:
 
        contract-watch: every caller matches parse again
 
@@ -33,13 +33,13 @@ The note lists every caller, not only the ones ripwire proves incompatible: in a
 
        contract-watch: no caller of parse carries the mismatch mark any more
 
-   The measurement runs before the command, not after it: `--edit-check` compares the working tree against git HEAD, so once a commit has landed there is nothing left to compare and every finding would read as closed. For the same reason an open symbol is held by ripwire's incompatible mark alone, not by the contract status: after a commit took the change the contract reads as HEAD, and a caller left on the old arity still carries the mark, so the finding stays open at the turn's end until the mark is gone.
-8. A finding the model did not close is measured the same way at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt. ripwire runs on this machine, once per open symbol:
+   The measurement runs before the command, not after it. `--edit-check` compares the working tree against git HEAD, so once a commit has landed there is nothing left to compare and every finding would look closed. For the same reason an open symbol is held by ripwire's incompatible mark alone, not by the contract status: after a commit took the change, the contract reads as HEAD, while a caller left on the old arity still carries the mark, so the finding stays open at the turn's end until the mark is gone.
+8. A finding the model did not close is measured the same way at the end of each main-loop turn, and whatever is left reaches the model as one note with your next prompt. ripwire runs on this machine, once per open symbol:
 
        contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.
 
-   One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
-9. In `deny` mode that same moment also stops the command while a changed signature leaves a caller behind. The gate takes a narrower measure than the note: only a check whose `incompatible` count is above zero holds it, the callers ripwire names by fixed-arity evidence. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`, once per repository) and lets the commit run when it holds none of the files those signatures live in, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only the person turns the gate off with `/contract-watch mode note`. `note` mode is the default and stops nothing.
+   That is one note per turn, not one per prompt. Without it the finding would be said once, at the edit, and then sit in the pane while the model forgot about it. You read nothing new, because the pane already shows the same finding.
+9. In `deny` mode that same moment also stops the command while a changed signature leaves a caller behind. The gate uses a narrower measure than the note: only a check whose `incompatible` count is above zero holds it, meaning the callers ripwire names on fixed-arity evidence. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only -z`, once per repository) and lets the commit run when it holds none of the files those signatures live in, with one line telling you how many still stand. A `push` and a `merge` have no index to read, so every finding counts there. There is no bypass; only you turn the gate off, with `/contract-watch mode note`. `note` mode is the default and stops nothing.
 
 In the live check the model read the note after its Edit and said that the two callers would not compile until they were updated.
 
@@ -55,13 +55,13 @@ In the live check the model read the note after its Edit and said that the two c
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install contract-watch@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and no mod loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## After installing
 
-1. Install [ripwire](https://github.com/redhat-et/ripwire) and put it on PATH. Without it every changed signature logs `the callers were not checked: ...` once, and the edit runs as before.
+1. Install [ripwire](https://github.com/redhat-et/ripwire) and put it on PATH. Without it, a changed signature writes `the callers were not checked: ...` as a yellow entry (a transcript line with the sidebar closed), once until a different error comes, and the edit goes through as before.
 2. Restart Claude Code.
 
 ## What it can reach
@@ -71,10 +71,10 @@ Validated with `claude plugin validate` on Claude Code 2.1.283:
     ❯ ./register.ts hooks: session.start, command.run{command=contract-watch}, turn.complete, prompt.submit, tool.call{tool=Bash}, tool.call{tool=Edit}
     ❯ ./register.ts calls: $.command.register, $.process.run (via askRipwire, locate, stagedIn), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get (via isEnabled, readSettings), $.store.set (via runCommand, setMode), $.ui.log (via atGitCommand, toPerson)
 
-Reach L2, runs processes.
+Reach L2: it runs processes.
 
     1. Reads:    the old and new text of each Edit; the Bash command text; through ripwire, the repository's source and git HEAD
-    2. Runs:     git rev-parse, git diff --cached --name-only and ripwire --edit-check, read-only, by argv, after an edit that changed a signature, and once per open symbol before a git commit, push or merge and at each turn's end
+    2. Runs:     git rev-parse, git diff --cached --name-only -z and ripwire --edit-check, read-only, by argv, after an edit that changed a signature, and once per open symbol before a git commit, push or merge and at each turn's end
     3. Sends:    a note to the model after the Edit's result, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode
     5. Hostile input: a function name comes from the edited text and reaches ripwire as one argv item, never through a shell
@@ -87,15 +87,15 @@ Reach L2, runs processes.
 - Only the Edit tool is watched. A Write that replaces a whole file is not.
 - Outside a git repository nothing runs.
 - A function ripwire does not index, such as a JavaScript function inside a PHP file's `<script>` block, is not checked. The sidebar shows one faint line, `<name>: ripwire does not index it, its callers were not checked`, and the model reads nothing. An open symbol ripwire no longer indexes was removed or renamed, and its finding closes.
-- The gate follows ripwire's `incompatible` count, which is itself a floor: a caller ripwire cannot bind by name does not hold the gate. The note stays the wider measure.
-- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/contract-watch mode note`.
-- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped, and the finding is then measured at the next turn's end instead.
-- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
+- The gate follows ripwire's `incompatible` count, which is itself a floor: a caller ripwire cannot bind by name does not hold the gate. The note remains the wider measure.
+- The `deny` mode has no bypass. When a finding cannot be fixed, you turn the gate off with `/contract-watch mode note`.
+- The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped; the finding is then measured at the next turn's end instead.
+- A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding counts for those.
 
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
