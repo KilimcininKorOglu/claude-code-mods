@@ -1,6 +1,6 @@
 # memory-save
 
-Proje başına bir `MEMORY.md` dosyasını, stop'u engellemeden güncel tutan ve session'a yükleyen bir Claude Code Mod'u. Her ana döngü turundan sonra session'ın tool'suz bir fork'una projenin neyi hatırlaması gerektiğini sorar ve cevabı kendisi yazar. Ana konuşma bir memory edit'i hiç görmez: engellenen bir stop yok, `MEMORY.md` üzerinde bir Read ya da Edit yok, fazladan bir tur yok.
+Bir Stop hook'unun tuttuğu memory turn'ün bitişini engeller, modele `MEMORY.md`'yi senin önünde Read ve Edit ettirir ve her seferinde fazladan bir turn'e mal olur. Bu mod proje başına bir `MEMORY.md`'yi stop'u engellemeden güncel tutar ve session'a yükler. Her ana döngü turundan sonra session'ın tool'suz bir fork'una projenin neyi hatırlaması gerektiğini sorar ve cevabı kendisi yazar. Ana konuşma bir memory edit'i hiç görmez: engellenen bir stop yok, `MEMORY.md` üzerinde bir Read ya da Edit yok, fazladan bir tur yok.
 
 ## Ne yapar
 
@@ -30,7 +30,7 @@ Kayıt arka planda çalışır. Fork çalışırken sonraki prompt beklemez. Ayn
 
 ### Yeni bir şey olmayan turu atlar
 
-Son kayıttan beri bir prompt gönderdiyseniz ya da turda bir ana döngü tool'u çalıştıysa tur kaydedilir. Bir plugin prompt'unun (örneğin bir `task-poke` devam prompt'unun) ya da bir arka plan işinin bildiriminin başlattığı ve modelin yalnız sözle cevap verdiği bir tur kaydedilmez ve hiçbir şey göstermez. Bir subagent'ın tool'ları sayılmaz, çünkü ana döngü yalnız beklerken bir arka plan agent'ı çalışmaya devam eder. Hiçbir şey kaybolmaz: fork bütün konuşmayı okur, bu yüzden sonraki kayıt atlanan turu da görür. Bunun karşılamadığı tek durum, böyle bir turun hemen ardından kapanan bir session'dır.
+Son kayıttan beri bir prompt gönderdiysen ya da turda bir ana döngü tool'u çalıştıysa tur kaydedilir. Bir plugin prompt'unun (örneğin bir `task-poke` devam prompt'unun) ya da bir arka plan işinin bildiriminin başlattığı ve modelin yalnız sözle cevap verdiği bir tur kaydedilmez ve hiçbir şey göstermez. Bir subagent'ın tool'ları sayılmaz, çünkü ana döngü yalnız beklerken bir arka plan agent'ı çalışmaya devam eder. Hiçbir şey kaybolmaz: fork bütün konuşmayı okur, bu yüzden sonraki kayıt atlanan turu da görür. Bunun karşılamadığı tek durum, böyle bir turun hemen ardından kapanan bir session'dır.
 
 Bu kontrolden önce ölçülen durum: iki arka plan agent'ını bekleyen bir session arka arkaya üç devam prompt'u aldı, her birine tek cümleyle cevap verdi ve her biri için bir kayıt çalıştırdı; bu kayıtlardan biri MEMORY.md'den beş maddeyi dışarı taşıdı.
 
@@ -77,7 +77,7 @@ Sonucu template'te olmayan bir kayıt hiçbir zaman yazılmaz.
 - Bir topic dosya adı küçük harftir, `.md` ile biter, dizin kısmı taşımaz ve `memory.md` değildir.
 - Sonuç dört section'ı sırada, 200 satırdan az ve 50000 karakterden az taşır. Zaten bir sınırda ya da üstünde olan bir dosya (bu kontrollerden önce yazılmış biri mesela) istisnadır: onu iki ölçüde de küçülten bir kayıt yazılır, böylece dosya her kaydın başarısız olması yerine adım adım sınırların altına iner. Bir sınırı aşan bir sonuç da kaybolmaz: eklemeler ve topic append'leri düşer, yalnız kaldırmalar yazılır ve düşen kısım reddedilmiş sayılır. Başlığı ya da dört `## ` section satırından birini alacak bir remove ya da replace tek başına reddedilir, böylece template bozulamaz; bir `### ` alt başlığı yine gidebilir.
 - 160 satırdan ya da 42000 karakterden itibaren fork'a bu kaydın kaç satır ve karakter kaldırması gerektiği söylenir. Bir sınırın üstünde not, yalnız küçültme kaydına döner: yeni madde ekleme, yalnız girdileri bir topic dosyasına taşı.
-- O not altında çalışan bir kayıt bir `## CRITICAL RULES` maddesini kaldırmaz. Böyle bir remove tek başına reddedilir ve fork'a maddeyi bunun yerine bir replace op ile kısaltması söylenir. 160 satırın ve 42000 karakterin altındaki bir kayıt bir CRITICAL RULES maddesini kaldırabilir, çünkü fork onu orada yalnız konuşma kuralın artık geçerli olmadığını gösterdiğinde kaldırır. Kaldırılan madde `history.md` dosyasına `## Retired CRITICAL RULES` başlığı altında gider, transcript satırı onu adlandırır (`retired from CRITICAL RULES, kept in history.md: ...`) ve status line sarıya döner (`1 rule(s) retired`). Böylece fork'un yanlışlıkla kaldırdığı bir kuralı geri koyabilirsiniz. Bu kontrolden önce ölçülen durum: 160 satırdaki bir projede kullanıcının seçtiği bir kural kayboldu, çünkü offload notu fork'a dışarı taşınacak maddeleri seçtirdi.
+- O not altında çalışan bir kayıt bir `## CRITICAL RULES` maddesini kaldırmaz. Böyle bir remove tek başına reddedilir ve fork'a maddeyi bunun yerine bir replace op ile kısaltması söylenir. 160 satırın ve 42000 karakterin altındaki bir kayıt bir CRITICAL RULES maddesini kaldırabilir, çünkü fork onu orada yalnız konuşma kuralın artık geçerli olmadığını gösterdiğinde kaldırır. Kaldırılan madde `history.md` dosyasına `## Retired CRITICAL RULES` başlığı altında gider, transcript satırı onu adlandırır (`retired from CRITICAL RULES, kept in history.md: ...`) ve status line sarıya döner (`1 rule(s) retired`). Böylece fork'un yanlışlıkla kaldırdığı bir kuralı geri koyabilirsin. Bu kontrolden önce ölçülen durum: 160 satırdaki bir projede kullanıcının seçtiği bir kural kayboldu, çünkü offload notu fork'a dışarı taşınacak maddeleri seçtirdi.
 - Hiçbir yeni madde 600 karakterden uzun değildir. Maddesi daha uzun olan bir `add` ya da `replace` tek başına reddedilir: diğer op'lar yazılır, status line onu sayar (`+1 1 refused`), transcript satırı adlandırır ve sonraki kayıt fork'a böyle bir maddeyi bölmesini ya da detayını bir topic dosyasına taşımasını söyler.
 - Fork çalışırken `MEMORY.md` değişmedi.
 
@@ -89,36 +89,36 @@ Bu biçimde bir JSON object'i olmayan bir cevap memory dizinindeki `memory-save.
 
     memory-save: MEMORY.md: this turn's reply was not read (reply is not valid JSON (JSON Parse error: Expected '}')); 1840 output tokens, kept in memory-save.failed-reply.txt
 
-Böyle her cevap dosyayı değiştirir, yani dosya sonuncusunu tutar. Cevabın kesilip kesilmediğini ya da bozuk JSON taşıdığını görmek için onu okuyun. Fork cevabının stop reason'ı bir mod'a ulaşmaz, bu yüzden mod ikisini kendisi ayırt edemez.
+Böyle her cevap dosyayı değiştirir, yani dosya sonuncusunu tutar. Cevabın kesilip kesilmediğini ya da bozuk JSON taşıdığını görmek için onu oku. Fork cevabının stop reason'ı bir mod'a ulaşmaz, bu yüzden mod ikisini kendisi ayırt edemez.
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install memory-save@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
-Tek bir session için yerel bir checkout'tan yükleyin:
+Yerel bir checkout'tan tek session için yüklemek istersen:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/memory-save
 
-Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Modele `MEMORY.md` dosyasını edit etmesini söyleyen diğer her hook'u, `CLAUDE.md` satırını ya da skill'i kaldırın. Dosyayı mod yazar ve fork çalışırken bir model edit'i o kaydı bir hata ile durdurur.
-2. Elinizde olan bir memory dosyasını korumak için onu `~/.cli-tweaks/memory/<project>/MEMORY.md` yoluna kopyalayın. Sonraki yüklemede mod onu dört section'a koyar ve eski kopyayı `MEMORY.pre-migration.md` olarak tutar. Dosyası olmayan bir proje ilk kaydından sonra bir tane alır; dizini mod oluşturur.
-3. Claude Code'u yeniden başlatın. Memory başlangıçta, resume'da, `/clear` ve compaction'da yüklenir.
+1. Modele `MEMORY.md`'yi düzenlemesini söyleyen başka her hook'u, `CLAUDE.md` satırını ya da skill'i kaldır. Dosyayı mod yazar; fork çalışırken modelin yaptığı bir edit o kaydı bir hatayla durdurur.
+2. Elindeki bir memory dosyasını korumak istersen onu `~/.cli-tweaks/memory/<project>/MEMORY.md` yoluna kopyala. Sonraki yüklemede mod onu dört section'a yerleştirir ve eski kopyayı `MEMORY.pre-migration.md` olarak saklar. Dosyası olmayan bir proje ilk kayıttan sonra bir tane alır; dizini mod oluşturur.
+3. Claude Code'u yeniden başlat. Memory başlangıçta, resume'da, `/clear`'da ve compaction'da yüklenir.
 
-Mod'un komutu yoktur. Kayıtları durdurmak için onu devre dışı bırakın: `claude plugin disable memory-save@kilimcininkoroglu-mods`.
+Mod'un komutu yoktur. Kayıtları durdurmak için onu devre dışı bırak: `claude plugin disable memory-save@kilimcininkoroglu-mods`.
 
 ## Nereye uzanır
 
-Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, tool.call, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, logEvent), $.ui.status (via clearReport, report)
@@ -145,7 +145,7 @@ Reach L2, dosya yazar, git çalıştırır ve Claude'u sürer.
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

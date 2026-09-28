@@ -1,6 +1,6 @@
 # memory-save
 
-A Claude Code Mod that keeps a per-project `MEMORY.md` up to date without blocking the stop, and loads it into the session. After every main-loop turn it asks a tool-less fork of the session what the project must remember, and writes the answer itself. The main conversation never sees a memory edit: no blocked stop, no Read or Edit of `MEMORY.md`, no extra turn.
+A memory kept by a Stop hook blocks the turn's end, makes the model Read and Edit `MEMORY.md` in front of you, and costs an extra turn every time. This mod keeps a per-project `MEMORY.md` up to date without blocking the stop, and loads it into the session. After every main-loop turn it asks a tool-less fork of the session what the project must remember, and writes the answer itself. The main conversation never sees a memory edit: no blocked stop, no Read or Edit of `MEMORY.md`, no extra turn.
 
 ## What it does
 
@@ -96,7 +96,7 @@ Each such reply replaces the file, so it holds the last one. Read it to see whet
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install memory-save@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag:
+Function hooks are early access, and nothing loads without the flag:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
@@ -118,7 +118,7 @@ The mod has no command. To stop the saves, disable it: `claude plugin disable me
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.280:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, tool.call, turn.complete
     ❯ ./register.ts calls: $.clock.now (via report), $.env.get (via locate), $.fs.exists (via readFile), $.fs.list (via memoryContext), $.fs.read (via readFile), $.fs.write (via ask, save, templated, writeTopics), $.model.fork (via ask), $.process.run (via git), $.sidebar.clear (via clearReport), $.sidebar.set (via report), $.ui.log (via ask, git, logEvent), $.ui.status (via clearReport, report)
@@ -145,7 +145,7 @@ Reach L2, writes files, runs git and drives Claude.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
