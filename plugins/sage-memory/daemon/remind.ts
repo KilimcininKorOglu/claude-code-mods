@@ -11,8 +11,8 @@ import { REMINDED_POLICY, type Visibility } from './search.ts'
 import type { SemanticQuery } from './vectors.ts'
 
 /**
- * Ranking the memories a reminder may carry, for the three moments a reminder goes out: after a
- * batch of file tools, with the person's prompt, and when a subagent starts. The hooks module
+ * Ranking the memories a reminder may carry, for the three moments a reminder goes out: on a file
+ * tool's result, with the person's prompt, and when a subagent starts. The hooks module
  * then leaves out what the context already shows, fits the rest to its budget and records what
  * it sent. Ported from SAGE's tool-result and turn-context middlewares.
  */
@@ -104,7 +104,7 @@ function byScore(left: Ranked, right: Ranked): number {
 }
 
 export type ToolsRequest = {
-  /** The paths the batch's tools touched, absolute or relative to the project root. */
+  /** The paths the file tool touched, absolute or relative to the project root. */
   paths: readonly string[]
   /** The paths spelled out as terms, the tools' patterns, and the tasks in progress. */
   query: string
@@ -164,7 +164,7 @@ function graphChannel(readers: Readers, request: ToolsRequest, statuses: readonl
 }
 
 /**
- * The memories a reminder after a tool batch may carry, best reminder score first. A read
+ * The memories a reminder on a file tool's result may carry, best reminder score first. A read
  * reminds of active memories; a change reminds of stale ones too. A memory held back by a gate
  * is reported with the reason: a repeated text, too little importance, relation or score, or a
  * context that was already reminded of it.

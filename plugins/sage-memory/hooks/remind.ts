@@ -6,9 +6,9 @@
 import type { Memory, Ranked } from './shared/model.ts'
 import { collapseSpace, textKey, tokenize } from './shared/text.ts'
 
-/** Tools that read a file; a batch of them reminds of the active memories about it. */
+/** Tools that read a file; each one's result carries the active memories about it. */
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LSP'])
-/** Tools that change a file; a batch with one reminds of stale memories too, so they are checked. */
+/** Tools that change a file; each one's result carries stale memories too, so they are checked. */
 export const CHANGE_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit', 'MultiEdit'])
 /** The input fields an MCP tool names a file in. */
 const PATH_FIELDS = ['file_path', 'path', 'notebook_path', 'filePath', 'filepath', 'file']
@@ -65,7 +65,7 @@ function patternOf(call: ToolCall): string | undefined {
   return stringField(call.tool_input, 'pattern') ?? stringField(call.tool_input, 'query')
 }
 
-/** The query of a batch: its paths spelled out as terms, its patterns, and the tasks in progress. */
+/** The query of a tool reminder: the paths spelled out as terms, the patterns, and the tasks in progress. */
 export function queryOf(calls: readonly ToolCall[], paths: readonly string[], tasks: readonly string[]): string {
   const pathTerms = paths.map(path => path.split(/[/\\._-]+/).join(' '))
   const patterns = calls.map(patternOf).filter((pattern): pattern is string => pattern !== undefined)
@@ -81,7 +81,7 @@ export function tasksInProgress(result: unknown): string[] {
 
 export type Budget = { count: number; chars: number }
 
-/** How much a reminder after a tool batch may carry, by how full the context is (SAGE's steps). */
+/** How much a reminder on one tool's result may carry, by how full the context is (SAGE's steps). */
 export function toolBudget(percent: number | undefined): Budget {
   const full = percent ?? 0
   if (full >= 95) return { count: 0, chars: 0 }
@@ -173,7 +173,7 @@ export function reminderBlock(header: string, memories: readonly Memory[], chars
 }
 
 /**
- * The reminder after a tool batch: the ranked memories the context does not show yet, picked for
+ * The reminder on a file tool's result: the ranked memories the context does not show yet, picked for
  * diversity and fitted to the budget.
  */
 export function toolReminder(ranked: readonly Ranked[], visible: string, budget: Budget, framed: boolean, taskAware: boolean): { text: string; sent: Memory[] } {

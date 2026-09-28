@@ -10,7 +10,7 @@ after(cleanUp)
 
 const READ_APP: ToolsRequest = { paths: ['src/app.ts'], query: 'src/app.ts app.ts app', mutation: false, limit: 8 }
 
-describe('a reminder after a tool batch', () => {
+describe("a reminder on a file tool's result", () => {
   test('a memory anchored to the touched file is a candidate; one word in common is not evidence enough', async () => {
     const w = world()
     const anchored = (await w.remember({ text: 'The app entry must register the router before the store', anchors: [{ type: 'file', path: 'src/app.ts' }] })).memory
