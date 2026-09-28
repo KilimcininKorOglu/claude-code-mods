@@ -189,6 +189,13 @@ describe('sage-memory', () => {
     expect(w.fetches.filter(f => f.url === '/memory/hygiene').map(f => f.body.automatic)).toEqual([true])
   })
 
+  withSidebar('a command before the session start connects once and answers the ready state', async ($, on) => {
+    const w = world(on)
+    expect((await $.command.run(run(''))).text).toBe('on · daemon ready · my app · embeddings off · /sage-memory setup')
+    await $.session.start(START)
+    expect(w.argvs.filter(a => a.includes('--dir'))).toHaveLength(1)
+  })
+
   withSidebar('answers an unknown word with the usage', async ($, on) => {
     world(on)
     await $.session.start(START)

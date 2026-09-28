@@ -274,6 +274,11 @@ async function linkUp($: EngineInterface, state: State): Promise<void> {
   await show($, state)
 }
 
+/** Waits for this window's connection, starting it when none began: a command can come before session.start's. */
+async function linked($: EngineInterface, state: State): Promise<void> {
+  if (state.enabled) await (state.connecting ?? connect($, state))
+}
+
 /** Follows a setup job every 2 s until it ends, and shows each step. */
 async function pollSetup($: EngineInterface, state: State): Promise<void> {
   if (state.polling) return
@@ -589,6 +594,7 @@ async function jobCommand($: EngineInterface, state: State, word: string, rest: 
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   await follow($, state)
+  await linked($, state)
   const [first = '', ...rest] = args.trim().split(/\s+/)
   const word = first.toLowerCase()
   if (word === '') return statusText(state.enabled, state.link, state.project?.name ?? '')
@@ -1279,7 +1285,7 @@ export const register: Register = on => {
     state.guidance = await readEnabled($, state)
     await declareTools($, state)
     await scheduleDaily($, state)
-    if (state.enabled) await connect($, state)
+    if (state.enabled) await linked($, state)
     else await show($, state)
     return r
   })
