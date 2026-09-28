@@ -1,6 +1,6 @@
 # sidebar
 
-Transcript'in yanında tek bir paylaşılan pane açan ve diğer her mod'un oraya yazdığını çizen bir Claude Code Mod'u. Tek bir sidebar vardır, mod başına bir pane değil: bir mod `$.sidebar.set(...)` çağrısını satır ve button'lardan oluşan bir section ile yapar, bu mod da onu çizer.
+Bir düzine mod bulgularını transcript satırı ve status line olarak yazınca transcript konuşmaya ait olmayan satırlarla dolar ve bir bulgu sen okumadan yukarı kayar. Bu mod transcript'in yanında tek bir paylaşılan pane açar ve diğer her mod'un oraya yazdığını çizer. Tek bir sidebar vardır, mod başına bir pane değil: bir mod `$.sidebar.set(...)` çağrısını satır ve button'lardan oluşan bir section ile yapar, bu mod da onu çizer.
 
 ## Ne yapar
 
@@ -11,11 +11,11 @@ Transcript'in yanında tek bir paylaşılan pane açan ve diğer her mod'un oray
 5. Bir button bir slash komutu çalıştırır: `{ label: 'stop', command: 'bg-tasks', args: 'stop b1' }` için `[ stop ]` basışı `/bg-tasks stop b1` komutunu kişi gibi çalıştırır ve komutun ilk cevap satırı pane'in altında soluk görünür. Çalışmayan bir komut orada `/<command> did not run: <error>` gösterir, `did not run` kırmızı çizilir. Button'u sunan mod o komutu kendisi karşılar. Etiket işaretçi altında kırmızıya döner, yani bir basışın ne çalıştıracağı basıştan önce açıktır.
 6. Üç ömür vardır: `session` mod onu değiştirene ya da temizleyene kadar üstte durur, `stream` altındaki log'a eklenir, `turn` tur bitince gider. Kapatılıp yeniden yüklenen (`/reload-plugins`) bir plugin kendi section'ını artık temizleyemez. Bu yüzden sidebar her turun başında plugin'i kapalı olan bir mod'un duran section'larını kaldırır: o adın her `enabledPlugins` key'i false'tur ve session'daki hiçbir komut o plugin'den gelmez. `--plugin-dir` ile yüklenen bir plugin'in section'ları kalır, çünkü kendi komutu listededir; hiçbir key'in adını taşımadığı bir consumer'ınkiler de kalır. Böyle bir plugin'in stream'e yazdığı entry'ler yerinde kalır.
 7. Her stream entry'si ayrıca bu projenin kendi log dosyasına yazılır, `~/.claude/sidebar/<project>-<YYYY-MM-DD>.log`, satır başına bir JSON object. Pane açıldığında o projenin log'larının en yeni 10 entry'si stream'e geri gelir, her biri ilk yazıldığı gün ve saatle, yani yarın başlayan bir session dün bulunanı yine gösterir. Geri gelen bir entry log'a yeniden yazılmaz. Gün, yazmanın günüdür, yani gece yarısını geçen bir session yeni günün dosyasına yazar. Her yazma dosyayı önce yeniden okur, yani aynı gün aynı projenin iki session'ı birbirinin satırlarını korur; var olan ama okunamayan bir dosyanın üstüne yazılmaz. Stream entry'lerini kaldıran bir `clear`, log'a kendi satırını yazar (`{"at", "cleared": {consumer, key}}`): entry'ler geçmiş olarak dosyada kalır, ve restore o key'in bu satırdan önce yazılmış her entry'sini dışarıda bırakır, satır daha yeni bir günün dosyasında olsa da. Böylece kapanmış bir bulgu kendi kapanış satırının yanında geri gelmez. `/sidebar log` dosyanın path'ini ve en yeni 10 entry'sini yazar, temizlenmiş olanlar da dahil.
-8. Model pane'i `mcp__sidebar__read` tool'u ile okur. Tool session başından beri ToolSearch olmadan listelenir. Açıklaması modele, sidebar'da görünen bir şeye atıf yaptığınızda onu çağırmasını söyler; böylece pane'i prompt'a yapıştırmazsınız. Tool pane'in içeriğini düz metin olarak döner: her section'ın başlığı, altında girintili satırları, sabit section'lar ile stream arasındaki çizgi `---` olarak, bir buton `[ label ]` olarak; renkler korunmaz. `/sidebar snapshot` aynı metni komutun cevabı olarak verir, model onu da okur. Kapalı bir sidebar hiçbir şey tutmadığını söyler. Claude Code 2.1.283 üzerinde canlı bir session'da ölçüldü: sidebar'da ne yazdığı sorulan model tool'u hemen çağırdı ve ctx satırını kelimesi kelimesine aktardı.
+8. Model pane'i `mcp__sidebar__read` tool'u ile okur. Tool session başından beri ToolSearch olmadan listelenir. Açıklaması modele, sidebar'da görünen bir şeyden söz ettiğinde onu çağırmasını söyler; böylece pane'i prompt'a yapıştırmazsın. Tool pane'in içeriğini düz metin olarak döner: her section'ın başlığı, altında girintili satırları, sabit section'lar ile stream arasındaki çizgi `---` olarak, bir buton `[ label ]` olarak; renkler korunmaz. `/sidebar snapshot` aynı metni komutun cevabı olarak verir, model onu da okur. Kapalı bir sidebar hiçbir şey tutmadığını söyler. Claude Code 2.1.283 üzerinde canlı bir session'da ölçüldü: sidebar'da ne yazdığı sorulan model tool'u hemen çağırdı ve ctx satırını kelimesi kelimesine aktardı.
 
 ## Diğer mod'ların kullandığı API
 
-`plugin.json` içinde `"dependencies": ["sidebar"]` **bildirmeyin**. Bildirilen bir dependency serttir: kişide sidebar kurulu değilken engine mod'unuzu hiç yüklemez (2.1.278 üzerinde ölçüldü). API'yi bir guard arkasından çağırın; böylece mod'unuz bu mod olsun olmasın çalışır:
+`plugin.json` içinde `"dependencies": ["sidebar"]` **bildirme**. Bildirilen bir dependency serttir: kişide sidebar kurulu değilken engine mod'unu hiç yüklemez (2.1.278 üzerinde ölçüldü). API'yi bir guard arkasından çağır; böylece mod'un bu mod olsa da olmasa da çalışır:
 
 ```ts
 /** The finding the person reads: the sidebar while it is open, else the mod's own transcript line. */
@@ -40,11 +40,11 @@ async function toPerson($: EngineInterface, findings: readonly string[], line: s
 
 `set`, section tutulup çizildiğinde `true`, sidebar kapalıyken `false` cevaplar, yani tek bir `if (taken) return` hem kapalı hem eksik durumu kapsar. `clear({ consumer, key })` o key'in duran section'ını ve her stream entry'sini kaldırır ve sonraki bir session'ın o entry'leri log'dan geri almasını önler; `isOpen()` pane'in açık olup olmadığını cevaplar.
 
-Bir satır `parts` taşıdığında tek bir kelimeyi renklendirir: `{ text: 'model opus-5-5', parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }] }`. Her part kendi `kind`'ını alır, `kind`'ı olmayan bir part satırınkini alır, ve part'ların birleşen metinleri pane'in çizdiği ve wrap ettiği satırdır; bir part wrap edilen bir satırda da rengini korur. Bütün satırı `text` içinde de tutun, çünkü 0.11.0'dan eski bir sidebar yalnız `text`'i çizer.
+Bir satır `parts` taşıdığında tek bir kelimeyi renklendirir: `{ text: 'model opus-5-5', parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }] }`. Her part kendi `kind`'ını alır, `kind`'ı olmayan bir part satırınkini alır, ve part'ların birleşen metinleri pane'in çizdiği ve wrap ettiği satırdır; bir part wrap edilen bir satırda da rengini korur. Bütün satırı `text` içinde de tut, çünkü 0.11.0'dan eski bir sidebar yalnız `text`'i çizer.
 
-`types/index.d.ts` contract'tır: `SidebarSection`, `SidebarLine`, `SidebarPart`, `SidebarKind`, `SidebarButton`, `SidebarUntil` ve `Sidebar`. `/plugin-types` onu etkin her plugin için `.claude/types/claude-code-plugins/` altına kopyalar, yani `$.sidebar` mod'unuzda elle hiçbir şey kopyalamadan type'lanır. Ona karşı geliştirmek için `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>` kullanın.
+`types/index.d.ts` contract'tır: `SidebarSection`, `SidebarLine`, `SidebarPart`, `SidebarKind`, `SidebarButton`, `SidebarUntil` ve `Sidebar`. `/plugin-types` onu etkin her plugin için `.claude/types/claude-code-plugins/` altına kopyalar, yani `$.sidebar` mod'unda elle hiçbir şey kopyalamadan type'lanır. Ona karşı geliştirmek için `claude --plugin-dir <your mod> --plugin-dir <path to sidebar>` kullan.
 
-Bir `claude plugin test` dosyasında test engine'i `engine.create` çalıştırmaz, bu yüzden noun'u inline bir plugin ile stub'layın ve çağrılarını world'de cevaplayın:
+Bir `claude plugin test` dosyasında test engine'i `engine.create` çalıştırmaz; bu yüzden noun'u inline bir plugin ile stub'la ve çağrılarını world'de cevapla:
 
 ```ts
 const SIDEBAR: Plugin = {
@@ -57,7 +57,7 @@ const SIDEBAR: Plugin = {
 // then in the test: on('sidebar.set', (_, e) => ({ value: true }))
 ```
 
-Section başına sınırlar: 50 satır ve 5 button; dışarıda kalan satırlar pane'de sayılır. Pane, surface'in body'sine verdiği kadar satır çizer, en fazla 200. Stream consumer başına en yeni 20 entry'yi ve toplamda 100 tanesini tutar, satırlar bunların kaçını gösterirse göstersin, ve çizdiği satırlar oraya yazan consumer'lar arasında paylaşılır. Pane'in genişliğinden uzun bir satır kesilir. `consumer`, `key` ya da `title` değeri başka biçimde olan bir section, çağıran mod'un okuduğu bir hata ile reddedilir.
+Section başına sınırlar: 50 satır ve 5 button; dışarıda kalan satırlar pane'de sayılır. Pane, surface'in body'sine verdiği kadar satır çizer, en fazla 200. Stream consumer başına en yeni 20 entry'yi ve toplamda 100 tanesini tutar, satırlar bunların kaçını gösterirse göstersin, ve çizdiği satırlar oraya yazan consumer'lar arasında paylaşılır. Pane'in genişliğinden uzun bir satır en fazla 4 satıra wrap edilir (Sınırlar'a bak). Bir satır en fazla 16 part alır. `consumer`, `key` ya da `title` değeri başka biçimde olan bir section, çağıran mod'un okuduğu bir hata ile reddedilir.
 
 ## Komut
 
@@ -65,21 +65,21 @@ Section başına sınırlar: 50 satır ve 5 button; dışarıda kalan satırlar 
     /sidebar on | off   aynısı, adlandırılmış
     /sidebar status     on ya da off, kaç section durduğu ve stream'in kaç entry tuttuğu
     /sidebar log        bu projenin bugünkü log'unun path'i ve en yeni 10 entry'si
-    /sidebar snapshot   pane'in içeriği düz metin olarak, kopyalamanız ve modelin okuması için
+    /sidebar snapshot   pane'in içeriği düz metin olarak, senin kopyalaman ve modelin okuması için
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install sidebar@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. Bir kere `/sidebar` çalıştırın. O andan sonra `/sidebar off` çalıştırana kadar her session onu açar.
+1. Claude Code'u yeniden başlat.
+2. Bir kez `/sidebar` çalıştır. O andan sonra sen `/sidebar off` çalıştırana kadar her session onu açar.
 
 ## Nereye uzanır
 
@@ -101,14 +101,14 @@ Reach L2, bir dosya yazar.
 
 ## Sınırlar
 
-- Log dizini 0.7.0'a kadar `~/.claude/stream` idi ve 0.8.0'dan itibaren `~/.claude/sidebar`, yani her mod'un kendi dizini mod'un adını taşır. Hiçbir şey taşınmaz: eski dosyalar diskte okunmadan kalır. Daha eski günlerin geri gelmesini istiyorsanız onları kendiniz taşıyın: `mv ~/.claude/stream/* ~/.claude/sidebar/`.
+- Log dizini 0.7.0'a kadar `~/.claude/stream` idi ve 0.8.0'dan itibaren `~/.claude/sidebar`, yani her mod'un kendi dizini mod'un adını taşır. Hiçbir şey taşınmaz: eski dosyalar diskte okunmadan kalır. Daha eski günlerin geri gelmesini istiyorsan onları kendin taşı: `mv ~/.claude/stream/* ~/.claude/sidebar/`.
 
 - Pane yalnız fullscreen layout altında transcript'in yanına konur; diğer durumda prompt'un üstünde açılır.
 - Sidebar'ı saklanan seçimden açan bir session onu kişi olarak değil plugin olarak açar: engine böyle bir pane'i 144 terminal kolonunun altında çizmez, kişi o pane'i bir kere kendisi açtıysa 110'un altında. O session'daki `/sidebar` onu her genişlikte yerleştirir.
 - Sidebar'ı kapatmak her section'ı ve bütün stream'i düşürür. Yeniden açıldığında hiçbiri geri gelmez; her mod kendi section'ını sonraki güncellemede yazar.
 - Pane'deki stream session boyunca durur; diskteki log bir restart'tan sonra kalan şeydir ve yalnız en yeni 10 entry'si geri gelir.
 - Log proje ve gün başınadır. Proje, session'ın başladığı dizinin son parçasıdır, yani bir repository'nin iki checkout'u bir log dosyası paylaşır.
-- Bir günün dosyası en yeni 500 satırını tutar. Eski bir günün dosyasını hiçbir şey kaldırmaz; onu temizlemek sizin işinizdir.
+- Bir günün dosyası en yeni 500 satırını tutar. Eski bir günün dosyasını hiçbir şey kaldırmaz; onu temizlemek sana kalır.
 - Her entry'de bütün dosya yeniden yazılır, çünkü engine'in `$.fs` arayüzünde append yoktur. Başarısız bir yazma geçilir ve pane çalışmaya devam eder.
 - Bir stream entry'sinin saati, mod'un onu yazdığı andır, `$.clock.now()` ile okunur ve makinenin kendi time zone'unda çizilir. Bulgunun olduğu an değildir ve sonradan değişmez.
 - Pane'in genişliğinden uzun bir satır, sığan son boşlukta, en fazla 4 satıra wrap edilir; ilkinden sonraki her satır iki boşluk girintilidir. O 4 satırdan uzun bir satırın son satırı `…` ile kesilir. Bir başlık wrap edilmez, kesilir.
@@ -119,7 +119,7 @@ Reach L2, bir dosya yazar.
 ## Geliştirme
 
     make install     # eslint, typescript, typescript-eslint
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

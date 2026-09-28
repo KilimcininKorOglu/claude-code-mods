@@ -1,6 +1,6 @@
 # sidebar
 
-A Claude Code Mod that opens one shared pane beside the transcript and draws what every other mod writes into it. There is one sidebar, not one pane per mod: a mod calls `$.sidebar.set(...)` with a section of lines and buttons, and this mod draws it.
+When a dozen mods each write their findings as transcript lines and status lines, the transcript fills with lines that are not the conversation, and a finding scrolls away before you read it. This mod opens one shared pane beside the transcript and draws what every other mod writes into it. There is one sidebar, not one pane per mod: a mod calls `$.sidebar.set(...)` with a section of lines and buttons, and this mod draws it.
 
 ## What it does
 
@@ -57,7 +57,7 @@ const SIDEBAR: Plugin = {
 // then in the test: on('sidebar.set', (_, e) => ({ value: true }))
 ```
 
-Limits per section: 50 lines and 5 buttons; the lines left out are counted in the pane. The pane draws as many rows as the surface gave its body, and at most 200. The stream holds its newest 20 entries per consumer and 100 in all, however few of them the rows show, and the rows it draws are shared between the consumers writing into it. A line longer than the pane's width is cut. A section whose `consumer`, `key` or `title` is of another shape is refused with an error the calling mod reads.
+Limits per section: 50 lines and 5 buttons; the lines left out are counted in the pane. The pane draws as many rows as the surface gave its body, and at most 200. The stream holds its newest 20 entries per consumer and 100 in all, however few of them the rows show, and the rows it draws are shared between the consumers writing into it. A line longer than the pane's width is wrapped over at most 4 rows (see Limits). A line takes at most 16 parts. A section whose `consumer`, `key` or `title` is of another shape is refused with an error the calling mod reads.
 
 ## Command
 
@@ -72,7 +72,7 @@ Limits per section: 50 lines and 5 buttons; the lines left out are counted in th
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install sidebar@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -119,7 +119,7 @@ Reach L2, it writes a file.
 ## Development
 
     make install     # eslint, typescript, typescript-eslint
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
