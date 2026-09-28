@@ -20,12 +20,17 @@ One effort setting never fits a whole session: `max` wastes minutes and tokens o
 
 ## Only where the prompt cache survives
 
-An effort change can rewrite the whole prompt cache, and rewriting a long conversation costs more than the turn gains. So the mod changes the effort only on the models that keep the cache across an effort change: Opus 5.5 and Fable 5.1. On every other model it changes nothing, and once the session's first request names such a model, no prompt is rated at all.
+An effort change can rewrite the whole prompt cache, and rewriting a long conversation costs more than the turn gains. So the mod changes the effort only on the models that keep the cache across an effort change: Opus 5.5, Sonnet 5.5 and Fable 5.1. On every other model it changes nothing, and once the session's first request names such a model, no prompt is rated at all.
 
 Measured on Claude Code 2.1.283, with the same conversation and an effort change from one turn to the next:
 
     Opus 5.5   high → low, low → max    cache read 58,408 each time, as at the same effort
     Sonnet 5   high → low, low → max    cache read 0, the whole conversation of about 73,700 tokens written again
+
+Measured on Claude Code 2.1.284 the same way, a medium turn first as the control:
+
+    Sonnet 5.5  medium → high, high → low   cache read 58,417 each time and about 5,500 written, as at the same effort
+    Sonnet 5    medium → high               cache read 0, about 73,700 tokens written again
 
 In the live check a greeting was rated `low` and a design question `max`. The `max` turn read the cache the `low` turn had written (74,079 tokens), and the next turn, back at `low`, read 91,755.
 

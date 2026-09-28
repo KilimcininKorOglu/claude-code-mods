@@ -20,12 +20,17 @@ Tek bir effort ayarı bir session'ın tamamına hiç uymaz: `max` bir "teşekkü
 
 ## Yalnız prompt cache'in korunduğu yerde
 
-Bir effort değişikliği bütün prompt cache'i yeniden yazdırabilir ve uzun bir konuşmayı yeniden yazmak turn'ün kazandırdığından pahalıya gelir. Bu yüzden mod effort'u yalnız effort değişikliğinde cache'i koruyan modellerde değiştirir: Opus 5.5 ve Fable 5.1. Diğer modellerde hiçbir şeyi değiştirmez; session'ın ilk request'i böyle bir modeli söyleyince de artık hiçbir prompt puanlanmaz.
+Bir effort değişikliği bütün prompt cache'i yeniden yazdırabilir ve uzun bir konuşmayı yeniden yazmak turn'ün kazandırdığından pahalıya gelir. Bu yüzden mod effort'u yalnız effort değişikliğinde cache'i koruyan modellerde değiştirir: Opus 5.5, Sonnet 5.5 ve Fable 5.1. Diğer modellerde hiçbir şeyi değiştirmez; session'ın ilk request'i böyle bir modeli söyleyince de artık hiçbir prompt puanlanmaz.
 
 Claude Code 2.1.283'te, aynı konuşma ve bir turn'den diğerine effort değişikliğiyle ölçüldü:
 
     Opus 5.5   high → low, low → max    cache read 58,408 each time, as at the same effort
     Sonnet 5   high → low, low → max    cache read 0, the whole conversation of about 73,700 tokens written again
+
+Claude Code 2.1.284'te aynı yolla, kontrol olarak önce aynı effort'ta bir turn ile ölçüldü:
+
+    Sonnet 5.5  medium → high, high → low   cache read 58,417 each time and about 5,500 written, as at the same effort
+    Sonnet 5    medium → high               cache read 0, about 73,700 tokens written again
 
 Canlı denemede bir selamlaşma `low`, bir tasarım sorusu `max` puan aldı. `max` turn'ü `low` turn'ünün yazdığı cache'i okudu (74.079 token), yeniden `low`'a dönen sonraki turn de 91.755 okudu.
 
