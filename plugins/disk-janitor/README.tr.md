@@ -4,7 +4,7 @@ Build araçları arkalarını hiç toplamaz: `node_modules`, Rust'ın `target`'�
 
 ## Ne yapar
 
-1. Session başında ve son ölçüm 10 dakikadan eskiyse bir turn'den sonra, session dizininin repository'sinde `git ls-files --others --ignored --exclude-standard --directory -z` çalıştırır. Bu dizin session'ın başladığı dizindir ve başlangıçta bir kez okunur, çünkü Bash'teki bir `cd` session'ın kendi dizinini değiştirir ve ölçümü başka bir repository'ye yöneltirdi. Git repository'si dışında hiçbir şey yapmaz.
+1. Session başında, etkileşimli bir session'da 60 sn'de bir ve son ölçüm 10 dakikadan eskiyse bir turn'den sonra, session dizininin repository'sinde `git ls-files --others --ignored --exclude-standard --directory -z` çalıştırır. Bu dizin session'ın başladığı dizindir ve başlangıçta bir kez okunur, çünkü Bash'teki bir `cd` session'ın kendi dizinini değiştirir ve ölçümü başka bir repository'ye yöneltirdi. Git repository'si dışında hiçbir şey yapmaz. 60 sn'lik ölçüm, bu session boştayken başka bir pencerede yapılan bir build'i ya da silmeyi gösterir. Pane'deki sil butonu kuruluyken bekler, çünkü bir ölçüm butonu sıfırlar; bir önceki ölçüm hâlâ sürüyorsa atlanır.
 2. Git'in ignore ettiği her dizini adına ve içeriğine göre ayırır:
    - **kesin**: `node_modules` (içinde `.package-lock.json`, `.modules.yaml`, `.yarn-integrity` ya da `.yarn-state.yml` varsa), `target` (`CACHEDIR.TAG` ya da `.rustc_info.json` ile), `.venv` ve `venv` (`pyvenv.cfg` ile), `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.phpunit.cache`, `.next`, `.nuxt`, `.turbo`, `.parcel-cache`, `.gradle`, `DerivedData`, `Pods`. İşaret dosyası olmayan kesin bir ad belirsiz sayılır.
    - **belirsiz**: `dist`, `build`, `out`, `bin`, `obj`, `vendor`, `.cache`, `coverage`. `(unsure)` ile listelenir, hiçbir zaman önceden seçilmez.
@@ -72,10 +72,10 @@ Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod y
 
 ## Nereye uzanır
 
-Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.284 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane}, ui.close
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
 Reach L2: process çalıştırır ve dizin siler.
 
@@ -90,7 +90,7 @@ Reach L2: process çalıştırır ve dizin siler.
 - Yalnız git'in ignore ettiği dizinler listelenir. Commit'lenmiş ya da hiçbir yerde ignore edilmeyen bir build çıktısı listelenmez.
 - Üç listenin dışındaki bir ad, build çıktısı olsa bile listelenmez.
 - Ignore edilen bir dizinin içindeki başka bir ignore edilen dizin listelenmez. Tek istisna dıştaki dizinin bir veri dizini olmasıdır; o zaman mod yalnız bir seviye içine bakar.
-- Çok büyük bir ağaçta `du` uzun sürebilir. Ölçüm arka planda, 60 saniyelik bir sınırla çalışır; ilki bitene kadar pane `measuring…` gösterir.
+- Çok büyük bir ağaçta `du` uzun sürebilir. Ölçüm arka planda, 60 saniyelik bir sınırla çalışır; ilki bitene kadar pane `measuring…` gösterir. Etkileşimli bir session ölçümü 60 sn'de bir çalıştırır; artifact dizinlerinin altında yüz binlerce dosya olan bir repository bu dosyaları o sıklıkla okur (ölçüldü: bu mod'un repository'sinde git'in ignore ettiği 42 dizin, 231 MB, üzerinde `du -sk` 0,14 sn sürdü).
 - En fazla 500 dizin listelenir.
 
 ## Geliştirme

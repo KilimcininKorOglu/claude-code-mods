@@ -8,6 +8,9 @@ const PANE_ID = 'disk-janitor'
 /** A new measurement starts at most this often after a turn. */
 const SCAN_EVERY_MS = 10 * 60 * 1000
 
+/** How often an interactive session measures again, so a build or a deletion in another window shows without a turn. */
+const TICK_MS = 60_000
+
 const USAGE = 'expects nothing (the pane), list, rescan, or delete <path>'
 
 const BUSY = 'a measurement or a deletion is running; try again when it ends'
@@ -180,6 +183,14 @@ function refreshInBackground($: EngineInterface, state: State): void {
   )
 }
 
+/**
+ * The timed measure. It waits while the pane's delete button is armed, because a measure disarms it and
+ * the person's second press would then arm it again instead of deleting.
+ */
+function tick($: EngineInterface, state: State): void {
+  if (!state.confirm) refreshInBackground($, state)
+}
+
 /** Deletes each picked directory that still passes every check, and answers what went and what stayed. */
 async function deletePicked($: EngineInterface, state: State, picked: readonly Found[]): Promise<string> {
   const scan = state.scan
@@ -297,6 +308,7 @@ export const register: Register = on => {
       argumentHint: '[list | rescan | delete <path>]',
     })
     refreshInBackground($, state)
+    if (e.isInteractive) $.clock.every(TICK_MS, () => tick($, state))
     return r
   })
 

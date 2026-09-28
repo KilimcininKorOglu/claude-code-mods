@@ -4,7 +4,7 @@ Build tools never clean up after themselves: `node_modules`, Rust's `target` and
 
 ## What it does
 
-1. At session start, and after a turn once the last measurement is 10 minutes old, it runs `git ls-files --others --ignored --exclude-standard --directory -z` in the repository of the session's directory. That directory is the one the session started in, read once at the start, because a Bash `cd` moves the session's own directory and would point the measurement at another repository. Outside a git repository it does nothing.
+1. At session start, every 60 s in an interactive session, and after a turn once the last measurement is 10 minutes old, it runs `git ls-files --others --ignored --exclude-standard --directory -z` in the repository of the session's directory. That directory is the one the session started in, read once at the start, because a Bash `cd` moves the session's own directory and would point the measurement at another repository. Outside a git repository it does nothing. The 60 s measurement shows a build or a deletion made in another window while this session is idle. It waits while the pane's delete button is armed, because a measurement disarms the button, and it is skipped while the last measurement still runs.
 2. It sorts each git-ignored directory by its name and content:
    - **certain**: `node_modules` (with `.package-lock.json`, `.modules.yaml`, `.yarn-integrity` or `.yarn-state.yml` inside), `target` (with `CACHEDIR.TAG` or `.rustc_info.json`), `.venv` and `venv` (with `pyvenv.cfg`), `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.phpunit.cache`, `.next`, `.nuxt`, `.turbo`, `.parcel-cache`, `.gradle`, `DerivedData`, `Pods`. A certain name without its marker file counts as unsure.
    - **unsure**: `dist`, `build`, `out`, `bin`, `obj`, `vendor`, `.cache`, `coverage`. Listed with `(unsure)` and never picked in advance.
@@ -72,10 +72,10 @@ Function hooks are early access, and no mod loads without the flag. To keep it o
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.284:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane}, ui.close
-    ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
 Reach L2: it runs processes and deletes directories.
 
@@ -90,7 +90,7 @@ Reach L2: it runs processes and deletes directories.
 - Only directories git ignores are listed. A build output that is committed, or ignored nowhere, is not.
 - A name outside the three lists is not listed, even when it is a build output.
 - An ignored directory inside another ignored directory is not listed, unless the outer one is a data directory (one level only).
-- `du` on a very large tree can take a while. The measurement runs in the background with a 60-second limit, and the pane shows `measuring…` until the first one ends.
+- `du` on a very large tree can take a while. The measurement runs in the background with a 60-second limit, and the pane shows `measuring…` until the first one ends. An interactive session runs it every 60 s, so a repository with hundreds of thousands of files under its artifact directories reads them that often (measured: `du -sk` over the 42 git-ignored directories of this mod's repository, 231 MB, took 0.14 s).
 - At most 500 directories are listed.
 
 ## Development

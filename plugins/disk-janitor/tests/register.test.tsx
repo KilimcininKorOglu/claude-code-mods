@@ -216,7 +216,7 @@ describe('disk-janitor', () => {
     expect((await $.command.run(run('wipe'))).text).toBe('expects nothing (the pane), list, rescan, or delete <path>')
   })
 
-  test('opens and closes the pane, measures again at most every 10 minutes, and does nothing outside git', async ($, on) => {
+  test('opens and closes the pane, and a turn end within 10 minutes of a measure measures nothing', async ($, on) => {
     const w = world(on)
     await started($, w)
     expect((await $.command.run(run(''))).text).toBe('pane open: Enter picks a row, the delete button asks twice, Esc closes')
@@ -226,12 +226,32 @@ describe('disk-janitor', () => {
     await $.turn.complete(turn)
     await w.clock.settle()
     expect(w.statuses.length).toBe(measured)
+  })
+
+  test('an interactive session measures every 60 s, waits while the delete button is armed, and does nothing outside git', async ($, on) => {
+    const w = world(on)
+    await started($, w)
+    const measured = w.statuses.length
+    await w.clock.advance(59_000)
+    await w.clock.settle()
+    expect(w.statuses.length).toBe(measured)
     w.inGit = false
-    await w.clock.advance(10 * 60 * 1000)
-    await $.turn.complete(turn)
+    await w.clock.advance(1000)
     await w.clock.settle()
     expect(w.statuses.length).toBe(measured + 1)
     expect(w.statuses.at(-1)).toBe(undefined)
     expect((await $.command.run(run('list'))).text).toBe('not measured yet, or not in a git repository')
+    w.inGit = true
+    await w.clock.advance(60_000)
+    await w.clock.settle()
+    expect(w.statuses.at(-1)).toBe('artifacts 6.5 GB · /disk-janitor')
+    // An armed delete button stays armed: the second press deletes, not arms again.
+    const ui = await pane($)
+    await ui.press({ key: 'delete' })
+    const armed = w.statuses.length
+    await w.clock.advance(60_000)
+    await w.clock.settle()
+    expect(w.statuses.length).toBe(armed)
+    expect((await ui.find({ type: 'Button', key: 'delete' }))?.props.label).toBe('Press again to delete 3 dir(s), 6.5 GB')
   })
 })
