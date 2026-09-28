@@ -1,6 +1,6 @@
 # sage-memory
 
-Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn.
+A memory file loaded whole at every start grows until it fills the context, and the one note that matters for the file you are editing sits somewhere in the middle of it. This mod keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn.
 
 It runs beside [memory-save](../memory-save): memory-save hands the model all of `MEMORY.md` at a session's start, sage-memory hands it one memory at the moment it matters. A memory the context already shows (`MEMORY.md`, `CLAUDE.md`, a tool result) is not handed again.
 
@@ -73,7 +73,7 @@ Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install sage-memory@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -91,6 +91,8 @@ Validated with `claude plugin validate` on Claude Code 2.1.283 (the validator cu
 
     ❯ ./register.tsx hooks: session.start, tool.describe{tool=/"^mcp__sage-memory__"/}, tool.check{tool=/"^mcp__sage-memory__"/}, tool.call{tool=/"^mcp__sage-memory__"/}, prompt.section{name=env_info_simple}, classic.SessionStart, session.compact, prompt.context, prompt.attachment, classic.PostToolBatch, tool.call{tool=/"^(Read|Grep|Glob|LSP|Edit|Write|NotebookEdit|MultiEdit|mcp__(?!sage-memory__).+)$"/}, prompt.submit, agent.spawn, turn.complete, tool.call{tool=/"^(Edit|Write|NotebookEdit|MultiEdit)$"/}, tool.call{tool=Bash}, session.end, command.run{command=sage-memory}, ui.render{component=Pane}, ui.close, turn.start
     ❯ ./register.tsx calls: $.clock.after (via scheduleDaily, within), $.clock.every (via pollSetup), $.clock.now (via captureOutcome, dailyRun, fileProposals, scheduleDaily, triageReport), $.command.register, $.env.get (via layoutFor), $.fs.read (via importCommand, launch), $.http.fetch (via send), $.model.complete (via answerOf, consolidate, curate, proposeCompact), $.process.run (via checkNode, git, launch), $.session.cwd, $.session.id (via afterCall, beforePrompt, captureOutcome, consolidate, countUse, curate, forSubagent, importCommand, newContext, record, remapMoved, rememberCommand, send, serveTool, verifyChanged), $.session.usage (via budgetOf), $.sidebar.set (via toPerson, toStream), $.store.get (via afterCall, beforePrompt, captureOutcome, consolidate, curate, dailyRun, forSubagent, isDailyOn, jobModel, onByDefault, readEnabled, scheduleDaily, toggle), $.store.set (via dailyRun, modelCommand, onByDefault, setEnabled, toggle), $.tool.call (via taskList), $.tool.register (via declare… [+210 chars]
+    ❯ ./register.tsx env writes: nothing
+    ❯ ./register.tsx env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L3, starts a long-lived local process, sends turns to a model, and downloads packages and a model on `/sage-memory setup`.
 
@@ -118,7 +120,7 @@ On Claude Code 2.1.283, macOS, Node 24.18: a daemon request over the socket took
 ## Development
 
     make install     # eslint, typescript-eslint, typescript, @types/node
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # the hooks and the daemon; needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test, then node --test for the daemon
