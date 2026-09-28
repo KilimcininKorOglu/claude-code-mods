@@ -442,16 +442,17 @@ async function settled(w: World): Promise<void> {
 const answered = (answer: string) => ({ answer, reason: 'answer', durationMs: 1, isAborted: false, turnId: 't' }) as never
 
 describe('consolidator', () => {
-  withSidebar('after a worked turn the model reads the answer and evidence, and each add it proposes is written', async ($, on) => {
+  withSidebar('after a worked turn the model reads the answer and evidence, and each candidate it marks keep is written', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/memory/list', { memories: [PNPM], nextCursor: null, total: 1, statusCounts: {} })
     w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
     w.tasks = [{ id: '1', status: 'completed', subject: 'Shorten the idle timeout' }]
     w.modelText = JSON.stringify({
-      operations: [
-        { action: 'add', text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', priority: 'high', confidence: 0.9, tags: ['daemon'], anchors: [{ type: 'file', path: 'daemon/server.ts' }] },
-        { action: 'add', text: 'The user prefers short answers.', scope: 'user', kind: 'preference', anchors: [{ type: 'file', path: 'a.ts' }] },
-        { action: 'delete', text: 'anything' },
+      candidates: [
+        { text: 'The daemon closes after five idle minutes', is: 'keep', memory: { text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', priority: 'high', confidence: 0.9, tags: ['daemon'], anchors: [{ type: 'file', path: 'daemon/server.ts' }] } },
+        { text: 'The user prefers short answers', is: 'keep', memory: { text: 'The user prefers short answers.', scope: 'user', kind: 'preference', anchors: [{ type: 'file', path: 'a.ts' }] } },
+        { text: 'The turn read the daemon server', is: 'done', memory: { text: 'The turn read daemon/server.ts.', kind: 'fact' } },
+        { text: 'Next the timer gets a test', is: 'next' },
       ],
     })
     await $.session.start(START)
@@ -477,7 +478,7 @@ describe('consolidator', () => {
 
   withSidebar('a turn nobody asked for and nothing worked on is not consolidated, nor one while the consolidator is off', async ($, on) => {
     const w = readyWorld(on)
-    w.modelText = '{"operations":[]}'
+    w.modelText = '{"candidates":[]}'
     await $.session.start(START)
     await $.turn.complete(answered('A plugin turn that only talked, long enough to count.'))
     await settled(w)
@@ -508,7 +509,7 @@ describe('curator', () => {
     w.routes.set('/candidates/list', [])
     w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
     w.routes.set('/memory/update', { memory: DAEMON, superseded: ['m3'] })
-    w.modelText = '{"operations":[]}'
+    w.modelText = '{"candidates":[]}'
     w.curatorText = JSON.stringify({
       operations: [
         { action: 'merge', targetIds: ['m3', 'm4', 'unknown'], text: 'The daemon closes itself five minutes after its last request.', type: 'fact', priority: 'high', reason: 'timer changed' },
