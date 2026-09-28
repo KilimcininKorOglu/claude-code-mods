@@ -39,7 +39,7 @@ Model `` db.query(`SELECT * FROM users WHERE id = ${id}`) `` yazar, sorgu testte
 
        sql-concat-watch: 2 place(s) still build SQL from strings: src/db.ts:14 · src/db.ts:22. Pass the values as query parameters (?, $1, :name), or take the lines out.
 
-   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız edit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu not olmasa model bulguyu yalnız edit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
 
 8. `deny` modunda bir dosya hâlâ string'lerden SQL kurdukça mod `git commit`, `git push` ve `git merge`'ü de durdurur; `--dry-run`, `--help` ya da `-h` taşıyan bir komut durdurulmaz. Durdurmadan önce açık her dosyayı yeniden okur; böylece modelin düzelttiği bir dosya gate'i kendiliğinden açar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit açık dosyaların hiçbirini içermiyorsa geçmesine izin verir ve kaç tanesinin hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/sql-concat-watch mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
