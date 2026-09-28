@@ -289,6 +289,17 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'agent-7', trigger: 'subagent', ids: ['m1', 'm2'] })
   })
 
+  withSidebar('a subagent also starts with the always memories, first and each once', async ($, on) => {
+    const w = readyWorld(on)
+    const RULE = memory('r1', 'Deploys go through the deploy.sh script in the tools folder.', { contextPolicy: 'always' })
+    w.routes.set('/remind/subagent', { audience: [PNPM], task: [ranked(DAEMON)] })
+    w.routes.set('/remind/always', [RULE, PNPM])
+    await $.session.start(START)
+    await $.agent.spawn({ tool_use_id: 't9', prompt: 'How do we deploy?', description: 'deploy', subagentType: 'general-purpose' } as never)
+    expect(bodiesOf(w, '/memory/reminded').find(b => b.trigger === 'subagent')).toMatchObject({ loop: 'agent-7', ids: ['r1', 'm1', 'm2'] })
+    expect(w.spawned[0]).toContain('<memory id="r1"')
+  })
+
   withSidebar('an answer that names a reminded memory counts one use, once', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })

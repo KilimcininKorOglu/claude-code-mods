@@ -11,7 +11,7 @@ It runs beside [memory-save](../memory-save): memory-save hands the model all of
 3. **Memory reminders.** A reminder is a block of `<memory>` entries the model reads as saved project memory, framed by a note in the system prompt:
    - after a batch of file tools (Read, Grep, Glob, LSP, Edit, Write, NotebookEdit, and MCP tools that name a file), the memories anchored to those paths and related to the tasks in progress, fewer as the context fills (8 under 65%, 3 up to 82%, 1 up to 95%, none above);
    - with a prompt you type, the memories that match it, at most 8;
-   - to a subagent, in front of its task: the memories written for its type or permission mode, then the ones about its task;
+   - to a subagent, in front of its task: the `always` memories, the memories written for its type or permission mode, then the ones about its task;
    - at every start, `/clear`, resume and compaction, every memory with the `always` policy.
    Each memory goes once per context. A compaction starts a new context, so it can go again. An answer that uses a reminded memory counts as a use.
 4. **Learning.** After a main-loop turn that had your prompt or a tool call, a consolidator (haiku by default) reads the answer, the files the turn read and wrote, its last 10 Bash commands and the completed tasks, and adds what is worth keeping, in English. After a turn that wrote files, a curator reviews the memories of those files: it supersedes, merges, recalibrates, marks a contradiction or archives. A permanent memory is never superseded, contradicted or archived.

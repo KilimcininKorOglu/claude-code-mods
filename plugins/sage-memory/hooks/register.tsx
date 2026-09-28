@@ -707,7 +707,8 @@ async function forSubagent($: EngineInterface, state: State, e: Spawn): Promise<
   if (!(await isReady(state)) || (await $.store.get('remindSubagent')) === false) return undefined
   const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt.slice(0, 4000) }
   const ranking = await ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
-  const block = subagentReminder(ranking.audience, ranking.task)
+  const always = await ask<Memory[]>($, state, '/remind/always', { sessionId: body.sessionId, limit: 100 }, REMIND_MS)
+  const block = subagentReminder(always, ranking.audience, ranking.task)
   return block.sent.length > 0 ? block : undefined
 }
 

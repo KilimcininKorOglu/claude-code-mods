@@ -189,10 +189,13 @@ export function promptReminder(ranked: readonly Ranked[], visible: string): { te
   return reminderBlock('project memory related to this prompt', fresh.map(item => item.memory), PROMPT_BUDGET.chars, false)
 }
 
-/** What a subagent starts with: the memories written for its role or mode, then the ones about its task. */
-export function subagentReminder(audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
-  const seen = new Set(audience.map(memory => memory.id))
-  const memories = [...audience, ...task.map(item => item.memory).filter(memory => !seen.has(memory.id))]
+/**
+ * What a subagent starts with: the memories kept in view at all times, the ones written for its role
+ * or mode, then the ones about its task, each once.
+ */
+export function subagentReminder(always: readonly Memory[], audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
+  const all = [...always, ...audience, ...task.map(item => item.memory)]
+  const memories = all.filter((memory, i) => all.findIndex(other => other.id === memory.id) === i)
   return reminderBlock('project memory for this agent and its task', memories, SUBAGENT_CHARS, true)
 }
 

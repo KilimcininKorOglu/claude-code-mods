@@ -11,7 +11,7 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
 3. **Memory reminder'lar.** Bir reminder, modelin kayıtlı proje hafızası olarak okuduğu `<memory>` girdilerinden oluşan bir bloktur. System prompt'taki bir not bloğu tanıtır:
    - bir dosya tool batch'inden sonra (Read, Grep, Glob, LSP, Edit, Write, NotebookEdit ve dosya adı taşıyan MCP tool'ları), o yollara bağlı ve devam eden görevlerle ilgili kayıtlar; context doldukça daha az (%65'in altında 8, %82'ye kadar 3, %95'e kadar 1, üstünde hiç);
    - yazdığınız bir prompt'la, ona uyan en fazla 8 kayıt;
-   - bir subagent'a, görevinin önünde: onun tipi ya da permission mode'u için yazılmış kayıtlar, sonra göreviyle ilgili kayıtlar;
+   - bir subagent'a, görevinin önünde: `always` kayıtlar, onun tipi ya da permission mode'u için yazılmış kayıtlar, sonra göreviyle ilgili kayıtlar;
    - her başlangıçta, `/clear`'da, resume'da ve compaction'da, `always` policy'li her kayıt.
    Her kayıt bir context'te bir kez gider. Compaction yeni bir context başlatır, kayıt yeniden gidebilir. Hatırlatılan bir kaydı kullanan cevap bir kullanım sayılır.
 4. **Öğrenme.** Prompt'unuz ya da bir tool çağrısı olan her ana loop turn'ünden sonra bir consolidator (varsayılan haiku) cevabı, turn'ün okuduğu ve yazdığı dosyaları, son 10 Bash komutunu ve tamamlanan görevleri okur ve saklanmaya değeri İngilizce ekler. Dosya yazan bir turn'den sonra bir curator o dosyaların kayıtlarını gözden geçirir: supersede, merge, recalibrate, çelişki işareti ya da archive. Permanent bir kayıt asla supersede, contradict ya da archive edilmez.
