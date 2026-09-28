@@ -255,4 +255,25 @@ describe('gemini-advisor', () => {
     expect([...w.store.keys()]).toEqual([])
     expect((await $.command.run(run('model gemini-3.7-flash'))).text).toBe('expects on, off, or reset; /gemini-core sets the model, the thinking level and the tier')
   })
+
+  it('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, { key: 'KEY', store: [] })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('prompt.section', (_, e) => ({ text: e.text }))
+    await $.session.start(start)
+    await $.turn.start({ text: 'devam et', turnId: 't1' })
+    expect(w.tools).toEqual([])
+    // Every window shares the store: another one ran /gemini-advisor on, and this one never ran the command.
+    w.store.set('enabled', true)
+    await $.turn.start({ text: 'devam et', turnId: 't2' })
+    expect(w.tools.map(t => t.name)).toEqual(['advise'])
+    await $.turn.start({ text: 'devam et', turnId: 't3' })
+    expect(w.tools).toHaveLength(1)
+    // The note waits for /clear, as after /gemini-advisor on in this window, so the prompt the cache holds stays.
+    expect((await $.prompt.section({ name: 'env_info_simple', text: 'W' })).text).toBe('W')
+    // Another window turns the advisor off: the tool refuses at once and asks nothing.
+    w.store.set('enabled', false)
+    expect((await $.tool.call({ tool: TOOL, message: 'x' })).deny).toContain('gemini-advisor is off')
+    expect(w.requests).toEqual([])
+  })
 })

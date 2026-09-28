@@ -5,11 +5,12 @@ import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from '.
 import { renderTranscript } from './transcript.ts'
 
 /**
- * The last advice's usage line, for the status, and whether the system prompt
+ * The last advice's usage line, for the status; whether the system prompt
  * carries the note, fixed at a session start or /clear so a change of the
- * setting does not change the prompt the cache holds.
+ * setting does not change the prompt the cache holds; and whether this session
+ * declared the tool.
  */
-type State = { last?: string; guidance: boolean }
+type State = { last?: string; guidance: boolean; declared: boolean }
 
 /** Gemini's answer, the model and the tier it went to, or why there is none. */
 type Asked = { answer: Answer; model: string; tier: 'free' | 'paid' } | { error: string }
@@ -23,15 +24,16 @@ async function isEnabled($: EngineInterface): Promise<boolean> {
   return (await $.store.get(ENABLED_KEY)) === true
 }
 
-function declareTool($: EngineInterface): Promise<unknown> {
-  return $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
+async function declareTool($: EngineInterface, state: State): Promise<void> {
+  await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
+  state.declared = true
 }
 
 /** Stores on or off; `on` is refused while gemini-core has no key, and declares the tool at once. */
-async function storeEnabled($: EngineInterface, enabled: boolean): Promise<string> {
+async function storeEnabled($: EngineInterface, state: State, enabled: boolean): Promise<string> {
   if (enabled && !(await $.gemini.settings({ consumer: CONSUMER })).hasKey) return NO_KEY_ON
   await $.store.set(ENABLED_KEY, enabled)
-  if (enabled) await declareTool($)
+  if (enabled) await declareTool($, state)
   return changeText(enabled)
 }
 
@@ -90,13 +92,13 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     await $.store.delete(ENABLED_KEY)
     return RESET_TEXT
   }
-  if (command.kind === 'set') return storeEnabled($, command.enabled)
+  if (command.kind === 'set') return storeEnabled($, state, command.enabled)
   return statusText(await isEnabled($), await $.gemini.settings({ consumer: CONSUMER }), state.last)
 }
 
 export const register: Register = (on, options) => {
   const config = configFrom(options)
-  const state: State = { guidance: false }
+  const state: State = { guidance: false, declared: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -107,8 +109,15 @@ export const register: Register = (on, options) => {
       argumentHint: '[on | off | reset]',
     })
     state.guidance = await isEnabled($)
-    if (state.guidance) await declareTool($)
+    if (state.guidance) await declareTool($, state)
     return r
+  })
+
+  // Every window shares the store: a /gemini-advisor on made in another window declares the tool here
+  // before the next turn's first request. The note waits for /clear, as after /gemini-advisor on in this window.
+  on('turn.start', async ($, e, next) => {
+    if (!state.declared && (await isEnabled($))) await declareTool($, state)
+    return next(e)
   })
 
   // /clear arrives only through the classic seam; the note follows the setting from there.

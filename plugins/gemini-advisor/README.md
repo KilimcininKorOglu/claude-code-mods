@@ -29,7 +29,7 @@ The tool row in the transcript holds the model's message and the advice (ctrl+o)
     /gemini-advisor on | off     on is refused while gemini-core has no key; off: a call answers that the advisor is off
     /gemini-advisor reset        off again, the default
 
-The advisor is off after an install: the model gets no tool and no note, and nothing is sent to Gemini. `on` declares the tool at once. The system prompt note follows the setting at `/clear` or the next session, not at once, because a change of the system prompt in the middle of a session makes the next request write the whole prompt cache again. After `off` the note leaves at `/clear` or the next session and the tool at the next session; until then a call answers that the advisor is off.
+The advisor is off after an install: the model gets no tool and no note, and nothing is sent to Gemini. `on` declares the tool at once. The system prompt note follows the setting at `/clear` or the next session, not at once, because a change of the system prompt in the middle of a session makes the next request write the whole prompt cache again. After `off` the note leaves at `/clear` or the next session and the tool at the next session; until then a call answers that the advisor is off. The setting is one for every window: an `on` in another window declares the tool here at this window's next turn and the note at its next `/clear` or session, and an `off` there makes a call here answer at once that the advisor is off.
 
 The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level are gemini-core's, and a change applies from the next call:
 
@@ -72,7 +72,7 @@ After an update from 0.1.x: `claude plugin update` does not add gemini-core (mea
 
 Validated with `claude plugin validate` on Claude Code 2.1.278:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
+    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
     ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via runCommand, storeEnabled), $.http.fetch (via askGemini), $.session.messages (via conversation), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.tool.register (via declareTool), $.ui.toast (via advise)
 
 Reach L3, reaches the network.

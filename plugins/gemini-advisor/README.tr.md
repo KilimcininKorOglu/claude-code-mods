@@ -29,7 +29,7 @@ Transcript'teki tool satırı modelin mesajını ve tavsiyeyi tutar (ctrl+o).
     /gemini-advisor on | off     gemini-core'da key yokken on reddedilir; off: bir çağrı danışmanın kapalı olduğunu söyler
     /gemini-advisor reset        tekrar off, varsayılan
 
-Danışman kurulumdan sonra kapalıdır: model tool ve not almaz ve Gemini'ye hiçbir şey gönderilmez. `on` tool'u hemen tanımlar. System prompt notu ayarı `/clear` ya da sonraki session'da izler, hemen değil; çünkü session ortasında system prompt'u değiştirmek sonraki isteğin tüm prompt cache'ini yeniden yazmasına yol açar. `off` sonrasında not `/clear` ya da sonraki session'da kalkar, tool sonraki session'da; o ana kadar bir çağrı danışmanın kapalı olduğunu söyler.
+Danışman kurulumdan sonra kapalıdır: model tool ve not almaz ve Gemini'ye hiçbir şey gönderilmez. `on` tool'u hemen tanımlar. System prompt notu ayarı `/clear` ya da sonraki session'da izler, hemen değil; çünkü session ortasında system prompt'u değiştirmek sonraki isteğin tüm prompt cache'ini yeniden yazmasına yol açar. `off` sonrasında not `/clear` ya da sonraki session'da kalkar, tool sonraki session'da; o ana kadar bir çağrı danışmanın kapalı olduğunu söyler. Ayar bütün pencereler için tektir: başka bir penceredeki `on`, tool'u bu pencerede sonraki turn'de, notu sonraki `/clear`'da ya da session'da tanımlar. Oradaki bir `off` ise buradaki bir çağrının hemen danışmanın kapalı olduğunu söylemesini sağlar.
 
 Key, tier, model (varsayılan `gemini-3.8-flash`) ve thinking seviyesi gemini-core'a aittir; değişiklik bir sonraki çağrıdan itibaren geçerlidir:
 
@@ -72,7 +72,7 @@ Canlı testte kullanılan free key ile `gemini-3.1-pro-preview` HTTP 429 (quota 
 
 Claude Code 2.1.278 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
+    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
     ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via runCommand, storeEnabled), $.http.fetch (via askGemini), $.session.messages (via conversation), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.tool.register (via declareTool), $.ui.toast (via advise)
 
 Reach L3, network'e çıkar.
