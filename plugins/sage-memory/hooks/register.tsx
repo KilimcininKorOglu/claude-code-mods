@@ -168,14 +168,14 @@ async function launch($: EngineInterface, layout: Layout): Promise<string> {
   return tokenOf(await $.fs.read(layout.serverFile))
 }
 
-/** One daemon route: its value, or an error that names the route. */
+/** One daemon route, for this project and this session: its value, or an error that names the route. */
 async function ask<T>($: EngineInterface, state: State, path: string, body: Record<string, unknown>, ms = CALL_MS): Promise<T> {
   if (state.layout === undefined || state.token === undefined) throw new Error('the daemon is not connected')
   const init = {
     method: 'POST',
     socketPath: state.layout.socket,
     headers: { authorization: `Bearer ${state.token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ project: state.project, ...body }),
+    body: JSON.stringify({ project: state.project, sessionId: await $.session.id(), ...body }),
   }
   const r = await within($, ms, path, $.http.fetch(`http://sage-memory${path}`, init))
   return valueOf<T>(path, r.status, r.text)
