@@ -88,6 +88,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [effort-auto](plugins/effort-auto) | Has a small model rate how hard each prompt is and runs that turn at the matching effort, on the models whose prompt cache survives an effort change. | L3 |
 | [council](plugins/council) | Asks a council of models about a hard problem, when the model calls its tool or you run /council <question>: Claude models, and Gemini models when gemini-core has a key, answer in parallel, and the model of the session writes one verdict from their answers. | L3 |
 | [pin-note](plugins/pin-note) | Keeps the notes you pin with /pin-note for the whole session and sends them to the model again, word for word, after each compaction and /clear. Off until /pin-note on. | L0 |
+| [git-commit](plugins/git-commit) | Ships a commit skill and holds every Bash git commit to it: a commit the skill did not open, a blanket git add, a signature trailer, a secret, an ignored path, or a push or branch change nobody asked for is stopped before git runs. | L2 |
 | [probe-runner](plugins/probe-runner) | For mod development: runs a live check of plugins in a fresh Claude Code session in tmux, types the steps one by one, collects the pane and the transcript, then deletes the temp directory, its transcripts and the inline store files. | L3 |
 | [self-command](plugins/self-command) | For mod development: lets the model run a slash command in its own session, such as /reload-plugins after a plugin update, and read the output as the next prompt. | L2 |
 
