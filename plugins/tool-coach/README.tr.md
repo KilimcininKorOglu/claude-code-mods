@@ -1,6 +1,6 @@
 # tool-coach
 
-Var olmayan bir dosyanın Read'i başarısız olur, model aynı Read'i bir daha, bir daha ister: her tur bir isteğe mal olur ve aynı hatayı getirir. Bu mod, modelin az önce başarısız olan bir tool çağrısını aynı input ile tekrarlamasını durdurur. Bir dosya ya da bir komut bir şeyi değiştirene kadar çağrı yeniden çalışmaz; model bunun yerine daha önce aldığı hatayı okur.
+Var olmayan bir dosyanın Read'i başarısız olur, model aynı Read'i tekrar tekrar ister: her turn bir isteğe mal olur ve aynı hatayı getirir. Bu mod, modelin az önce başarısız olan bir tool çağrısını aynı input ile tekrarlamasını durdurur. Bir dosya ya da bir komut bir şeyi değiştirene kadar çağrı yeniden çalışmaz; model bunun yerine daha önce aldığı hatayı okur.
 
 ## Ne yapar
 
@@ -52,7 +52,7 @@ Reach L0: çizer ve hatırlar.
     2. Çalıştırır:  hiçbir şey
     3. Gönderir:    başarısız bir çağrı aynen tekrarlanınca modele bir deny metni, sidebar'a ya da transcript'e bir satır; makineden hiçbir şey çıkmaz
     4. Saklar:      $.store içinde açık/kapalı ayarını; başarısız çağrılar bir değişikliğe ya da sonraki turn'e kadar bellekte durur
-    5. Düşman girdi: bir çağrının input'u ve hatası yalnız karşılaştırılır ve modele geri alıntılanır, asla çalıştırılmaz ya da açılmaz
+    5. Düşman girdi: bir çağrının input'u ve hatası yalnız karşılaştırılır ve modele geri alıntılanır, hiçbir zaman çalıştırılmaz ya da açılmaz
 
 ## Sınırlar
 
