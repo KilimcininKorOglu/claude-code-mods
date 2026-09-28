@@ -22,7 +22,7 @@ Tool, tek bir `question` girdisi alan `mcp__council__convene`'dir. ToolSearch ol
 - her birinin gerçek trade-off'ları olan iki tasarım arasında seçim yapması gerekiyorsa;
 - geri alınması zor bir değişiklikten önce.
 
-Not session başında ve `/clear` sonrasında sabitlenir. Bu yüzden `/council on` tool'u modele hemen verir, notu ise sonraki session'dan itibaren. Modelin kaç kez çağıracağına bir sınır yoktur.
+Not session başında ve `/clear` sonrasında sabitlenir. Bu yüzden `/council on` tool'u modele hemen verir, notu ise sonraki session'dan itibaren. Modelin kaç kez çağıracağına bir sınır yoktur. Ayar bütün pencereler için tektir: başka bir pencerede çalışan `/council on`, bu penceredeki modele tool'u sonraki turn'de, notu sonraki `/clear`'da ya da session'da verir. Oradaki bir `/council off` ise tool'un burada hemen reddetmesini sağlar.
 
 ## Ne görürsünüz
 
@@ -88,7 +88,7 @@ Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kal
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=council}, prompt.section{name=env_info_simple}, tool.describe{tool=/"^mcp__council__convene$"/}, tool.call{tool=/"^mcp__council__convene$"/}, turn.step
+    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=council}, prompt.section{name=env_info_simple}, tool.describe{tool=/"^mcp__council__convene$"/}, tool.call{tool=/"^mcp__council__convene$"/}, turn.step
     ❯ ./register.ts calls: $.clock.after (via runManual), $.clock.now (via askClaude, askGemini, askGeminiModel, convene, drawRun, ended, verdictOf), $.command.register, $.command.run (via send), $.gemini.enroll (via enrollGemini), $.gemini.read (via askGeminiModel), $.gemini.request (via askGeminiModel), $.gemini.settings (via geminiReach), $.http.fetch (via askGeminiModel), $.model.complete (via askChair, askClaude), $.model.fork (via askChair, askClaude), $.prompt.submit (via send), $.session.messages (via contextOf), $.sidebar.set (via drawRun), $.store.delete (via runCommand), $.store.get (via isEnabled, membersNow), $.store.set (via runCommand, storeEnabled), $.tool.register (via declareTool), $.ui.log (via enrollGemini, runManual, send, toPerson)
 
 Reach L3, üye başına bir istek ve başkan için bir istek.

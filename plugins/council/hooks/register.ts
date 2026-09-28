@@ -14,8 +14,11 @@ const SEND_COMMAND = 'council:send'
 
 const SECTION = { consumer: 'council', key: 'run' }
 
-/** Whether the system prompt carries the note (fixed at a session start or /clear), the main loop's model, and the runs. */
-type State = { guidance: boolean; model?: string; runs: number; current?: number; last?: string }
+/**
+ * Whether the system prompt carries the note (fixed at a session start or /clear), whether this session
+ * declared the tool, the main loop's model, and the runs.
+ */
+type State = { guidance: boolean; declared: boolean; model?: string; runs: number; current?: number; last?: string }
 
 /** Whether gemini-core can take a request now, or why not. */
 type Reach = { ok: true } | { ok: false; why: string }
@@ -41,13 +44,14 @@ async function membersNow($: EngineInterface): Promise<Member[]> {
   return storedMembers(await $.store.get(MEMBERS_KEY))
 }
 
-function declareTool($: EngineInterface): Promise<unknown> {
-  return $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
+async function declareTool($: EngineInterface, state: State): Promise<void> {
+  await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: INPUT_SCHEMA })
+  state.declared = true
 }
 
-async function storeEnabled($: EngineInterface, enabled: boolean): Promise<string> {
+async function storeEnabled($: EngineInterface, state: State, enabled: boolean): Promise<string> {
   await $.store.set(ENABLED_KEY, enabled)
-  if (enabled) await declareTool($)
+  if (enabled) await declareTool($, state)
   return changeText(enabled)
 }
 
@@ -335,7 +339,7 @@ async function runCommand($: EngineInterface, state: State, config: Config, args
   switch (command.kind) {
     case 'error': return command.text
     case 'status': return statusOf($, state)
-    case 'set': return storeEnabled($, command.enabled)
+    case 'set': return storeEnabled($, state, command.enabled)
     case 'members': return membersText((await membersNow($)).map(m => m.label))
     case 'setMembers':
       await $.store.set(MEMBERS_KEY, command.members)
@@ -351,7 +355,7 @@ async function runCommand($: EngineInterface, state: State, config: Config, args
 
 export const register: Register = (on, options) => {
   const config = configFrom(options)
-  const state: State = { guidance: false, runs: 0 }
+  const state: State = { guidance: false, declared: false, runs: 0 }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -362,8 +366,15 @@ export const register: Register = (on, options) => {
     })
     await enrollGemini($)
     state.guidance = await isEnabled($)
-    if (state.guidance) await declareTool($)
+    if (state.guidance) await declareTool($, state)
     return r
+  })
+
+  // Every window shares the store: a /council on made in another window declares the tool here before the
+  // next turn's first request. The note waits for /clear, as after /council on in this window.
+  on('turn.start', async ($, e, next) => {
+    if (!state.declared && (await isEnabled($))) await declareTool($, state)
+    return next(e)
   })
 
   // /clear arrives only through the classic seam; the note follows the setting from there.

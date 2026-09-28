@@ -22,7 +22,7 @@ The tool is `mcp__council__convene` with one `question` input. It is listed with
 - it must choose between two designs that each have real trade-offs;
 - before a change that is hard to undo.
 
-The note is fixed at a session start and at `/clear`, so `/council on` gives the model the tool at once and the note from the next session. There is no limit on how often the model calls it.
+The note is fixed at a session start and at `/clear`, so `/council on` gives the model the tool at once and the note from the next session. There is no limit on how often the model calls it. The setting is one for every window: a `/council on` in another window gives this window's model the tool at its next turn and the note at its next `/clear` or session, and a `/council off` there makes the tool refuse here at once.
 
 ## You see
 
@@ -88,7 +88,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
-    ❯ ./register.ts hooks: session.start, classic.SessionStart, command.run{command=council}, prompt.section{name=env_info_simple}, tool.describe{tool=/"^mcp__council__convene$"/}, tool.call{tool=/"^mcp__council__convene$"/}, turn.step
+    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=council}, prompt.section{name=env_info_simple}, tool.describe{tool=/"^mcp__council__convene$"/}, tool.call{tool=/"^mcp__council__convene$"/}, turn.step
     ❯ ./register.ts calls: $.clock.after (via runManual), $.clock.now (via askClaude, askGemini, askGeminiModel, convene, drawRun, ended, verdictOf), $.command.register, $.command.run (via send), $.gemini.enroll (via enrollGemini), $.gemini.read (via askGeminiModel), $.gemini.request (via askGeminiModel), $.gemini.settings (via geminiReach), $.http.fetch (via askGeminiModel), $.model.complete (via askChair, askClaude), $.model.fork (via askChair, askClaude), $.prompt.submit (via send), $.session.messages (via contextOf), $.sidebar.set (via drawRun), $.store.delete (via runCommand), $.store.get (via isEnabled, membersNow), $.store.set (via runCommand, storeEnabled), $.tool.register (via declareTool), $.ui.log (via enrollGemini, runManual, send, toPerson)
 
 Reach L3, one request per member and one for the chair.

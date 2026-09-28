@@ -323,6 +323,26 @@ describe('/council', () => {
     expect(w.sent[0]).toContain('My question:\n\nIs the timeout the cause?\n\nCouncil verdict (5 of 5 members answered;')
     expect(w.logs).toEqual(['5 of 5 members answered in 0s; the chair wrote the verdict'])
   })
+
+  it('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, { enabled: false })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('prompt.section', (_, e) => ({ text: e.text }))
+    await $.session.start(start)
+    await $.turn.start({ text: 'devam et', turnId: 't1' })
+    expect(w.tools).toEqual([])
+    // Every window shares the store: another one ran /council on, and this one never ran the command.
+    w.store.set('enabled', true)
+    await $.turn.start({ text: 'devam et', turnId: 't2' })
+    expect(w.tools.map(t => t.name)).toEqual(['convene'])
+    await $.turn.start({ text: 'devam et', turnId: 't3' })
+    expect(w.tools).toHaveLength(1)
+    // The note waits for /clear, as after /council on in this window, so the prompt the cache holds stays.
+    expect((await $.prompt.section({ name: 'env_info_simple', text: 'W' })).text).toBe('W')
+    // Another window turns the council off: the tool refuses at once.
+    w.store.set('enabled', false)
+    expect((await convene($)).deny).toBe('the council is off; the user can turn it on with /council on')
+  })
 })
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [CORE, SIDEBAR] }, body)
