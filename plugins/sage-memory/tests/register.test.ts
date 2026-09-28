@@ -639,21 +639,30 @@ describe('triage, compact and capture', () => {
     expect(applied).toContain('failed: delete w1: w1 changed since the proposal')
   })
 
-  withSidebar('the daily dry run runs an hour after a start once a day, and deletes and patches nothing', async ($, on) => {
+  withSidebar('the daily cleanup is on after an install, runs an hour after a start once a day and applies the triage', async ($, on) => {
     const w = triageWorld(on)
     w.routes.set('/memory/hygiene', { project: { state: 'started' } })
-    w.store.set('daily', true)
     w.store.set('dailyAt', Date.parse('2026-09-26T12:00:00Z'))
     await $.session.start(START)
+    expect((await $.command.run(run('daily'))).text).toBe('the daily cleanup is on')
     await w.clock.advance(59 * 60 * 1000)
     expect(bodiesOf(w, '/memory/hygiene')).toEqual([])
     await w.clock.advance(60 * 1000)
     await settled(w)
     expect(bodiesOf(w, '/memory/hygiene')).toHaveLength(1)
-    expect(bodiesOf(w, '/candidates/propose')).toEqual([])
-    expect(bodiesOf(w, '/memory/update').length + bodiesOf(w, '/memory/delete').length).toBe(0)
+    expect(bodiesOf(w, '/memory/delete')).toHaveLength(2)
     expect(w.store.get('dailyAt')).toBe(Date.parse('2026-09-28T13:00:00Z'))
-    expect(w.lines.at(-1)).toBe('daily triage: 4 memories, 2 deletion(s) and 1 merge(s) suggested, 0 review proposal(s) filed; /sage-memory triage shows them')
+    expect(w.lines.at(-1)).toMatch(/^daily cleanup of 4 memories: applied: 2 deletion\(s\)/)
+  })
+
+  withSidebar('the daily cleanup the person turned off runs no more', async ($, on) => {
+    const w = triageWorld(on)
+    w.store.set('dailyAt', Date.parse('2026-09-26T12:00:00Z'))
+    await $.session.start(START)
+    expect((await $.command.run(run('daily off'))).text).toBe('the daily cleanup off')
+    await w.clock.advance(2 * 60 * 60 * 1000)
+    await settled(w)
+    expect(bodiesOf(w, '/memory/hygiene')).toEqual([])
   })
 
   withSidebar('outcome capture writes a failed command once an hour while the person turned it on', async ($, on) => {

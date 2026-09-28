@@ -152,7 +152,7 @@ type State = {
   compactPlan?: Plan
   /** The commands outcome capture wrote in the last hour, by key. */
   captured: Map<string, number>
-  /** The timer of the next daily triage dry run. */
+  /** The timer of the next daily cleanup. */
   daily?: { cancel: () => void }
   /** What the memory manager pane shows. */
   pane: PaneState
@@ -376,8 +376,8 @@ async function follow($: EngineInterface, state: State): Promise<void> {
 }
 
 /** A setting the person turns on or off, stored under `key`; without on or off, its state. */
-async function toggle($: EngineInterface, key: string, what: string, word: string): Promise<string> {
-  if (word !== 'on' && word !== 'off') return `${what} is ${(await $.store.get(key)) === true ? 'on' : 'off'}`
+async function toggle($: EngineInterface, key: string, what: string, word: string, isOnByDefault = false): Promise<string> {
+  if (word !== 'on' && word !== 'off') return `${what} is ${((await $.store.get(key)) ?? isOnByDefault) === true ? 'on' : 'off'}`
   await $.store.set(key, word === 'on')
   return `${what} ${word}`
 }
@@ -394,7 +394,7 @@ async function captureCommand($: EngineInterface, rest: string): Promise<string>
 }
 
 async function dailyCommand($: EngineInterface, state: State, rest: string): Promise<string> {
-  const answer = await toggle($, 'daily', 'the daily triage dry run', rest.trim().toLowerCase())
+  const answer = await toggle($, 'daily', 'the daily cleanup', rest.trim().toLowerCase(), true)
   await scheduleDaily($, state)
   return answer
 }
@@ -1120,21 +1120,26 @@ async function triageCommand($: EngineInterface, state: State, rest: string): Pr
   return reportText(report, applied)
 }
 
+/** The daily cleanup is on unless the person turned it off. */
+async function isDailyOn($: EngineInterface): Promise<boolean> {
+  return (await $.store.get('daily')) !== false
+}
+
 /**
- * The daily dry run: hygiene, then a triage bounded to 40 ratings and 15 pairs, whose proposals are
- * filed and nothing else written. The time of the last run is kept in the store, so one window runs it.
+ * The daily cleanup: hygiene, then a triage bounded to 40 ratings and 15 pairs, applied as
+ * `/sage-memory triage apply` applies it. The time of the last run is kept in the store, so one window runs it.
  */
 async function dailyRun($: EngineInterface, state: State): Promise<void> {
   state.daily = undefined
-  if ((await $.store.get('daily')) !== true || !(await isReady(state))) return
+  if (!(await isDailyOn($)) || !(await isReady(state))) return
   const last = await $.store.get('dailyAt')
   const now = await $.clock.now()
   if (typeof last === 'number' && now - last < DAY_MS) return scheduleDaily($, state)
   await $.store.set('dailyAt', now)
   await ask($, state, '/memory/hygiene', { automatic: true })
   const report = await triageReport($, state, DAILY_LIMITS)
-  const filed = await fileProposals($, state, report.proposals)
-  await toStream($, 'triage', { text: `daily triage: ${report.total} memories, ${report.deletions.length} deletion(s) and ${report.merges.length} merge(s) suggested, ${filed.filed} review proposal(s) filed; /sage-memory triage shows them`, kind: 'ok' })
+  const applied = await applyTriage($, state, report)
+  await toStream($, 'triage', { text: `daily cleanup of ${report.total} memories: ${applied}`, kind: applied.includes('failed:') ? 'error' : 'ok' })
   await scheduleDaily($, state)
 }
 
@@ -1142,7 +1147,7 @@ async function dailyRun($: EngineInterface, state: State): Promise<void> {
 async function scheduleDaily($: EngineInterface, state: State): Promise<void> {
   state.daily?.cancel()
   state.daily = undefined
-  if ((await $.store.get('daily')) !== true) return
+  if (!(await isDailyOn($))) return
   const last = await $.store.get('dailyAt')
   const now = await $.clock.now()
   const wait = typeof last === 'number' && now - last < DAY_MS ? last + DAY_MS - now : HOUR_MS
