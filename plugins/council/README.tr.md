@@ -22,7 +22,7 @@ Tool `mcp__council__convene`'dir ve tek bir `question` girdisi alır. ToolSearch
 - ikisinin de gerçek artıları ve eksileri olan iki tasarım arasında seçim yapması gerekiyorsa;
 - geri alınması zor bir değişiklikten önce.
 
-Not session başında ve `/clear`'da sabitlenir; yani `/council on` tool'u modele hemen, notu ise bir sonraki session'dan itibaren verir. Modelin onu kaç kez çağırabileceğine bir sınır yoktur. Ayar bütün pencereler için ortaktır: başka bir penceredeki `/council on`, bu penceredeki modele tool'u bir sonraki turn'ünde, notu bir sonraki `/clear`'ında ya da session'ında verir; oradaki bir `/council off` ise tool'un burada hemen reddetmesine yol açar.
+Not session başında ve `/clear`'da sabitlenir; yani `/council on` tool'u modele hemen, notu ise bir sonraki session'dan itibaren verir. Modelin onu kaç kez çağırabileceğine bir sınır yoktur. Ayar bütün pencereler için ortaktır: başka bir penceredeki `/council on`, bu penceredeki modele tool'u bir sonraki turn'ünde, notu bir sonraki `/clear`'ında ya da session'ında verir; oradaki bir `/council off` ise buradaki tool'un çağrıları hemen reddetmesine yol açar.
 
 ## Ne görürsün
 
