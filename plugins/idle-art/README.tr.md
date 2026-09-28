@@ -1,6 +1,6 @@
 # idle-art
 
-Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Dört sahne yerleşik olarak gelir: matrix yağmuru, ateş, akvaryum ve bir kedi. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
+Uzun bir turn'de beklerken prompt'un üstünde yalnız dönen bir spinner vardır. Bu mod o boşluğa, model çalışırken ASCII bir animasyon çizer. Dört sahne yerleşik olarak gelir: matrix yağmuru, ateş, akvaryum ve bir kedi. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
 
 ## Ne gösterir
 
@@ -39,7 +39,7 @@ Band en fazla 8 satır kaplar ve terminalin tüm genişliğini kullanır. Termin
 
     /idle-art import ~/Downloads/kedi.gif kedi
 
-Mod GIF'i okur ve her kareyi kendi süresi ve şeffaflığıyla çözer. Sonra her kareyi karakterlere çevirir. Her hücre, kapladığı piksellerin ortalama rengini alır. Hücrenin karakteri `.:-=+*#%@` dizisinden parlaklığına göre seçilir. Parlaklık, klibin kendi en koyu ve en parlak hücresi arasına yayılır. Çoğu şeffaf olan bir hücre boş kalır. Resim şeklini korur ve band'in 8 satırını doldurur. Bir hücre, genişliğinin iki katı yükseklikte sayılır. Klip band'in ortasında, her kare kendi süresi kadar gösterilerek döngü halinde oynar.
+Mod GIF'i okur ve her kareyi kendi süresi ve şeffaflığıyla çözer. Sonra her kareyi karakterlere çevirir. Her hücre, kapladığı piksellerin ortalama rengini alır; renk kanal başına altı seviyeye yuvarlanır, böylece komşu hücreler aynı rengi paylaşır. Hücrenin karakteri `.:-=+*#%@` dizisinden parlaklığına göre seçilir. Parlaklık, klibin kendi en koyu ve en parlak hücresi arasına yayılır. Çoğu şeffaf olan bir hücre boş kalır. Resim şeklini korur ve band'in 8 satırını doldurur, en fazla 100 sütun genişliğinde. Bir hücre, genişliğinin iki katı yükseklikte sayılır. Klip band'in ortasında, her kare kendi süresi kadar gösterilerek döngü halinde oynar.
 
     ● Brewing… (6s)
         ....=*******++=+***+====-....
@@ -53,7 +53,7 @@ Mod GIF'i okur ve her kareyi kendi süresi ve şeffaflığıyla çözer. Sonra h
 
 Bir klip 90.000 karakterin altında tutulur. Çünkü tek bir çizim, çizim thread'ine en fazla bu kadar veri verebilir. Daha uzun bir klip her iki kareden birini düşürür ve sığana kadar bunu tekrarlar. Kalan her kare, düşen karenin süresini de üstlenir. Cevap kaç karenin kaldığını söyler. Klipler mod'un store'unda durur. Store toplam 4 MiB tutar, bu da yaklaşık kırk klip eder. Sığmayan bir klip, sebebiyle birlikte reddedilir.
 
-Klip adı küçük harf, rakam ve tire içerir, en fazla 24 karakterdir. Yerleşik bir sahnenin adı ya da komutun okuduğu bir kelime olamaz. Kayıtlı bir adla yeniden import etmek o klibi değiştirir. `~` ile başlayan bir yol ev dizinini gösterir. Göreli bir yol oturumun dizinine göre çözülür. Yolda boşluk olabilir: son kelime klibin adıdır.
+Klip adı küçük harf, rakam ve tire içerir, bir harf ya da rakamla başlar ve en fazla 24 karakterdir; büyük harfle yazılan ad küçük harfe çevrilir. Yerleşik bir sahnenin adı ya da komutun okuduğu bir kelime olamaz. Kayıtlı bir adla yeniden import etmek o klibi değiştirir. `~` ile başlayan bir yol ev dizinini gösterir. Göreli bir yol oturumun dizinine göre çözülür. Yolda boşluk olabilir: son kelime klibin adıdır.
 
 ## Komut
 
@@ -78,21 +78,21 @@ Ayarlar ve klipler mod'un store'unda durur. Store bütün projelerde ve bütün 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install idle-art@kilimcininkoroglu-mods
 
-Function hooks erken erişimdedir. Flag olmadan hiçbir şey yüklenmez:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
-Bir oturum için yerel checkout'tan yüklemek için:
+Yerel bir checkout'tan tek session için yüklemek istersen:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/idle-art
 
-Flag'i açık tutmak için `~/.claude/settings.json` dosyasına şunu ekleyin:
+Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-Claude Code'u yeniden başlatın ya da açık bir oturumda `/reload-plugins` çalıştırın. Mod kurulumdan sonra açıktır. `/idle-art off` komutu onu kapatır.
+Claude Code'u yeniden başlat ya da açık bir session'da `/reload-plugins` çalıştır. Mod kurulumdan sonra açıktır. `/idle-art off` komutu onu kapatır.
 
 ## Nereye uzanır
 
@@ -124,7 +124,7 @@ Reach L2: 4 MiB'tan büyük bir GIF'i okumak için `base64` çalıştırır.
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10, üstünde build başarısız olur
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

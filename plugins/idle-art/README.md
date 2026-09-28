@@ -1,6 +1,6 @@
 # idle-art
 
-A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Four scenes are built in: matrix rain, fire, an aquarium and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
+While you wait out a long turn, all that moves above the prompt is a spinner. This mod fills that space with an ASCII animation while the model works. Four scenes are built in: matrix rain, fire, an aquarium and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
 
 ## What it shows
 
@@ -39,7 +39,7 @@ The band takes at most 8 rows, fewer when the terminal has less room, and the te
 
     /idle-art import ~/Downloads/kitty.gif kitty
 
-The mod reads the GIF, decodes every frame with its own delay and transparency, and turns each frame into characters: every cell takes the mean colour of its pixels, and a glyph from `.:-=+*#%@` by its brightness, spread over the clip's own darkest to brightest cell. A cell mostly transparent stays blank. The picture keeps its shape and fills the 8 rows of the band; a cell counts as twice as tall as wide. The clip then plays in the middle of the band, each frame for its own delay, in a loop.
+The mod reads the GIF, decodes every frame with its own delay and transparency, and turns each frame into characters: every cell takes the mean colour of its pixels, rounded to six levels a channel so neighbouring cells share a colour, and a glyph from `.:-=+*#%@` by its brightness, spread over the clip's own darkest to brightest cell. A cell mostly transparent stays blank. The picture keeps its shape and fills the 8 rows of the band, at most 100 columns wide; a cell counts as twice as tall as wide. The clip then plays in the middle of the band, each frame for its own delay, in a loop.
 
     ● Brewing… (6s)
         ....=*******++=+***+====-....
@@ -53,7 +53,7 @@ The mod reads the GIF, decodes every frame with its own delay and transparency, 
 
 A clip is kept under 90,000 characters, because that is what one drawing may hand the drawing thread. A longer clip keeps every other frame, each kept frame showing for the time of both, and does so again until it fits; the answer says how many frames stayed. The clips live in the mod's store, which holds 4 MiB in all, so about forty clips fit; a clip that does not fit is refused with the reason.
 
-A name is lowercase letters, digits and dashes, up to 24 characters, and cannot be a built-in scene or a word the command reads. Importing under a saved name replaces that clip. A path starting with `~` is under your home directory, and a relative path is under the session's directory. A path may hold spaces: the last word is the name.
+A name is lowercase letters, digits and dashes, starts with a letter or digit, is up to 24 characters (a capital letter is lowered), and cannot be a built-in scene or a word the command reads. Importing under a saved name replaces that clip. A path starting with `~` is under your home directory, and a relative path is under the session's directory. A path may hold spaces: the last word is the name.
 
 ## Command
 
@@ -78,7 +78,7 @@ An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install idle-art@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag:
+Function hooks are early access, and nothing loads without the flag:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
@@ -124,7 +124,7 @@ Reach L2, runs `base64` to read a GIF over 4 MiB.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
