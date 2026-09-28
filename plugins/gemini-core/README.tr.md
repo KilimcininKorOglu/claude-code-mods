@@ -6,7 +6,7 @@ Birkaç mod Gemini'ye soruyor. Her biri kendi key'ini, tier'ını ve modelini tu
 
 1. Her Gemini mod'u session başında plugin adıyla ve varsayılan modeliyle kaydolur.
 2. Bir mod Gemini'ye soracağı zaman `$.gemini.request`, mod'un gövdesinden `generateContent` isteğini kurar: key `x-goog-api-key` header'ına girer, hiçbir zaman URL'ye girmez; model mod'un modelidir; thinking seviyesi `generationConfig.thinkingConfig.thinkingLevel`'a yazılır. Seviye yoksa gövde olduğu gibi gider ve model kendi varsayılanını kullanır. Bir mod tek bir istek için başka bir model verebilir (`model`); mod'un thinking seviyesi o isteğe de uygulanır.
-3. İsteği mod kendi `$.http.fetch`'iyle gönderir, cevabı `$.gemini.read` okur. Sonuç metin ve token sayılarıdır, ya da Gemini'nin hata mesajıdır, ya da HTTP 503'ten sonra aynı isteği yeniden göndermeden önceki beklemedir (1 sn, 2 sn, 3 sn; en fazla dört deneme; mod'un süre sınırı geçtiyse deneme yok). HTTP 429'dan ya da bir key hatasından sonra aynı isteği sıradaki key ile verir, mod da onu hemen gönderir.
+3. İsteği mod kendi `$.http.fetch`'iyle gönderir, cevabı `$.gemini.read` okur. Sonuç metin ve token sayılarıdır, ya da Gemini'nin hata mesajıdır, ya da HTTP 503'ten sonra aynı isteği yeniden göndermeden önceki beklemedir (1 sn, 2 sn, 3 sn; en fazla dört deneme; mod'un süre sınırı geçtiyse deneme yok). HTTP 429'dan ya da bir key hatasından sonra aynı isteği sıradaki key ile yeniden kurar, mod da onu hemen gönderir.
 
 Bir plugin noun'unun method'u 10 saniye içinde cevap vermek zorundadır (2.1.278 üzerinde ölçüldü: method içindeki 14 saniyelik bir fetch `did not answer within 10000ms` ile reddedildi). Bir Gemini isteği bundan uzun sürebilir; bu yüzden isteği `$.gemini` değil, mod gönderir.
 
@@ -129,8 +129,8 @@ Reach L3: network'e çıkar. `/gemini-core models` ve bir model değişikliği G
     1. Okur:     GEMINI_API_KEY ya da apiKey option'ını; kendi $.store dosyasını
     2. Çalıştırır: hiçbir process; model seçimi için bir pane açar
     3. Gönderir: model listesi isteğini (GET generativelanguage.googleapis.com/v1beta/models, konuşma yok), session başına bir kere ve refresh'te, key x-goog-api-key header'ında; kurduğu istekleri Gemini mod'ları gönderir
-    4. Saklar:   $.store içinde tier'ı, kayıtlı mod'ları varsayılan modelleriyle, hangilerinin kendi modellerini adlandırdığını, ve her mod'un modeli ile thinking seviyesini
-    5. Düşman girdi: `$.gemini.request` çağıran her plugin key'i alır, bu yüzden yalnız güvendiğiniz Gemini mod'larını kurun; model id'si, bir isteğin adlandırdığı da, `[a-z0-9.-]` ile eşleşmek zorundadır, çünkü URL path'ine girer; cevap metni JSON olarak okunur ve hiç çalıştırılmaz
+    4. Saklar:   $.store içinde tier'ı, kayıtlı mod'ları varsayılan modelleriyle, hangilerinin kendi modellerini adlandırdığını ve her mod'un modeli ile thinking seviyesini
+    5. Düşman girdi: `$.gemini.request` çağıran her plugin key'i alır, bu yüzden yalnız güvendiğin Gemini mod'larını kur; model id'si, bir isteğin adlandırdığı da, `[a-z0-9.-]` ile eşleşmek zorundadır, çünkü URL path'ine girer; cevap metni JSON olarak okunur ve hiç çalıştırılmaz
 
 ## Sınırlar
 
