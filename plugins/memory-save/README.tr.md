@@ -1,6 +1,6 @@
 # memory-save
 
-Bir Stop hook'unun tuttuğu memory turn'ün bitişini engeller, modele `MEMORY.md`'yi senin önünde Read ve Edit ettirir ve her seferinde fazladan bir turn'e mal olur. Bu mod proje başına bir `MEMORY.md`'yi stop'u engellemeden güncel tutar ve session'a yükler. Her ana döngü turundan sonra session'ın tool'suz bir fork'una projenin neyi hatırlaması gerektiğini sorar ve cevabı kendisi yazar. Ana konuşma bir memory edit'i hiç görmez: engellenen bir stop yok, `MEMORY.md` üzerinde bir Read ya da Edit yok, fazladan bir tur yok.
+Memory'yi bir Stop hook'u tutarsa hook turn'ün bitişini engeller, modele `MEMORY.md`'yi senin gözünün önünde Read ve Edit ettirir ve her seferinde fazladan bir turn'e mal olur. Bu mod proje başına bir `MEMORY.md`'yi stop'u engellemeden güncel tutar ve session'a yükler. Her ana loop turn'ünden sonra session'ın tool'suz bir fork'una projenin neyi hatırlaması gerektiğini sorar ve cevabı kendisi yazar. Ana konuşma bir memory edit'i hiç görmez: engellenen bir stop, `MEMORY.md` üzerinde bir Read ya da Edit, fazladan bir turn olmaz.
 
 ## Ne yapar
 
@@ -15,22 +15,22 @@ Başlangıçta, resume'da, `/clear` ve compaction'da `classic.SessionStart` hook
 
     Topic files in ~/.cli-tweaks/memory/<project>: history.md
 
-Dil satırı orada, çünkü context'i çoğunlukla İngilizce olan uzun turlar başka bir dildeki prompt'lara İngilizce cevaplarla bitiyordu (ölçüldü). Topic satırı yalnız topic dosyaları varken bulunur. `MEMORY.md` olmayan bir proje hiçbir blok almaz. Blok, dosyayı yazma talimatı taşımaz, çünkü dosyayı mod yazar. Memory bu olaylar arasında tekrarlanmaz, yani context'i tur tur büyütmez.
+Dil satırı orada, çünkü context'i çoğunlukla İngilizce olan uzun turn'ler başka bir dildeki prompt'lara İngilizce cevaplarla bitiyordu (ölçüldü). Topic satırı yalnız topic dosyaları varken bulunur. `MEMORY.md` olmayan bir proje hiçbir blok almaz. Blok, dosyayı yazma talimatı taşımaz, çünkü dosyayı mod yazar. Memory bu olaylar arasında tekrarlanmaz, yani context'i her turn'de büyütmez.
 
 ### Memory'yi kaydeder
 
-Bir cevapla ya da bir kesintiyle biten ve fork'a okuyacak bir şey veren her ana döngü turundan sonra (sonraki bölüme bakın):
+Bir cevapla ya da bir kesintiyle biten ve fork'a okuyacak bir şey veren her ana loop turn'ünden sonra (sonraki bölüme bak):
 
 1. `~/.cli-tweaks/memory/<project>/MEMORY.md` dosyasını, varsa, okur.
 2. `$.model.fork`'a tek bir mesaj gönderir. Fork bütün session transcript'ini görür ve prompt cache'ini paylaşır, ama tool'u yoktur. Mesaj mevcut dosyayı, yazma kurallarını ve cevap biçimini taşır. Yazma kuralları, template ve MIGRATION, OFFLOAD ve BULLET SPLIT notları klasik memory-save Stop hook'unun metinleridir, kelimesi kelimesine; yalnız durdurmaya dair kısımlar dışarıda bırakılır, çünkü fork durdurmaz. OFFLOAD notunda bir cümle fazladır: fork'a bir `## CRITICAL RULES` maddesini dışarı taşımamasını söyler.
 3. Fork JSON ile cevap verir: eklenecek, kaldırılacak ya da değiştirilecek madde'ler ve `history.md` gibi topic dosyalarına eklenecek metin.
 4. Mod cevabı uygular, sonucu kontrol eder ve dosyaları yazar.
 
-Kayıt arka planda çalışır. Fork çalışırken sonraki prompt beklemez. Aynı anda bir kayıt çalışır; bir kayıt sırasında biten bir tur, ondan sonra bir kayıt daha ister.
+Kayıt arka planda çalışır. Fork çalışırken sonraki prompt beklemez. Aynı anda tek bir kayıt çalışır; bir kayıt sürerken biten bir turn, o kayıttan sonra bir kayıt daha ister.
 
-### Yeni bir şey olmayan turu atlar
+### Yeni bir şey olmayan turn'ü atlar
 
-Son kayıttan beri bir prompt gönderdiysen ya da turda bir ana döngü tool'u çalıştıysa tur kaydedilir. Bir plugin prompt'unun (örneğin bir `task-poke` devam prompt'unun) ya da bir arka plan işinin bildiriminin başlattığı ve modelin yalnız sözle cevap verdiği bir tur kaydedilmez ve hiçbir şey göstermez. Bir subagent'ın tool'ları sayılmaz, çünkü ana döngü yalnız beklerken bir arka plan agent'ı çalışmaya devam eder. Hiçbir şey kaybolmaz: fork bütün konuşmayı okur, bu yüzden sonraki kayıt atlanan turu da görür. Bunun karşılamadığı tek durum, böyle bir turun hemen ardından kapanan bir session'dır.
+Son kayıttan beri bir prompt gönderdiysen ya da turn'de bir ana loop tool'u çalıştıysa turn kaydedilir. Bir plugin prompt'unun (örneğin bir `task-poke` devam prompt'unun) ya da bir arka plan işinin bildiriminin başlattığı ve modelin yalnız sözle cevap verdiği bir turn kaydedilmez ve hiçbir şey göstermez. Bir subagent'ın tool'ları sayılmaz, çünkü ana loop yalnız beklerken bir arka plan agent'ı çalışmaya devam eder. Hiçbir şey kaybolmaz: fork bütün konuşmayı okur, bu yüzden sonraki kayıt atlanan turn'ü de görür. Bunun karşılamadığı tek durum, böyle bir turn'ün hemen ardından kapanan bir session'dır.
 
 Bu kontrolden önce ölçülen durum: iki arka plan agent'ını bekleyen bir session arka arkaya üç devam prompt'u aldı, her birine tek cümleyle cevap verdi ve her biri için bir kayıt çalıştırdı; bu kayıtlardan biri MEMORY.md'den beş maddeyi dışarı taşıdı.
 
@@ -47,7 +47,7 @@ Proje adı, bir git worktree içinde de birincil repository adıdır; yoksa git 
     memory-save: +2 1 refused · 14:32
     memory-save: error: reply has no JSON object · 14:32
 
-[sidebar](../sidebar) açıkken bu durum oraya gider, session boyunca duran ve her kayıtta yeniden yazılan bir `MEMORY.md` section'ı olarak, ve status line boş kalır. Orada satır parça parça renklidir: bir kaydın yazdığı kısım (`+2 -1 ~3 topic: …`) yeşil, her `N skipped`, `N refused` ve `N rule(s) retired` sarı, `error:` başı kırmızı ve mesaj varsayılan renkte, `saving…` ve `no change` soluk, saat de soluktur. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi, engine'in kendi renginde çizilir.
+[sidebar](../sidebar) açıkken bu durum oraya, session boyunca duran ve her kayıtta yeniden yazılan bir `MEMORY.md` section'ı olarak gider; status line boş kalır. Orada satır parça parça renklidir: bir kaydın yazdığı kısım (`+2 -1 ~3 topic: …`) yeşil, her `N skipped`, `N refused` ve `N rule(s) retired` sarı, `error:` başı kırmızı ve mesaj varsayılan renkte, `saving…` ve `no change` soluk, saat de soluktur. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi, engine'in kendi renginde çizilir.
 
 Section, durumun altında ikinci, soluk bir satır taşır: son transcript satırı, başındaki `MEMORY.md:` olmadan. Durum kaydın nerede olduğunu söyler, ikinci satır ne yaptığını:
 
@@ -71,7 +71,7 @@ Sonucu template'te olmayan bir kayıt hiçbir zaman yazılmaz.
 
 ## Bir yazma öncesinde ne kontrol edilir
 
-- Cevap tek bir JSON object'idir. Parser'ın okuyamadığı bir cevap sonraki tura bırakılır: hiçbir şey yazılmaz, cevap kanıt olarak tutulur ve bir transcript satırı bunu status line olmadan söyler. Başka biçimde bir op ya da topic tek başına reddedilir, cevabın geri kalanı yazılır, status line onu sayar (`+2 1 refused`), transcript satırı adlandırır ve sonraki kayıt fork'a neyi reddettiğini söyler. Tek bir bozuk op artık bütün kaydı kaybetmez.
+- Cevap tek bir JSON object'idir. Parser'ın okuyamadığı bir cevap sonraki turn'e bırakılır: hiçbir şey yazılmaz, cevap kanıt olarak tutulur ve bir transcript satırı bunu status line olmadan söyler. Başka biçimde bir op ya da topic tek başına reddedilir, cevabın geri kalanı yazılır, status line onu sayar (`+2 1 refused`), transcript satırı adlandırır ve sonraki kayıt fork'a neyi reddettiğini söyler. Tek bir bozuk op artık bütün kaydı kaybetmez.
 - Bir `add`, dosyanın zaten taşıdığı bir heading'i adlandırır: dört section'dan biri ya da onun bir `### ` alt başlığı, büyük küçük harf fark etmez. Bir madde o heading'in kendi bloğunun sonuna gider, yani bir section'a yapılan ekleme ilk alt başlığından önce iner. Heading'i dosyada olmayan bir ekleme tek başına reddedilir.
 - Kaldırılan ya da değiştirilen bir satır dosyada tam olarak bulunur, ya da yalnız baştaki bir liste işaretiyle tek bir satırdan ayrılır. Fork her girdiyi madde olarak yazar, dosyada düz bir paragraf satırı olarak duranı da. Satırı dosyada olmayan bir remove ya da replace atlanır ve diğer op'lar yazılır: status line onu sayar (`+1 1 skipped`), transcript satırı adlandırır ve sonraki kayıt fork'a böyle bir satırı markup'ı ile birlikte tam kopyalamasını söyler. Yanlış alıntılanmış bir satır (fork birinin etrafına `**` eklemişse mesela) eskiden bütün kaydı durduruyordu.
 - Bir topic dosya adı küçük harftir, `.md` ile biter, dizin kısmı taşımaz ve `memory.md` değildir.
@@ -125,10 +125,10 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: HOME
 
-Reach L2, dosya yazar, git çalıştırır ve Claude'u sürer.
+Reach L2: dosya yazar, git çalıştırır ve Claude'u yönlendirir.
 
-    1. Okur:     HOME; ~/.cli-tweaks/memory/<project>/ altındaki MEMORY.md, topic dosyalarını ve dizin listesini; fork üzerinden session transcript'ini; her prompt'un origin'ini ve bir ana döngü tool'unun çalışıp çalışmadığını (prompt metnini ve tool girdisini hiç okumaz)
-    2. Çalıştırır: git rev-parse, session başına iki kere, projeyi adlandırmak için; ana döngü turu başına bir tool'suz $.model.fork
+    1. Okur:     HOME; ~/.cli-tweaks/memory/<project>/ altındaki MEMORY.md, topic dosyalarını ve dizin listesini; fork üzerinden session transcript'ini; her prompt'un origin'ini ve bir ana loop tool'unun çalışıp çalışmadığını (prompt metnini ve tool girdisini hiç okumaz)
+    2. Çalıştırır: git rev-parse, session başına iki kere, projeyi adlandırmak için; ana loop turn'ü başına bir tool'suz $.model.fork
     3. Gönderir: MEMORY.md dosyasını başlangıçta, resume'da, /clear ve compaction'da session context'i olarak; fork mesajını (yazma kuralları ve mevcut MEMORY.md) session'ın kendi API client'ına, session'ın transcript'i üzerine
     4. Saklar:   ~/.cli-tweaks/memory/<project>/ altında MEMORY.md, MEMORY.pre-migration.md, topic dosyalarını ve okunamayan son fork cevabını (memory-save.failed-reply.txt)
     5. Düşman girdi: fork'un cevabı güvenilmez metindir; yalnız belgelenmiş JSON biçimi uygulanır, topic dosya adları kontrol edilir ve sonuç bir yazmadan önce her kontrolü geçmek zorundadır
@@ -138,8 +138,8 @@ Reach L2, dosya yazar, git çalıştırır ve Claude'u sürer.
 - Fork'un tool'u yoktur. Yalnız transcript'i ve mevcut dosyayı bilir.
 - Session ortasında yüklenen bir mod (`/reload-plugins`, bir enable) memory'yi sonraki `/clear`, compaction ya da session'da yükler.
 - `claude plugin test` test engine'i `classic.SessionStart` olayını raise edemez. Yükleme, metninin unit test'leri ve canlı bir session kontrolü ile kapsanır.
-- Her ana döngü turu bir fork'a mal olur: cache okuması olarak transcript, input olarak mevcut dosya ve kurallar, output olarak cevap.
-- Başarısız bir kayıt tekrar denenmez. Sonraki tur yeniden kaydeder.
+- Her ana loop turn'ü bir fork'a mal olur: cache okuması olarak transcript, input olarak mevcut dosya ve kurallar, output olarak cevap.
+- Başarısız bir kayıt tekrar denenmez. Sonraki turn yeniden kaydeder.
 - Bir fork metinsiz dönebilir: konuşmanın ilk cevabından önce, bir API hatasında ya da bir abort ile kesildiğinde. Status line o zaman sebebi adlandırır.
 
 ## Geliştirme
