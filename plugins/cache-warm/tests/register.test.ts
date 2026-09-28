@@ -314,6 +314,17 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
+  test('a reload after pings alone takes the last ping as the last request, and the loop keeps its time', async ($, on) => {
+    // The last turn is two hours old; a ping 20 minutes ago kept the cache.
+    const kept = { kind: 'ping', read: 200_000, write: 0, usd: 0.05, at: START - 20 * MIN }
+    const w = world(on, [warm], { store: [['always', true], ['request:S1', START - 2 * HOUR], ['last:S1', kept]] })
+    w.live.tokens = 200_000
+    await $.session.start(session)
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 30m · last ping read 200k/)
+    await w.clock.advance(30 * MIN)
+    expect(w.forks).toBe(1)
+  })
+
   test('waits for the first reply when the engine has nothing to fork, and the next turn pings again', async ($, on) => {
     const w = world(on, [NOTHING_TO_FORK, warm])
     await $.session.start(session)

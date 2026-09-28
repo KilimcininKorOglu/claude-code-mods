@@ -441,14 +441,17 @@ async function stampRequest($: EngineInterface, s: State): Promise<void> {
 /**
  * The time of the last request of a conversation this module did not see: a reloaded module starts with
  * no request time, and `always` would wait for the first turn to arm its ping. Each turn's end keeps that
- * time in the store; only a session with none kept yet (one that ran an older version) reads the last
- * write of its transcript, which a reload's own line moves to the reload. Only a cache that is still warm
- * is taken, so a reload never pays for a cold ping the next message would pay anyway.
+ * time in the store, and each ping keeps its own read (`restore` put it in `s.lastRead`); the later of the
+ * two counts, because a session kept warm by pings alone has a last turn older than the cache it holds.
+ * Only a session with neither kept (one that ran an older version) reads the last write of its
+ * transcript, which a reload's own line moves to the reload. Only a cache that is still warm is taken, so
+ * a reload never pays for a cold ping the next message would pay anyway.
  */
 async function seedLastRequest($: EngineInterface, s: State, now: number): Promise<void> {
   const kept = await $.store.get(requestKey(s))
-  if (typeof kept !== 'number') return seedFromTranscript($, s, now)
-  if (now - kept < TTL_MS) s.lastRequestAt = kept
+  const latest = Math.max(typeof kept === 'number' ? kept : 0, s.lastRead?.at ?? 0)
+  if (latest === 0) return seedFromTranscript($, s, now)
+  if (now - latest < TTL_MS) s.lastRequestAt = latest
 }
 
 /**
