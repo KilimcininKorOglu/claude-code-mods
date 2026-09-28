@@ -6,7 +6,7 @@ Model bir component'e `t('checkout.total')` ekler; key hiçbir locale dosyasınd
 
 1. Mod Edit ve Write tool'larını hook'lar. Bir kaynak dosyada (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `.astro`, `.php`, `.py`, `.rb`, `.erb`, `.haml`, `.slim`) başarılı bir çağrıdan sonra edit'in eklediği çeviri çağrılarını okur: `new_string`'de olup `old_string`'de olmayanları, ya da bir Write'ın bütün çağrılarını.
 2. Okunan çağrılar, ilk argümanı tırnak içinde olan `t`, `$t`, `i18n.t`, `__`, `trans`, `trans_choice`, `@lang`, `_`, `gettext` ve `ngettext`'tir; `this.`, `vm.`, `i18n.`, `$i18n.`, `I18n.` ve `i18n.global.`'dan sonra gelenler de. Değişken bir argüman, bir template literal ve bir Rails lazy key'i (`t('.title')`) atlanır.
-3. Session dizininin şu alt dizinlerindeki locale dosyalarını okur; en fazla 4 seviye derine ve 200 dosyaya kadar iner, `node_modules`'ı ve 2 MB'ı aşan dosyaları atlar: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. Session dizini, session'ın başladığı dizindir ve başta bir kez okunur, çünkü bir Bash `cd`'si session'ın kendi dizinini değiştirir. Edit edilen dosya, session'ın başladığı git repository'sine göre adlandırılır; yani `apps/web`'de açılan bir session `apps/api`'deki bir dosyayı `apps/api/x.ts` diye yazar. Git repository'si dışında dosya session dizinine göre adlandırılır. Bu kök de session başında bir kez okunur.
+3. Session dizininin şu alt dizinlerindeki locale dosyalarını okur; en fazla 4 seviye derine ve 200 dosyaya kadar iner, `node_modules`'ı ve 2 MB'ı aşan dosyaları atlar: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. Session dizini, session'ın başladığı dizindir ve başta bir kez okunur, çünkü bir Bash `cd`'si session'ın kendi dizinini değiştirir. Düzenlenen dosyanın yolu, session'ın başladığı git repository'sinin köküne göre yazılır; yani `apps/web`'de açılan bir session `apps/api`'deki bir dosyayı `apps/api/x.ts` diye yazar. Git repository'si dışında yol session dizinine göre yazılır. Bu kök de session başında bir kez okunur.
 
    | Biçim | Örnek path | Key'ler |
    |---|---|---|
@@ -28,7 +28,7 @@ Model bir component'e `t('checkout.total')` ekler; key hiçbir locale dosyasınd
    Not ile satır ayrı kanallardır: model satırı, sen de notu hiç okumazsın.
 6. [sidebar](../sidebar) açıksa bu key'ler transcript yerine onun stream'ine bir kayıt olarak gider: önce dosya, sonra her key için bir satır. Key kırmızı, satır numarası soluk, `every locale` kırmızı, birkaç locale'den oluşan liste sarıdır. Transcript temiz kalır. Kayıt, yenileri onu pane'den itene kadar durur. Sidebar kapalıysa ya da kurulu değilse satır yukarıdaki gibi transcript'e düşer.
 
-7. Bulgu hiçbir zaman hatırlanmış bir cevap değildir. Tuttuğu key'ler bir iddiadır; her ölçüm kaynak dosyayı diskten yeniden okur ve artık çağrılmayan key'leri düşürür. Bu yüzden bulgu iki yoldan kapanır; ölçüm her Edit ve Write'tan sonra, her ana loop turn'ünün sonunda ve korunan bir git komutundan önce yapılır:
+7. Mod bulguyu bellekteki eski cevaba göre tutmaz. Bulgudaki key'ler yalnız bir iddiadır; her ölçüm kaynak dosyayı diskten yeniden okur ve artık çağrılmayan key'leri düşürür. Bu yüzden bulgu iki yoldan kapanır; ölçüm her Edit ve Write'tan sonra, her ana loop turn'ünün sonunda ve korunan bir git komutundan önce yapılır:
 
    - her locale key'leri kazanmıştır;
    - kod onları artık çağırmıyordur, çünkü edit metni silmiş, başka bir metinle değiştirmiş ya da başka bir dosyaya taşımıştır. Ortadan kalkan bir dosya da bulgusunu kapatır.
@@ -44,7 +44,7 @@ Model bir component'e `t('checkout.total')` ekler; key hiçbir locale dosyasınd
 
        i18n-watch: 1 file(s) still use translation keys the locale files lack: index.php (Unauthorized Access:42). Add the keys to every locale file, or take the calls out.
 
-   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız edit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu not olmasa model bulguyu yalnız edit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
 
 9. `deny` modunda bir dosya locale dosyalarında olmayan key'leri kullanmaya devam ettikçe mod `git commit`, `git push` ve `git merge`'ü de durdurur; `--dry-run`, `--help` ya da `-h` taşıyan bir komut durdurulmaz. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit açık dosyaların hiçbirini içermiyorsa geçmesine izin verir ve kaç tanesinin hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/i18n-watch mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz, ama bir git komutunda bulguları yine ölçer; böylece çözülmüş bir bulgu pane'de kalmaz.
 
@@ -82,9 +82,9 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 Reach L2: index'i okumak için git çalıştırır.
 
     1. Okur:     her Edit ve Write çağrısının metnini; Bash komut metnini; raporlanan her kaynak dosyayı yeniden; session dizini altındaki locale dizinlerini ve dosyalarını
-    2. Çalıştırır: session başlangıcında bir kere git rev-parse --show-toplevel, dosyaları repository köküne göre adlandırmak için; deny modunda guarded bir komutta git rev-parse --show-toplevel ve git diff --cached --name-only -z, commit'in hangi dosyaları tuttuğunu okumak için
+    2. Çalıştırır: session başlangıcında bir kere git rev-parse --show-toplevel, dosyaları repository köküne göre adlandırmak için; deny modunda korunan bir komutta git rev-parse --show-toplevel ve git diff --cached --name-only -z, commit'in hangi dosyaları tuttuğunu okumak için
     3. Gönderir: eksik key kullanan bir edit'ten sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; makineden hiçbir şey çıkmaz
-    4. Saklar:   $.store içinde on/off ayarını ve modu; locale key'leri bir tur boyunca bellekte yaşar
+    4. Saklar:   $.store içinde on/off ayarını ve modu; locale key'leri bir turn boyunca bellekte durur
     5. Düşman girdi: locale dosyaları yalnız veri olarak parse edilir (JSON.parse ve satır regex'leri), hiçbir zaman çalıştırılmaz; PHP dosyaları execute edilmez
 
 ## Sınırlar
