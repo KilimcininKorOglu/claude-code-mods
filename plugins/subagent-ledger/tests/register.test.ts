@@ -130,16 +130,16 @@ describe('subagent-ledger', () => {
     expect(limitOf('200')).toBe(200)
   })
 
-  test('the pane draws five rows and counts the rest, the total red at the limit and yellow from 80% of it', () => {
+  test('the pane draws three rows and counts the rest, the total red at the limit and yellow from 80% of it', () => {
     const runs = Array.from({ length: 7 }, (_, i): Run => ({ type: 'Explore', description: `${i}`, model: '', turns: 1, ms: 1000, tokens: (i + 1) * 50_000, split: NO_SPLIT, status: 'done' }))
-    const lines = sidebarLines(runs, 200)
-    expect(lines).toHaveLength(6)
+    const lines = sidebarLines(runs, 300)
+    expect(lines).toHaveLength(4)
     expect(totalKind(lines[0])).toBe('error')
-    // The fourth row spent exactly the limit, so its total is red too; the fifth is at 75%, under the yellow step.
-    expect(totalKind(lines[3])).toBe('error')
-    expect(totalKind(lines[4])).toBe(undefined)
-    expect(totalKind(sidebarLines([runAt(160_000, 'done')], 200)[0])).toBe('warn')
-    expect(lines[5]).toEqual({ text: '2 more · 150k', kind: 'dim' })
+    // The second row spent exactly the limit, so its total is red too; the third is past 80%, yellow.
+    expect(totalKind(lines[1])).toBe('error')
+    expect(totalKind(lines[2])).toBe('warn')
+    expect(totalKind(sidebarLines([runAt(150_000, 'done')], 200)[0])).toBe(undefined)
+    expect(lines[3]).toEqual({ text: '4 more · 500k', kind: 'dim' })
   })
 
   test('a row colours its status word, its model by family and nothing else', () => {

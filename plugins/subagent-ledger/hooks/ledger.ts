@@ -8,7 +8,7 @@ export const MIN_LIMIT_K = 1
 export const MAX_LIMIT_K = 10_000
 
 /** The pane draws this many subagents, the costliest first; the rest are counted. */
-export const ROWS = 5
+export const ROWS = 3
 
 /** Where a subagent stands: its loop runs, it answered, or its run ended without an answer. */
 export type Status = 'running' | 'done' | 'stopped'
@@ -151,7 +151,7 @@ export function rowLine(run: Run, limitK: number): Line {
 
 /**
  * The pane's lines: one row per subagent, the costliest first, each drawn by `rowLine`. The rows past
- * the fifth are one faint line, so a fan-out of twenty agents still holds six rows.
+ * the third are one faint line, so a fan-out of twenty agents still holds four rows.
  */
 export function sidebarLines(runs: readonly Run[], limitK: number): Line[] {
   const order = ranked(runs)
