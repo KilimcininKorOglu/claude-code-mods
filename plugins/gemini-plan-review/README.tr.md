@@ -5,18 +5,18 @@ Plan modunda model bir plan yazar, sen de onaylarsın. İstediğin bir adımı a
 ## Ne yapar
 
 1. Mod ExitPlanMode tool'unu hook'lar. Bir `tool.call` hook'u izin sorusundan önce çalışır; bu yüzden geri gönderilen bir plan onay penceresini hiç açmaz.
-2. Plan dosyasını diskten okur; pencerenin gösterdiği metin budur. Dosya, çağrının `planFilePath`'idir; yoksa engine'in plan modu notunun adını verdiği dosyadır (`## Plan File Info: ... create your plan at /.../x.md`). Çağrının kendi `plan` alanı yalnız hiçbir path bilinmiyorsa kullanılır. Çünkü 2.1.278 üzerinde yeni bir plan dosyasından sonraki ilk çağrıda ne `plan` ne `planFilePath` vardı, daha sonraki bir çağrı da planın modelin son düzenlemesinden önceki hâlini taşıyordu (ölçüldü).
+2. Plan dosyasını diskten okur; pencerenin gösterdiği metin budur. Dosya, çağrının `planFilePath`'idir; yoksa engine'in plan modu notunun adını verdiği dosyadır (`## Plan File Info: ... create your plan at /.../x.md`). Çağrının kendi `plan` alanı yalnız hiçbir path bilinmiyorsa kullanılır, çünkü 2.1.278 üzerinde yeni bir plan dosyasından sonraki ilk çağrıda ne `plan` ne `planFilePath` vardı, daha sonraki bir çağrı da planın modelin son düzenlemesinden önceki hâlini taşıyordu (ölçüldü).
 3. Planı ve konuşmayı schema'lı tek bir `generateContent` isteğiyle gönderir. Cevap bir bulgu listesidir; her bulgu `blocker` ya da `minor`'dır ve bir mesaj taşır. Plan her zaman bütün gider. Konuşma `maxInputChars`'ı (varsayılan 2.000.000 karakter) aşarsa en uzun tool çıktıları ortak bir uzunluğa kısaltılır; her biri baş ve son kısmını korur. İsteği gemini-core kurar: `gemini-plan-review` için tuttuğu key, model ve thinking seviyesiyle. Cevabı da o okur.
 4. `blocker` şunlardan biridir: hedefin gerektirdiği ama planın atladığı bir adım, konuşmanın ya da orada görünen kodun çürüttüğü bir varsayım, ulaşılıp ulaşılmadığı kontrol edilemeyen bir hedef, ya da senin istediğine aykırı bir karar. Geri kalan her şey `minor`'dır.
 5. Karar:
-   - 1. ya da 2. turda bir blocker: plan geri döner. Model her blocker'ı ve minor notları okur; talimat planı düzeltmesi, ya da yanlış bir bulguyu plan dosyasında `## Gemini plan review` başlığı altında cevaplamasıdır. Gemini sonraki turda o bölümü okur ve konuşmanın desteklediği bir cevabı kabul etmesi söylenir;
+   - 1. ya da 2. turda bir blocker: plan geri döner. Model her blocker'ı ve minor notları okur; talimat planı düzeltmesi, ya da yanlış bir bulguyu plan dosyasında `## Gemini plan review` başlığı altında cevaplamasıdır. Gemini sonraki turda o bölümü okur; ona konuşmanın desteklediği bir cevabı kabul etmesi söylenir;
    - 2 turdan sonra hâlâ blocker: plan sana ulaşır. Bir transcript satırı açık blocker'ları sayar, model de onları senin cevabından sonra okur;
    - yalnız minor bulgular ya da hiç bulgu yok: plan sana ulaşır; model senin cevabından sonra notları, ya da incelemenin hiçbir şey bulmadığını söyleyen tek satırı okur.
 6. Senin gönderdiğin bir prompt (composer'dan, bridge'den ya da SDK'dan) sonraki plana 2 turunu yeniden verir; onay penceresine ulaşan bir plan da öyle. Bir background bildirimi ya da bir peer mesajı vermez.
 7. İnceleme cevap veremezse plan sana ulaşır, bir transcript satırı nedenini söyler ve model de nedeni okur. Nedenler: key yok, bir HTTP hatası, bozuk ya da çıktı sınırında kesilmiş bir cevap, okunamayan bir plan dosyası, ya da tool çıktıları olmadan da sınırı aşan bir konuşma.
-8. 503'ten sonra gemini-core mod'a 1 sn, 2 sn ve 3 sn sonra yeniden sordurur; toplam en fazla dört deneme olur. Beklemesi 50 sn'yi aşacak bir deneme başlamaz. 429'dan ya da bir key hatasından sonra gemini-core, elinde başka key varsa isteği onunla verir.
+8. 503'ten sonra mod, gemini-core'un bildirdiği gibi 1 sn, 2 sn ve 3 sn sonra yeniden sorar; toplam en fazla dört deneme olur. Beklemesi 50 sn'yi aşacak bir deneme başlamaz. 429'dan ya da bir key hatasından sonra gemini-core, elinde başka bir key varsa isteği onunla yeniden gönderir.
 
-2.1.278 üzerinde `gemini-3.5-flash` ile yapılan canlı denemede istek, birim testiyle birlikte bir `--json` flag'iydi; plan ise `1. Add a --json flag to /task-poke. 2. Done.` idi. 1. tur planı `The plan does not include the requested unit test for the --json flag` ile geri gönderdi. Model test adımını ekledi ve ikinci çağrı onay penceresini açtı. Free bir key'de `gemini-3.8-flash` ile aynı inceleme yalnız 503 aldı ve plan onay penceresine nedeniyle birlikte ulaştı.
+2.1.278 üzerinde `gemini-3.5-flash` ile yapılan canlı denemede istenen şey, birim testiyle birlikte bir `--json` flag'iydi; plan ise `1. Add a --json flag to /task-poke. 2. Done.` idi. 1. tur planı `The plan does not include the requested unit test for the --json flag` ile geri gönderdi. Model test adımını ekledi ve ikinci çağrı onay penceresini açtı. Free bir key'de `gemini-3.8-flash` ile aynı inceleme yalnız 503 aldı ve plan onay penceresine nedeniyle birlikte ulaştı.
 
 ## Ne gösterir
 
@@ -84,7 +84,7 @@ Reach L3: network'e çıkar.
     2. Çalıştırır: hiçbir şey
     3. Gönderir: planı ve konuşmayı, ExitPlanMode çağrısı başına bir istek (503 sonrası en fazla dört, 429 ya da key hatası sonrası ek key başına bir tane daha), gemini-core'un kurduğu URL'ye (generativelanguage.googleapis.com), key x-goog-api-key header'ında, hiçbir zaman URL'de değil
     4. Saklar:   $.store içinde on/off ayarını; tur sayısı, plan dosyası path'i ve son inceleme satırı bellekte yaşar
-    5. Düşman girdi: bir plan ya da bir konuşma Gemini'nin bulgularını yönlendirebilir, yani zayıf bir plan geçebilir ya da sağlam bir plan geri dönebilir; model yanlış bir bulguyu planda cevaplayabilir ve 2 turdan sonra Gemini ne derse desin plan size ulaşır
+    5. Düşman girdi: bir plan ya da bir konuşma Gemini'nin bulgularını yönlendirebilir, yani zayıf bir plan geçebilir ya da sağlam bir plan geri dönebilir; model yanlış bir bulguyu planda cevaplayabilir ve 2 turdan sonra Gemini ne derse desin plan sana ulaşır
 
 ## Sınırlar
 
