@@ -1,30 +1,30 @@
 # gemini-plan-review
 
-A Claude Code Mod that has Gemini review every plan before it reaches you. When the model calls ExitPlanMode, Gemini reads the plan and the conversation before the approval dialog opens. A plan with a blocking finding goes back to the model, at most twice; you see the plan once it passes.
+In plan mode the model writes a plan and you approve it. A plan that leaves out a step you asked for, or rests on an assumption the code contradicts, is easy to approve without noticing. This mod has Gemini review every plan before it reaches you. When the model calls ExitPlanMode, Gemini reads the plan and the conversation before the approval dialog opens. A plan with a blocking finding goes back to the model, at most twice; you see the plan once it passes.
 
 ## What it does
 
 1. The mod hooks the ExitPlanMode tool. A `tool.call` hook runs before the permission prompt, so a plan sent back never opens the approval dialog.
 2. It reads the plan file from disk, which is the text the dialog shows. The file is the call's `planFilePath`, else the one the engine's plan mode note names (`## Plan File Info: ... create your plan at /.../x.md`). The call's own `plan` field is used only when no path is known, because on 2.1.278 the first call after a new plan file carried neither `plan` nor `planFilePath`, and a later call carried the plan as it was before the model's last edit (measured).
-3. It sends the plan and the conversation in one `generateContent` request with a schema: a list of findings, each `blocker` or `minor`, with a message. gemini-core builds the request with the key, the model and the thinking level it holds for `gemini-plan-review`, and reads the answer.
+3. It sends the plan and the conversation in one `generateContent` request with a schema: a list of findings, each `blocker` or `minor`, with a message. The plan always goes whole. When the conversation is over `maxInputChars` (2,000,000 characters by default), its longest tool outputs are cut to one common length, each keeping its head and tail. gemini-core builds the request with the key, the model and the thinking level it holds for `gemini-plan-review`, and reads the answer.
 4. `blocker` means a step the goal needs that the plan leaves out, an assumption the conversation or the code shown in it contradicts, a goal with no way to check that it was reached, or a decision against what you asked for. Everything else is `minor`.
 5. The verdict:
    - a blocker, in round 1 or 2: the plan goes back. The model reads each blocker and the minor notes, with the instruction to fix the plan, or to answer a wrong finding in the plan file under a `## Gemini plan review` heading. Gemini reads that section in the next round and is told to accept an answer the conversation supports;
    - a blocker after 2 rounds: the plan reaches you. A transcript line lists the open blockers, and the model reads them after your answer;
    - only minor findings, or none: the plan reaches you, and the model reads the notes, or one line that the review found nothing, after your answer.
-6. A prompt you send gives the next plan its 2 rounds again, and so does a plan that reached the dialog. A background notification or a peer message does not.
-7. When the review cannot answer (no key, an HTTP error, a malformed answer, an unreadable plan file), the plan reaches you, a transcript line says why, and the model reads the reason.
-8. After a 503, gemini-core has the mod ask again after 1 s, 2 s and 3 s, at most four times, and no attempt starts once 50 s have passed.
+6. A prompt you send (from the composer, the bridge or the SDK) gives the next plan its 2 rounds again, and so does a plan that reached the dialog. A background notification or a peer message does not.
+7. When the review cannot answer (no key, an HTTP error, a malformed answer or one cut at the output limit, an unreadable plan file, a conversation over the limit even without tool output), the plan reaches you, a transcript line says why, and the model reads the reason.
+8. After a 503, gemini-core has the mod ask again after 1 s, 2 s and 3 s, at most four attempts in all, and no attempt starts whose wait would end past 50 s. After a 429 or a key error, gemini-core hands over the request with its next key, when it holds one.
 
 In a live check on 2.1.278 with `gemini-3.5-flash`, the request was a `--json` flag with a unit test and the plan was `1. Add a --json flag to /task-poke. 2. Done.`. Round 1 sent it back with `The plan does not include the requested unit test for the --json flag`. The model added the test step, and the second call opened the approval dialog. With `gemini-3.8-flash` on a free key, the same review got only 503 answers and the plan reached the dialog with the reason.
 
 ## What it shows
 
-A toast after each review, and the last one in `/gemini-plan-review`:
+After each review a toast stays for 10 seconds, and `/gemini-plan-review` shows the last one:
 
     gemini-plan-review: plan reviewed · 1 blocker, 0 minor · 621 in, 1k out · sent to Gemini free tier
 
-A transcript line when a plan goes back, passes with open blockers, or is not reviewed:
+The `sent to Gemini free tier` part appears only on the free tier. A transcript line appears when a plan goes back, passes with open blockers, or is not reviewed:
 
     gemini-plan-review: plan sent back (round 1 of 2): plan reviewed · 1 blocker, 0 minor · 621 in, 1k out
     gemini-plan-review: plan reached you without a review: Gemini HTTP 503: This model is currently experiencing high demand. ...
@@ -35,9 +35,9 @@ A transcript line when a plan goes back, passes with open blockers, or is not re
     /gemini-plan-review on | off     off: plans reach you without a review; on is refused while gemini-core has no key
     /gemini-plan-review reset        off again, the default
 
-The review is off after an install, so nothing is sent to Gemini before you set a key and turn it on.
+The review is off after an install, so nothing goes to Gemini before you set a key and turn it on.
 
-The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level are gemini-core's:
+The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level belong to gemini-core:
 
     /gemini-core model plan-review gemini-3.5-flash
     /gemini-core thinking plan-review low
@@ -52,7 +52,7 @@ Every review sends the plan and the conversation: your prompts, the commands the
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-plan-review@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -67,11 +67,13 @@ It depends on `gemini-core`, which `claude plugin install` adds. Function hooks 
 
 | Option | Default | What it sets |
 |---|---|---|
-| `maxInputChars` | `2000000` | Characters of conversation sent at most |
+| `maxInputChars` | `2000000` | Characters of conversation sent at most, 10,000 to 4,000,000; the plan always goes whole |
+
+A value outside the range, or one that is not a whole number, falls back to the default.
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=gemini-plan-review}, prompt.submit, prompt.attachment{type=plan_mode}, tool.call{tool=ExitPlanMode}
     ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.fs.read (via planOf), $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via review, runCommand, storeEnabled), $.http.fetch (via askGemini), $.session.messages (via review), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.ui.log (via notReviewed, verdictOf), $.ui.toast (via verdictOf)
@@ -95,7 +97,7 @@ Reach L3, reaches the network.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
