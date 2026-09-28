@@ -41,10 +41,11 @@ type World = {
   spawned: string[]
   tasks: { id: string; status: string; subject: string }[]
   toolFails: boolean
+  tools: string[]
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -73,6 +74,8 @@ function world(on: On): World {
     return { value: { exitCode: 0, stdout, stderr: '' } }
   })
   on('session.id', () => ({ value: 'sess-1' }))
+  on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
+  on('tool.describe', (_, e) => ({ description: e.description }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { percent: w.percent }, rateLimits: [] } as never }))
   on('prompt.submit', (_, e) => ({ text: e.text, context: e.context }))
   on('prompt.section', (_, e) => ({ text: e.text }))
@@ -282,5 +285,60 @@ describe('memory reminders', () => {
     w.toolFails = true
     await $.tool.call({ tool: 'Edit', file_path: '/src/my app/x.ts', old_string: 'a', new_string: 'b' } as never)
     expect(bodiesOf(w, '/memory/verify-paths')).toHaveLength(1)
+  })
+})
+
+const TOOL = (name: string) => `mcp__sage-memory__${name}`
+
+describe('memory tools', () => {
+  withSidebar('declares the 15 tools when on, and at the first turn after another window turned the mod on', async ($, on) => {
+    const w = readyWorld(on)
+    w.store.set('enabled', false)
+    await $.session.start(START)
+    expect(w.tools).toEqual([])
+    w.store.set('enabled', true)
+    await $.turn.start({ text: 'hi', turnId: 't1' } as never)
+    expect(w.tools).toHaveLength(15)
+    expect(w.tools.slice(0, 2)).toEqual(['remember', 'search'])
+  })
+
+  withSidebar('remember and search are listed at once, the rest wait behind ToolSearch, and none asks for approval', async ($, on) => {
+    readyWorld(on)
+    await $.session.start(START)
+    const described = async (name: string) => (await $.tool.describe({ tool: TOOL(name), description: 'd', provider: { kind: 'plugin', name: 'sage-memory' } } as never)).isDeferred
+    expect(await described('remember')).toBe(false)
+    expect(await described('update')).toBe(undefined)
+    expect((await $.tool.check({ tool: TOOL('delete'), input: {} } as never)).decision).toBe('allow')
+  })
+
+  withSidebar('remember writes through the daemon with this session as its source, a session memory owned by it', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: PNPM, outcome: 'added' })
+    await $.session.start(START)
+    const r = await $.tool.call({ tool: TOOL('remember'), text: PNPM.text, scope: 'session', tags: ['build'] } as never)
+    expect(String(r.result)).toContain('"outcome": "added"')
+    expect(bodiesOf(w, '/memory/remember')[0]).toMatchObject({
+      sessionId: 'sess-1',
+      input: { text: PNPM.text, scope: 'session', tags: ['build'], ownerSessionId: 'sess-1', sources: [{ type: 'session', sessionId: 'sess-1' }] },
+    })
+  })
+
+  withSidebar('a delete without force and a two-letter forget are refused before the daemon is asked', async ($, on) => {
+    const w = readyWorld(on)
+    await $.session.start(START)
+    const deleted = await $.tool.call({ tool: TOOL('delete'), id: 'm1' } as never)
+    expect(deleted).toMatchObject({ isError: true })
+    expect(String(deleted.result)).toMatch(/^force: true is required to delete a memory/)
+    const forgot = await $.tool.call({ tool: TOOL('forget'), query: 'ab', force: true } as never)
+    expect(String(forgot.result)).toMatch(/^query must be at least 3 characters/)
+    expect(bodiesOf(w, '/memory/delete').length + bodiesOf(w, '/memory/forget').length).toBe(0)
+  })
+
+  withSidebar('a tool called after another window turned the mod off says so', async ($, on) => {
+    const w = readyWorld(on)
+    await $.session.start(START)
+    w.store.set('enabled', false)
+    const r = await $.tool.call({ tool: TOOL('search'), query: 'pnpm' } as never)
+    expect(r).toMatchObject({ isError: true, result: 'sage-memory is off; the person turns it on with /sage-memory on.' })
   })
 })

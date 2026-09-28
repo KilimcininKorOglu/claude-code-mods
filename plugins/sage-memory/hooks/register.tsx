@@ -22,6 +22,7 @@ import {
   usedBy,
   type ToolCall,
 } from './remind.ts'
+import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
 import type { Memory, Ranking, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol.ts'
@@ -60,6 +61,8 @@ type State = {
   loops: Map<string, Loop>
   /** The subjects of the tasks in progress, read once per main-loop turn. */
   tasks?: string[]
+  /** Whether this session declared the memory tools; a declared tool cannot be taken back. */
+  declared: boolean
 }
 
 type Loop = { visible: string; reminded: Memory[] }
@@ -404,6 +407,34 @@ function succeeded(result: object): boolean {
   return !('deny' in result && result.deny !== undefined) && !('isError' in result && result.isError === true)
 }
 
+/**
+ * Declares the memory tools once the mod is on, at a session's start or at the first turn after
+ * another window turned it on. A declared tool stays for the session; while the mod is off it answers
+ * that it is off.
+ */
+async function declareTools($: EngineInterface, state: State): Promise<void> {
+  if (state.declared || !state.enabled) return
+  state.declared = true
+  for (const tool of TOOLS) await $.tool.register({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema })
+}
+
+/** One memory tool call, answered with the daemon's value or the reason it failed. */
+async function serveTool($: EngineInterface, state: State, name: string, input: Input): Promise<{ result: string; isError?: true }> {
+  await follow($, state)
+  if (!state.enabled) return { result: OFF_TEXT, isError: true }
+  await state.connecting
+  if (state.link.state !== 'ready') return { result: `the sage-memory daemon is not ready: ${statusText(state.enabled, state.link, state.project?.name ?? '')}`, isError: true }
+  try {
+    const call = callOf(name, input, await $.session.id())
+    const value = await ask<unknown>($, state, call.path, { ...call.body, sessionId: await $.session.id() })
+    return { result: resultText(value) }
+  } catch (err) {
+    return { result: errorText(err), isError: true }
+  }
+}
+
+const LISTED = new Set(TOOLS.filter(tool => tool.listed).map(tool => `mcp__sage-memory__${tool.name}`))
+
 /** A hook result with one more context text, or unchanged when there is none. */
 function withContext<R extends { additionalContext?: readonly string[] }>(r: R, text: string | undefined): R {
   return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
@@ -425,16 +456,28 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map() }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'sage-memory', description: 'Project memory recalled when it is relevant: state, on, off, setup (sage-memory)', argumentHint: '[on | off | setup]' })
     state.guidance = await readEnabled($, state)
+    await declareTools($, state)
     if (state.enabled) await connect($, state)
     else await show($, state)
     return r
   })
+
+  // remember and search are listed at once; the other tools wait behind ToolSearch.
+  on('tool.describe', { tool: /^mcp__sage-memory__/ }, async (_, e, next) => {
+    const r = await next(e)
+    return LISTED.has(e.tool) ? { ...r, isDeferred: false } : r
+  })
+
+  // No memory tool asks for approval: the user chose that, and each writes only to the mod's own stores.
+  on('tool.check', { tool: /^mcp__sage-memory__/ }, async () => ({ decision: 'allow' as const }))
+
+  on('tool.call', { tool: /^mcp__sage-memory__/ }, async ($, e) => serveTool($, state, toolName(e.tool) ?? '', e as unknown as Input))
 
   // The note is fixed at a session's start or /clear, so a change of the setting leaves the prompt the cache holds alone.
   on('prompt.section', { name: 'env_info_simple' }, async (_, e, next) => {
@@ -520,6 +563,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     state.tasks = undefined
     await follow($, state)
+    await declareTools($, state)
     return next(e)
   })
 }
