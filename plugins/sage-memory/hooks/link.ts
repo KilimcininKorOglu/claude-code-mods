@@ -90,3 +90,11 @@ export function setupText(job: SetupJob): string {
   if (job.state === 'failed') return `setup failed at ${job.step}: ${job.error}`
   return 'setup has not run'
 }
+
+/** What this session did with the memories: reminded, used in an answer, added. */
+export type SessionCounts = { reminded: number; used: number; added: number }
+
+/** The sidebar's second line, while the daemon answers. */
+export function countsLine(counts: SessionCounts): Line {
+  return { text: `this session: reminded ${counts.reminded} · used ${counts.used} · added ${counts.added}`, kind: 'dim' }
+}

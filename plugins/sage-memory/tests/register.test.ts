@@ -130,7 +130,7 @@ describe('sage-memory', () => {
   withSidebar('starts the daemon, asks it with the token over the socket, and shows it ready', async ($, on) => {
     const w = world(on)
     await $.session.start(START)
-    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings off · /sage-memory setup')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings off · /sage-memory setup / this session: reminded 0 · used 0 · added 0')
     expect(w.argvs.find(a => a.includes('--dir'))?.slice(-2)).toEqual(['--dir', '/Users/k/.claude/sage-memory'])
     const status = w.fetches[0]
     if (status === undefined) throw new Error('no fetch reached the daemon')
@@ -178,7 +178,7 @@ describe('sage-memory', () => {
     w.routes.set('/embed/status', { embedding: { state: 'ready', modelId: 'paraphrase-multilingual', dims: 384 }, setup: { state: 'done', indexed: 3, startedAt: '', finishedAt: '' } })
     await w.clock.advance(2000)
     expect(w.logs).toContain('setup done: 3 memories embedded')
-    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings paraphrase-multilingual')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings paraphrase-multilingual / this session: reminded 0 · used 0 · added 0')
   })
 
   withSidebar('a session end asks for the automatic hygiene run', async ($, on) => {
@@ -233,6 +233,7 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/remind/prompt')[0]).toMatchObject({ sessionId: 'sess-1', loop: 'main', query: 'which package manager do we use here?' })
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'main', trigger: 'prompt', ids: ['m1'] })
     expect(w.lines.at(-1)).toBe('reminded (prompt): Install packages with pnpm, never with')
+    expect(w.lines.at(-2)).toBe('daemon ready · my app · embeddings off · /sage-memory setup / this session: reminded 1 · used 0 · added 0')
   })
 
   withSidebar('a slash command and a turned-off mod ask the daemon nothing', async ($, on) => {

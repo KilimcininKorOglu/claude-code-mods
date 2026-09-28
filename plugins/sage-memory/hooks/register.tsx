@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { launchOf, NODE_PROBE, nodeProblem, setupText, stateLine, statusText, tokenOf, valueOf, type Line, type LinkView } from './link.ts'
+import { countsLine, launchOf, NODE_PROBE, nodeProblem, setupText, stateLine, statusText, tokenOf, valueOf, type Line, type LinkView, type SessionCounts } from './link.ts'
 import { hexOf, keySource, projectKey, projectNameFrom } from './project.ts'
 import {
   alwaysBlock,
@@ -151,6 +151,8 @@ type State = {
   daily?: { cancel: () => void }
   /** What the memory manager pane shows. */
   pane: PaneState
+  /** This session's reminded, used and added memories, shown under the daemon line. */
+  counts: SessionCounts
 }
 
 type Loop = { visible: string; reminded: Memory[] }
@@ -179,20 +181,21 @@ async function within<T>($: EngineInterface, ms: number, what: string, work: Pro
 }
 
 /** The sidebar section, or the status line while the sidebar does not take it. */
-async function toPerson($: EngineInterface, line: Line): Promise<void> {
+async function toPerson($: EngineInterface, lines: Line[]): Promise<void> {
   try {
-    if (await $.sidebar.set({ ...SECTION, title: 'memory', lines: [line], buttons: [{ label: 'manage', command: 'sage-memory', args: 'pane' }], until: 'session', order: 23 })) {
+    if (await $.sidebar.set({ ...SECTION, title: 'memory', lines, buttons: [{ label: 'manage', command: 'sage-memory', args: 'pane' }], until: 'session', order: 23 })) {
       $.ui.status(undefined)
       return
     }
   } catch {
     // The sidebar mod is not installed; the status line carries the state.
   }
-  $.ui.status(line.text)
+  $.ui.status(lines[0]?.text)
 }
 
 async function show($: EngineInterface, state: State): Promise<void> {
-  await toPerson($, stateLine(state.link, state.project?.name ?? ''))
+  const first = stateLine(state.link, state.project?.name ?? '')
+  await toPerson($, state.link.state === 'ready' ? [first, countsLine(state.counts)] : [first])
 }
 
 async function git($: EngineInterface, args: string[]): Promise<string> {
@@ -636,7 +639,9 @@ async function record($: EngineInterface, state: State, loopKey: string, trigger
   const loop = loopOf(state, loopKey)
   loop.visible = seen(loop.visible, block.text)
   loop.reminded.push(...block.sent.filter(isTracked))
+  state.counts.reminded += block.sent.length
   await ask($, state, '/memory/reminded', { sessionId: await $.session.id(), loop: loopKey, trigger, ids: block.sent.map(memory => memory.id) })
+  await show($, state)
   await toStream($, 'reminder', { text: reminderLine(trigger, block.sent), kind: 'dim' })
 }
 
@@ -707,6 +712,8 @@ async function countUse($: EngineInterface, state: State, loopKey: string, answe
   const used = usedBy(answer, loop.reminded)
   if (used.length === 0) return
   loop.reminded = loop.reminded.filter(memory => !used.includes(memory))
+  state.counts.used += used.length
+  await show($, state)
   await ask($, state, '/memory/used', { sessionId: await $.session.id(), source: 'assistant_reference', ids: used.map(memory => memory.id) })
 }
 
@@ -807,7 +814,11 @@ async function topOf($: EngineInterface, state: State, scope: 'project' | 'user'
 async function writeOne($: EngineInterface, state: State, input: RememberInput): Promise<boolean> {
   try {
     const result = await ask<RememberResult>($, state, '/memory/remember', { input })
-    if (result.outcome === 'added') await toStream($, 'consolidator', { text: addedLine(result.memory), kind: 'ok' })
+    if (result.outcome === 'added') {
+      state.counts.added += 1
+      await show($, state)
+      await toStream($, 'consolidator', { text: addedLine(result.memory), kind: 'ok' })
+    }
     return true
   } catch (err) {
     await toStream($, 'error', { text: `the consolidator's memory was not written: ${errorText(err)}`, kind: 'error' })
@@ -1260,7 +1271,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, captured: new Map(), pane: emptyPane() }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, captured: new Map(), pane: emptyPane(), counts: { reminded: 0, used: 0, added: 0 } }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
