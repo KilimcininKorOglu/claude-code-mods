@@ -45,7 +45,7 @@ The tool call waits for the probe and answers the report. You run it with the co
 
     /probe-runner [--model <model>] <plugin>[,<plugin>...] <step> ;; <step> ;; ...
 
-The command answers `started` at once; the report reaches the model through `/probe-runner:send` when the probe ends, as its own prompt.
+The command answers `started` at once; the report reaches the model through `/probe-runner:send` when the probe ends, as its own prompt. When the engine refuses that command, one line says so and the report goes as a plugin prompt. A probe that fails answers its exit code and its error text instead of a report.
 
 A plugin is a name under the session's repository `plugins/` directory, or a path (absolute, `~/...`, or relative to the session's directory). A plugin without `.claude-plugin/plugin.json` is refused before anything runs. The model is `sonnet` unless named.
 
@@ -68,10 +68,12 @@ Function hooks are early access. Start Claude Code with `CLAUDE_CODE_ENABLE_FUNC
 
 ## What it can reach
 
-Validated on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, tool.describe{tool=/"^mcp__probe-runner__probe$"/}, tool.call{tool=/"^mcp__probe-runner__probe$"/}, command.run{command=probe-runner}
     ❯ ./register.ts calls: $.clock.after (via runInBackground), $.command.register, $.command.run (via runInBackground), $.env.get (via pluginDirs), $.fs.exists (via pluginDirs), $.process.run (via runProbe), $.prompt.submit (via runInBackground), $.session.cwd (via pluginDirs), $.session.repo (via pluginDirs), $.tool.register, $.ui.log (via runInBackground)
+    ❯ ./register.ts env writes: nothing
+    ❯ ./register.ts env reads: HOME
 
 Reach L3: the probe session talks to the Claude API.
 
