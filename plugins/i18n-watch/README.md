@@ -1,12 +1,12 @@
 # i18n-watch
 
-A Claude Code Mod that tells the model when an edit uses translation keys that one or more locale files lack. The note comes with the Edit's result, so the model adds the keys in the same turn. By default nothing is stopped; in `deny` mode a commit, a push and a merge stop while a key is missing.
+The model adds `t('checkout.total')` to a component, and the key exists in no locale file, or in English only. The page then shows the raw key, or English on the Turkish page, and nobody notices until a user does. This mod tells the model when an edit uses translation keys that one or more locale files lack. The note comes with the Edit's result, so the model adds the keys in the same turn. By default nothing is stopped; in `deny` mode a commit, a push and a merge stop while a key is missing.
 
 ## What it does
 
 1. The mod hooks the Edit and Write tools. After a successful call on a source file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `.astro`, `.php`, `.py`, `.rb`, `.erb`, `.haml`, `.slim`), it reads the translation calls the edit added: those in `new_string` that `old_string` does not have, or every call of a Write.
 2. The calls read are `t`, `$t`, `i18n.t`, `__`, `trans`, `trans_choice`, `@lang`, `_`, `gettext` and `ngettext` with a quoted first argument, also after `this.`, `vm.`, `i18n.`, `$i18n.`, `I18n.` and `i18n.global.`. A variable argument, a template literal and a Rails lazy key (`t('.title')`) are skipped.
-3. It reads the locale files under these directories of the session directory, at most 4 levels deep and 200 files: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. The session directory is the one the session started in, read once at its start, because a Bash `cd` moves the session's own directory. The edited file is named against the git repository the session started in, so a session opened in `apps/web` names a file of `apps/api` as `apps/api/x.ts`. Outside a git repository the file is named against the session directory. That root is read once at the session's start too.
+3. It reads the locale files under these directories of the session directory, at most 4 levels deep and 200 files, skipping `node_modules` and any file over 2 MB: `locales`, `lang`, `i18n`, `translations`, `locale`, `config/locales`, `resources/lang`, `src/locales`, `src/i18n`, `public/locales`. The session directory is the one the session started in, read once at its start, because a Bash `cd` moves the session's own directory. The edited file is named against the git repository the session started in, so a session opened in `apps/web` names a file of `apps/api` as `apps/api/x.ts`. Outside a git repository the file is named against the session directory. That root is read once at the session's start too.
 
    | Format | Example path | Keys |
    |---|---|---|
@@ -20,20 +20,20 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
 
        i18n-watch: this edit uses translation keys the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale). Add them to each locale file.
 
-   At most 10 keys are named, the rest counted.
-5. The same moment writes one line to the transcript, so you see what the model was told. The line holds the file and its keys, without the instruction. The file is named because the model saw the edit and you did not:
+   At most 10 keys are named, the rest counted. Only the keys this edit added are reported; a key reported before stays in the finding without being said again.
+5. At the same moment one line reaches the transcript, so you see what the model was told. The line holds the file and its keys, without the instruction. The file is named because the model saw the edit and you did not:
 
        i18n-watch: keys src/Cart.vue uses that the locale files lack: checkout.total:42 (missing in tr, de) · checkout.vat:58 (missing in every locale)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those keys go there instead, the file first and then one line per key (the closing entry reads the same way), as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. While the [sidebar](../sidebar) is open, those keys go there instead, as an entry in its stream: the file first, then one line per key, with the key red, its line number faint, `every locale` red and a list of some locales yellow. The transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. A finding is never a remembered answer. The keys it holds are a claim, and every measure reads the source file from disk again and drops the keys it no longer calls. So a finding closes two ways, and both are measured after each Edit and Write and again before a guarded git command:
+7. A finding is never a remembered answer. The keys it holds are a claim, and every measure reads the source file from disk again and drops the keys it no longer calls. So a finding closes two ways, measured after each Edit and Write, at the end of each main-loop turn, and before a guarded git command:
 
    - every locale gained the keys;
    - the code stopped calling them, because the edit deleted the string, replaced it with another one or moved it to another file. A file that is gone closes its finding too.
 
-   The entry is cleared and a new one says which of the two it was:
+   The entry is cleared and a green one says which of the two it was:
 
        i18n-watch: every locale now has the keys src/Cart.vue lacked: checkout.total · checkout.vat
        i18n-watch: index.php no longer uses: Unauthorized Access
@@ -46,9 +46,9 @@ A Claude Code Mod that tells the model when an edit uses translation keys that o
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the edit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a file still uses keys the locale files lack. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`) and lets the commit run when it holds none of the open files, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only the person turns the gate off with `/i18n-watch mode note`. `note` mode is the default and stops nothing, but it measures the findings at a git command all the same, so a settled one does not stay in the pane.
+9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a file still uses keys the locale files lack; a command with `--dry-run`, `--help` or `-h` is not stopped. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only -z`) and lets the commit run when it holds none of the open files, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every finding stands there. There is no bypass; only you turn the gate off, with `/i18n-watch mode note`. `note` mode is the default and stops nothing, but it measures the findings at a git command all the same, so a settled one does not stay in the pane.
 
-The locale files are read at the first edit of a turn that adds a key, and again after an Edit or Write of a locale file. A project without these directories gets nothing. A locale file that cannot be read or parsed is skipped and logged once per session.
+The locale files are read at the first edit of a turn that needs them, and again after an Edit or Write of a locale file. A project without these directories gets nothing. A locale file that cannot be read or parsed is skipped and logged once per session.
 
 In the live check the model added `t('cart.total')` to a file of a project with `locales/en.json` and `locales/tr.json`, read the note after the Edit, and quoted it word for word.
 
@@ -64,7 +64,7 @@ In the live check the model added `t('cart.total')` to a file of a project with 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install i18n-watch@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -82,7 +82,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.283:
 Reach L2, it runs git to read the index.
 
     1. Reads:    the text of each Edit and Write call; the Bash command text; each reported source file again; the locale directories under the session directory and their files
-    2. Runs:     git rev-parse --show-toplevel once at the session's start, to name files against the repository root; git rev-parse --show-toplevel and git diff --cached --name-only, at a guarded command in deny mode, to read which files the commit holds
+    2. Runs:     git rev-parse --show-toplevel once at the session's start, to name files against the repository root; git rev-parse --show-toplevel and git diff --cached --name-only -z, at a guarded command in deny mode, to read which files the commit holds
     3. Sends:    a note to the model after an edit that uses missing keys, one more with the next prompt while a finding stands, and one line to the transcript; nothing leaves the machine
     4. Persists: in $.store, the on/off setting and the mode; the locale keys live in memory for one turn
     5. Hostile input: locale files are only parsed as data (JSON.parse and line regexes), never run; PHP files are not executed
@@ -95,7 +95,7 @@ Reach L2, it runs git to read the index.
 - A key built at run time (`t(name)`, `` t(`a.${b}`) ``) is not checked.
 - A language code is two letters with an optional region or script (`tr`, `pt_BR`, `zh-Hant`); a three-letter code such as `fil` is not recognised.
 - A key the edit only moves (it was in `old_string` too) is not checked, and neither is an edit through Bash.
-- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/i18n-watch mode note`.
+- The `deny` mode has no bypass. When a finding cannot be fixed, you turn the gate off with `/i18n-watch mode note`.
 - The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
 - A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open finding stands for those.
 - The index is read before the command runs. A commit whose files change between the read and the run (another process staging meanwhile) is measured against what the index held at the read.
@@ -104,7 +104,7 @@ Reach L2, it runs git to read the index.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
