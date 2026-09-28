@@ -1,6 +1,6 @@
 # session-watch
 
-Bu session'ın durumunu [sidebar](../sidebar)'da gösteren bir Claude Code Mod'u: context doluluğu, token toplamları, maliyet, model ve thinking seviyesi, Claude Code sürümü, git branch'i ve durumu.
+Context'in ne kadar dolu olduğu, session'ın neye mal olduğu, son isteğin hangi effort'la gittiği ve branch'in ne durumda olduğu `/context`, `/cost`, `/model` ve bir git çağrısı arasında dağılmıştır; hiçbiri ekranda kalmaz. Bu mod bu session'ın durumunu [sidebar](../sidebar)'da tutar: context doluluğu, token toplamları, maliyet, model ve effort, Claude Code sürümü, bu makinedeki diğer session'lar, git branch'i ve durumu.
 
 ## Ne gösterir
 
@@ -51,15 +51,15 @@ Her okuma, session'ın başladığı dizinde bir kez `git status --porcelain=v2 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install session-watch@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. [sidebar](../sidebar) mod'unu kurun ve `/sidebar` ile açın. O olmadan mod status line'ı yazar.
-3. `git` kurun. O olmadan git satırı hatayı yazar.
+1. Claude Code'u yeniden başlat.
+2. [sidebar](../sidebar) mod'unu kur ve `/sidebar` ile aç. O olmadan mod status line'ı yazar.
+3. `git` kur. O olmadan git satırı hatayı yazar.
 
 ## Nereye uzanır
 
@@ -67,8 +67,10 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, model.fork, model.complete, session.compact, tool.call{tool=Bash}, command.run{command=session-watch}
     ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf, readTail), $.fs.exists (via readOthers, readTail, transcriptsOf), $.fs.list (via readOthers, transcriptsOf), $.fs.read (via readOthers), $.fs.stat (via tailWithResponse, transcriptsOf), $.process.run (via livePids, readGit, tailWithResponse), $.process.spawn (via followOne, readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.settings.read (via readTail), $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedFromTail, seedTotals, startTotals, tryFollow), $.ui.status (via show)
+    ❯ ./register.ts env writes: nothing
+    ❯ ./register.ts env reads: CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CONFIG_DIR, HOME
 
-Reach L2, git, ps, head ve tail çalıştırır.
+Reach L2: git, ps, head ve tail çalıştırır.
 
     1. Okur:     session'ın usage değerlerini (context, maliyet), modelini, id'sini, başlangıç dizinini ve engine sürümünü; diğer session'ların <config dizini>/sessions/*.json altındaki kayıt dosyalarını (pid, session id, durum, ad, başlangıç dizini; yanlarındaki .key dosyalarını asla); her turn'ün token sayılarını, her plugin model çağrısının ve compaction'ın usage'ını ve her request'in effort ayarını; session başında bir kez, ana transcript'in son 256 KiB'ındaki (orada cevap yoksa 1 MB, sonra 4 MB) son cevabın kaydettiği effort'u ve token dağılımını, yoksa CLAUDE_CODE_EFFORT_LEVEL'ı ya da settings'teki effortLevel'ı; git adını geçip geçmediğini görmek için her Bash komutunun metnini; toplamı tutulmamış her session'da bir kez, <config dizini>/projects/ altındaki transcript'lerini, yalnız model cevaplarının usage alanını
     2. Çalıştırır: her okumada session'ın başlangıç dizininde git status --porcelain=v2 --branch; her okumada diğer session'ların pid'leri üzerinde ps -o pid= -p <pid'ler>; her transcript üzerinde bir kez head -c <boyut>; hiçbir hook'un bildirmediği thinking token'ları için main loop'un her isteğinden sonra onun transcript'inde, ve her turn sonunda büyüyen her transcript'te tail -c +<offset>; session başında bir kez, son kaydedilen effort ve dağılım için main loop'un transcript'inde tail -c 262144, cevap bulunmazsa 1048576 ve 4000000 ile yeniden, bulunana kadar her okumada tekrar; interactive bir session'da bir 10 saniyelik timer
@@ -88,7 +90,7 @@ Reach L2, git, ps, head ve tail çalıştırır.
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

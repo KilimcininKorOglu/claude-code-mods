@@ -1,6 +1,6 @@
 # session-watch
 
-A Claude Code Mod that shows this session's state in the [sidebar](../sidebar): context fill, token totals, cost, model and thinking level, the Claude Code version, and the git branch and status.
+How full the context is, what the session cost, which effort the last request went out with and what state the branch is in are spread over `/context`, `/cost`, `/model` and a git call, and none of them stays on screen. This mod keeps this session's state in the [sidebar](../sidebar): context fill, token totals, cost, model and effort, the Claude Code version, the other sessions of this machine, and the git branch and status.
 
 ## What it shows
 
@@ -51,7 +51,7 @@ Each reading runs `git status --porcelain=v2 --branch` once in the directory the
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install session-watch@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -67,6 +67,8 @@ Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, model.fork, model.complete, session.compact, tool.call{tool=Bash}, command.run{command=session-watch}
     ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf, readTail), $.fs.exists (via readOthers, readTail, transcriptsOf), $.fs.list (via readOthers, transcriptsOf), $.fs.read (via readOthers), $.fs.stat (via tailWithResponse, transcriptsOf), $.process.run (via livePids, readGit, tailWithResponse), $.process.spawn (via followOne, readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.settings.read (via readTail), $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedFromTail, seedTotals, startTotals, tryFollow), $.ui.status (via show)
+    ❯ ./register.ts env writes: nothing
+    ❯ ./register.ts env reads: CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CONFIG_DIR, HOME
 
 Reach L2, it runs git, ps, head and tail.
 
@@ -88,7 +90,7 @@ Reach L2, it runs git, ps, head and tail.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
