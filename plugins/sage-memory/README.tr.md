@@ -25,8 +25,10 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
 
     sage-memory: memory
     daemon ready · my-app · embeddings off · /sage-memory setup
-    this session: reminded 4 · used 1 · added 2
+    this session: reminded 4 · used 1 · added 2 · this project: 2031 active
     [ manage ]
+
+Son kısım bu projenin store'undaki aktif kayıtları sayar; bölüm her çizildiğinde daemon'dan okunur.
 
 Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kontrolü ve her hatayı (kırmızı) gösterir. Sidebar kapalıyken ilk satır status line'a, akış satırları transcript'e gider.
 

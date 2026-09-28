@@ -150,6 +150,8 @@ type State = {
   worth: boolean
   /** The prompts the person typed since the last consolidation, which the consolidator reads with the answer. */
   asked: string[]
+  /** The project store's active memories at the last draw; unset until the daemon answered. */
+  stored?: number
   /** The last compact proposal, which `/sage-memory compact apply` writes. */
   compactPlan?: Plan
   /** The commands outcome capture wrote in the last hour, by key. */
@@ -204,9 +206,19 @@ async function toPerson($: EngineInterface, lines: Line[]): Promise<void> {
   $.ui.status(lines[0]?.text)
 }
 
+/** The project store's active memories, read again at each draw; a failed read keeps the last count. */
+async function readStored($: EngineInterface, state: State): Promise<void> {
+  try {
+    state.stored = (await ask<{ project: StoreStats }>($, state, '/memory/stats', {})).project.byStatus.active
+  } catch (err) {
+    await toStream($, 'error', { text: `the store count was not read: ${errorText(err)}`, kind: 'error' })
+  }
+}
+
 async function show($: EngineInterface, state: State): Promise<void> {
   const first = stateLine(state.link, state.project?.name ?? '')
-  await toPerson($, state.link.state === 'ready' ? [first, countsLine(state.counts)] : [first])
+  if (state.link.state === 'ready') await readStored($, state)
+  await toPerson($, state.link.state === 'ready' ? [first, countsLine(state.counts, state.stored)] : [first])
 }
 
 async function git($: EngineInterface, args: string[]): Promise<string> {

@@ -25,8 +25,10 @@ While the [sidebar](../sidebar) is open, the mod keeps one `memory` section ther
 
     sage-memory: memory
     daemon ready · my-app · embeddings off · /sage-memory setup
-    this session: reminded 4 · used 1 · added 2
+    this session: reminded 4 · used 1 · added 2 · this project: 2031 active
     [ manage ]
+
+The last part counts the active memories of this project's store, read from the daemon at each draw of the section.
 
 Under it, the stream shows each reminder (faint), each added memory (green), each check and each failure (red). With the sidebar closed, the first line goes to the status line and the stream lines to the transcript.
 
