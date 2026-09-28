@@ -18,9 +18,9 @@ Bildirim komutu hemen döner ve 5 saniye sonra sonlandırılır; böylece takıl
 | Linux | `notify-send <başlık> <alt başlık ve gövde>` (alt başlık alanı yoktur) |
 | Windows | hiçbir zaman bir tıklamayı beklemeyen bir PowerShell toast'ı |
 
-Masaüstü session başına bir kez okunur: `OS=Windows_NT` Windows demektir, değilse `uname -s` `Darwin` ya da `Linux` der. Başka bir sistemde mod bunu bir kez söyler ve hiçbir şey göndermez. Başarısız olan ya da bulunmayan bir bildirim komutu, farklı bir hata onun yerini alana kadar bir kez transcript satırı olarak bildirilir.
+Masaüstü session başına bir kez okunur: `OS=Windows_NT` Windows demektir, değilse `uname -s` `Darwin` ya da `Linux` der. Başka bir sistemde mod bunu bir kez söyler ve hiçbir şey göndermez. Bildirim komutu başarısız olursa ya da bulunamazsa mod bunu bir transcript satırıyla bir kez söyler; farklı bir hata gelene kadar tekrarlamaz.
 
-2.1.282'deki canlı denemede modelin `AskUserQuestion` ile sorduğu bir soru, soru ekrana gelmeden önce `osascript`'i exit 0 ile çalıştırdı.
+2.1.282'deki canlı denemede model `AskUserQuestion` ile bir soru sordu; soru ekrana gelmeden önce `osascript` çalıştı ve exit 0 ile bitti.
 
 ## Komut
 
