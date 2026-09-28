@@ -1,21 +1,21 @@
 # subagent-ledger
 
-A Claude Code Mod that shows what each subagent of the session spent: its turns, its wall-clock time and its tokens, one row per agent, the costliest first.
+You fan a task out to five subagents, and afterwards `/cost` gives one total: which agent read the whole repository, and which one ran for four minutes, stays hidden. This mod shows what each subagent of the session spent: its turns, its wall-clock time and its tokens, one row per agent, the costliest first.
 
 ## What it does
 
-1. The mod hooks `agent.spawn`, which names what the subagent is: its agent type (`Explore`, `general-purpose`, a plugin's agent, `fork`) and the one-line description of its task. It keeps that against the agent id the spawn answers with, and draws the row as running at once.
-2. It hooks `turn.complete` of every subagent loop. That turn is the subagent's answer, so it ends the run: `done` when the turn ended with an answer, `stopped` when it was interrupted, refused or ended on an API error. Each of those turns adds one turn, its `durationMs`, and its tokens: the input, the output, the cache reads and the cache writes the engine reports for that turn. The turn also names the model that answered it, drawn without the vendor prefix and without the date of a full id, so `claude-haiku-4-5-20251001` reads as `haiku-4-5`. A main-loop turn is not counted.
+1. The mod hooks `agent.spawn`, which names what the subagent is: its agent type (`Explore`, `general-purpose`, a plugin's agent, `fork`) and the one-line description of its task. It keeps that against the agent id the spawn answers with, together with the model the spawn resolved, and draws the row as running at once.
+2. It hooks `turn.complete` of every subagent loop. That turn is the subagent's answer, so it ends the run: `done` when the turn ended with an answer, `stopped` when it was interrupted, refused or ended on an API error. Each of those turns adds one turn, its `durationMs`, and its tokens: the input, the output, the cache reads and the cache writes the engine reports for that turn. The turn also names the model that answered it, which replaces the spawn's model, drawn without the vendor prefix and without the date of a full id, so `claude-haiku-4-5-20251001` reads as `haiku-4-5`. A main-loop turn is not counted.
 3. It hooks `turn.step`, one model request, to draw a subagent as running again when its loop runs after it answered, as it does when SendMessage resumes it. A main-loop step is not read.
 4. While the [sidebar](../sidebar) is open, the ledger is one `subagents` section that stays for the session and is rewritten at each spawn, at each subagent turn and when a subagent runs again:
 
        subagents
-       find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k · done
        port the config loader to the new schem… · opus-5 · 7 turn · 4m 10s · T 260k · I 5k · O 9k · CR 210k · CW 36k · running
+       find the parser · haiku-4-5 · 3 turn · 42s · T 81k · I 2k · O 1k · CR 70k · CW 8k · done
        read the tests · haiku-4-5 · 1 turn · 9s · T 30k · I 1k · O 500 · CR 24k · CW 5k · stopped
        2 more · 150k
 
-   A row's name is the description of its task, cut at 40 characters; a spawn that named no description shows its agent type there instead. Its tokens read as `T` the total, `I` the input the cache did not serve, `O` the output, `CR` the cache reads and `CW` the cache writes; the last four add up to `T`. A row ends with its status word: `running` yellow while its subagent runs, `done` green once it answered, and `stopped` faint when its run ended without an answer. The model is coloured by family (opus red, fable yellow, sonnet green, haiku faint). The `T` total is yellow from 80% of the limit (200k tokens by default) and red once the subagent reached it, in every status. The label, the turns, the time and the tokens by kind stay in the default colour. The rows past the fifth are one faint line with their tokens added up, so a fan-out of twenty agents still holds six rows.
+   A row's name is the description of its task, cut at 40 characters; a spawn that named no description shows its agent type there instead. Its tokens read as `T` the total, `I` the input the cache did not serve, `O` the output, `CR` the cache reads and `CW` the cache writes; the last four add up to `T`. A row ends with its status word: `running` yellow while its subagent runs, `done` green once it answered, and `stopped` faint when its run ended without an answer. The model is coloured by family (opus red, fable yellow, sonnet green, haiku faint). The `T` total is yellow from 80% of the limit (200k tokens by default) and red once the subagent reached it, in every status. The label, the turns, the time and the tokens by kind stay in the default colour. The rows past the third are one faint line with their tokens added up, so a fan-out of twenty agents still holds four rows.
 5. With the sidebar closed, or without that mod installed, the totals go to the status line instead:
 
        subagent-ledger: 4 subagent · 12 turn · 3m 10s · 210k
@@ -33,7 +33,7 @@ A Claude Code Mod that shows what each subagent of the session spent: its turns,
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install subagent-ledger@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -55,7 +55,7 @@ Reach L0, draws and remembers.
     2. Runs:     nothing
     3. Sends:    nothing to the model; the rows and the status line are for the person only
     4. Persists: in $.store, the on/off setting and the limit; the ledger itself lives in memory and ends with the session
-    5. Hostile input: the only text drawn is the agent type, the spawn's own description, cut to 28 characters, and the model id the engine reports
+    5. Hostile input: the only text drawn is the agent type, the spawn's own description, cut to 40 characters, and the model id the engine reports
 
 ## Limits
 
@@ -69,7 +69,7 @@ Reach L0, draws and remembers.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
