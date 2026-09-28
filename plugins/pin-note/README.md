@@ -1,6 +1,6 @@
 # pin-note
 
-A Claude Code Mod that keeps the notes you pin with `/pin-note` for the whole session, and sends them to the model again, word for word, after each compaction and `/clear`. A compaction summary can drop or reword an instruction you gave early on; a pinned note comes back as you wrote it.
+You tell the model early on "ask before every push", and after a compaction the summary has dropped the sentence or reworded it into something weaker; after `/clear` it is gone for good. This mod keeps the notes you pin with `/pin-note` for the whole session, and sends them to the model again, word for word, after each compaction and `/clear`.
 
 ## What it does
 
@@ -32,7 +32,7 @@ While the mod is off, `/pin-note <note>` and `drop` are refused. `on`, `off` and
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install pin-note@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 

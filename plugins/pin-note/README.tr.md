@@ -1,6 +1,6 @@
 # pin-note
 
-Bu Claude Code Mod'u, `/pin-note` ile sabitlediğiniz notları session boyunca saklar ve her compaction ile `/clear` sonrasında modele kelimesi kelimesine yeniden gönderir. Bir compaction özeti, başta verdiğiniz bir talimatı atabilir ya da başka sözlerle yazabilir; sabitlenmiş bir not ise yazdığınız gibi geri gelir.
+Modele baştan "her push'tan önce sor" dersin; bir compaction'dan sonra özet bu cümleyi atmış ya da daha zayıf bir şeye çevirmiştir, `/clear`'dan sonra ise tamamen gitmiştir. Bu mod `/pin-note` ile sabitlediğin notları session boyunca saklar ve her compaction'dan ve `/clear`'dan sonra modele kelimesi kelimesine yeniden gönderir.
 
 ## Ne yapar
 
@@ -9,14 +9,14 @@ Bu Claude Code Mod'u, `/pin-note` ile sabitlediğiniz notları session boyunca s
        pin-note: pinned note 1, kept for this session and sent to you again after each compaction and /clear:
        ask before every push
 
-2. Bir compaction'dan ve `/clear`'dan sonra notlar, bir `SessionStart` hook'u ile modelin yeni context'ine numaralı tek bir liste olarak girer. Her not yazdığınız gibidir. Listenin üstündeki üç satır modele notların nereden geldiğini söyler: notları siz `/pin-note` ile sabitlediniz, sonra konuşma compact edildi ya da `/clear` çalıştırdınız, ve açtığınız pin-note plugin'i notları geri veriyor. Bu satırlar olmadan model zaman zaman bir notu inject edilmiş bir talimat sanıp uygulamadı. Bir satır size bunu bildirir:
+2. Bir compaction'dan ve `/clear`'dan sonra notlar bir `SessionStart` hook'u ile modelin yeni context'ine numaralı tek bir liste olarak girer; her not yazdığın gibidir. Listenin üstündeki üç satır modele notların nereden geldiğini söyler: notları sen `/pin-note` ile kendin sabitledin, sonra konuşma compact edildi ya da `/clear` çalıştırdın, açtığın pin-note plugin'i de onları geri veriyor. Bu satırlar olmadığında model bazen bir notu enjekte edilmiş bir talimat sanıp uygulamadı. Sana tek bir satır bunu bildirir:
 
        pin-note: sent 1 pinned note(s) again after the compaction
 
-3. Notlar session'a aittir. `$.store` içinde session'ın id'si altında tutulur, böylece reload edilen bir modül ve resume edilen bir session onları yeniden bulur. `/clear` yeni bir session başlatır ve notlar onunla birlikte gider.
-4. Session başında ve resume'da hiçbir şey gönderilmez, çünkü oradaki konuşma notları sabitlediğiniz haliyle zaten tutar.
+3. Notlar session'a aittir. `$.store`'da session'ın id'si altında tutulur; böylece yeniden yüklenen bir modül ve resume edilen bir session onları yeniden bulur. `/clear` yeni bir session başlatır ve notlar onunla birlikte gider.
+4. Session başında ve resume'da hiçbir şey gönderilmez, çünkü oradaki konuşma notları sabitlediğin hâliyle zaten taşır.
 
-Claude Code 2.1.283 üzerinde `sonnet` modeliyle canlı session'larda ölçüldü: `/compact` sonrasında not modelin context'ine ulaştı. `/clear` sonrasında sabitlenmiş bir not olup olmadığı sorulan model, notu kelimesi kelimesine yazdı. Her cevabın sonuna bir kelime eklenmesini isteyen bir not sabitlendi, ardından `/clear` ve yeni bir soru geldi; bu, her metin için 20 kez denendi. Önceki tek satırlık metinde model notu 4 kez inject edilmiş sayıp reddetti. Şimdiki metinde 20 denemenin hepsinde nota uydu.
+Claude Code 2.1.283 üzerinde `sonnet` modeliyle canlı session'larda ölçüldü: `/compact`'tan sonra not modelin context'ine ulaştı. `/clear`'dan sonra sabitlenmiş bir not olup olmadığı sorulan model, notu kelimesi kelimesine yazdı. Her cevabın sonuna bir kelime eklenmesini isteyen bir not sabitlendi, ardından `/clear` ve yeni bir soru geldi; bu her metin için 20 kez denendi. Önceki tek satırlık metinle model notu 4 kez enjekte edilmiş sayıp reddetti. Şimdiki metinle 20 denemenin hepsinde nota uydu.
 
 ## Komut
 
@@ -25,21 +25,21 @@ Claude Code 2.1.283 üzerinde `sonnet` modeliyle canlı session'larda ölçüld�
     /pin-note <not>            bir notu sabitler; metin yazıldığı gibi saklanır, birkaç satır da olabilir
     /pin-note drop <n>         n numaralı notu çıkarır
 
-Mod kapalıyken `/pin-note <not>` ve `drop` reddedilir. Komut kelimeleri yalnız `on`, `off` ve `drop <n>`'dir; bu yüzden ardından tek başına bir sayı gelmeyen bir not `drop` ile başlayabilir.
+Mod kapalıyken `/pin-note <not>` ve `drop` reddedilir. Komut kelimeleri yalnız `on`, `off` ve `drop <n>`'dir; bu yüzden bir not, ardından tek başına bir sayı gelmediği sürece `drop` ile başlayabilir.
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install pin-note@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına şunu ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. `/pin-note on` çalıştırın.
+1. Claude Code'u yeniden başlat.
+2. `/pin-note on` çalıştır.
 
 ## Nereye uzanır
 
@@ -58,14 +58,14 @@ Reach L0; ağ yok, dosya yok, süreç yok.
 
 ## Sınırlar
 
-- Notlar yalnız compaction'da ve `/clear`'da yeniden gönderilir. Context'ten çıkmasını istediğiniz bir not `drop` ile çıkarılmalı ve context compact edilmelidir, çünkü modelin okuduğu bir not konuşmada kalır.
-- Her session'ın notları `$.store` içinde id'si altında kalır; eski bir session'ın notlarını hiçbir şey silmez.
-- Not sayısı ve uzunluğu için sınır yoktur; her not her compaction sonrasında context'e girer.
+- Notlar yalnız compaction'da ve `/clear`'da yeniden gönderilir. Context'ten çıkmasını istediğin bir notu `drop` ile çıkarıp context'i compact etmen gerekir, çünkü modelin okuduğu bir not konuşmada kalır.
+- Her session'ın notları `$.store`'da id'si altında kalır; eski bir session'ın notlarını hiçbir şey silmez.
+- Not sayısı ve uzunluğu için bir sınır yoktur; her not her compaction'dan sonra context'e girer.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, üstünde build başarısız olur
-    make typecheck   # /plugin-types çıktısı .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
