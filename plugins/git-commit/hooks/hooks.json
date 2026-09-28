@@ -1,4 +1,4 @@
 {
-  "description": "git-commit: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "git-commit: session.start, command.run, turn.start, prompt.submit, tool.call on Skill and Bash, skill.prompt, attribution.text, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
   "modules": ["./register.ts"]
 }
