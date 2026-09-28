@@ -6,7 +6,7 @@ Modeli çalışır bırakıyorsun, döndüğünde session `API Error: Connection
 
 1. Ana loop'un `turn.complete`'ini izler. Bir subagent'ın turn'üne dokunmaz.
 2. Yalnız tek bir bitiş türüne tepki verir: `reason: "error"`, yani engine'in bir API hatası yüzünden öldü dediği turn (denemeler tükenmiş, context sınırı). Senin yarıda kestiğin bir turn `aborted`, modelin reddi `refusal` olur; ikisi de prompt almaz.
-3. Session boşa çıkınca çalışan şu prompt'u gönderir:
+3. Session boşta kalınca şu prompt'u gönderir:
 
        The previous turn was cut off by an API error, not by me. Continue where you stopped; do not start over. If you cannot tell how far you got, say so and stop.
 
