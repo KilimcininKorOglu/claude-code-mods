@@ -45,6 +45,9 @@ describe('findCommit', () => {
     expect(findCommit("echo '// v2' >> math.ts && git commit -am 'docs: v2'")?.before).toEqual(['echo'])
     expect(findCommit('npm test && git status && git add -A && git commit -m x')?.before).toEqual(['npm', 'git status'])
     expect(findCommit('cd sub && git -C .. add a.ts && git commit -m x && git push')?.before).toEqual([])
+    expect(findCommit('git add a.ts 2>&1 && git commit -m x')?.before).toEqual([])
+    expect(findCommit('git status 2>&1 && git commit -m x')?.before).toEqual(['git status'])
+    expect(findCommit('cd sub &>/dev/null && git commit -m x')).toEqual({ ...plain, cwd: 'sub' })
     expect(combinedText(['sed', 'sed', 'git status'])).toContain('it runs `sed`, `git status` before git commit')
   })
 

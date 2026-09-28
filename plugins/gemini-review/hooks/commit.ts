@@ -68,10 +68,15 @@ function quoted(s: Scan, text: string, i: number): number {
 
 const SEPARATORS = new Set([';', '&', '|', '\n', '(', ')'])
 
+/** An `&` that belongs to a redirection (`2>&1`, `<&3`, `&>out`), not a separator. */
+function isRedirectAmp(text: string, i: number): boolean {
+  return text[i] === '&' && (text[i - 1] === '>' || text[i - 1] === '<' || text[i + 1] === '>')
+}
+
 /** One character outside quotes; returns how many characters it used. */
 function unquoted(s: Scan, text: string, i: number): number {
   const c = text[i] ?? ''
-  if (SEPARATORS.has(c)) endSegment(s)
+  if (SEPARATORS.has(c) && !isRedirectAmp(text, i)) endSegment(s)
   else if (c === ' ' || c === '\t') endToken(s)
   else if (c === '"' || c === "'") {
     s.quote = c
@@ -87,15 +92,16 @@ function unquoted(s: Scan, text: string, i: number): number {
   return 1
 }
 
-/** A redirection such as `>out`, `2>`, `<in`; with a bare operator the target is the next word. */
-const REDIRECT = /^\d*[<>]/
+/** A redirection such as `>out`, `2>&1`, `&>out`, `<in`; with a bare operator the target is the next word. */
+const REDIRECT = /^(?:\d*|&)[<>]/
+const BARE_REDIRECT = /^(?:\d*|&)[<>]+$/
 
 function withoutRedirections(words: readonly string[]): string[] {
   const kept: string[] = []
   for (let i = 0; i < words.length; i++) {
     const word = words[i] ?? ''
     if (!REDIRECT.test(word)) kept.push(word)
-    else if (/^\d*[<>]+$/.test(word)) i++
+    else if (BARE_REDIRECT.test(word)) i++
   }
   return kept
 }
