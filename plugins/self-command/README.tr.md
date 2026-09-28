@@ -1,6 +1,6 @@
 # self-command
 
-Mod geliştirme için: modelin kendi session'ında bir slash command çalıştırmasını sağlar, örneğin bir plugin update'inden sonra `/reload-plugins`, ve çıktıyı bir sonraki prompt olarak okur.
+Mod geliştirme için: model kendi session'ında bir slash command çalıştırır (örneğin bir plugin update'inden sonra `/reload-plugins`) ve çıktıyı bir sonraki prompt olarak okur.
 
 > **Günlük kullanım için değil, bir geliştirme aracıdır.** Bu repository'nin mod'larını geliştirmek ve test etmek için yazıldı: model bir mod'u günceller, `/reload-plugins`'i kendisi çalıştırır ve sonucu aynı turn zincirinde kontrol eder. Modele session'daki her slash command'ı (aşağıdaki yedisi hariç) senin izinlerinle verir; bu yüzden modele ulaşan bir prompt injection, veri silen ya da gönderen bir komutu çalıştırabilir. Yalnız mod geliştirdiğin kendi makinene kur ve geliştirme yapmadığın zamanlarda kapat (`claude plugin disable self-command@kilimcininkoroglu-mods`).
 
@@ -14,7 +14,7 @@ Mod geliştirme için: modelin kendi session'ında bir slash command çalıştı
       Reloaded: 58 plugins · 8 skills · 6 agents · 0 hooks · 1 plugin MCP server · 6 plugin LSP servers
 
   Başarısız olan bir komut bunun yerine engine'in hatasıyla birlikte `did not run:` bildirir.
-- Hemen reddedilenler: session'ın listelemediği bir ad (alias'lar dahil), ve session'ı temizleyen, bitiren ya da değiştiren `/clear`, `/exit`, `/quit`, `/logout`, `/login`, `/resume` ve `/rewind`.
+- Hemen reddedilenler: session'ın listelemediği bir ad (alias'lar dahil) ve session'ı temizleyen, bitiren ya da değiştiren `/clear`, `/exit`, `/quit`, `/logout`, `/login`, `/resume` ve `/rewind`.
 
 ## Nasıl çalışır
 
@@ -54,10 +54,10 @@ Reach L2: Claude'u yönlendirir.
 ```
 Threat model for self-command (reach L2)
 1. Okur:         session'ın komut listesini.
-2. Çalıştırır:   modelin adını verdiği her slash command'ı, session'ı temizleyen, bitiren ya da değiştiren yedisi hariç, sizin izinlerinizle.
-3. Gönderir:     kendisi ağ üzerinden hiçbir şey; çalıştırdığı bir komut gönderebilir.
+2. Çalıştırır:   modelin adını verdiği her slash command'ı, session'ı temizleyen, bitiren ya da değiştiren yedisi hariç, senin izinlerinle.
+3. Gönderir:     kendisi network üzerinden hiçbir şey; çalıştırdığı bir komut gönderebilir.
 4. Saklar:       hiçbir şey.
-5. Düşman girdi: modele ulaşan bir prompt injection, izin verilen herhangi bir komutu çalıştırabilir, örneğin veri silen ya da gönderen bir plugin komutunu. Bir geliştirme makinesinde tutun ve mod geliştirmediğiniz zamanlarda kapatın.
+5. Düşman girdi: modele ulaşan bir prompt injection, izin verilen herhangi bir komutu çalıştırabilir, örneğin veri silen ya da gönderen bir plugin komutunu. Mod'u bir geliştirme makinesinde tut ve mod geliştirmediğin zamanlarda kapat.
 ```
 
 ## Geliştirme
