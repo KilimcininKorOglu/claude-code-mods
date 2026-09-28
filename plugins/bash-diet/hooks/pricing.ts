@@ -24,6 +24,7 @@ const PRICES: ReadonlyArray<readonly [family: string, price: Price]> = [
   ['opus-4-7', { read: 0.5, write: 10 }],
   ['opus-4-8', { read: 0.5, write: 10 }],
   ['opus-4', { read: 1.5, write: 30 }],
+  ['sonnet-5-5', { read: 0.2, write: 4 }],
   ['sonnet-5', { read: 0.2, write: 4 }],
   ['sonnet', { read: 0.3, write: 6 }],
   ['haiku-4-5', { read: 0.1, write: 2 }],
