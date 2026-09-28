@@ -14,7 +14,7 @@ Canlı denemede 2980 karakterlik bir prompt dosyaya yazıldı; model dosyayı `R
 
 ## Komut
 
-    /prompt-offload              açık mı kapalı mı, ve sınır
+    /prompt-offload              açık mı kapalı mı ve sınır
     /prompt-offload on | off     varsayılan açık
     /prompt-offload limit <n>    en az 500 karakter; session'lar arasında korunur
 
@@ -43,7 +43,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L2: dosya yazar ve bir process çalıştırır.
 
-    1. Okur:     gönderilen her prompt'un metnini ve origin'ini, ve TMPDIR
+    1. Okur:     gönderilen her prompt'un metnini ve origin'ini, TMPDIR'ı
     2. Çalıştırır: mkdir -p, argv ile
     3. Gönderir: prompt'un ilk 200 karakterini ve path'i modele; makineden hiçbir şey çıkmaz
     4. Saklar:   bütün prompt'u $TMPDIR/prompt-offload altında, on/off ayarını ve limiti $.store içinde
