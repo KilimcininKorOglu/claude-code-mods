@@ -15,7 +15,7 @@ Model kod yazar, commit'ler ve diff'i kimse okumadan geçmişe yazılır: koda g
    - yalnız minor bulgular: commit çalışır, model notları sonuçtan sonra okur;
    - hiç bulgu yok: commit çalışır, model incelemenin hiçbir şey bulmadığını söyleyen tek satırı okur.
 7. İnceleme cevap veremezse commit çalışır, bir transcript satırı nedenini söyler ve model de nedeni okur. Nedenler: key yok, bir HTTP hatası, bozuk ya da çıktı sınırında kesilmiş bir cevap, bir git hatası, ya da 1.500.000 karakteri aşan bir diff.
-8. Gemini arada bir HTTP 503 ("high demand") döner, çoğu zaman 10 saniye ya da daha uzun sürdükten sonra. gemini-core o zaman mod'a 1 sn, 2 sn ve 3 sn sonra yeniden sordurur; toplam en fazla dört deneme olur. Beklemesi 60 sn'yi aşacak bir deneme başlamaz. Bir hook'un 10 saniyelik budget'ı `$.clock` beklemelerini sayar ama istekleri saymaz; bu yüzden beklemeler kısa tutulur. 429'dan ya da bir key hatasından sonra gemini-core, elinde başka key varsa isteği onunla verir.
+8. Gemini arada bir HTTP 503 ("high demand") döner, çoğu zaman 10 saniye ya da daha uzun sürdükten sonra. Bu durumda mod, gemini-core'un bildirdiği gibi 1 sn, 2 sn ve 3 sn sonra yeniden sorar; toplam en fazla dört deneme olur. Beklemesi 60 sn'yi aşacak bir deneme başlamaz. Bir hook'un 10 saniyelik budget'ı `$.clock` beklemelerini sayar ama istekleri saymaz; bu yüzden beklemeler kısa tutulur. 429'dan ya da bir key hatasından sonra gemini-core, elinde başka bir key varsa isteği onunla yeniden gönderir.
 
 2.1.278 üzerinde `gemini-3.8-flash` ile yapılan canlı denemede `sk_live_...` içeren bir dosyanın commit'i `sub/pay.ts:1: Hardcoded live Stripe secret key committed in source code` ile durduruldu. Düzeltmeden sonra `git add pay.ts sub.ts && git commit` çalıştı, `GEMINI_REVIEW_SKIP=1` ile atılan bir commit incelenmeden çalıştı, geçersiz bir key ise commit'i `Gemini HTTP 400: API key not valid` ile çalıştırdı. O session'daki sekiz incelemenin dördü cevap aldı (biri iki 503'ten sonra, toplam 42,5 saniyede); dördü yalnız 503 aldı ve commit'i çalıştırdı.
 
@@ -87,7 +87,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L3: network'e çıkar.
 
-    1. Okur:     her Bash komutunu; bir commit anında repository'nin diff'ini ve yeni dosyalarını git üzerinden, ve konuşmayı (mesajlar, tool input'ları ve output'ları); kendi $.store dosyasını; gemini-core'dan key'i taşıyan isteği
+    1. Okur:     her Bash komutunu; bir commit anında git üzerinden repository'nin diff'ini ve yeni dosyalarını, ayrıca konuşmayı (mesajlar, tool input'ları ve output'ları); kendi $.store dosyasını; gemini-core'dan key'i taşıyan isteği
     2. Çalıştırır: salt okuma git komutlarını argv ile, shell yok: rev-parse, diff, ls-files; en fazla 200 yeni dosya okunur
     3. Gönderir: diff'i ve konuşmayı, commit başına bir istek (503 sonrası en fazla dört, 429 ya da key hatası sonrası ek key başına bir tane daha), gemini-core'un kurduğu URL'ye (generativelanguage.googleapis.com), key x-goog-api-key header'ında, hiçbir zaman URL'de değil
     4. Saklar:   $.store içinde on/off ayarını; son inceleme satırı bellekte yaşar
