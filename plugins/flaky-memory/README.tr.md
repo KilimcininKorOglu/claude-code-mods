@@ -42,7 +42,7 @@ Bir Bash komutu şunlardan birini içeriyorsa test komutu sayılır: `go test`, 
 | Maven surefire | `name(Class)  Time elapsed … <<< FAILURE!` | yok |
 | Gradle | `Class > test FAILED` | yok |
 
-Hiçbir geçen testi anmayan bir çalıştırma, 0 ile çıktığı sürece, aynı komutun son başarısız çalıştırmasında düşen testler için geçiş sayılır. Böylece `-v` olmadan `go test ./...`, PHPUnit, rspec, Maven ve Gradle de çalışır: başarısızlıkları okunur, 0 ile çıkan bir sonraki çalıştırmaları da o testleri geçmiş sayar.
+Geçen hiçbir testi anmayan bir çalıştırma 0 ile çıkarsa, aynı komutun son başarısız çalıştırmasında düşen testler için geçiş sayılır. Böylece `-v` olmadan `go test ./...`, PHPUnit, rspec, Maven ve Gradle de çalışır: başarısızlıkları okunur, 0 ile çıkan bir sonraki çalıştırmaları da o testleri geçmiş sayar.
 
 Yalnız pencere içinde başarısız olmuş testler saklanır; binlerce geçen testten oluşan bir test takımı hiçbir şey saklamaz. Her test son 7 günden en fazla 50 çalıştırma tutar.
 
@@ -53,7 +53,7 @@ Yalnız pencere içinde başarısız olmuş testler saklanır; binlerce geçen t
     /flaky-memory reset <test id>   tek bir testin çalıştırmalarını unutur, örneğin go:TestFlip
     /flaky-memory on | off          test çalıştırmalarını kaydeder ya da kaydetmez (varsayılan açık); off saklanan çalıştırmaları korur
 
-Repository, onun git common dizinidir; yani aynı repository'nin worktree'leri çalıştırmalarını paylaşır.
+Mod bir repository'yi git common dizininden tanır; yani aynı repository'nin worktree'leri çalıştırmalarını paylaşır.
 
 ## Kurulum
 
