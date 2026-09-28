@@ -83,13 +83,13 @@ Reach L2: process çalıştırır ve dizin siler.
     2. Çalıştırır: salt okunur git rev-parse, git ls-files ve git check-ignore; du -sk; pane'de iki kez seçtiğin ya da /disk-janitor delete ile adını verdiğin bir dizin için rm -rf --; hepsi argv ile, shell yok
     3. Gönderir: hiçbir şey; /disk-janitor çıktı satırını model her komut çıktısı gibi okur
     4. Saklar:   hiçbir şey; son ölçüm ve seçimlerin bellekte durur
-    5. Düşman girdi: dizin adı git'ten ve diskten gelir, hiçbir zaman modelden gelmez; bir silme senin tuşuna ya da yazdığın komuta ihtiyaç duyar ve yol, hemen öncesinde bütün kontrolleri yeniden geçmek zorundadır
+    5. Düşman girdi: dizin adı git'ten ve diskten gelir, hiçbir zaman modelden gelmez; silme ancak senin tuşunla ya da yazdığın komutla olur ve yol, hemen öncesinde bütün kontrolleri yeniden geçmek zorundadır
 
 ## Sınırlar
 
 - Yalnız git'in ignore ettiği dizinler listelenir. Commit'lenmiş ya da hiçbir yerde ignore edilmeyen bir build çıktısı listelenmez.
 - Üç listenin dışındaki bir ad, build çıktısı olsa bile listelenmez.
-- Ignore edilen bir dizinin içindeki başka bir ignore edilen dizin listelenmez; dıştaki bir veri dizini olduğunda bu kural esner (yalnız bir seviye).
+- Ignore edilen bir dizinin içindeki başka bir ignore edilen dizin listelenmez. Tek istisna dıştaki dizinin bir veri dizini olmasıdır; o zaman mod yalnız bir seviye içine bakar.
 - Çok büyük bir ağaçta `du` uzun sürebilir. Ölçüm arka planda, 60 saniyelik bir sınırla çalışır; ilki bitene kadar pane `measuring…` gösterir.
 - En fazla 500 dizin listelenir.
 
