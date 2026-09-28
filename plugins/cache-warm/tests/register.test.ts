@@ -314,13 +314,16 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
-  test('stops when the engine has nothing to fork', async ($, on) => {
-    const w = world(on, [NOTHING_TO_FORK])
+  test('waits for the first reply when the engine has nothing to fork, and the next turn pings again', async ($, on) => {
+    const w = world(on, [NOTHING_TO_FORK, warm])
     await $.session.start(session)
-    await $.command.run(run('cache-warm', '1h'))
+    await $.command.run(run('cache-warm', '6h'))
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
-    expect(w.statuses.at(-1)).toBe('stopped: the engine did not send the ping; the conversation has no reply to fork yet')
+    expect(w.statuses.at(-1)).not.toMatch(/^stopped/)
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(2)
   })
 
   test('stops with the status and kind of an API error, and scores no cold ping', async ($, on) => {
@@ -560,11 +563,11 @@ describe('always', () => {
   })
 
   test('a ping that failed stops the loop for that turn alone; the next turn starts it again', async ($, on) => {
-    const w = world(on, [NOTHING_TO_FORK, warm], { store: [['always', true]] })
+    const w = world(on, [{ isAnswered: false, reason: 'api-error', status: 529, error: 'overloaded', usage: NO_USAGE }, warm], { store: [['always', true]] })
     await $.session.start(session)
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
-    expect(w.statuses.at(-1)).toMatch(/^stopped: the engine did not send the ping/)
+    expect(w.statuses.at(-1)).toMatch(/^stopped: the ping failed/)
     await $.turn.complete(turn())
     const status = await $.command.run(run('cache-status'))
     expect(status.text).toMatch(/keep warm   on, always · /)

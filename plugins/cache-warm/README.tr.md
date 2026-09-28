@@ -16,7 +16,7 @@ Davranış, Karan Bansal'ın cache-tax mod'unu (karanb192/claude-code-mods) izle
 
 **Durumu gösterir.** `/cache-status`; modeli, sıcak ya da soğuk olduğunu, context boyutunu, soğuk fiyatı, pencereyi, başa baş noktasını ve bu session'ın soğuk write'larını yazar.
 
-Soğuk bir cache'e giden mesaj durdurulmaz ve geciktirilmez. Cache'i düşmüş, resume edilen bir session ilk mesajının fiyatını tek satırda alır.
+Soğuk bir cache'e giden mesaj durdurulmaz ve geciktirilmez. Cache'i düşmüş, resume edilen bir session ilk mesajının fiyatını tek satırda alır. Claude Code cache'in yaşını transcript'teki son cevaptan hesaplar ve ping transcript'e yazılmaz; bu yüzden mod'un bu session için kaydettiği son ping son bir saat içinde cache'i okuduysa satır yazılmaz. Resume'dan sonra ping ilk cevabı bekler, çünkü engine'in ondan önce fork edecek bir cevabı yoktur.
 
 ## Komutlar
 

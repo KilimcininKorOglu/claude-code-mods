@@ -105,6 +105,16 @@ describe('resume and clear', () => {
     expect(line).toMatch(/about \$1\.00\.$/)
   })
 
+  test('a ping this mod kept within the hour overrides the transcript: no expiry line, and the clock starts at the ping', async () => {
+    const s = freshState()
+    s.lastRead = { kind: 'ping', read: 430_023, write: 1280, usd: 0.23, at: NOW - 40 * 60 * 1000 }
+    const line = seedFromResume(s, { source: 'resume', context_tokens: 431_305, seconds_since_last_response: 13 * 3600, prompt_cache_likely_expired: true, estimated_cache_write_usd: 4.31 }, NOW)
+    expect(line).toBe(null)
+    expect(s.lastRequestAt).toBe(NOW - 40 * 60 * 1000)
+    s.lastRead = { ...s.lastRead, at: NOW - 2 * HOUR }
+    expect(seedFromResume(s, { source: 'resume', context_tokens: 431_305, seconds_since_last_response: 13 * 3600, prompt_cache_likely_expired: true }, NOW)).toMatch(/^the cache expired/)
+  })
+
   test('stays quiet on a start, a warm resume and a small context', async () => {
     expect(seedFromResume(freshState(), { source: 'startup' }, NOW)).toBe(null)
     expect(seedFromResume(freshState(), { source: 'resume', context_tokens: 300_000, prompt_cache_likely_expired: false }, NOW)).toBe(null)

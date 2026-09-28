@@ -263,6 +263,9 @@ async function ping($: EngineInterface, s: State): Promise<void> {
   } catch (err) {
     return stop($, s, `the ping failed, ${errorText(err)}`)
   }
+  // A resumed conversation has no reply of this process to fork until its first turn, whose end arms the
+  // ping again; the window waits instead of stopping.
+  if (!reply.isAnswered && reply.reason === 'nothing-to-fork') return
   // A reply without text still read the cache, so it is scored as a ping; every other unanswered fork stops.
   if (!reply.isAnswered && reply.reason !== 'empty-reply') return stop($, s, unsentText(reply))
   await settlePing($, s, reply.usage, now)
@@ -503,6 +506,9 @@ export const register: Register = on => {
       await clearSession($, s)
       return r
     }
+    // The last ping this session kept, also when this seam runs before session.start restored it.
+    s.sid ||= await $.session.id()
+    s.lastRead ??= pingRecordOf(await $.store.get(lastKey(s)))
     const line = seedFromResume(s, e, await $.clock.now())
     s.model ??= await $.session.model()
     if (line) logEvent($, s, line, eventShort(line))

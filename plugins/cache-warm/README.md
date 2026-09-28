@@ -16,7 +16,7 @@ The behavior follows the cache-tax mod by Karan Bansal (karanb192/claude-code-mo
 
 **Shows the state.** `/cache-status` prints the model, warm or cold, the context size, the cold price, the window, the break-even and this session's cold writes.
 
-A message sent to a cold cache is not stopped or delayed. A resumed session whose cache has lapsed gets one line with the price of its first message.
+A message sent to a cold cache is not stopped or delayed. A resumed session whose cache has lapsed gets one line with the price of its first message. Claude Code dates the cache from the transcript's last reply, which a ping never writes, so the line is left out while the last ping this mod kept for the session read the cache within the hour. After a resume the ping waits for the first reply, because the engine has nothing to fork before it.
 
 ## Commands
 

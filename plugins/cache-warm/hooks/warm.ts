@@ -277,14 +277,29 @@ export type ResumeFields = {
   estimated_cache_write_usd?: number
 }
 
-/** Applies the fields Claude Code computes for a resumed session; returns the line to log, if any. */
+/** The last request of a resumed conversation: its last reply, or a later ping this mod kept. */
+function seedResumeClock(s: State, e: ResumeFields, now: number): void {
+  if (typeof e.seconds_since_last_response === 'number') s.lastRequestAt = now - e.seconds_since_last_response * 1000
+  if (s.lastRead && s.lastRead.at > s.lastRequestAt) s.lastRequestAt = s.lastRead.at
+}
+
+/** Whether a request this mod kept read the cache within its lifetime. */
+function readRecently(s: State, now: number): boolean {
+  return s.lastRead !== null && now - s.lastRead.at < TTL_MS
+}
+
+/**
+ * Applies the fields Claude Code computes for a resumed session; returns the line to log, if any. Claude
+ * Code dates the cache from the transcript's last reply, which a ping never writes, so a ping this mod
+ * kept (`s.lastRead`) within the cache's lifetime means the cache was warm when the session closed.
+ */
 export function seedFromResume(s: State, e: ResumeFields, now: number): string | null {
   if (e.source !== 'resume' && e.source !== 'fork') return null
   if (typeof e.context_tokens === 'number' && e.context_tokens > 0) s.ctx = e.context_tokens
-  if (typeof e.seconds_since_last_response === 'number') s.lastRequestAt = now - e.seconds_since_last_response * 1000
+  seedResumeClock(s, e, now)
   if (typeof e.model === 'string') s.model = e.model
   s.compacted = false
-  if (e.prompt_cache_likely_expired !== true || s.ctx < BIG_TOKENS) return null
+  if (e.prompt_cache_likely_expired !== true || readRecently(s, now) || s.ctx < BIG_TOKENS) return null
   const usd = typeof e.estimated_cache_write_usd === 'number' ? e.estimated_cache_write_usd : writeUsd(s.ctx, priceNow(s))
   return `the cache expired while the session was closed. The first message will re-write ${fmtCount(s.ctx)} tokens, about ${fmtUsd(usd)}.`
 }
