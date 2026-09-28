@@ -58,10 +58,10 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L1: transcript'i okur.
 
-    1. Okur:     session'ın kendi transcript dosyasının boyutunu, sonra 4 MiB ya da daha küçükse dosyayı başlangıçta, resume'da ve fork'ta bir kere, ve yalnız satırlarının type, uuid ve timestamp değerlerini; gönderilen her prompt'un ve çizilen her user satırının metnini, ikisini eşlemek için; saati
+    1. Okur:     session'ın kendi transcript dosyasının boyutunu, sonra 4 MiB ya da daha küçükse dosyayı başlangıçta, resume'da ve fork'ta bir kere ve yalnız satırlarının type, uuid ve timestamp değerlerini; gönderilen her prompt'un ve çizilen her user satırının metnini, ikisini eşlemek için; saati
     2. Çalıştırır: hiçbir şey; process yok, fork yok, timer yok
     3. Gönderir: hiçbir şey; network çağrısı yok ve modele hiçbir şey gitmez
-    4. Saklar:   hiçbir şey; saatler bellekte yaşar ve session ile biter
+    4. Saklar:   hiçbir şey; saatler bellekte durur ve session'la birlikte gider
     5. Düşman girdi: JSON olmayan bir transcript satırı sayılır ve atlanır, string uuid'si ya da parse edilebilir timestamp'i olmayan bir satır atlanır; çizilen etiket yalnız sayılardan kurulur
 
 ## Sınırlar
