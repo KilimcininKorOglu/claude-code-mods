@@ -31,7 +31,7 @@ Model koda `process.env.STRIPE_KEY` ekler, commit'ler ve `.env.example` hâlâ o
 
    Not ile satır ayrı kanallardır: model satırı, sen de notu hiç okumazsın.
 7. [sidebar](../sidebar) açıksa değişkenler transcript yerine onun stream'ine gider, her değişken bir satırda (ad kırmızı, okunduğu yer soluk); transcript temiz kalır. Kayıt, yenileri onu pane'den itene kadar durur. Sidebar yoksa satır yukarıdaki gibi transcript'e düşer.
-8. Bulgu hiçbir zaman hatırlanmış bir cevap değildir. Sonraki her commit'ten sonra ve korunan bir git komutundan önce yapılan her ölçüm iki kaynağı da yeniden okur; bu yüzden bulgu iki yoldan kapanır:
+8. Mod bulguyu bellekteki eski cevaba göre tutmaz. Sonraki her commit'ten sonra ve korunan bir git komutundan önce yapılan her ölçüm iki kaynağı da yeniden okur; bu yüzden bulgu iki yoldan kapanır:
 
    - referans dosyası artık değişkeni listeliyordur;
    - eklenen satırları değişkeni okuyan dosya, kod değiştiği ya da geri alındığı için artık onu okumuyordur. Ortadan kalkan bir dosya da hiçbir şey okumaz.
@@ -46,10 +46,10 @@ Model koda `process.env.STRIPE_KEY` ekler, commit'ler ve `.env.example` hâlâ o
 
        env-sync: .env.example still lacks 1 env variable(s) the code reads: STRIPE_KEY (src/pay.ts). Add them to .env.example with a placeholder value, or take the reads out.
 
-   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız commit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu not olmasa model bulguyu yalnız commit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
 10. `deny` modunda bulgu açık kaldıkça `git commit`, `git push` ve `git merge` komutlarını da durdurur. Durdurmadan önce iki kaynağı da yeniden ölçer; değişkenleri ekleyen ya da okumaları kaldıran bir commit gate'i kendiliğinden açar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit eksik değişkenleri okuyan dosyaların hiçbirini içermiyorsa geçmesine izin verir ve kaç bulgunun hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/env-sync mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
-Bir git hatası sarı bir kayıt olarak yazılır (sidebar kapalıysa transcript'e), farklı bir hata gelene kadar bir kez; commit'in sonucu da olduğu gibi kalır.
+Bir git hatası sarı bir kayıt olarak yazılır (sidebar kapalıysa transcript'e). Kayıt farklı bir hata gelene kadar bir kez yazılır ve commit'in sonucu olduğu gibi kalır.
 
 Canlı denemede model `.env.example`'ı yalnız `DB_URL`'yi listeleyen bir repository'deki bir dosyaya `process.env.STRIPE_KEY` ekledi, commit'ledi ve notu kelimesi kelimesine aktardı.
 
@@ -93,7 +93,7 @@ Reach L2: process çalıştırır.
 - Bir config katmanı üzerinden okunan değişken (Laravel `config('x')`, bir settings sınıfı, `dotenv` şema dosyaları) görülmez; çalışma anında kurulan bir ad (`process.env[name]`) da görülmez.
 - Yalnız repository kökündeki referans dosyası okunur. Kendi `.env.example`'ı olan bir monorepo paketi, kökteki dosyaya göre kontrol edilir.
 - Mod komutu metin olarak okur; `git commit`'i gizleyen bir script ya da alias üzerinden yapılan commit görülmez ve gate'ten geçer.
-- Dizinini shell'in önce genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote), mod'un bilebileceği bir dizin söylemez. O commit kontrol edilmez; sarı satır da kelimeyi söyler, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
+- Dizinini shell'in genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote) mod'a gerçek dizini söylemez. O commit kontrol edilmez ve sarı satır bu kelimeyi gösterir, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
 - Bir merge commit'inin birleşik diff'i okunmaz.
 - `deny` modunu aşmanın yolu yoktur. Bir bulgu düzeltilemiyorsa gate'i `/env-sync mode note` ile sen kapatırsın.
 - `git commit -a`, `-am` ve `--` sonrasında pathspec verilen commit index'e göre daraltılmaz, çünkü index'te henüz olmayan dosyaları da commit'ler. Bunlarda açık bulguların hepsi geçerlidir.
