@@ -9,18 +9,18 @@ Uzun bir işi başlatıp kalkıyorsun, bir saat sonra dönüyorsun ve session'ı
 3. Süre dolar da cevap gelmezse mod senin yerine her sorunun önerilen seçeneğiyle cevap verir. Engine soruyu kapatır, transcript de cevabı senin cevabın gibi gösterir.
 
    Tool, modele önerdiği seçeneği başa koymasını ve etiketini `(Recommended)` ile bitirmesini söyler. Başka dilde yazılmış bir soruda model bu kelimeyi o dilde yazar. Mod da ilk seçeneği, etiketi parantez içinde bu kelimeyle bitiyorsa ve başka hiçbir seçenekte bu işaret yoksa seçer. Kelimeyi İngilizce, Türkçe, Almanca, İspanyolca, Portekizce, Fransızca, İtalyanca, Felemenkçe, Lehçe, Rusça, Çince, Japonca ve Korece tanır; tam genişlikli parantezler de sayılır.
-4. Cevapla birlikte modele tek bir not gider: sen süre içinde cevap vermedin, yani bu seçim senin kararın değil, varsayılan; bir sonraki cevabında da bunu söylemesi gerekir. Canlı denemede model gerçekten de seçimi senin yapmadığını belirtti.
+4. Cevapla birlikte modele tek bir not gider. Not, süre içinde cevap vermediğini, seçimin senin kararın değil varsayılan olduğunu ve modelin bunu bir sonraki cevabında söylemesi gerektiğini anlatır. Canlı denemede model gerçekten de seçimi senin yapmadığını belirtti.
 5. Neyin seçildiğini söyleyen tek bir kayıt görürsün: [sidebar](../sidebar) açıksa onun stream'inde, değilse transcript'te bir satır olarak. Sidebar'da seçilen cevap sarı, soru ve geri kalanı soluktur:
 
        ask-autopick: no answer in 10 min, picked the recommended option: Renk? → Mavi (Önerilen)
 
-6. Bazı sorular hiç seçilmez: ilk seçeneği işaretli olmayan, ikinci bir seçeneği de işaretli olan ve birden çok cevap alan (`multiSelect`) sorular. Bunlar seni bekler, bunu söyleyen sarı bir kayıt da düşer.
+6. Üç tür soruya mod hiç cevap vermez: ilk seçeneği işaretli olmayan, işaretli ikinci bir seçeneği olan ve birden çok cevap alan (`multiSelect`) sorular. Bunlar seni bekler ve bunu söyleyen sarı bir kayıt düşer.
 
 2.1.282'deki canlı denemede açık bırakılan bir soru hem 1 hem 5 dakika sonra `Mavi (Önerilen)` cevabını aldı ve model işe onunla devam etti.
 
 ## Komut
 
-    /ask-autopick             açık mı kapalı mı, ve bekleme süresi
+    /ask-autopick             açık mı kapalı mı ve bekleme süresi
     /ask-autopick on | off    varsayılan kapalı; session'lar arasında korunur
     /ask-autopick 20          20 dakika bekler; 1 ile 120 arası, varsayılan 10, session'lar arasında korunur
 
