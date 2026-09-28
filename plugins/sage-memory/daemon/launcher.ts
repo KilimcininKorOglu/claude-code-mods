@@ -39,10 +39,15 @@ export function compareVersions(a: string, b: string): number {
   return 0
 }
 
-/** A daemon of the same protocol is used whatever its version; one of another protocol is replaced unless it is newer. */
+/**
+ * A daemon of the same protocol is used unless its version is older, so the daemon of an updated
+ * plugin replaces the one an older install left running. A daemon of another protocol is replaced
+ * unless it is newer.
+ */
 export function verdictOf(hello: Hello, own: Own): Verdict {
-  if (hello.protocol === own.protocol) return 'use'
-  return compareVersions(hello.version, own.version) > 0 ? 'newer' : 'replace'
+  const order = compareVersions(hello.version, own.version)
+  if (hello.protocol === own.protocol) return order < 0 ? 'replace' : 'use'
+  return order > 0 ? 'newer' : 'replace'
 }
 
 function note(layout: Layout, text: string): void {

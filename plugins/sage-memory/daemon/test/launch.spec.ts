@@ -116,9 +116,11 @@ describe('launch rules', () => {
     assert.equal(compareVersions('0.1.0', '0.1.1'), -1)
   })
 
-  test('the same protocol is used, another one is replaced unless its version is newer', () => {
+  test('an older version is replaced, a newer one of another protocol stops the launch', () => {
     const own = { version: '0.2.0', protocol: 2 }
-    assert.equal(verdictOf(hello('0.9.0', 2), own), 'use')
+    assert.equal(verdictOf(hello('0.9.0', 2), own), 'use', 'an older plugin of the same protocol uses the newer daemon')
+    assert.equal(verdictOf(hello('0.2.0', 2), own), 'use')
+    assert.equal(verdictOf(hello('0.1.0', 2), own), 'replace', 'the daemon an older install left running')
     assert.equal(verdictOf(hello('0.1.0', 1), own), 'replace')
     assert.equal(verdictOf(hello('0.2.0', 1), own), 'replace', 'one version on two protocols is a development build')
     assert.equal(verdictOf(hello('0.3.0', 3), own), 'newer')

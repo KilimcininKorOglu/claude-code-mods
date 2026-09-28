@@ -63,6 +63,6 @@ export type ServerFile = { pid: number; version: string; protocol: number; token
 
 /**
  * The one line `daemon/launch.ts` prints. `started` is false when a daemon already answered;
- * `replaced` is the older daemon a launch stopped because it spoke another protocol.
+ * `replaced` is the older daemon a launch stopped: an older version, or one of another protocol.
  */
 export type Launch = { ready: true; started: boolean; hello: Hello; replaced?: Hello } | { ready: false; error: string; log?: string }
