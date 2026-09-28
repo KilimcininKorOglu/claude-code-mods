@@ -1,54 +1,58 @@
 # cache-warm
 
-Bir session'ın 1 saatlik prompt cache'ini sizin belirlediğiniz bir pencere boyunca sıcak tutan ve soğuk bir cache'in maliyetini gösteren bir Claude Code Mod'u. Cache düştükten sonra gönderilen bir mesaj tüm context'i cache-write fiyatından yeniden yazar; Claude Fable 5.1'de bu 200k token için 4,00 dolardır, aynı token'ları sıcak cache'ten okumanın 0,05 dolarına karşılık.
+Claude Code konuşmanı bir saatliğine prompt cache'te tutar. Daha uzun süre uzaklaşırsan bir sonraki mesaj bütün context'i cache-write fiyatından yeniden yazar: Claude Fable 5.1'de 200k token için bu $4,00 eder, aynı token'ları sıcak cache'ten okumak ise $0,05. Bu mod cache'i senin seçtiğin bir süre boyunca sıcak tutar ve soğuk bir cache'in sana neye mal olacağını gösterir.
 
-Davranış, Karan Bansal'ın cache-tax mod'unu (karanb192/claude-code-mods) izler, onun send guard'ı olmadan. Kod yenidir.
+Davranışı Karan Bansal'ın cache-tax mod'unu (karanb192/claude-code-mods) izler, ama onun gönderim kilidi yoktur. Kod baştan yazılmıştır.
 
 ## Ne yapar
 
-**Cache'i sıcak tutar.** `/cache-warm` altı saatlik bir pencere kurar. Pencere içinde, main loop'un son model isteğinden 50 dakika sonra mod, session'ın kendi transcript'i üzerinden tool'suz tek bir `$.model.fork` gönderir. Sunucu bunu cache'ten cevaplar, bu da saati tazeler. Her yeni istek ping'i ileri atar, yani aktif bir session hiç ping göndermez. Bir session'ın ilk isteği ve `/clear` ya da bir compaction sonrasındaki ilk istek de ping'i kurar, yani ilk turn içinde saati aşan tek bir tool çağrısı da ping'ini turn'ün ortasında alır (2.1.281 üzerinde ölçüldü: ping `sleep 110` çalışırken gitti ve turn normal bitti).
+**Cache'i sıcak tutar.** `/cache-warm` altı saatlik bir pencere açar. Pencere içinde, ana loop'un son model request'inden 50 dakika sonra mod, session'ın kendi transcript'i üzerinden tool'suz bir `$.model.fork` gönderir. Sunucu bunu cache'ten cevaplar ve bu da cache'in süresini bir saat uzatır. Her yeni request ping'i ileri kaydırır, yani aktif kullandığın bir session hiç ping göndermez. Session'ın ilk request'i ile `/clear` ya da compaction'dan sonraki ilk request de ping'i kurar. Böylece ilk turn içinde bir saati aşan bir tool çağrısı bile ping'ini turn'ün ortasında alır (2.1.281'de ölçüldü: ping `sleep 110` çalışırken gitti ve turn normal bitti).
 
-**`always` ile sonsuz çalışır.** `/cache-warm always` bir pencere değildir: ping, session yaşadığı sürece 50 dakikada bir çıkar ve bunu bitiren tek şey `/cache-warm off` komutudur. Switch, mod'un kendi `$.store` dosyasındaki tek bir global key'dir, yani her projenin her sonraki session'ı aynı döngüyü başlangıçta ve `/clear` sonrasında başlatır. Her turn'ün sonu son isteğin zamanını `$.store` içinde session'ın id'si altında saklar, her ping de kendi okumasını orada saklar; yani çalışan bir konuşmaya yüklenen modül (`/reload-plugins`, bir update) ping'i ikisinden daha yeni olana göre zamanında atar. Yalnız ping'lerle sıcak tutulan bir session'ın son turn'ü, tuttuğu cache'ten daha eskidir. İkisi de bir saatten eskiyse cache gitmiştir ve döngü soğuk bir ping ödemek yerine sonraki turn'ü bekler. Bunun için session transcript'i okunmaz, çünkü `/reload-plugins` oraya kendi satırını yazar ve dosyanın son yazılma zamanı o zaman bir istek gibi okunur (ölçüldü: son turn'den 90 saniye sonraki bir reload ping'i 90 saniye geç kurardı). Henüz saklı zamanı olmayan bir session, yani eski bir sürümle çalışmış olan, transcript'inin son yazılma zamanını bir kere okur (`~/.claude/projects/<dizin>/<session id>.jsonl`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altından); dosyayı session'ın başladığı dizinin altında arar, bir shell `cd` komutunun taşıdığı dizinde asla aramaz; bulamadığı bir transcript'i bir transcript satırıyla bildirir. Cache'i gitmiş bulan bir ping bu döngüyü bitirmez: o ping'in ödediği write yeni cache'tir, mod bunu bir transcript satırıyla söyler, write'ı session'ın sayacına ekler ve devam eder. Sıcak bir ping context'i read fiyatından okur, 200k token için yaklaşık 0,05 dolar, yani boş geçen bir günün ping'leri yaklaşık 1,40 dolar tutar.
+**`always` ile sonsuza dek çalışır.** `/cache-warm always` bir pencere değildir: ping session yaşadığı sürece her 50 dakikada bir gider ve onu yalnız `/cache-warm off` bitirir. Ayar, mod'un kendi `$.store`'unda tek bir global key'dir; bu yüzden her projenin sonraki her session'ı aynı döngüyü başlangıçta ve `/clear`'dan sonra kendisi başlatır.
 
-**Cache gittiğinde durur.** Bu, sonu olan bir pencere için geçerlidir, `always` için değil. Sıcak bir ping context'i okur ve yalnız kendi birkaç token'ını yazar. Bir ping hiçbir şey okumadığında ya da okuduğunun onda biri kadar veya daha fazlasını yazdığında, cache zaten gitmiştir ve write'ı ping'in kendisi ödemiştir. Mod o zaman durur ve sebebini gösterir. API fork'a bir hatayla cevap verdiğinde (satır onun status'unu ve türünü adlandırır) ve fork cevabından önce kesildiğinde de durur. Engine'in fork edeceği bir şey olmadığında, örneğin resume edilmiş bir sürecin ilk cevabından önce, pencere durmaz: sonraki cevabı bekler, o turn ping'i yeniden kurar, ve satır cache'in ne zamana kadar tuttuğunu söyler. Metin taşımayan bir cevap yine de cache'i okumuştur, bu yüzden bir ping sayılır. `always` altında böyle bir hata döngüyü yalnız o turn için durdurur: sonraki turn onu yeniden başlatır, yani session switch'i tutarken hiçbir şey çalıştırmaz duruma düşmez.
+- Her turn'ün sonu son request'in zamanını session'ın id'siyle `$.store`'a yazar, her ping de kendi okumasını oraya kaydeder. Bu sayede çalışan bir konuşmaya yüklenen modül (`/reload-plugins`, bir güncelleme) ikisinden hangisi daha yeniyse ona göre zamanında ping atar; yalnız ping'lerle sıcak tutulan bir session'ın son turn'ü cache'inden eskidir. İkisi de bir saatten eskiyse cache gitmiştir ve döngü soğuk bir ping'e para ödemek yerine bir sonraki turn'ü bekler.
+- Bunun için session'ın transcript'i okunmaz, çünkü `/reload-plugins` oraya kendi satırını yazar ve dosyanın son yazılma zamanı bir request gibi görünürdü (ölçüldü: son turn'den 90 saniye sonraki bir reload ping'i 90 saniye geciktirirdi). Transcript'in son yazılma zamanını yalnız henüz hiç zaman kaydı olmayan, eski bir sürümle çalışmış session bir kez okur (`~/.claude/projects/<dizin>/<session id>.jsonl`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altında). Transcript, session'ın başladığı dizine göre aranır, bir shell `cd`'sinin götürdüğü dizine göre değil; bulunamazsa bir transcript satırı bunu söyler.
+- Cache'i gitmiş bulan bir ping bu döngüyü bitirmez. O ping'in ödediği yazma yeni cache olur: mod bunu bir transcript satırıyla söyler, yazmayı session'ın sayacına ekler ve devam eder. Sıcak bir ping context'i okuma fiyatından okur, 200k token için yaklaşık $0,05; yani boşta geçen bir günün ping'leri yaklaşık $1,40 tutar.
 
-**Ödenmiş soğuk bir write'tan sonra kendini kurar.** Bir turn, 20k token'dan büyük bir context'in en az yarısını yeniden yazdığında mod o soğuk write'ı sayar ve altı saatlik bir pencere kurar, daha uzun bir pencere zaten kurulu değilse. `always` altında hiç altı saatlik pencere kurulmaz, çünkü sonsuz döngü o cache'i zaten tutar.
+**Cache gidince durur.** Bu, sonu olan bir pencere için geçerlidir, `always` için değil. Sıcak bir ping context'i okur ve yalnız kendi birkaç token'ını yazar. Bir ping hiçbir şey okumazsa ya da okuduğunun onda biri kadar veya daha fazla yazarsa cache zaten gitmiş ve yazmayı ping'in kendisi ödemiştir; mod durur ve nedenini gösterir. API fork'a hata dönerse (satır status'u ve türünü söyler) ve fork cevap vermeden kesilirse de durur. Engine'in fork'layacak bir şeyi yoksa, örneğin resume edilmiş bir process ilk cevabını henüz vermemişse, pencere durmaz: bir sonraki cevabı bekler, o turn ping'i yeniden kurar ve satır cache'in ne zamana kadar tuttuğunu söyler. Metinsiz bir cevap da cache'i okumuştur, bu yüzden ping sayılır. `always` altında böyle bir hata döngüyü yalnız o turn için durdurur: bir sonraki turn onu yeniden başlatır, böylece session hiçbir şey çalışmıyorken ayarı açık tutmaz.
 
-**Durumu gösterir.** `/cache-status`; modeli, sıcak ya da soğuk olduğunu, context boyutunu, soğuk fiyatı, pencereyi, başa baş noktasını ve bu session'ın soğuk write'larını yazar.
+**Pahalı bir soğuk yazmadan sonra kendiliğinden açılır.** Bir turn 20k token'dan büyük bir context'in en az yarısını yeniden yazarsa mod bu soğuk yazmayı sayar ve altı saatlik bir pencere açar; daha uzun bir pencere zaten açıksa açmaz. `always` altında altı saatlik pencere hiç açılmaz, çünkü sonsuz döngü o cache'i zaten tutuyordur.
 
-Soğuk bir cache'e giden mesaj durdurulmaz ve geciktirilmez. Cache'i düşmüş, resume edilen bir session ilk mesajının fiyatını tek satırda alır. Claude Code cache'in yaşını transcript'teki son cevaptan hesaplar ve ping transcript'e yazılmaz; bu yüzden mod'un bu session için kaydettiği son ping son bir saat içinde cache'i okuduysa satır yazılmaz.
+**Durumu gösterir.** `/cache-status` modeli, cache'in sıcak mı soğuk mu olduğunu, context boyutunu, soğuk fiyatı, pencereyi, başa baş noktasını ve bu session'daki soğuk yazmaları yazar.
 
-**Resume'dan sonra bir cache mesajı gönderir.** Resume edilmiş bir süreç kendi ilk cevabından önce fork edemez: `$.model.fork` `nothing-to-fork` döner (headless bir `claude --resume` ile ölçüldü). Bu yüzden ping gidemez, ve kapatılıp 30 dakika sonra açılan bir session, siz bir şey yazmazsanız cache'ini saatin dolduğu anda kaybeder. Bu nedenle bir pencere ya da `always` çalışırken interactive bir session resume edildiğinde, context'i 50k token ya da daha büyükse ve cache'i hâlâ tutuyorsa, mod resume'dan üç saniye sonra kendi `/cache-warm:send` komutuyla bir mesaj gönderir:
+Soğuk bir cache'e gönderdiğin mesaj asla durdurulmaz ya da geciktirilmez. Cache'i dolmuş bir session resume edilince, ilk mesajının fiyatını söyleyen tek bir satır görür. Claude Code cache'in yaşını transcript'teki son cevaba göre hesaplar ve ping hiçbir zaman oraya yazmaz. Bu yüzden mod'un bu session için kaydettiği son ping cache'i son bir saat içinde okuduysa o satır gösterilmez.
+
+**Resume'dan sonra sıcak tutma mesajı gönderir.** Resume edilmiş bir process kendi ilk cevabından önce fork yapamaz: `$.model.fork` `nothing-to-fork` döner (headless bir `claude --resume` ile ölçüldü). Yani ping gidemez; kapatıp 30 dakika sonra yeniden açtığın bir session, sen bir şey yazmadıkça saatin sonunda cache'ini kaybederdi. Bu yüzden bir pencere ya da `always` çalışırken, context'i 50k token veya daha büyük ve cache'i hâlâ tutan interaktif bir session resume edilince mod, resume'dan üç saniye sonra kendi `/cache-warm:send` komutuyla tek bir mesaj gönderir:
 
     /cache-warm:send This message was sent by the cache-warm plugin, not by the person. The session was resumed, and a resumed session can keep its prompt cache warm only after a reply. Do not run a tool or continue a task. Reply with the single word: warm
 
-Bu gerçek bir turn'dür: cache'i okur, model tek kelimeyle cevap verir, bu soru-cevap çifti konuşmada kalır ve turn'ün sonu ping'i yeniden kurar. Cache zaten gitmişse (sonraki mesajınız aynı write'ı öder), bir `-p` çalıştırmasında ya da o üç saniye içinde siz bir mesaj gönderdiyseniz hiçbir şey gönderilmez. Diğer mod'lar bu turn'ü diğerleri gibi görür: açık görev varken `task-poke` ardından devam prompt'unu gönderebilir, `desk-notify` turn sonu bildirimini gösterir. 2.1.283'te 116k token'lık, resume edilmiş interactive bir session'da ölçüldü: mesaj resume anında gitti, model `warm` dedi ve sonraki ping fork edip 117k token okudu. Resume prefix'in bir kısmını kendi başına bozabilir (o session'da 116k'nın 42k'sını yeniden yazdı; son ping'inden 40 dakika sonra resume edilen bir başkasında 4k); cache mesajı o write'ı ilk mesajınız yerine resume anında öder.
+Bu gerçek bir turn'dür: cache'i okur, model tek kelimeyle cevap verir, bu ikisi konuşmada kalır ve turn'ün sonu ping'i yeniden kurar. Cache zaten gitmişse (bir sonraki mesajın aynı yazmayı nasılsa öder), bir `-p` koşusunda ya da o üç saniye içinde sen bir mesaj gönderdiysen hiçbir şey gönderilmez. Diğer mod'lar bunu sıradan bir turn gibi görür: açık görevler varken `task-poke` arkasından devam prompt'unu gönderebilir, `desk-notify` de turn sonu bildirimini gösterir. 2.1.283'te 116k token'lık, resume edilmiş interaktif bir session'da ölçüldü: mesaj resume anında gitti, model `warm` diye cevap verdi ve bir sonraki ping fork yapıp 117k token okudu. Resume prefix'in bir kısmını kendi başına bozabilir (o session 116k'nın 42k'sını yeniden yazdı; son ping'inden 40 dakika sonra resume edilen bir başkası 4k); sıcak tutma turn'ü bu yazmayı senin ilk mesajın yerine resume anında öder.
 
 ## Komutlar
 
-    /cache-warm               altı saat sıcak tut
-    /cache-warm 90m           kendi pencereniz kadar sıcak tut (2h30m de olur)
-    /cache-warm always        cache'i sonsuza kadar sıcak tut, her projenin her session'ında
-    /cache-warm 6h every 2m   iki dakikada bir ping; test ayarı, taban 1m, bu pencereden sonra unutulur
+    /cache-warm               altı saat sıcak tutar
+    /cache-warm 90m           kendi seçtiğin bir süre boyunca sıcak tutar (2h30m de olur)
+    /cache-warm always        cache'i sonsuza dek, her projenin her session'ında sıcak tutar
+    /cache-warm 6h every 2m   iki dakikada bir ping atar; test ayarıdır, en az 1m, bu pencereden sonra unutulur
     /cache-warm status        status line metni
-    /cache-warm off           durdur, pencereyi unut ve always'i kapat
+    /cache-warm off           durdurur, pencereyi unutur ve always'i kapatır
     /cache-status             kart
-    /cache-warm:send <metin>  mod'un resume'dan sonra gönderdiği cache mesajı; gövdesi yalnız metindir
+    /cache-warm:send <metin>  mod'un resume'dan sonra gönderdiği sıcak tutma mesajı; gövdesi yalnız metindir
 
 ## Ne gösterir
 
-**Prompt'un altında bir status line**, bir pencere kuruluyken ya da bir duruştan sonra:
+**Prompt'un altında bir status line**, pencere açıkken ya da bir duruştan sonra:
 
     cache-warm: 5h 10m left · ping in 37m · last ping read 200k $0.05 (05:42)
     cache-warm: stopped: the ping read 0 and wrote 180k tokens ($3.60), the cache was already gone
 
-`last` kısmı cache'i okuyan son isteği adlandırır, bir ping ya da bir main-loop turn'ü, hangisi en son geldiyse: `last ping read 200k $0.05` ya da `last turn read 250k $0.07`, ikisi hiçbir zaman birlikte değil. Bir turn'ün değerleri bütün turn'ündür, her isteği toplanır. Parantezdeki zaman o cevabın geldiği yerel saattir; önceki bir günün cevabı gününü ve ayını da taşır, `(22 Sep 23:10)` gibi. Kayıt session'ın id'si altında `$.store` içinde tutulur, bu yüzden `/reload-plugins` ya da bir update onu hemen yeniden çizer.
+`last` kısmı cache'i en son okuyan request'i gösterir; ping mi ana loop turn'ü mü, hangisi daha yeniyse: `last ping read 200k $0.05` ya da `last turn read 250k $0.07`, hiçbir zaman ikisi birden değil. Turn'ün sayıları bütün turn'ü kapsar, içindeki her request toplanır. Parantezdeki saat o cevabın geldiği yerel saattir; önceki bir güne aitse gün ve ayı da taşır, `(22 Sep 23:10)` gibi. Kayıt session'ın id'siyle `$.store`'da tutulur, bu yüzden `/reload-plugins` ya da bir güncelleme onu hemen yeniden gösterir.
 
-Bir pencere çalışırken interactive bir session satırı her dakika yeniden çizer; böylece kalan süre ve bir sonraki ping'e kalan süre turn'ler ve ping'ler arasında da geri sayar. `last` kısmı satırda kalır. Ping'ten önceki son dakika `ping now` diye okunur, çünkü dakikalar yuvarlanır ve satır dakikada bir çizilir; ping'in fork'u giderken satır `pinging…` der. Engine'in fork edeceği bir şey olmadığında satır geri saymak yerine bunu söyler:
+Pencere açıkken interaktif bir session satırı her dakika yeniden çizer; böylece kalan süre ve bir sonraki ping'e kalan süre turn'ler ve ping'ler arasında geri sayar, `last` kısmı da satırda kalır. Ping'den önceki son dakikada satırda `ping now` yazar, çünkü dakikalar yuvarlanır ve satır dakikada bir çizilir; ping'in fork'u yoldayken `pinging…` yazar. Engine'in fork'layacak bir şeyi yoksa satır geri saymak yerine bunu söyler:
 
     cache-warm: always · no ping before the next reply · cache holds until 19:16
 
-**Her ping denemesi için bir stream girdisi**, sidebar açıkken; sidebar'ın log dosyasında (`~/.claude/sidebar/<proje>-<tarih>.log`) kalır, böylece bir ping'in gidip gitmediği ve ne yaptığı sonradan okunabilir. Sidebar kapalıyken aynı metin bir transcript satırıdır:
+**Her ping denemesi için bir stream kaydı**, sidebar açıkken. Kayıt sidebar'ın log dosyasında da tutulur (`~/.claude/sidebar/<proje>-<tarih>.log`), böylece bir ping'in gidip gitmediğini ve ne yaptığını sonradan okuyabilirsin; sidebar kapalıysa aynı metin bir transcript satırıdır:
 
     ping sent · read 901k · wrote 0 · $0.45
     ping found the cache gone · read 0 · wrote 180k · $3.60
@@ -56,29 +60,29 @@ Bir pencere çalışırken interactive bir session satırı her dakika yeniden �
     ping failed: the ping failed, the API answered 529 (overloaded)
     keep-warm message sent: the session was resumed and its cache holds until 19:16; a resumed session pings only after a reply
 
-[sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran ve her değişimde yeniden yazılan bir `cache window` section'ı olarak; status line temiz kalır. Orada yalnızca kalan süre (ya da `always`) renklidir: sonu bir ping periyodundan yakın olan pencerede sarı, tutan pencerede yeşil, ilk turn beklenirken soluk. Ardındaki ping bilgileri soluktur; durmuş bir pencerede `stopped:` başı kırmızı, sebep varsayılan renktedir. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi çizilir.
+[sidebar](../sidebar) açıksa status line oraya taşınır: session boyunca duran ve her değişiklikte yeniden yazılan bir `cache window` section'ı olur, status line da boş kalır. Yalnız kalan süre (ya da `always`) renklidir: pencere bir ping süresinden daha yakında bitecekse sarı, sürüyorsa yeşil, ilk turn'ü beklerken soluk. Arkasından gelen ping ayrıntıları soluktur; durmuş bir pencere ise `stopped:` başını kırmızı, nedenini varsayılan renkte gösterir. Sidebar yoksa status line yukarıdaki gibi çizilir.
 
-Duruş sebebi bir turn boyunca durur. Sonraki turn'de section onun yerine idle satırını taşır; satır soluktur, yalnızca ödenmiş bir `N cold writes paid $X` sarıdır. Böylece pane biten pencerenin bir cümlesini değil, şimdinin ölçümünü tutar. Sebep transcript'te kalır ve pencere çalışmıyorken status line boştur:
+Duruş nedeni bir turn boyunca kalır. Bir sonraki turn'de section onun yerine boşta satırını gösterir: soluktur, yalnız ödenmiş `N cold writes paid $X` kısmı sarıdır. Böylece pane, biten bir pencerenin son cümlesini değil, şimdiki ölçümü gösterir. Neden transcript'te kalır; hiçbir pencere çalışmıyorken status line boştur:
 
     cache window
     off · 2 cold writes paid $6.30 · context 315k tokens
 
-Süresi dolan bir pencere sonraki mesajınızla tekrar kurulur, biten pencere kadar ve aynı ping periyoduyla; idle satırı beklerken bunu söyler:
+Süresi dolan bir pencere bir sonraki mesajınla yeniden açılır; biten pencere kadar uzun ve aynı ping süresiyle. Boşta satırı beklerken bunu söyler:
 
     cache window
     off · 6h again at your next message · 1 cold write paid $4.01 · context 201k tokens
 
     cache-warm: the 6h window ran out; this message arms another one. /cache-warm off stops it.
 
-Yalnız süresi dolan pencere geri gelir. Bir ping'in durdurduğu pencere gelmez: orada cache zaten gitmiştir ve sonraki mesajınızın soğuk write'ı kendi 6h penceresini kurar. `/cache-warm off` geri gelmeyi bekleyen bir pencereyi unutur.
+Yalnız süresi dolan pencere geri gelir. Bir ping'in durdurduğu pencere gelmez: orada cache zaten gitmiştir ve bir sonraki mesajının soğuk yazması kendi 6 saatlik penceresini açar. `/cache-warm off` geri gelmeyi bekleyen bir pencereyi de unutur.
 
-Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satırı, kısaltılmış; bir cold write'ın maliyeti sarıdır. Pencere satırı cache'in ne kadar tutulacağını söyler, ikinci satır mod'un en son ne yaptığını:
+Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satırının kısaltılmışı, içinde soğuk yazmanın maliyeti sarı. Pencere satırı cache'in ne kadar tutulacağını, ikinci satır mod'un en son ne yaptığını söyler:
 
     cache window
     6h left · ping in 50m
     cold write 201k tokens paid ($4.01)
 
-**`/cache-status` kartı**:
+`/cache-status`'un **kartı**:
 
     claude-fable-5-1
     state       warm, 42m left
@@ -88,41 +92,41 @@ Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satı
     break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m
     session     1 cold write paid, $4.01
 
-**Transcript'te bir satır**, modele gitmez: soğuk bir write pencereyi kurduğunda ya da bir resume soğuk başladığında.
+**Transcript'te bir satır**, modele gönderilmez: bir soğuk yazma pencereyi açtığında ya da bir resume soğuk başladığında.
 
 ## Fiyatlar
 
-`hooks/pricing.ts` içindeki tablo, Anthropic fiyat sayfasındaki her modelin cache-read, 1 saatlik cache-write ve output fiyatlarını tutar, Eylül 2026'da okundu. Bir model id'si, içerdiği ilk aileyi alır; yani `claude-opus-4-1` Opus 4.1 olarak fiyatlanır (1,50 / 30 / 75 dolar), `claude-opus-4-8` ise Opus 4.8 olarak (0,50 / 10 / 25 dolar). `claude-opus-5-5` de `opus-5` içerir, bu yüzden kendi satırı önce gelir: Opus 5.5, Opus 5'in altında 0,20 / 8 / 20 dolardır. Bir ping tam fiyatlanır: cache read'i, kendi cache write'ı, base fiyattan cache'siz input'u (1 saatlik write fiyatının yarısı) ve output'u. Bilinmeyen model `n/a` gösterir.
+`hooks/pricing.ts` içindeki tablo, Anthropic fiyat sayfasındaki her modelin cache okuma, 1 saatlik cache yazma ve output fiyatlarını tutar; Eylül 2026'da okundu. Bir model id'si, içinde geçen ilk aileyi alır: `claude-opus-4-1` Opus 4.1 olarak ($1,50 / $30 / $75), `claude-opus-4-8` Opus 4.8 olarak ($0,50 / $10 / $25) fiyatlanır. `claude-opus-5-5` içinde `opus-5` de geçtiği için kendi satırı önce gelir: Opus 5.5, Opus 5'ten ucuzdur, $0,20 / $8 / $20. Bir ping'in tamamı fiyatlanır: cache okuma, kendi cache yazması, taban fiyattan (1 saatlik yazma fiyatının yarısı) cache'lenmemiş input'u ve output'u. Bilinmeyen bir model `n/a` gösterir.
 
-Fast mode, Opus 5.5, Opus 5 ve Opus 4.8'i kendi base fiyatlarından faturalar (8 ve 10 dolar input), cache çarpanları da bunların üstüne uygulanır. `/fast` komutunun yazdığı `fastMode` setting'i açıkken mod Opus 5.5'i 0,40 / 16 / 40 dolardan, Opus 5 ve 4.8'i 1 / 20 / 50 dolardan fiyatlar. Setting'leri session başında ve her main-loop turn'ün sonunda okur, yani bir `/fast` sonraki turn'den itibaren sayılır. `true` değerli bir `fastModePerSessionOptIn` her session'ı fast mode kapalı başlatır, o durumda standart fiyatlar kalır. Diğer her model standart fiyatını korur ve kart fast mode'u yalnız fiyatlar değiştiğinde adlandırır:
+Fast mode Opus 5.5, Opus 5 ve Opus 4.8'i kendi taban fiyatlarından ($8 ve $10 input) faturalar, cache çarpanları bunun üstüne uygulanır. `/fast`'in yazdığı `fastMode` ayarı açıkken mod Opus 5.5'i $0,40 / $16 / $40, Opus 5 ve 4.8'i $1 / $20 / $50 olarak fiyatlar. Ayarları session başında ve her ana loop turn'ünün sonunda okur, yani bir `/fast` bir sonraki turn'den itibaren sayılır. `fastModePerSessionOptIn` `true` ise her session fast mode kapalı başlar ve standart fiyatlar geçerli olur. Diğer modeller standart fiyatlarında kalır; kart da fast mode'dan yalnız fiyatlar değiştiğinde söz eder:
 
     claude-opus-5-5 · fast mode rates (the fastMode setting)
 
-Abonelikte dolarlar fatura değil, bir ölçü birimidir. Bir cache read'in 5 saatlik ve haftalık limitlere nasıl sayıldığı dokümante değildir.
+Abonelikteysen dolarlar bir ölçü birimidir, faturan değil. Bir cache okumasının 5 saatlik ve haftalık limitlerden nasıl düştüğü belgelenmemiştir.
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install cache-warm@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod yüklenmiyor:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
-Tek bir session için local checkout'tan yükleyin:
+Bir session için yerel bir checkout'tan yüklemek istersen:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/cache-warm
 
-Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. Diğer her keep-warm mod'unu kapatın, örneğin `claude plugin disable cache-tax@claude-code-mods`. Tek session'da iki keep-warm mod'u, boş geçen her aralıkta iki ping gönderir.
-3. Bir ping'in cache'inizi okuduğunu bir kere doğrulayın, aşağıdaki "Kendi session'ınızda kanıtlayın" bölümündeki gibi.
-4. Cache'i sonsuza kadar sıcak tutmak için `/cache-warm always` komutunu bir kere çalıştırın. Anahtar global'dir: her projenin her sonraki session'ı döngüyü kendisi başlatır ve `/cache-warm off` onu temelli bitirir. Bu olmadan pencere yalnız `/cache-warm` ile ya da ödenmiş bir soğuk write'tan sonra kurulur.
+1. Claude Code'u yeniden başlat.
+2. Cache'i sıcak tutan başka bir mod varsa kapat, örneğin `claude plugin disable cache-tax@claude-code-mods`. Bir session'da iki böyle mod, her boşta kalma süresinde iki ping gönderir.
+3. Aşağıdaki "Kendi session'ında kanıtla" bölümündeki gibi, bir ping'in cache'ini gerçekten okuduğunu bir kez kontrol et.
+4. Cache'i sonsuza dek sıcak tutmak istersen bir kez `/cache-warm always` çalıştır. Ayar globaldir: her projenin sonraki her session'ı döngüyü kendi başlatır, `/cache-warm off` da onu kalıcı olarak bitirir. Bu ayar olmadan pencere yalnız `/cache-warm` ile ya da ödenmiş bir soğuk yazmadan sonra açılır.
 
 ## Nereye uzanır
 
@@ -133,37 +137,37 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
-Reach L2, Claude'u sürer.
+Reach L2: Claude'u yönlendirir.
 
-    1. Okur:     her main-loop model isteğinin zamanını; her turn'ün ve her ping'in token sayılarını ve model id'sini; canlı context boyutunu; pencereyi tekrar kurmak için her mesajın origin'ini; Claude Code'un settings hook'ları için hesapladığı resume alanlarını; session id'sini ve modelini; modül çalışan bir konuşmaya yüklendiğinde bir kere, session'ın kendi transcript dosyasının son yazılma zamanını; fastMode ve fastModePerSessionOptIn setting'lerini, session başında ve her turn sonunda; kendi $.store dosyasını. Bir prompt'un metnini, bir dosyanın içeriğini ya da bir tool sonucunu hiç okumaz.
-    2. Çalıştırır: bir pencere ya da always döngüsü çalışırken boş geçen her aralıkta bir $.model.fork, son istekten 50 dakika sonra (test ayarı kullanılmadıkça; taban 1 dakika); kapalıyken asla; cache'i gitmiş bulan bir ping sonu olan pencereyi bitirir, always altında döngü devam eder; cache'i hâlâ tutan interactive bir session resume edildiğinde /cache-warm:send ile bir cache mesajı (engine komutu reddederse bir plugin prompt'u), ki bu gerçek bir turn'dür
-    3. Gönderir: fork'u, yani session'ın kendi transcript'i üzerinden sabit tek satırlık prompt taşıyan bir API isteğini, ve resume'dan sonra sabit cache mesajını konuşmanın bir turn'ü olarak
-    4. Saklar:   $.store içinde pencere sonunu, ping periyodunu ve son main-loop isteğinin zamanını ve son ping ya da turn okumasını (token, maliyet, saat) bu session'ın id'si altında, ve global always switch'ini (sonsuz döngünün yanında pencere key'ine ihtiyacı yoktur); bu session'ın biten penceresi duruşta ve bir sonraki başlangıçta silinir, başka bir session'ın penceresi bittikten bir hafta sonra, başka bir session'ın istek zamanı ve son okuması bir saat eskidiğinde; soğuk write sayacı bellekte yaşar ve session ile biter
-    5. Düşman girdi: parse ettiği tek metin /cache-warm argümanıdır, bir süre kalıbına ve üç kelimeye karşı eşleştirilir; fork'un prompt'u sabittir, yani kurgulanmış hiçbir şey ona ulaşamaz
+    1. Okur:     her ana loop model request'inin zamanını; her turn'ün ve her ping'in token sayılarını ve model id'sini; güncel context boyutunu; pencereyi yeniden açmak için her mesajın kaynağını; Claude Code'un settings hook'ları için hesapladığı resume alanlarını; session id'sini ve modelini; modül çalışan bir konuşmaya yüklendiğinde bir kez, session'ın kendi transcript dosyasının son yazılma zamanını; session başında ve her turn sonunda fastMode ve fastModePerSessionOptIn ayarlarını; kendi $.store'unu. Hiçbir prompt'un metnini, dosya içeriğini ya da tool sonucunu okumaz.
+    2. Çalıştırır: bir pencere ya da always döngüsü çalışırken her boşta kalma süresinde bir $.model.fork; test ayarı kullanılmıyorsa son request'ten 50 dakika sonra (en az 1 dakika); kapalıyken hiç; cache'i gitmiş bulan bir ping sonu olan bir pencereyi bitirir, always altında döngü sürer; cache'i hâlâ tutan interaktif bir session resume edilince /cache-warm:send ile bir sıcak tutma mesajı (engine komutu reddederse plugin prompt'u olarak), bu gerçek bir turn'dür
+    3. Gönderir: fork'u, yani session'ın kendi transcript'i üzerinden sabit tek satırlık prompt'la bir API request'ini; resume'dan sonra da sabit sıcak tutma mesajını konuşmanın bir turn'ü olarak
+    4. Saklar:   $.store içinde bu session'ın id'siyle pencerenin bitişini, ping süresini, son ana loop request'inin zamanını ve son ping ya da turn okumasını (token, maliyet, zaman), bir de sonsuz döngünün yanında pencere key'i gerektirmeyen global always ayarını; bu session'ın biten penceresi duruşta ve bir sonraki başlangıçta, başka bir session'ın penceresi bittikten bir hafta sonra, başka bir session'ın request zamanı ve son okuması bir saati geçince silinir; soğuk yazma sayacı bellekte durur ve session'la biter
+    5. Düşman girdi: ayrıştırdığı tek metin /cache-warm'un argümanıdır ve bir süre deseniyle üç kelimeye karşı kontrol edilir; fork'un prompt'u sabittir, bu yüzden özel hazırlanmış bir metin ona ulaşamaz
 
-## Kendi session'ınızda kanıtlayın
+## Kendi session'ında kanıtla
 
-Mock clock testleri zamanlayıcıyı ve puanlamayı kanıtlar, bir fork'un ana cache'i okuduğunu değil. Bunu tek bir ping kanıtlar. Sıcak bir session'da:
+Sahte saatli testler zamanlayıcıyı ve puanlamayı kanıtlar, fork'un ana cache'i okuduğunu değil. Bunu tek bir ping kanıtlar. Sıcak bir session'da:
 
     > Reply with one word: ready
     > /cache-warm 1h every 1m
 
-Bir dakika sonra status line `last ping read <context'inize yakın bir değer> $...` demelidir. `stopped: the ping read ...` satırı fork'un cache'i paylaşmadığını söyler ve mod çoktan durmuştur. `/cache-warm off` testi bitirir.
+Bir dakika sonra status line `last ping read <context'ine yakın bir sayı> $...` göstermeli. `stopped: the ping read ...` satırı, fork'un cache'i paylaşmadığı ve mod'un zaten durduğu anlamına gelir. `/cache-warm off` testi bitirir.
 
 ## Sınırlar
 
-- 50 dakikalık ping, ana konuşmanın kullandığı 1 saatlik cache tier'ını varsayar.
-- Sıcak bir ping cache'in o anda sıcak olduğunu kanıtlar. Model ya da effort değişimi, düzenlenmiş bir CLAUDE.md ya da değişen bir tool listesi prefix'i zamandan bağımsız bozar ve sonraki mesaj öder.
-- Bir ping'in output'u sınırlanamaz; yüksek effort'taki bir model cevaptan önce düşünebilir. Status line, ping'in gerçekten faturaladığını fiyatlar.
-- Resume mantığı, resume alanlarıyla `classic.SessionStart` üreten hook testleriyle ve resume edilmiş interactive bir session'ın tmux içindeki canlı kontrolüyle karşılanır. Bir resume'un prefix'in tamamını koruyup korumadığı mod'un elinde değildir: ölçülen bir session'da 116k'nın 42k'sını, bir başkasında 4k'yı yeniden yazdı.
-- Soğuk write sayacı session başınadır ve bellektedir. `/clear` onu sıfırlar.
-- Fast mode, istekten değil, kaydedilmiş tercih olan `fastMode` setting'inden okunur. Mod, Claude Code'un bir session içinde standart hıza düşmesini görmez: fast mode rate limit cooldown'u, biten usage credits ya da fast mode'u kapatan bir organizasyon. O turn'ler standart fiyattan faturalanır, mod ise onları fast fiyatlar.
-- Session fast çalışırken bir ping'in, yani bir `$.model.fork`'un, fast hızda çalışıp çalışmadığı ölçülmedi; mod onu session'ın fiyatlarıyla fiyatlar.
+- 50 dakikalık ping, ana konuşmanın kullandığı 1 saatlik cache katmanını varsayar.
+- Sıcak bir ping yalnız o anda cache'in sıcak olduğunu kanıtlar. Model ya da effort değişikliği, düzenlenmiş bir CLAUDE.md ya da değişen tool listesi, zamandan bağımsız olarak prefix'i bozar ve bedelini bir sonraki mesajın öder.
+- Bir ping'in output'u sınırlanamaz; yüksek effort'taki bir model cevaplamadan önce düşünebilir. Status line ping'in gerçekte ne kadar faturalandığını gösterir.
+- Resume mantığı, `classic.SessionStart`'ı resume alanlarıyla tetikleyen hook testleriyle ve tmux'ta resume edilmiş interaktif bir session'ın canlı denemesiyle kontrol ediliyor. Bir resume'un prefix'in tamamını koruyup korumadığı mod'un elinde değildir: ölçülen bir session'da 116k token'ın 42k'sını, bir başkasında 4k'sını yeniden yazdı.
+- Soğuk yazma sayacı session başınadır ve bellekte durur. `/clear` onu sıfırlar.
+- Fast mode, request'ten değil, kayıtlı tercih olan `fastMode` ayarından okunur. Mod, Claude Code'un bir session içinde standart hıza geri düştüğünü görmez (fast mode rate limit bekleme süresi, tükenen kullanım kredisi, fast mode'u kapatan bir organizasyon). Bu turn'ler standart fiyattan faturalanır ama mod onları fast fiyatlarla hesaplar.
+- Session fast çalışırken bir ping'in, yani bir `$.model.fork`'un da fast hızda çalışıp çalışmadığı ölçülmedi; mod onu session'ın fiyatlarıyla hesaplar.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
