@@ -1,51 +1,51 @@
 # dep-sentinel
 
-A Claude Code Mod that checks each package the model installs before the install runs. It asks the package's registry and OSV.dev, and stops an install of a missing, brand-new, look-alike, outdated or vulnerable package. The model reads why, and the latest version.
+When the model installs a package, it types a name from memory. That name can be misspelled, point to a package that does not exist, belong to a look-alike published last week, or pin a version with known vulnerabilities. This mod checks every package before the install runs: it asks the package's registry and OSV.dev, and it stops the install when something is wrong. The model reads why, and which version is the latest.
 
 ## What it does
 
-1. The mod reads the Bash command without a shell and finds the packages it installs:
+1. It reads the Bash command without a shell and finds the packages it installs:
    - npm: `npm i|install|add`, `pnpm add`, `yarn add`, `bun add|install`;
    - PyPI: `pip install`, `pip3 install`, `python -m pip install`, `uv pip install`, `uv add`, `poetry add`;
    - Go: `go get`, `go install`;
    - crates.io: `cargo add`;
    - Packagist: `composer require`.
 
-   A local path, a URL, a git source, a requirements file (`-r`) and an editable install (`-e`) are not checked. At most 10 packages per command are checked.
-2. For each package it asks the registry: registry.npmjs.org, pypi.org, proxy.golang.org, crates.io or repo.packagist.org. A Go package path is looked up at its module, the nearest parent path the proxy knows. Claude Code hands a mod at most 4 MiB of an answer and cuts the rest without a sign, and an npm document can be larger (webpack 5 MB, vite 39 MB). For such a package the mod runs `npm view <name> time.created dist-tags.latest versions --json` instead; without npm on the PATH the package stays unchecked. A larger answer from another registry is reported as unchecked by name.
+   A local path, a URL, a git source, a requirements file (`-r`) and an editable install (`-e`) are not checked. It checks at most 10 packages per command.
+2. For each package it asks the registry: registry.npmjs.org, pypi.org, proxy.golang.org, crates.io or repo.packagist.org. A Go package path is looked up at its module, the nearest parent path the proxy knows. Claude Code hands a mod at most 4 MiB of an answer and cuts the rest without a sign, and an npm document can be larger (webpack 5 MB, vite 39 MB). For such a package the mod runs `npm view <name> time.created dist-tags.latest versions --json` instead; without npm on the PATH the package stays unchecked. A larger answer from another registry is reported as unchecked, by name.
 3. It asks OSV.dev for known vulnerabilities of the version that would be installed: the pinned version, else the latest.
-4. The install is stopped when:
+4. It stops the install when:
    - no registry knows the package;
-   - the name is one or two edits from a popular package name (one edit under 7 characters, none under 4), unless the package is over a year old with 10 or more versions;
+   - the name is one or two edits away from a popular package name (one edit under 7 characters, none under 4), unless the package is over a year old with 10 or more versions;
    - the package was first published less than 7 days ago; a new version of an older package is not stopped;
-   - an exact pin (`lodash@4.17.15`, `requests==2.25.0`, `tokio@=1.38.0`, `go get x@v1.9.0`, `vendor/pkg:2.0.0`) is not the latest version; the reason names the latest, and the latest in the same major version when that differs;
+   - an exact pin (`lodash@4.17.15`, `requests==2.25.0`, `tokio@=1.38.0`, `go get x@v1.9.0`, `vendor/pkg:2.0.0`) is not the latest version; the reason names the latest, and also the latest in the same major version when that differs;
    - OSV.dev lists a known vulnerability for that version; the reason names the ids and the versions that fix them.
-5. The model reads the reasons as the command's error, with the instruction to install the latest version or the right name. When the user needs exactly that package, the model tells the user why and runs the command again with the `DEP_SENTINEL_SKIP=1` prefix. The mod logs such a skip.
-6. When a registry or OSV.dev cannot be reached, the install runs, and the model reads which package ran unchecked and why. The same moment writes one line to the transcript, so you see it too:
+5. The model reads the reasons as the command's error, with the instruction to install the latest version or the right name. When you need exactly that package, the model tells you why and runs the command again with the `DEP_SENTINEL_SKIP=1` prefix. The mod logs such a skip.
+6. When a registry or OSV.dev cannot be reached, the install runs, and the model reads which package ran unchecked and why. At the same moment you get one line in the transcript:
 
        dep-sentinel: the install ran unchecked for: lodash (api.osv.dev answered HTTP 503)
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-7. While the [sidebar](../sidebar) is open, the unchecked packages and the skipped ones go there instead, one line per package, as entries in its stream, and the transcript stays clean. An unchecked package shows its name red and the reason faint; a package skipped on request is yellow, because you asked for it. An entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript lines are written as above.
+7. With the [sidebar](../sidebar) open, the unchecked and the skipped packages go into its stream instead, one line per package, and the transcript stays clean. An unchecked package shows its name red and the reason faint. A package skipped on request is yellow, because you asked for it. An entry stays until newer ones push it off the pane. With the sidebar closed, or not installed, the lines land in the transcript as above.
 
-8. An unchecked finding is never a remembered answer: the check it is owed is run again, so it closes two ways. A later install of the package in the same ecosystem checks it (an npm `lodash` does not close a PyPI `lodash`), and a guarded git command runs the check itself, in both modes. The entry is cleared and a new one takes its place:
+8. An unchecked finding is never a remembered answer. The check it is owed runs again, so it closes in two ways. A later install of the same package in the same ecosystem checks it (an npm `lodash` does not close a PyPI `lodash`), and a guarded git command runs the check itself, in both modes. The entry is cleared and a new one takes its place:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
        dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash
 
-   What a late answer has to say is written as its own entry, because the install it belongs to already ran. There the pinned old version and `has N known vulnerability(ies)` are red, the latest version and `fixed in X` green, and `no fixed version is listed` and the age of a new package yellow:
+   Whatever the late answer has to say gets its own entry, because the install it belongs to already ran. There the pinned old version and `has N known vulnerability(ies)` are red, the latest version and `fixed in X` green, and `no fixed version is listed` and the age of a new package yellow:
 
        dep-sentinel: the check that was owed says: lodash@4.17.21 has 1 known vulnerability(ies) on OSV.dev: GHSA-29mw-wpgm-hmr9; fixed in 4.17.22
 
-   With the sidebar closed the same texts are transcript lines. The model reads nothing of this.
+   With the sidebar closed the same texts are transcript lines. The model reads none of this.
 
-9. The same check runs at the end of each main-loop turn, and the packages that are still open reach the model as one note with its next prompt:
+9. The same check runs at the end of each main-loop turn, and the packages still open reach the model as one note with its next prompt:
 
        dep-sentinel: 1 package(s) are still installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, or take the package out.
 
-   One note per turn, not one per prompt. Without this the finding would be said once, at the install, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
+   That is one note per turn, not one per prompt. Without it the finding would be said once, at the install, and then sit in the pane while the model forgot it. You read nothing new, because the pane already carries the same finding.
 
-10. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stayed unchecked. The gate runs the owed check first, so the package that only failed because the network was down opens the gate by itself; a package the registry still does not answer for stops the command. There is no bypass; only the person turns the gate off with `/dep-sentinel mode note`. `note` mode is the default and stops no git command, but it runs the same check at a git command, so a settled finding does not stay in the pane. An install is stopped in both modes, as above.
+10. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a package stays unchecked. The gate runs the owed check first, so a package that failed only because the network was down opens the gate by itself. A package the registry still does not answer for stops the command. There is no bypass; only you turn the gate off, with `/dep-sentinel mode note`. `note` mode is the default and stops no git command, but it runs the same check at a git command, so a settled finding does not stay in the pane. An install is stopped in both modes, as above.
 
 In the live check `npm install --dry-run lodash@4.17.15` was stopped with the latest version 4.18.1 and 6 OSV ids, `npm install --dry-run lodahs` was stopped as a look-alike of lodash with OSV id MAL-2025-25502, and `npm install --dry-run left-pad` ran.
 
@@ -61,7 +61,7 @@ In the live check `npm install --dry-run lodash@4.17.15` was stopped with the la
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install dep-sentinel@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and no mod loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -76,7 +76,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.283:
     ❯ ./register.ts hooks: session.start, command.run{command=dep-sentinel}, turn.complete, prompt.submit, tool.call{tool=Bash}
     ❯ ./register.ts calls: $.clock.now, $.command.register, $.http.fetch (via fetchText, osvCheck), $.process.run (via npmView), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get (via isEnabled, readSettings), $.store.set (via runCommand, setMode), $.ui.log (via toPerson)
 
-Reach L3, reaches the network.
+Reach L3: it reaches the network.
 
     1. Reads:    the Bash command text
     2. Runs:     npm view, only for an npm package whose registry document passes the 4 MiB a fetch reads
@@ -86,18 +86,18 @@ Reach L3, reaches the network.
 
 ## Limits
 
-- The popular-name list is fixed in `hooks/popular.ts` (about 150 npm and PyPI names, fewer for the other registries). A look-alike of a package not on the list is not seen.
-- A version range (`^18`, `>=4`, `cargo add serde@1.0`) is not stopped as old, because the installer resolves it; its latest version is checked on OSV.dev.
-- npm package documents are large (16 MB for typescript, measured), so a check takes up to a few seconds.
+- The popular-name list is fixed in `hooks/popular.ts` (about 150 npm and PyPI names, fewer for the other registries). A look-alike of a package not on the list goes unseen.
+- A version range (`^18`, `>=4`, `cargo add serde@1.0`) is not stopped as old, because the installer resolves it. Its latest version is checked on OSV.dev.
+- npm package documents are large (16 MB for typescript, measured), so a check can take a few seconds.
 - An install that a script, an alias or a lockfile runs (`npm ci`, `pip install -r`) is not checked.
-- The `deny` mode has no bypass. When a registry stays unreachable, the person turns the gate off with `/dep-sentinel mode note`.
+- The `deny` mode has no bypass. When a registry stays unreachable, you turn the gate off with `/dep-sentinel mode note`.
 - A git command while a finding is open waits for that check, so the first commit after a failed install takes as long as the registry does.
 - The gate reads the command text. A commit through a script or an alias that hides `git commit` is not stopped.
 
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
