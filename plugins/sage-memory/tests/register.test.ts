@@ -479,10 +479,10 @@ describe('consolidator', () => {
     expect(asked?.prompt).toContain('Shorten the idle timeout')
     expect(asked?.prompt).toContain('(project) Install packages with pnpm')
     const inputs = bodiesOf(w, '/memory/remember').map(body => body.input as Record<string, unknown>)
-    expect(inputs.map(input => input.kind)).toEqual(['fact', 'preference', 'session_digest'])
+    // Only the kept memories are written; no session digest of the answer follows them.
+    expect(inputs.map(input => input.kind)).toEqual(['fact', 'preference'])
     expect(inputs[0]).toMatchObject({ scope: 'project', importance: 0.8, confidence: 0.9, anchors: [{ type: 'file', path: 'daemon/server.ts' }], sources: [{ type: 'session', sessionId: 'sess-1' }] })
     expect(inputs[1]).toMatchObject({ scope: 'user', anchors: [] })
-    expect(inputs[2]).toMatchObject({ scope: 'session', ownerSessionId: 'sess-1', text: 'Session digest (2 facts added): The idle timeout is five minutes, set in the daemon server.' })
     expect(w.lines).toContain('added (project): The daemon closes itself five minutes after its last request.')
   })
 

@@ -3,7 +3,8 @@
  * and proposes durable memories, which the daemon writes. The kinds, scopes and write rules are SAGE's.
  * The selection is not: on real turns haiku turned SAGE's rules into a memory for nearly every work
  * report, plan and status line, so the model now labels every candidate and only the ones it marks
- * keep carry a memory. Pure code; `register.tsx` makes every call.
+ * keep carry a memory. SAGE's session digest, the answer's opening kept for 14 days, is not written:
+ * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
 import { ANCHOR_TYPES, KINDS, PATH_ANCHOR_TYPES, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
 
@@ -20,10 +21,6 @@ const SUMMARY_CHARS = 3000
 const EVIDENCE_CHARS = 6000
 const MAX_ADDS = 5
 const MAX_ANCHORS = 5
-/** A session digest lives this long. */
-const DIGEST_DAYS = 14
-const DIGEST_MIN = 40
-const DIGEST_CHARS = 400
 
 /** What one main-loop turn touched: the files it read and wrote, and the commands it ran. */
 export type TurnEvidence = { read: string[]; written: string[]; commands: string[] }
@@ -297,26 +294,6 @@ export function additionsOf(text: string, sessionId: string): RememberInput[] {
     .slice(0, MAX_ADDS)
     .map(op => additionOf(op, sessionId))
     .filter((input): input is RememberInput => input !== undefined)
-}
-
-/** The short-lived digest of a turn's outcome, owned by the session; nothing for a short answer. */
-export function digestOf(answer: string, added: number, sessionId: string, now: number): RememberInput | undefined {
-  const cleaned = answer.replace(/\s+/g, ' ').trim()
-  if (cleaned.length < DIGEST_MIN) return undefined
-  const summary = `${cleaned.slice(0, DIGEST_CHARS)}${cleaned.length > DIGEST_CHARS ? '…' : ''}`
-  return {
-    text: `Session digest${added > 0 ? ` (${added} facts added)` : ''}: ${summary}`,
-    scope: 'session',
-    kind: 'session_digest',
-    importance: 0.4,
-    confidence: 0.65,
-    persistence: 'short_lived',
-    tags: ['session_digest', 'auto'],
-    anchors: [],
-    sources: [{ type: 'session', sessionId }],
-    ownerSessionId: sessionId,
-    expiresAt: new Date(now + DIGEST_DAYS * 24 * 60 * 60 * 1000).toISOString(),
-  }
 }
 
 /** The line the person reads for a memory the consolidator added. */

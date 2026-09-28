@@ -30,7 +30,6 @@ import {
   completedTasks,
   consolidatorPrompt,
   DEFAULT_MODEL,
-  digestOf,
   emptyEvidence,
   evidenceText,
   MIN_ANSWER,
@@ -884,7 +883,7 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
   }
 }
 
-/** Asks the model what the turn taught, writes each addition and the turn's digest. */
+/** Asks the model what the turn taught and writes each memory it kept. */
 async function consolidate($: EngineInterface, state: State, answer: string, turn: TurnEvidence): Promise<void> {
   if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
   const root = state.project?.root ?? ''
@@ -895,11 +894,7 @@ async function consolidate($: EngineInterface, state: State, answer: string, tur
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
     return
   }
-  const sessionId = await $.session.id()
-  let added = 0
-  for (const input of additionsOf(r.text, sessionId)) if (await writeOne($, state, input)) added += 1
-  const digest = digestOf(answer, added, sessionId, await $.clock.now())
-  if (digest !== undefined) await ask($, state, '/memory/remember', { input: digest })
+  for (const input of additionsOf(r.text, await $.session.id())) await writeOne($, state, input)
 }
 
 /** The memories the curator audits: those anchored to the turn's written files, then the targets of pending candidates. */
