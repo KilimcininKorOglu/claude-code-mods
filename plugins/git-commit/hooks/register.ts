@@ -139,7 +139,7 @@ async function directoryFindings($: EngineInterface, operands: readonly string[]
   for (const operand of operands.filter(o => blanketReason(o) === undefined)) {
     const path = joinPath(dir, operand)
     const stat = await $.fs.stat(path).catch(() => undefined)
-    if (stat?.kind === 'dir' &&!(await $.fs.exists(`${path}/.git`))) out.push(blanketFinding(operand, 'is a directory'))
+    if (stat?.kind === 'dir' && !(await $.fs.exists(`${path}/.git`))) out.push(blanketFinding(operand, 'is a directory'))
   }
   return out
 }
