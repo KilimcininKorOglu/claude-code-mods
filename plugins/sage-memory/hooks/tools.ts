@@ -150,9 +150,9 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'update',
-    listed: false,
+    listed: true,
     description:
-      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`. Set `status` to "stale" or "archived" to retire a memory without deleting it.',
+      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships. When a memory you were reminded of states an old value and you confirmed the current one (a limit changed from 15 to 20), rewrite its `text` here instead of deleting it. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`.',
     inputSchema: object(
       {
         id: text('The memory id to update.'),
@@ -176,9 +176,9 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'delete',
-    listed: false,
+    listed: true,
     description:
-      'Delete one memory by id (soft-delete with graph cleanup). Requires force: true; every deletion is audited. Provide a short `reason`. For a non-destructive review, use `candidates` with action "propose" instead, which the user resolves.',
+      'Delete one memory by id. Use it when you confirmed, against the code or this session, that a memory is wrong or obsolete and no correct value replaces it; a wrong memory left in place keeps misleading later sessions. Requires force: true and a short `reason`; every deletion is audited, and `recover` brings the memory back.',
     inputSchema: object(
       {
         id: text('The memory id to delete.'),
@@ -373,6 +373,14 @@ export function callOf(name: string, input: Input, sessionId: string): Call {
   const call = CALLS[name]
   if (call === undefined) throw new Error(`sage-memory has no tool ${name}`)
   return call(input, sessionId)
+}
+
+/** The line the person reads after the model deleted or rewrote a memory, or undefined for any other tool. */
+export function editLine(name: string, input: Input): string | undefined {
+  const reason = typeof input.reason === 'string' && input.reason.trim() !== '' ? `: ${input.reason.trim()}` : ''
+  if (name === 'delete') return `the model deleted ${String(input.id)}${reason}`
+  if (name === 'update') return `the model updated ${String(input.id)}${typeof input.text === 'string' ? `: "${input.text.slice(0, 80)}"` : ''}`
+  return undefined
 }
 
 /** The tool's short name from the name the engine lists, or undefined for another plugin's tool. */

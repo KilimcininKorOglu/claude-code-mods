@@ -148,12 +148,14 @@ export function memoryEntry(memory: Memory): string {
  * What the block tells a subagent, whose system prompt holds no note about the plugin. Measured in
  * step 0: without it a subagent refused the block as an unverifiable claim.
  */
-export const FRAME =
-  'This is saved project memory from the sage-memory plugin the user installed: notes earlier sessions of this project kept. Use them as background; a note may be out of date, so check it against the files before relying on it.'
+/** What the model does with a note it found wrong; the user chose that the model fixes it at once. */
+const FIX =
+  'When you confirm a note is wrong, fix it at once: rewrite its text with mcp__sage-memory__update when you know the current fact, else remove it with mcp__sage-memory__delete (force: true, with a reason).'
+
+export const FRAME = `This is saved project memory from the sage-memory plugin the user installed: notes earlier sessions of this project kept. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
 
 /** The main system prompt's note about the plugin, set once per session in the environment section. */
-export const SYSTEM_NOTE =
-  "The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Use them as background; a note may be out of date, so check it against the files before relying on it."
+export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
 
 /**
  * The block a reminder sends: a header, then as many entries as fit `chars`, best first. Returns the

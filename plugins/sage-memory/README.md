@@ -14,9 +14,10 @@ It runs beside [memory-save](../memory-save): memory-save hands the model all of
    - to a subagent, in front of its task: the memories written for its type or permission mode, then the ones about its task.
 
    No memory is sent at every start the way memory-save sends `MEMORY.md`: each one goes only when it is relevant. Each memory goes once per context. A compaction starts a new context, so it can go again. An answer that uses a reminded memory counts as a use.
-4. **Learning.** After a main-loop turn that had your prompt or a tool call, a consolidator (haiku by default) reads the answer, the files the turn read and wrote, its last 10 Bash commands and the completed tasks, and adds what is worth keeping, in English: a decision and its reason, the cause of a bug, a limitation, a gap that stays open, a standing preference or a step still owed. It labels every candidate first and writes only the ones it marked keep, so a report of what the turn did, a plan, a status line or what the code already shows is not saved. After a turn that wrote files, a curator reviews the memories of those files: it supersedes, merges, recalibrates, marks a contradiction or archives. A permanent memory is never superseded, contradicted or archived.
-5. **Checking.** An edit checks the memories anchored to the changed file again (path, content hash, symbol, command, agent, git blob), and a memory whose anchor no longer holds goes stale. A `mv`, `git mv` or `Move-Item` moves the anchors with the file once the move is on disk. At a session's end the daemon runs hygiene in the background, at most once an hour per store: verification, duplicates, contradictions, review proposals and the removal of session memories whose transcripts are gone.
-6. **Search.** Full text search (FTS5) always. After `/sage-memory setup`, also a multilingual embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline, so a question can find a memory in another language. A result from this channel alone needs a cosine of 0.46; a paraphrase below it is left to the full text search and the anchors (measured: `deploy.sh betiği nerede` found `Deploys go through the deploy.sh script...` at 0.55, `Uygulamayı sunucuya nasıl gönderiyoruz?` stayed under 0.46).
+4. **Learning.** After a main-loop turn that had your prompt or a tool call, a consolidator (haiku by default) reads the answer, the files the turn read and wrote, its last 10 Bash commands and the completed tasks, and adds what is worth keeping, in English: a decision and its reason, the cause of a bug, a limitation, a gap that stays open, a standing preference or a step still owed. It labels every candidate first and writes only the ones it marked keep, so a report of what the turn did, a plan, a status line or what the code already shows is not saved. After a turn that wrote files, a curator reviews the memories of those files against what the turn changed: it rewrites a memory whose value changed (a limit that went from 15 to 20), deletes one the turn made wrong or that another shown memory contradicts, merges or splits, and recalibrates the scores. A permanent memory is never rewritten or deleted.
+5. **Fixing.** A wrong memory is deleted, not kept: a memory that is no longer true keeps misleading every later session. The system prompt note tells the model to fix a memory it found wrong at once, with `update` when it knows the current fact and with `delete` otherwise, and each such fix is a line in the stream. A deleted memory stays recoverable with `recover`.
+6. **Checking.** An edit checks the memories anchored to the changed file again (path, content hash, symbol, command, agent, git blob), and a memory whose anchor no longer holds goes stale. A `mv`, `git mv` or `Move-Item` moves the anchors with the file once the move is on disk. At a session's end the daemon runs hygiene in the background, at most once an hour per store: verification, duplicates, contradictions, review proposals and the removal of session memories whose transcripts are gone.
+7. **Search.** Full text search (FTS5) always. After `/sage-memory setup`, also a multilingual embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline, so a question can find a memory in another language. A result from this channel alone needs a cosine of 0.46; a paraphrase below it is left to the full text search and the anchors (measured: `deploy.sh betiği nerede` found `Deploys go through the deploy.sh script...` at 0.55, `Uygulamayı sunucuya nasıl gönderiyoruz?` stayed under 0.46).
 
 ## The sidebar
 
@@ -45,7 +46,7 @@ Under it, the stream shows each reminder (faint), each added memory (green), eac
     /sage-memory delete <id> | forget <query> | recover <id>
     /sage-memory audience remember --role <type> <text> | clear <id> | transfer <from> <to>
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
-    /sage-memory triage [apply]           a review of every memory; a dry run unless `apply`
+    /sage-memory triage [apply]           a review of every memory that lists each change; a dry run unless `apply`
     /sage-memory compact [apply]          a proposal to shorten and merge; `apply` writes it
     /sage-memory import <path> [--section <heading>] [--kind <kind>] [--scope project|user]
     /sage-memory model [name]             the model of the consolidator, curator, triage and compact (haiku)
@@ -56,11 +57,13 @@ Under it, the stream shows each reminder (faint), each added memory (green), eac
 
 Flags: `--kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts`.
 
+`triage` sorts every memory by rules, a value score and a rating from the model, then lists what `apply` would write: each deletion with its reason, each merge, each score patch, and a review for a memory of importance 0.9 or more, which it never deletes. A memory the model rated 1 or 2, and debris the rules or the score find (a `wip:` note, an expired one), is deleted. SAGE also kept every memory an answer had used; that rule is gone, because an answer that names a memory to say it is wrong counts as a use.
+
 `import` writes each bullet of a markdown file, or of one section under a heading, as an ordinary memory with the file as its source. It moves notes kept in another file into the store once; the imported memories are then reminded by relevance like any other.
 
 ## Tools the model can call
 
-Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember` and `search` are listed at once, the rest wait behind ToolSearch. None asks for approval: each writes only to the mod's own stores. A session memory belongs to the session that wrote it.
+Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `update` and `delete` are listed at once, the rest wait behind ToolSearch. None asks for approval: each writes only to the mod's own stores. A session memory belongs to the session that wrote it.
 
 ## Install
 

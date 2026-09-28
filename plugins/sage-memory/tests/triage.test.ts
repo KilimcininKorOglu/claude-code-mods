@@ -16,6 +16,8 @@ function memory(id: string, extra: Partial<Memory> = {}): Memory {
 describe('triage', () => {
   test('phase 1 keeps the strong cases first and discards only clear debris', () => {
     expect(preFilter(memory('a', { importance: 0.95, text: 'wip: x' }), NOW).verdict).toBe('keep')
+    // An answer that names a memory to say it is wrong counts as a use, so a use keeps nothing by itself.
+    expect(preFilter(memory('u', { useCount: 1, text: 'The daemon needs an explicit reload to reconnect.' }), NOW).verdict).toBe('uncertain')
     expect(preFilter(memory('b', { text: 'Test suite must run from the repository root.' }), NOW).verdict).toBe('uncertain')
     expect(preFilter(memory('c', { text: 'WIP: try the other parser today' }), NOW)).toEqual({ verdict: 'discard', reasons: ['text starts with a transient marker'] })
     expect(preFilter(memory('d', { expiresAt: '2026-09-01T00:00:00Z' }), NOW).reasons).toEqual(['expired at 2026-09-01T00:00:00Z'])
@@ -27,12 +29,14 @@ describe('triage', () => {
     expect(valueScore(memory('b', { reminderCount: 6, persistence: 'short_lived', kind: 'summary', text: 'short' }), NOW)).toEqual({ total: 0 + 3 + 5 + 2 + 3, band: 'discard' })
   })
 
-  test('a reply without a 1-5 score is no rating, and the action table guards importance 0.9', () => {
+  test('a reply without a 1-5 score is no rating; a low rating deletes, and importance 0.9 is left to a person', () => {
     expect(ratingOf('I think it is fine')).toBe(undefined)
     expect(ratingOf('4 | useful')).toEqual({ score: 4, reason: 'useful' })
     const gray = { total: 45, band: 'gray' as const }
     expect(actionOf(memory('a'), gray, { score: 3, reason: '' })).toBe('stale')
-    expect(actionOf(memory('a', { importance: 0.95 }), gray, { score: 1, reason: '' })).toBe('propose_archive_safety_stale')
+    expect(actionOf(memory('a'), gray, { score: 2, reason: '' })).toBe('delete')
+    expect(patchOf(memory('a'), 'delete', { score: 2, reason: '' })).toEqual({})
+    expect(actionOf(memory('a', { importance: 0.95 }), gray, { score: 1, reason: '' })).toBe('investigate')
     expect(patchOf(memory('a'), 'stale', { score: 3, reason: '' })).toEqual({ status: 'stale', staleReason: 'review', confidence: 0.4 })
   })
 

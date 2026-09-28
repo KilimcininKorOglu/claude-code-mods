@@ -14,9 +14,10 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
    - bir subagent'a, görevinin önünde: onun tipi ya da permission mode'u için yazılmış kayıtlar, sonra göreviyle ilgili kayıtlar.
 
    memory-save'in `MEMORY.md`'yi gönderdiği gibi her başlangıçta giden bir kayıt yoktur: her kayıt yalnız ilgili olduğunda gider. Her kayıt bir context'te bir kez gider. Compaction yeni bir context başlatır, kayıt yeniden gidebilir. Hatırlatılan bir kaydı kullanan cevap bir kullanım sayılır.
-4. **Öğrenme.** Prompt'unuz ya da bir tool çağrısı olan her ana loop turn'ünden sonra bir consolidator (varsayılan haiku) cevabı, turn'ün okuduğu ve yazdığı dosyaları, son 10 Bash komutunu ve tamamlanan görevleri okur ve saklanmaya değeri İngilizce ekler: bir karar ve gerekçesi, bir hatanın nedeni, bir sınır, açık kalan bir eksik, kalıcı bir tercih ya da yapılması gereken bir adım. Önce her adayı etiketler ve yalnız keep diye işaretlediklerini yazar; bu yüzden turn'ün yaptığı işin raporu, bir plan, bir durum satırı ya da kodun zaten gösterdiği bir bilgi kaydedilmez. Dosya yazan bir turn'den sonra bir curator o dosyaların kayıtlarını gözden geçirir: supersede, merge, recalibrate, çelişki işareti ya da archive. Permanent bir kayıt asla supersede, contradict ya da archive edilmez.
-5. **Doğrulama.** Bir edit, değişen dosyaya bağlı kayıtları yeniden kontrol eder (yol, content hash, symbol, komut, agent, git blob); anchor'ı tutmayan kayıt stale olur. Bir `mv`, `git mv` ya da `Move-Item` taşıma diskte gerçekleşince anchor'ları dosyayla taşır. Oturum sonunda daemon hygiene'i arka planda, depo başına saatte en fazla bir kez çalıştırır: doğrulama, kopyalar, çelişkiler, inceleme önerileri ve transcript'i silinmiş oturumların session kayıtlarının silinmesi.
-6. **Arama.** Her zaman tam metin arama (FTS5). `/sage-memory setup`'tan sonra ayrıca çok dilli bir embedding modeli (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline; böylece bir soru başka dildeki bir kaydı bulabilir. Yalnız bu kanaldan gelen bir sonuç 0.46 cosine ister; bunun altında kalan bir yeniden ifade tam metin aramasına ve anchor'lara kalır (ölçüldü: `deploy.sh betiği nerede` sorusu `Deploys go through the deploy.sh script...` kaydını 0.55 ile buldu, `Uygulamayı sunucuya nasıl gönderiyoruz?` 0.46'nın altında kaldı).
+4. **Öğrenme.** Prompt'unuz ya da bir tool çağrısı olan her ana loop turn'ünden sonra bir consolidator (varsayılan haiku) cevabı, turn'ün okuduğu ve yazdığı dosyaları, son 10 Bash komutunu ve tamamlanan görevleri okur ve saklanmaya değeri İngilizce ekler: bir karar ve gerekçesi, bir hatanın nedeni, bir sınır, açık kalan bir eksik, kalıcı bir tercih ya da yapılması gereken bir adım. Önce her adayı etiketler ve yalnız keep diye işaretlediklerini yazar; bu yüzden turn'ün yaptığı işin raporu, bir plan, bir durum satırı ya da kodun zaten gösterdiği bir bilgi kaydedilmez. Dosya yazan bir turn'den sonra bir curator o dosyaların kayıtlarını turn'ün değiştirdiklerine göre gözden geçirir: değeri değişen bir kaydın metnini günceller (15'ten 20'ye çıkan bir sınır gibi), turn'ün yanlış hâle getirdiği ya da gösterilen başka bir kaydın çeliştiği kaydı siler, merge ya da split yapar ve puanları yeniden ayarlar. Permanent bir kayıt asla yeniden yazılmaz ya da silinmez.
+5. **Düzeltme.** Yanlış bir kayıt tutulmaz, silinir: artık doğru olmayan bir kayıt sonraki her oturumu yanıltır. System prompt notu, modele yanlış bulduğu bir kaydı hemen düzeltmesini söyler: güncel bilgiyi biliyorsa `update` ile, bilmiyorsa `delete` ile. Her düzeltme akışta bir satır olur. Silinen kayıt `recover` ile geri alınabilir.
+6. **Doğrulama.** Bir edit, değişen dosyaya bağlı kayıtları yeniden kontrol eder (yol, content hash, symbol, komut, agent, git blob); anchor'ı tutmayan kayıt stale olur. Bir `mv`, `git mv` ya da `Move-Item` taşıma diskte gerçekleşince anchor'ları dosyayla taşır. Oturum sonunda daemon hygiene'i arka planda, depo başına saatte en fazla bir kez çalıştırır: doğrulama, kopyalar, çelişkiler, inceleme önerileri ve transcript'i silinmiş oturumların session kayıtlarının silinmesi.
+7. **Arama.** Her zaman tam metin arama (FTS5). `/sage-memory setup`'tan sonra ayrıca çok dilli bir embedding modeli (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline; böylece bir soru başka dildeki bir kaydı bulabilir. Yalnız bu kanaldan gelen bir sonuç 0.46 cosine ister; bunun altında kalan bir yeniden ifade tam metin aramasına ve anchor'lara kalır (ölçüldü: `deploy.sh betiği nerede` sorusu `Deploys go through the deploy.sh script...` kaydını 0.55 ile buldu, `Uygulamayı sunucuya nasıl gönderiyoruz?` 0.46'nın altında kaldı).
 
 ## Sidebar
 
@@ -45,7 +46,7 @@ Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kont
     /sage-memory delete <id> | forget <sorgu> | recover <id>
     /sage-memory audience remember --role <tip> <metin> | clear <id> | transfer <eski> <yeni>
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
-    /sage-memory triage [apply]           bütün kayıtların incelemesi; `apply` olmadan kuru çalışır
+    /sage-memory triage [apply]           bütün kayıtların her değişikliği listeleyen incelemesi; `apply` olmadan kuru çalışır
     /sage-memory compact [apply]          kısaltma ve birleştirme önerisi; `apply` yazar
     /sage-memory import <yol> [--section <başlık>] [--kind <kind>] [--scope project|user]
     /sage-memory model [ad]               consolidator, curator, triage ve compact'ın modeli (haiku)
@@ -56,11 +57,13 @@ Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kont
 
 Flag'ler: `--kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts`.
 
+`triage` her kaydı kurallara, bir değer puanına ve modelin verdiği bir puana göre ayırır, sonra `apply`'ın yazacağı her şeyi listeler: gerekçesiyle her silme, her merge, her puan değişikliği ve importance'ı 0.9 ya da üstü olan bir kayıt için bir inceleme; böyle bir kaydı asla silmez. Modelin 1 ya da 2 verdiği kayıt ve kuralların ya da puanın bulduğu döküntü (bir `wip:` notu, süresi dolmuş bir kayıt) silinir. SAGE bir cevabın kullandığı her kaydı da tutuyordu; bu kural kalktı, çünkü bir kaydın yanlış olduğunu söylemek için onu anan cevap da bir kullanım sayılıyor.
+
 `import` bir markdown dosyasının ya da bir başlığın altındaki bölümün her maddesini, kaynağı o dosya olan sıradan bir kayıt olarak yazar. Başka bir dosyada tutulan notları bir kez depoya taşır; içe alınan kayıtlar sonra diğerleri gibi ilgiye göre hatırlatılır.
 
 ## Modelin çağırabildiği tool'lar
 
-On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember` ve `search` hemen listelenir, diğerleri ToolSearch arkasında bekler. Hiçbiri onay sormaz: her biri yalnız modun kendi depolarına yazar. Bir session kaydı onu yazan oturuma aittir.
+On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `update` ve `delete` hemen listelenir, diğerleri ToolSearch arkasında bekler. Hiçbiri onay sormaz: her biri yalnız modun kendi depolarına yazar. Bir session kaydı onu yazan oturuma aittir.
 
 ## Kurulum
 

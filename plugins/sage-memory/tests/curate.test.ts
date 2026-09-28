@@ -15,15 +15,23 @@ const SHOWN = [memory('a'), memory('b'), memory('p', true)]
 const steps = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), SHOWN, 's1')
 
 describe('curate', () => {
-  test('an id the curator was not shown, and a permanent memory, are never retired', () => {
-    expect(steps([{ action: 'supersede', targetId: 'x' }, { action: 'supersede', targetId: 'p' }, { action: 'supersede', targetId: 'a' }])).toEqual([
-      { kind: 'update', id: 'a', patch: { status: 'superseded' }, count: 'superseded' },
+  test('a memory the session made wrong is deleted, never one the curator was not shown or a permanent one', () => {
+    expect(steps([{ action: 'delete', targetId: 'x' }, { action: 'delete', targetId: 'p' }, { action: 'delete', targetId: 'a', reason: 'the timer moved' }])).toEqual([
+      { kind: 'delete', id: 'a', reason: 'curator: the timer moved', count: 'deleted' },
+    ])
+    // SAGE's supersede still reaches the curator's answers; it deletes too, and an archive does.
+    expect(steps([{ action: 'supersede', targetId: 'b' }, { action: 'recalibrate', targetId: 'a', status: 'archived' }]).map(s => (s.kind === 'delete' ? s.id : s.kind))).toEqual(['b', 'a'])
+  })
+
+  test('a memory whose value changed is rewritten, and a permanent one is not', () => {
+    expect(steps([{ action: 'update', targetId: 'a', text: ' The limit is 20. ' }, { action: 'update', targetId: 'p', text: 'x' }, { action: 'update', targetId: 'b', text: '' }])).toEqual([
+      { kind: 'update', id: 'a', patch: { text: 'The limit is 20.' }, count: 'rewritten' },
     ])
   })
 
-  test('a contradiction needs a shown memory on the other side', () => {
+  test('a contradiction deletes the wrong side, and needs a shown memory on the other side', () => {
     expect(steps([{ action: 'contradict', targetId: 'a', contradictsWith: 'a fact' }, { action: 'contradict', targetId: 'a', contradictsWith: 'b' }])).toEqual([
-      { kind: 'update', id: 'a', patch: { status: 'contradicted', contradicts: ['b'] }, count: 'contradicted' },
+      { kind: 'delete', id: 'a', reason: 'curator: contradicted by b', count: 'deleted' },
     ])
   })
 
@@ -44,7 +52,7 @@ describe('curate', () => {
   })
 
   test('the line names only the counts that moved', () => {
-    expect(tallyLine({ superseded: 0, contradicted: 1, merged: 0, split: 2, recalibrated: 0 })).toBe('curated: 1 contradicted, 2 split')
-    expect(tallyLine({ superseded: 0, contradicted: 0, merged: 0, split: 0, recalibrated: 0 })).toBe(undefined)
+    expect(tallyLine({ rewritten: 0, deleted: 1, merged: 0, split: 2, recalibrated: 0 })).toBe('curated: 1 deleted, 2 split')
+    expect(tallyLine({ rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0 })).toBe(undefined)
   })
 })

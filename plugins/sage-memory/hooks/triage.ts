@@ -23,7 +23,8 @@ const TRANSIENT = [/^(wip|todo|test|tmp|draft|tbd|placeholder|scratch)\s*(?::|-\
 const KEEP_RULES: readonly ((m: Memory) => string | undefined)[] = [
   m => (m.importance >= 0.9 ? 'importance ≥ 0.9' : undefined),
   m => (m.persistence === 'permanent' ? 'permanent' : undefined),
-  m => ((m.useCount ?? 0) > 0 ? `used ${m.useCount}x` : undefined),
+  // SAGE also kept every memory an answer used. An answer that names a memory to say it is wrong counts
+  // as a use, so that rule kept exactly the memories to drop; the use count still raises the value score.
   m => (m.kind === 'decision' || m.kind === 'bug_root_cause' ? `kind ${m.kind}` : undefined),
   m => (m.kind === 'preference' && m.importance >= 0.8 ? 'preference with importance ≥ 0.8' : undefined),
 ]
@@ -121,16 +122,19 @@ export function ratingOf(raw: string): Rating | undefined {
   return { score: Number(found[1]) as Rating['score'], reason: reason.slice(0, 200) }
 }
 
-export type Action = 'keep' | 'keep_llm_override' | 'stale' | 'propose_archive' | 'propose_archive_safety_stale'
+export type Action = 'keep' | 'keep_llm_override' | 'stale' | 'delete' | 'investigate'
 
-/** SAGE's table from the rating and the score to an action; importance ≥ 0.9 never gets more than stale. */
+/**
+ * SAGE's table from the rating and the score to an action, with its archive turned into a deletion, as
+ * the user chose; importance ≥ 0.9 is never deleted, only marked stale and left to a person.
+ */
 export function actionOf(m: Memory, score: Score, rating: Rating): Action {
   const guarded = m.importance >= 0.9
   if (rating.score === 5) return 'keep'
   if (rating.score === 4) return score.total >= 40 ? 'keep' : 'keep_llm_override'
   if (rating.score === 3) return score.total >= 50 ? 'keep' : 'stale'
-  if (rating.score === 2) return guarded ? 'stale' : 'propose_archive'
-  return guarded ? 'propose_archive_safety_stale' : 'propose_archive'
+  if (rating.score === 2) return guarded ? 'stale' : 'delete'
+  return guarded ? 'investigate' : 'delete'
 }
 
 // ── Phase 4: merges ────────────────────────────────────────────────────
@@ -243,6 +247,8 @@ export function mergesOf(yes: readonly Pair[]): Merge[] {
 
 export type Proposal = { memory: Memory; suggestedAction: SuggestedAction; reason: string }
 export type Patch = { memory: Memory; patch: UpdatePatch }
+/** A memory triage apply deletes, and why. */
+export type Deletion = { memory: Memory; reason: string }
 
 function keepPatch(m: Memory, action: Action, rating: Rating): UpdatePatch {
   if (action === 'keep') return rating.score >= 4 && m.confidence < 0.8 ? { confidence: rating.score === 5 ? 0.9 : 0.8 } : {}
@@ -258,23 +264,25 @@ function stalePatch(m: Memory, confidence: number | undefined): UpdatePatch {
   return patch
 }
 
-/** The patch an action applies; a stale one is marked as a review's, so no automatic pass revives it. */
+/** The patch an action applies; a stale one is marked as a review's, so no automatic pass revives it; a deletion patches nothing. */
 export function patchOf(m: Memory, action: Action, rating: Rating): UpdatePatch {
   if (action === 'keep' || action === 'keep_llm_override') return keepPatch(m, action, rating)
   if (action === 'stale') return stalePatch(m, 0.4)
-  if (action === 'propose_archive_safety_stale') return stalePatch(m, undefined)
-  return m.confidence > 0.3 ? { confidence: 0.3 } : {}
+  return action === 'investigate' ? stalePatch(m, undefined) : {}
 }
 
 export function proposalOf(m: Memory, action: Action, rating: Rating): Proposal | undefined {
-  if (action === 'propose_archive') return { memory: m, suggestedAction: 'archive', reason: `rated ${rating.score} (${rating.reason}) with a low score: archive` }
-  if (action === 'propose_archive_safety_stale') return { memory: m, suggestedAction: 'investigate', reason: `rated ${rating.score} but importance ${m.importance} ≥ 0.9: a person should look. ${rating.reason}` }
-  return undefined
+  return action === 'investigate' ? { memory: m, suggestedAction: 'investigate', reason: `rated ${rating.score} but importance ${m.importance} ≥ 0.9: a person should look. ${rating.reason}` } : undefined
 }
 
-/** The archive proposal a phase 1 or phase 2 discard opens; SAGE left those without an action. */
-export function discardProposal(m: Memory, reasons: readonly string[]): Proposal {
-  return { memory: m, suggestedAction: 'archive', reason: `triage discard: ${reasons.join('; ')}` }
+/** The deletion a rating of 1 or 2 asks for. */
+export function ratedDeletion(m: Memory, rating: Rating): Deletion {
+  return { memory: m, reason: `triage: rated ${rating.score} (${rating.reason})` }
+}
+
+/** The deletion a phase 1 or phase 2 discard asks for; SAGE left those without an action. */
+export function discardDeletion(m: Memory, reasons: readonly string[]): Deletion {
+  return { memory: m, reason: `triage discard: ${reasons.join('; ')}` }
 }
 
 const REVIEW_WINDOW_MS = 90 * DAY_MS
@@ -323,6 +331,7 @@ export type Report = {
   rated: number
   unrated: number
   patches: Patch[]
+  deletions: Deletion[]
   proposals: Proposal[]
   merges: Merge[]
   overlaps: Pair[]
@@ -330,12 +339,25 @@ export type Report = {
   unjudged: number
 }
 
+const quoted = (m: Memory): string => `${m.id}: "${m.text.slice(0, 60)}"`
+
+/** What a patch changes, as `status stale, confidence 0.4`. */
+function patchText(patch: UpdatePatch): string {
+  return Object.entries(patch)
+    .filter(([key]) => key !== 'staleReason')
+    .map(([key, value]) => `${key} ${String(value)}`)
+    .join(', ')
+}
+
+/** The report lists every change it would make, so the person sees what apply writes. */
 export function reportText(r: Report, applied: string | undefined): string {
   const lines = [
     `triage of ${r.total} memories: ${r.kept} kept by rule, ${r.discarded} discarded by rule or score, ${r.gray} in the gray band (${r.rated} rated, ${r.unrated} without a rating)`,
-    `${r.patches.length} patch(es), ${r.proposals.length} review proposal(s), ${r.merges.length} merge(s) and ${r.overlaps.length} overlap(s) from ${r.pairs} compared pair(s)${r.unjudged > 0 ? `, ${r.unjudged} pair(s) without a verdict` : ''}`,
-    ...r.merges.slice(0, 10).map(m => `  merge: ${m.loser.id} into ${m.keeper.id}: "${m.loser.text.slice(0, 60)}"`),
-    ...r.proposals.slice(0, 10).map(p => `  ${p.suggestedAction}: ${p.memory.id}: "${p.memory.text.slice(0, 60)}"`),
+    `${r.deletions.length} deletion(s), ${r.patches.length} patch(es), ${r.proposals.length} review proposal(s), ${r.merges.length} merge(s) and ${r.overlaps.length} overlap(s) from ${r.pairs} compared pair(s)${r.unjudged > 0 ? `, ${r.unjudged} pair(s) without a verdict` : ''}`,
+    ...r.deletions.map(d => `  delete: ${quoted(d.memory)} (${d.reason})`),
+    ...r.merges.map(m => `  merge: ${m.loser.id} into ${m.keeper.id}: "${m.loser.text.slice(0, 60)}"`),
+    ...r.patches.map(p => `  patch: ${quoted(p.memory)}: ${patchText(p.patch)}`),
+    ...r.proposals.map(p => `  ${p.suggestedAction}: ${quoted(p.memory)}`),
   ]
   return [...lines, applied ?? 'dry run: nothing was written; /sage-memory triage apply writes it'].join('\n')
 }

@@ -63,7 +63,7 @@ import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture.ts'
 import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact.ts'
 import {
   actionOf,
-  discardProposal,
+  discardDeletion,
   MERGE_SYSTEM,
   mergesOf,
   mergeVerdictOf,
@@ -76,16 +76,18 @@ import {
   proposalsToFile,
   RATE_SYSTEM,
   ratePrompt,
+  ratedDeletion,
   ratingOf,
   reportText,
   valueScore,
+  type Deletion,
   type Merge,
   type Pair,
   type Proposal,
   type Report,
   type Score,
 } from './triage.ts'
-import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
+import { callOf, editLine, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane.tsx'
 import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
@@ -839,6 +841,8 @@ async function serveTool($: EngineInterface, state: State, name: string, input: 
   try {
     const call = callOf(name, input, await $.session.id())
     const value = await ask<unknown>($, state, call.path, { ...call.body, sessionId: await $.session.id() })
+    const edit = editLine(name, input)
+    if (edit !== undefined) await toStream($, 'model', { text: edit, kind: 'warn' })
     return { result: resultText(value) }
   } catch (err) {
     return { result: errorText(err), isError: true }
@@ -913,18 +917,19 @@ async function curatorTargets($: EngineInterface, state: State, written: readonl
   return [...found.values()]
 }
 
-/** New memories that take the place of old ones: each written, then the first new one supersedes the old ones it did not merge into. */
+/** New memories that take the place of old ones: each written, then the old ones a new one did not merge into are deleted. */
 async function replaceWith($: EngineInterface, state: State, step: Extract<Step, { kind: 'replace' }>): Promise<void> {
   const written: Memory[] = []
   for (const input of step.inputs) written.push((await ask<RememberResult>($, state, '/memory/remember', { input })).memory)
-  const successor = written.find(memory => !step.replaced.includes(memory.id))
   const replaced = step.replaced.filter(id => !written.some(memory => memory.id === id))
-  if (successor !== undefined && replaced.length > 0) await ask($, state, '/memory/update', { id: successor.id, patch: { supersedes: replaced } })
+  const reason = `curator: ${step.count} into ${written.map(memory => memory.id).join(', ')}`
+  for (const id of replaced) await ask($, state, '/memory/delete', { id, force: true, reason })
 }
 
 async function applyStep($: EngineInterface, state: State, step: Step, tally: Tally): Promise<void> {
   try {
     if (step.kind === 'update') await ask($, state, '/memory/update', { id: step.id, patch: step.patch })
+    else if (step.kind === 'delete') await ask($, state, '/memory/delete', { id: step.id, force: true, reason: step.reason })
     else await replaceWith($, state, step)
     tally[step.count] += 1
   } catch (err) {
@@ -997,19 +1002,19 @@ async function answerOf($: EngineInterface, system: string, prompt: string): Pro
 
 type Gray = { memory: Memory; score: Score }
 
-/** Phases 1 and 2: the rule and score verdicts, with an archive proposal for each discard. */
-function classify(memories: readonly Memory[], now: number): { kept: number; discards: Proposal[]; gray: Gray[] } {
-  const result = { kept: 0, discards: [] as Proposal[], gray: [] as Gray[] }
+/** Phases 1 and 2: the rule and score verdicts, with a deletion for each discard. */
+function classify(memories: readonly Memory[], now: number): { kept: number; discards: Deletion[]; gray: Gray[] } {
+  const result = { kept: 0, discards: [] as Deletion[], gray: [] as Gray[] }
   for (const memory of memories) {
     const verdict = preFilter(memory, now)
-    if (verdict.verdict === 'discard') result.discards.push(discardProposal(memory, verdict.reasons))
+    if (verdict.verdict === 'discard') result.discards.push(discardDeletion(memory, verdict.reasons))
     if (verdict.verdict !== 'uncertain') {
       if (verdict.verdict === 'keep') result.kept += 1
       continue
     }
     const score = valueScore(memory, now)
     if (score.band === 'keep') result.kept += 1
-    else if (score.band === 'discard') result.discards.push(discardProposal(memory, [`value score ${score.total}/100`]))
+    else if (score.band === 'discard') result.discards.push(discardDeletion(memory, [`value score ${score.total}/100`]))
     else result.gray.push({ memory, score })
   }
   return result
@@ -1026,6 +1031,7 @@ async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number
     }
     report.rated += 1
     const action = actionOf(memory, score, rating)
+    if (action === 'delete') report.deletions.push(ratedDeletion(memory, rating))
     const patch = patchOf(memory, action, rating)
     if (Object.keys(patch).length > 0) report.patches.push({ memory, patch })
     const proposal = proposalOf(memory, action, rating)
@@ -1054,7 +1060,7 @@ async function triageReport($: EngineInterface, state: State, limits: Limits): P
   const memories = await allMemories($, state)
   const now = await $.clock.now()
   const classified = classify(memories, now)
-  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], proposals: [...classified.discards], merges: [], overlaps: [], pairs: 0, unjudged: 0 }
+  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], deletions: [...classified.discards], proposals: [], merges: [], overlaps: [], pairs: 0, unjudged: 0 }
   await rateGray($, classified.gray, limits.calls, now, report)
   await comparePairs($, memories, limits.pairs, report)
   return report
@@ -1093,15 +1099,17 @@ async function applyMerge($: EngineInterface, state: State, merge: Merge): Promi
   await ask($, state, '/memory/update', { id: keeper.id, patch: { supersedes: [...new Set([...(keeper.supersedes ?? []), merge.loser.id])] } })
 }
 
-/** Applies the patches and merges and files the proposals; returns the lines that say what was written. */
+/** Applies the deletions, patches and merges and files the proposals; returns the lines that say what was written. */
 async function applyTriage($: EngineInterface, state: State, report: Report): Promise<string> {
   const failed: string[] = []
+  let deleted = 0
   let patched = 0
   let merged = 0
+  for (const { memory, reason } of report.deletions) if (await attempt(failed, `delete ${memory.id}`, () => ask($, state, '/memory/delete', { id: memory.id, force: true, reason }))) deleted += 1
   for (const { memory, patch } of report.patches) if (await attempt(failed, `patch ${memory.id}`, () => ask($, state, '/memory/update', { id: memory.id, patch }))) patched += 1
   for (const merge of report.merges) if (await attempt(failed, `merge ${merge.loser.id}`, () => applyMerge($, state, merge))) merged += 1
   const proposals = await fileProposals($, state, report.proposals)
-  const lines = [`applied: ${patched} patch(es), ${merged} merge(s), ${proposals.filed} review proposal(s) filed`, ...[...failed, ...proposals.failed].map(line => `  failed: ${line}`)]
+  const lines = [`applied: ${deleted} deletion(s), ${patched} patch(es), ${merged} merge(s), ${proposals.filed} review proposal(s) filed`, ...[...failed, ...proposals.failed].map(line => `  failed: ${line}`)]
   return lines.join('\n')
 }
 
@@ -1126,7 +1134,7 @@ async function dailyRun($: EngineInterface, state: State): Promise<void> {
   await ask($, state, '/memory/hygiene', { automatic: true })
   const report = await triageReport($, state, DAILY_LIMITS)
   const filed = await fileProposals($, state, report.proposals)
-  await toStream($, 'triage', { text: `daily triage: ${report.total} memories, ${filed.filed} review proposal(s) filed, ${report.merges.length} merge(s) suggested`, kind: 'ok' })
+  await toStream($, 'triage', { text: `daily triage: ${report.total} memories, ${report.deletions.length} deletion(s) and ${report.merges.length} merge(s) suggested, ${filed.filed} review proposal(s) filed; /sage-memory triage shows them`, kind: 'ok' })
   await scheduleDaily($, state)
 }
 

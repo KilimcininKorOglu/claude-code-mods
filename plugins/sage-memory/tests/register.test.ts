@@ -393,13 +393,23 @@ describe('memory tools', () => {
     expect(w.tools.slice(0, 2)).toEqual(['remember', 'search'])
   })
 
-  withSidebar('remember and search are listed at once, the rest wait behind ToolSearch, and none asks for approval', async ($, on) => {
+  withSidebar('remember, search, update and delete are listed at once, the rest wait behind ToolSearch, and none asks for approval', async ($, on) => {
     readyWorld(on)
     await $.session.start(START)
     const described = async (name: string) => (await $.tool.describe({ tool: TOOL(name), description: 'd', provider: { kind: 'plugin', name: 'sage-memory' } } as never)).isDeferred
-    expect(await described('remember')).toBe(false)
-    expect(await described('update')).toBe(undefined)
+    expect(await Promise.all(['remember', 'search', 'update', 'delete'].map(described))).toEqual([false, false, false, false])
+    expect(await described('gather')).toBe(undefined)
     expect((await $.tool.check({ tool: TOOL('delete'), input: {} } as never)).decision).toBe('allow')
+  })
+
+  withSidebar('a memory the model deletes or rewrites is named to the person', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/delete', { deleted: true })
+    w.routes.set('/memory/update', { memory: PNPM })
+    await $.session.start(START)
+    await $.tool.call({ tool: TOOL('delete'), id: 'm1', force: true, reason: 'the daemon reconnects by itself since 5a9c2c4' } as never)
+    await $.tool.call({ tool: TOOL('update'), id: 'm2', text: 'The limit is 20.' } as never)
+    expect(w.lines.slice(-2)).toEqual(['the model deleted m1: the daemon reconnects by itself since 5a9c2c4', 'the model updated m2: "The limit is 20."'])
   })
 
   withSidebar('remember writes through the daemon with this session as its source, a session memory owned by it', async ($, on) => {
@@ -508,7 +518,8 @@ describe('curator', () => {
     w.routes.set('/memory/for-path', [OLD, KEPT])
     w.routes.set('/candidates/list', [])
     w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
-    w.routes.set('/memory/update', { memory: DAEMON, superseded: ['m3'] })
+    w.routes.set('/memory/update', { memory: DAEMON, superseded: [] })
+    w.routes.set('/memory/delete', { deleted: true })
     w.modelText = '{"candidates":[]}'
     w.curatorText = JSON.stringify({
       operations: [
@@ -526,10 +537,9 @@ describe('curator', () => {
     expect(w.asked.map(a => a.system.slice(0, 30))).toEqual(['You are a memory consolidator.', 'You are a fast, automated memo'])
     expect(w.asked[1]?.prompt).toContain('Modified files:\ndaemon/server.ts')
     expect(bodiesOf(w, '/memory/for-path')[0]).toMatchObject({ path: 'daemon/server.ts', limit: 4 })
-    expect(bodiesOf(w, '/memory/update')).toEqual([
-      { project: expect.anything(), sessionId: 'sess-1', id: 'm2', patch: { supersedes: ['m3'] } },
-      { project: expect.anything(), sessionId: 'sess-1', id: 'm4', patch: { importance: 1 } },
-    ])
+    // The merged memory is deleted, not kept as superseded; the permanent one keeps its place and only its score moves.
+    expect(bodiesOf(w, '/memory/delete').map(b => ({ id: b.id, reason: b.reason }))).toEqual([{ id: 'm3', reason: 'curator: merged into m2' }])
+    expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([{ id: 'm4', patch: { importance: 1 } }])
     expect(w.lines).toContain('curated: 1 merged, 1 recalibrated')
   })
 })
@@ -547,36 +557,37 @@ describe('triage, compact and capture', () => {
     w.routes.set('/memory/get', KEEPER)
     w.routes.set('/memory/update', { memory: KEEPER, superseded: [] })
     w.routes.set('/candidates/propose', { id: 'c1' })
+    w.routes.set('/memory/delete', { deleted: true })
     w.rateText = '2 | a build detail that changes often'
     w.mergeText = 'YES'
     return w
   }
 
-  withSidebar('a triage dry run reports rule, score, rating and merge verdicts and writes nothing', async ($, on) => {
+  withSidebar('a triage dry run lists every deletion, merge and patch it would make, and writes nothing', async ($, on) => {
     const w = triageWorld(on)
     await $.session.start(START)
     const text = String((await $.command.run(run('triage'))).text)
     expect(text).toContain('triage of 4 memories: 2 kept by rule, 1 discarded by rule or score, 1 in the gray band (1 rated, 0 without a rating)')
-    expect(text).toContain('1 patch(es), 2 review proposal(s), 1 merge(s) and 0 overlap(s) from 1 compared pair(s)')
+    expect(text).toContain('2 deletion(s), 0 patch(es), 0 review proposal(s), 1 merge(s) and 0 overlap(s) from 1 compared pair(s)')
+    expect(text).toContain('  delete: w1: "wip: try the other parser" (triage discard: text starts with a transient marker;')
+    expect(text).toContain('  delete: g1: "The build writes its bundle into the dist folder before the " (triage: rated 2 (a build detail that changes often))')
     expect(text).toContain('merge: t1 into k1')
     expect(text).toContain('dry run: nothing was written')
     expect(bodiesOf(w, '/memory/list')[0]).toMatchObject({ statuses: ['active', 'stale'], allSessions: true })
-    expect(bodiesOf(w, '/memory/update').length + bodiesOf(w, '/candidates/propose').length).toBe(0)
+    expect(bodiesOf(w, '/memory/update').length + bodiesOf(w, '/memory/delete').length + bodiesOf(w, '/candidates/propose').length).toBe(0)
   })
 
-  withSidebar('triage apply writes the patches, lets the permanent keeper supersede its twin, and files the proposals', async ($, on) => {
+  withSidebar('triage apply deletes what it rated as noise and lets the permanent keeper supersede its twin', async ($, on) => {
     const w = triageWorld(on)
     await $.session.start(START)
     const text = String((await $.command.run(run('triage apply'))).text)
-    expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([
-      { id: 'g1', patch: { confidence: 0.3 } },
-      { id: 'k1', patch: { supersedes: ['t1'] } },
+    expect(bodiesOf(w, '/memory/delete').map(b => ({ id: b.id, force: b.force }))).toEqual([
+      { id: 'w1', force: true },
+      { id: 'g1', force: true },
     ])
-    expect(bodiesOf(w, '/candidates/propose').map(b => (b.input as { targetMemoryId: string; suggestedAction: string }))).toMatchObject([
-      { targetMemoryId: 'w1', suggestedAction: 'archive' },
-      { targetMemoryId: 'g1', suggestedAction: 'archive' },
-    ])
-    expect(text).toContain('applied: 1 patch(es), 1 merge(s), 2 review proposal(s) filed')
+    expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([{ id: 'k1', patch: { supersedes: ['t1'] } }])
+    expect(bodiesOf(w, '/candidates/propose')).toEqual([])
+    expect(text).toContain('applied: 2 deletion(s), 0 patch(es), 1 merge(s), 0 review proposal(s) filed')
   })
 
   withSidebar('a rating the model does not give changes nothing', async ($, on) => {
@@ -612,7 +623,7 @@ describe('triage, compact and capture', () => {
     expect(applied).toContain('failed: delete w1: w1 changed since the proposal')
   })
 
-  withSidebar('the daily dry run runs an hour after a start once a day, files proposals, and patches nothing', async ($, on) => {
+  withSidebar('the daily dry run runs an hour after a start once a day, and deletes and patches nothing', async ($, on) => {
     const w = triageWorld(on)
     w.routes.set('/memory/hygiene', { project: { state: 'started' } })
     w.store.set('daily', true)
@@ -623,10 +634,10 @@ describe('triage, compact and capture', () => {
     await w.clock.advance(60 * 1000)
     await settled(w)
     expect(bodiesOf(w, '/memory/hygiene')).toHaveLength(1)
-    expect(bodiesOf(w, '/candidates/propose')).toHaveLength(2)
-    expect(bodiesOf(w, '/memory/update')).toEqual([])
+    expect(bodiesOf(w, '/candidates/propose')).toEqual([])
+    expect(bodiesOf(w, '/memory/update').length + bodiesOf(w, '/memory/delete').length).toBe(0)
     expect(w.store.get('dailyAt')).toBe(Date.parse('2026-09-28T13:00:00Z'))
-    expect(w.lines.at(-1)).toBe('daily triage: 4 memories, 2 review proposal(s) filed, 1 merge(s) suggested')
+    expect(w.lines.at(-1)).toBe('daily triage: 4 memories, 2 deletion(s) and 1 merge(s) suggested, 0 review proposal(s) filed; /sage-memory triage shows them')
   })
 
   withSidebar('outcome capture writes a failed command once an hour while the person turned it on', async ($, on) => {
