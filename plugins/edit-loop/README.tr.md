@@ -15,7 +15,7 @@ Bir düzeltme işe yaramayınca model aynı dosyayı tekrar tekrar düzenlemeye 
 
        edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, re-read the code path and state the root cause before the next edit.
 
-   Dosya, session'ın başladığı git repository'sinin içindeyse yol o repository'ye göre yazılır; yani `plugins/a` içinde açılmış bir session, `plugins/b`'deki bir dosyayı `plugins/b/x.ts` olarak gösterir. Git repository'si dışında yol, session'ın başladığı dizine göredir. Bu kök session başlarken bir kez okunur, çünkü Bash'te bir `cd` session'ın kendi dizinini değiştirir. Not her dosya ve turn için bir kez gelir; altıncı ve sonraki edit'ler not almaz.
+   Dosya, session'ın başladığı git repository'sinin içindeyse yol o repository'ye göre yazılır; yani `plugins/a` içinde açılmış bir session, `plugins/b`'deki bir dosyayı `plugins/b/x.ts` olarak gösterir. Git repository'si dışında yol, session'ın başladığı dizine göredir. Bu kök session başlarken bir kez okunur, çünkü Bash'teki bir `cd` session'ın dizinini değiştirir. Not her dosya ve turn için bir kez gelir; altıncı ve sonraki edit'ler not almaz.
 5. Aynı anda transcript'e tek bir satır düşer, böylece modele ne söylendiğini görürsün. Satırda talimat yoktur, yalnız bulgu vardır:
 
        edit-loop: 5th edit of hooks/a.ts in this turn
