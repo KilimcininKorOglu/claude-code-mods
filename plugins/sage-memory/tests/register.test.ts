@@ -168,6 +168,19 @@ describe('sage-memory', () => {
     expect(w.lines.at(-1)).toBe(section)
   })
 
+  withSidebar('the section reads the counts again every 60 s, so a memory another session saved shows while this one is idle', async ($, on) => {
+    const w = world(on)
+    const stats = (active: number) => ({ total: active, byStatus: { active }, byKind: {}, edges: 0 })
+    w.routes.set('/memory/stats', { project: stats(5), user: stats(1) })
+    await $.session.start(START)
+    expect(w.lines.at(-1)).toContain('this project: 5 active · global: 1 active')
+    w.routes.set('/memory/stats', { project: stats(6), user: stats(2) })
+    await w.clock.advance(59_000)
+    expect(w.lines.at(-1)).toContain('this project: 5 active · global: 1 active')
+    await w.clock.advance(1000)
+    expect(w.lines.at(-1)).toContain('this project: 6 active · global: 2 active')
+  })
+
   withSidebar('a Node without type stripping or node:sqlite fails before any launch', async ($, on) => {
     const w = world(on)
     w.node = JSON.stringify({ version: 'v20.11.0', typescript: false, sqlite: false })
@@ -703,7 +716,8 @@ describe('triage, compact and capture', () => {
     expect(bodiesOf(w, '/memory/hygiene')).toHaveLength(1)
     expect(bodiesOf(w, '/memory/delete')).toHaveLength(2)
     expect(w.store.get('dailyAt')).toBe(Date.parse('2026-09-28T13:00:00Z'))
-    expect(w.lines.at(-1)).toMatch(/^daily cleanup of 4 memories: applied: 2 deletion\(s\)/)
+    // The 60 s section redraw can land after the cleanup's line, so the line is looked up, not taken last.
+    expect(w.lines.find(line => line.startsWith('daily cleanup'))).toMatch(/^daily cleanup of 4 memories: applied: 2 deletion\(s\)/)
   })
 
   withSidebar('the daily cleanup the person turned off runs no more', async ($, on) => {

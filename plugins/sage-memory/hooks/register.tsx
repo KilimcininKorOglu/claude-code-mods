@@ -140,6 +140,8 @@ const REMIND_MS = 5000
 const CANDIDATES = 24
 /** How often a running setup job is asked where it is. */
 const SETUP_POLL_MS = 2000
+/** How often an idle session draws the section again, so counts another window or project changed show. */
+const REDRAW_MS = 60_000
 
 /**
  * The on/off setting as last read, the project, the daemon's directory and token, and what the
@@ -182,6 +184,8 @@ type State = {
   pane: PaneState
   /** This session's reminded, used and added memories, shown under the daemon line. */
   counts: SessionCounts
+  /** Whether a timed redraw is under way, so a slow daemon answer does not stack a second one. */
+  redrawing: boolean
 }
 
 /**
@@ -242,6 +246,17 @@ async function show($: EngineInterface, state: State): Promise<void> {
   if (state.link.state !== 'ready') return toPerson($, [first])
   await readStored($, state)
   await toPerson($, [first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts)])
+}
+
+/** The timed redraw: the store counts read again while the daemon is ready, one at a time. */
+async function redraw($: EngineInterface, state: State): Promise<void> {
+  if (state.redrawing || state.link.state !== 'ready') return
+  state.redrawing = true
+  try {
+    await show($, state)
+  } finally {
+    state.redrawing = false
+  }
 }
 
 async function git($: EngineInterface, args: string[]): Promise<string> {
@@ -1401,7 +1416,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, used: 0, added: 0 } }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1409,6 +1424,8 @@ export const register: Register = on => {
     state.guidance = await readEnabled($, state)
     await declareTools($, state)
     await scheduleDaily($, state)
+    // A -p run draws nothing, so only an interactive session redraws on a timer.
+    if (e.isInteractive) $.clock.every(REDRAW_MS, () => void redraw($, state))
     if (state.enabled) await linked($, state)
     else await show($, state)
     return r
