@@ -1,11 +1,14 @@
 # mod-doctor
 
-Yerel clone'u zaten daha yeni bir sürüm sunan her kurulu plugin'i, her marketplace'ten, adlandıran bir Claude Code Mod'u. Böylece marketplace için çalıştırıp plugin için çalıştırmadığınız bir update fark edilmeden kalmaz.
+`claude plugin marketplace update` çalıştırırsın, clone yeni sürümleri alır; ama kurulu plugin'ler, her biri için `claude plugin update` da çalıştırana kadar olduğu yerde kalır. Bu ikinci adımı unutmak kolaydır. Bu mod, hangi marketplace'ten gelirse gelsin, yerel clone'u daha yeni bir sürüm sunan her kurulu plugin'in adını söyler; böylece marketplace için yapıp plugin için yapmadığın bir güncelleme gözden kaçmaz.
 
 ## Ne yapar
 
-1. Her session başlangıcında ve her main-loop turn'ünün sonunda mod, host'un diskte tuttuğunu okur: her `<plugin>@<marketplace>` için scope başına kurulu sürümü adlandıran `~/.claude/plugins/installed_plugins.json` (user kurulumu ve adlandırdığı proje için bir project kurulumu; başka bir projenin project kurulumu okunmaz, geçerli iki kurulumdan eski sürüm karşılaştırılır; `CLAUDE_CONFIG_DIR` ayarlıysa dosya host gibi `$CLAUDE_CONFIG_DIR/plugins/` altından okunur); her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json` dosyası, o plugin'in içeride nerede olduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir); ve o plugin'in `.claude-plugin/plugin.json` dosyası, clone'un sunduğu sürüm.
-2. Kurulu sürümü sunulan sürümle her parçanın sayısına göre karşılaştırır, yani `0.10.0`, `0.9.0` sürümünden yeni sayılır. Sayı olarak karşılaştıramadığı iki sürüm eşit sayılır, yani başka biçimde bir sürüm hiçbir zaman update istemez.
+1. Mod her session başında ve her ana loop turn'ünün sonunda host'un diskte tuttuklarını okur:
+   - `~/.claude/plugins/installed_plugins.json` (`CLAUDE_CONFIG_DIR` ayarlıysa, host'un okuduğu gibi `$CLAUDE_CONFIG_DIR/plugins/`). Bu dosya her `<plugin>@<marketplace>` için scope başına kurulu sürümü söyler: user kurulumu ve adını verdiği proje için bir proje kurulumu. Başka bir projenin proje kurulumu okunmaz; geçerli iki kurulumdan eski sürüm karşılaştırılır;
+   - her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json`'ı; plugin'in clone içinde nerede durduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir);
+   - o plugin'in `.claude-plugin/plugin.json`'ı, yani clone'un sunduğu sürüm.
+2. Kurulu sürümü sunulanla her parçanın sayısına göre karşılaştırır; böylece `0.10.0`, `0.9.0`'dan yeni sayılır. Sayı olarak karşılaştıramadığı iki sürüm eşit sayılır, yani başka biçimde bir sürüm hiçbir zaman güncelleme istemez.
 3. [sidebar](../sidebar) açıkken geride kalan plugin'ler session boyunca duran tek bir `update available` section'ıdır:
 
        update available
@@ -13,17 +16,17 @@ Yerel clone'u zaten daha yeni bir sürüm sunan her kurulu plugin'i, her marketp
        turkish-native 1.0.0 → 1.2.0
        claude plugin update sidebar@kilimcininkoroglu-mods turkish-native@turkish-native
 
-   Her satırda kurulu sürüm soluktur, sunulan sürüm ise atlamaya göre renklenir: yeni bir major sürüm kırmızı, yeni bir minor sürüm sarı, yeni bir patch yeşil. Sekizinciden sonraki satırlar tek bir soluk satırda sayılır. Sidebar kapalıyken ya da o mod kurulu değilken aynı bulgu tek bir transcript satırıdır.
-4. Her kurulu plugin clone'unun sürümündeyken hiçbir şey çizilmez ve bu doğru olur olmaz section kaldırılır.
-5. Her turn sonundaki ölçüm, session başlangıcının göremediğini yakalar: bu session açıkken başka bir pencerede güncellediğiniz bir plugin ya da marketplace, ve bu mod ilk ölçtüğünde kendi plugin'i pane'ini henüz açmamış bir sidebar. Bulgu transcript'e bir kere ulaşır; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
-6. `/mod-doctor` anında yeniden ölçer ve ayarı, kapsamı, kaç plugin tuttuğunu ve hangilerinin geride olduğunu yazar. `/mod-doctor marketplace <name>` bunu tek bir marketplace'e daraltır, `marketplace all` yeniden genişletir.
+   Her satırda kurulu sürüm soluk, sunulan sürüm ise atlamanın büyüklüğüne göre renklidir: yeni bir major sürüm kırmızı, yeni bir minor sarı, yeni bir patch yeşil. Sekizinciden sonraki satırlar soluk tek bir satırda sayılır; altlarındaki soluk update komutu ilk sekiz satırın plugin'lerini sayar. Sidebar kapalıysa ya da kurulu değilse aynı bulgu tek bir transcript satırıdır.
+4. Kurulu her plugin clone'unun sürümündeyken hiçbir şey çizilmez; bu durum oluşur oluşmaz section kalkar.
+5. Her turn sonundaki ölçüm, session başının yakalayamadıklarını yakalar: bu session açıkken başka bir pencerede güncellediğin bir plugin'i ya da marketplace'i, ve bu mod ilk ölçtüğünde henüz pane'ini açmamış bir sidebar'ı. Bulgu transcript'e bir kez düşer; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
+6. `/mod-doctor` hemen yeniden ölçer ve ayarı, kapsamı, kaç plugin tuttuğunu ve hangilerinin geride olduğunu yazar. `/mod-doctor marketplace <ad>` kapsamı tek bir marketplace'e daraltır, `marketplace all` yeniden genişletir.
 
-Clone yalnız son `claude plugin marketplace update` kadar yenidir, yani bu mod "marketplace'i güncelledim, plugin'leri güncelledim mi?" sorusuna cevap verir, "GitHub'da daha yeni bir sürüm var mı?" sorusuna değil.
+Clone ancak son `claude plugin marketplace update` kadar yenidir; yani bu mod "marketplace'i güncelledim, plugin'leri güncelledim mi?" sorusunu cevaplar, "GitHub'da daha yeni bir sürüm var mı?" sorusunu değil.
 
 ## Komut
 
     /mod-doctor                        ayar, kapsam ve geride olan her plugin
-    /mod-doctor on | off               varsayılan on
+    /mod-doctor on | off               varsayılan açık
     /mod-doctor marketplace my-mods    yalnız o marketplace
     /mod-doctor marketplace all        host'un clone'ladığı her marketplace; varsayılan, session'lar arasında saklanır
 
@@ -32,14 +35,14 @@ Clone yalnız son `claude plugin marketplace update` kadar yenidir, yani bu mod 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install mod-doctor@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. Plugin başına satırlar için [sidebar](../sidebar) mod'unu kurun. O olmadan mod tek bir transcript satırı yazar.
+1. Claude Code'u yeniden başlat.
+2. Plugin başına satırlar için [sidebar](../sidebar) mod'unu kur. O olmadan mod onun yerine tek bir transcript satırı yazar.
 
 ## Nereye uzanır
 
@@ -50,7 +53,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
-Reach L1, dosya okur.
+Reach L1: dosya okur.
 
     1. Okur:     CLAUDE_CONFIG_DIR, HOME, host'un install kaydını, her marketplace clone'unun manifest'ini ve kurulu plugin başına bir plugin.json. Proje dosyası yok, prompt yok, transcript yok.
     2. Çalıştırır: hiçbir şey; update komutu kişinin çalıştıracağı bir metindir
@@ -60,18 +63,16 @@ Reach L1, dosya okur.
 
 ## Sınırlar
 
-- Ölçü clone'dur, upstream repository değil. Önce `claude plugin marketplace update <marketplace>` çalıştırın, yoksa mod yeni bir şey bildirmez.
-- Plugin'lerini commit sha ile sürümleyen bir marketplace (resmi olan öyle yapar) hiçbir şey bildirmez, çünkü iki sha sayı olarak karşılaştırılamaz.
+- Ölçü upstream repository değil, clone'dur. Önce `claude plugin marketplace update <marketplace>` çalıştır, yoksa mod yeni bir şey bildirmez.
+- Plugin'lerini commit sha'sıyla sürümleyen bir marketplace (resmî marketplace böyle yapar) hiçbir şey bildirmez, çünkü iki sha sayı olarak karşılaştırılamaz.
 - Marketplace'in başka bir repository'den git alt dizini olarak çektiği bir plugin'in clone'da sürümü yoktur, bu yüzden atlanır.
-- Kayıt session başına iki kere okunur: başlangıcında ve ilk ana döngü turunun sonunda. Aynı session'daki daha sonraki bir update, `/mod-doctor` ya da sonraki session'a kadar görülmez.
-- Çalışan session'ın yeni kodu yükleyip yüklemediğini söylemez. Bir session sırasında yapılan `claude plugin update`, `/reload-plugins` ya da bir restart'a kadar eski kodu yüklü bırakır.
-- Proje kapsamında ve kullanıcı kapsamında kurulu bir plugin yalnız ilk kaydı olarak okunur.
-- Sizin için hiçbir şey güncellenmez. Mod komutu adlandırır; onu çalıştırmak sizin işinizdir.
+- Çalışan session'ın yeni kodu yükleyip yüklemediğini söylemez. Session sırasında yapılan bir `claude plugin update`, `/reload-plugins`'e ya da yeniden başlatmaya kadar eski kodu yüklü bırakır.
+- Senin yerine hiçbir şey güncellenmez. Mod komutu söyler; çalıştırmak sana kalır.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
