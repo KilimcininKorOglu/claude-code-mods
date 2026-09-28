@@ -1230,6 +1230,15 @@ async function openPane($: EngineInterface, state: State): Promise<string> {
   return 'pane open: Enter on a row shows the memory and its buttons, delete asks twice, Esc closes'
 }
 
+/** A session's end is the whole chain's 1.5 s, so the request waits at most 1 s. */
+const END_MS = 1000
+
+/** Asks for the automatic hygiene run; the daemon starts it in the background, at most once an hour per store. */
+async function endHygiene($: EngineInterface, state: State): Promise<void> {
+  if (!state.enabled || state.link.state !== 'ready') return
+  await ask($, state, '/memory/hygiene', { automatic: true }, END_MS)
+}
+
 /** A hook result with one more context text, or unchanged when there is none. */
 function withContext<R extends { additionalContext?: readonly string[] }>(r: R, text: string | undefined): R {
   return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
@@ -1356,6 +1365,12 @@ export const register: Register = on => {
     if (e.agentId === undefined && command !== undefined) state.turn.commands = noted(state.turn.commands, command, 10)
     if (succeeded(r)) await guarded($, 'moving anchors', () => remapMoved($, state, e.command, cwd))
     if (!('deny' in r && r.deny !== undefined)) await guarded($, 'capturing the outcome', () => captureOutcome($, state, e.command, r.result, !succeeded(r)))
+    return r
+  })
+
+  on('session.end', async ($, e, next) => {
+    const r = await next(e)
+    await guarded($, 'the hygiene at the session end', () => endHygiene($, state))
     return r
   })
 

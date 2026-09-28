@@ -107,6 +107,7 @@ function world(on: On): World {
     return { model: 'sonnet', agentId: 'agent-7' }
   })
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('session.end', () => ({ sessionId: 'sess-1' }) as never)
   on('tool.call', (_, e) => {
     if (e.tool === 'TaskList') return { result: { tasks: w.tasks } } as never
     return { result: 'ok', isError: w.toolFails } as never
@@ -178,6 +179,14 @@ describe('sage-memory', () => {
     await w.clock.advance(2000)
     expect(w.logs).toContain('setup done: 3 memories embedded')
     expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings paraphrase-multilingual')
+  })
+
+  withSidebar('a session end asks for the automatic hygiene run', async ($, on) => {
+    const w = world(on)
+    w.routes.set('/memory/hygiene', { project: { state: 'started' }, user: { state: 'recent', lastAt: '' } })
+    await $.session.start(START)
+    await $.session.end({ reason: 'other' } as never)
+    expect(w.fetches.filter(f => f.url === '/memory/hygiene').map(f => f.body.automatic)).toEqual([true])
   })
 
   withSidebar('answers an unknown word with the usage', async ($, on) => {
