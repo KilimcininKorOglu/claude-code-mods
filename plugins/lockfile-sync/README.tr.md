@@ -69,7 +69,7 @@ Model `package.json`'a bir dependency ekler, yalnız o dosyayı commit'ler ve lo
 
 8. Bir lockfile'ı dışarıda bırakan her commit, manifest'lerine göre key'lenmiş kendi sidebar kaydıyla kendi bulgusunu açar. Sonraki bir commit bulgusunu açık olanların yanına ekler ve hiçbirinin üstüne yazmaz; açık bir bulgunun zaten saydığı bir çift ikinci kez açılmaz. Her bulgu kendi ölçümüyle kapanır.
 
-   Bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra, her ana loop turn'ünün sonunda ve `deny` modunda korunan bir git komutundan önce git'e ve package manager'a yeniden sorar; bu yüzden bulgu üç yoldan kapanır:
+   Mod bulguyu bellekteki eski cevaba göre tutmaz. Her ölçüm, sonraki her commit'ten sonra, her ana loop turn'ünün sonunda ve `deny` modunda korunan bir git komutundan önce git'e ve package manager'a yeniden sorar; bu yüzden bulgu üç yoldan kapanır:
 
    - lockfile yazılmıştır: sonraki bir commit onu değiştirmiştir, ya da `git status --porcelain` onu working tree'de değişmiş gösterir;
    - package manager lockfile'ı manifest'le uyumlu okur (4. adımdaki kontrol);
@@ -87,11 +87,11 @@ Model `package.json`'a bir dependency ekler, yalnız o dosyayı commit'ler ve lo
 
        lockfile-sync: 1 lockfile(s) are still behind their manifest: package-lock.json behind package.json. Run the package manager's install so the lockfile is written, or take the dependency change back.
 
-   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız commit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu not olmasa model bulguyu yalnız commit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
 
 10. `deny` modunda bir lockfile geride kaldıkça mod `git commit`, `git push` ve `git merge`'ü de durdurur. Durdurmadan önce iki ölçümü de çalıştırır; böylece package manager'ın az önce yazdığı bir lockfile da, geri alınmış bir dependency değişikliği de gate'i kendiliğinden açar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit açık manifest'lerin hiçbirini içermiyorsa geçmesine izin verir ve kaç tanesinin hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün çiftler geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/lockfile-sync mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
-Bir git hatası sarı bir kayıt olarak yazılır (sidebar kapalıysa transcript'e), farklı bir hata gelene kadar bir kez; commit'in sonucu da olduğu gibi kalır.
+Bir git hatası sarı bir kayıt olarak yazılır (sidebar kapalıysa transcript'e). Kayıt farklı bir hata gelene kadar bir kez yazılır ve commit'in sonucu olduğu gibi kalır.
 
 Canlı denemede model bir `package.json` dependency'sini yükseltti, yalnız o dosyayı commit'ledi ve notu kelimesi kelimesine aktardı.
 
@@ -139,7 +139,7 @@ Reach L3: network'e çıkan process'ler çalıştırır.
 - Hiçbir commit'in yazmadığı bir lockfile'da manifest'i karşılaştıracak bir şey yoktur; bulgusunu yalnız ilk ölçüm kapatabilir.
 - Aynı dizinde aynı manager'a ait iki lockfile (bir `package-lock.json`'ın yanında bir `yarn.lock`) tablodaki ilkiyle eşleşir.
 - `git commit`'i gizleyen bir script ya da alias üzerinden yapılan commit görülmez.
-- Dizinini shell'in önce genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote), mod'un bilebileceği bir dizin söylemez. O commit kontrol edilmez; sarı satır da kelimeyi söyler, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
+- Dizinini shell'in genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote) mod'a gerçek dizini söylemez. O commit kontrol edilmez ve sarı satır bu kelimeyi gösterir, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
 - Bir merge commit'inin birleşik diff'i okunmaz.
 - `deny` modunu aşmanın yolu yoktur. Bir bulgu düzeltilemiyorsa gate'i `/lockfile-sync mode note` ile sen kapatırsın.
 - Gate, lockfile'daki working tree değişikliğini düzeltme sayar; değişikliğin içeriğine bakmaz.
