@@ -5,7 +5,7 @@ Uzun bir session kolayca yirmi değişmiş dosya ve tek bir dev commit ile biter
 ## Ne yapar
 
 1. Her ana loop turn'ünün sonunda session'ın başladığı dizinde `git status --porcelain=v1 -z` çalıştırır ve adı geçen yolları okur; stage'lenmiş olsun olmasın. Ignore edilen dosyalar ve üretilen `.claude/` dizini altındaki untracked dosyalar dışarıda kalır.
-2. Kirli bir tree, aynı yol listesi için yalnız bir kez bildirilir. Hiçbir şeyi değiştirmeyen sonraki turn sessiz kalır; yeni eklenen ya da kaybolan bir yol yeniden bildirim yapar. Böylece uzun bir düzenleme sürecinde aynı satır tekrarlanmaz.
+2. Kirli bir tree, aynı yol listesi için yalnız bir kez bildirilir. Hiçbir şeyi değiştirmeyen sonraki turn sessiz kalır; listeye yeni bir yol girerse ya da bir yol çıkarsa bildirim yenilenir. Böylece uzun bir düzenleme sürecinde aynı satır tekrarlanmaz.
 3. Bulguyu [sidebar](../sidebar) stream'inde kırmızı tek bir satır olarak görürsün; sidebar kapalıysa transcript'te bir satır olarak:
 
        commit-cadence: 2 uncommitted file(s): src/app.ts, src/new.ts
