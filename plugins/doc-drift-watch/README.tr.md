@@ -61,7 +61,7 @@ Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod y
 
 ## Kurulumdan sonra
 
-1. [ripwire](https://github.com/redhat-et/ripwire)'ı kur ve PATH'e ekle. O olmadan bir commit `the docs were not checked: ...` satırını sarı bir kayıt olarak yazar (sidebar kapalıysa transcript'e), farklı bir hata gelene kadar bir kez; commit de eskisi gibi çalışır.
+1. [ripwire](https://github.com/redhat-et/ripwire)'ı kur ve PATH'e ekle. ripwire yoksa bir commit `the docs were not checked: ...` satırını sarı bir kayıt olarak yazar (sidebar kapalıysa transcript'e). Satır farklı bir hata gelene kadar bir kez yazılır ve commit her zamanki gibi çalışır.
 2. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
@@ -86,7 +86,7 @@ Reach L2: process çalıştırır.
 - Turn sonu yalnız açık dokümanları ölçer. Hiçbir commit'in dokunmadığı ve başka bir yoldan eskiyen doküman turn sonunda değil, bir sonraki commit'te bulunur.
 - `--doc-drift=<doküman>` yolun bir parçasına göre filtreler; yani tek dokümana daraltılmış bir çalıştırma, yolu o dokümanın yolunu içeren başka bir dokümanı da okur. Cevap ardından dokümanın kendi yoluna göre süzülür.
 - `git commit`'i gizleyen bir script ya da alias üzerinden yapılan commit görülmez.
-- Dizinini shell'in önce genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote), mod'un bilebileceği bir dizin söylemez. O commit kontrol edilmez; sarı satır da kelimeyi söyler, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
+- Dizinini shell'in genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote) mod'a gerçek dizini söylemez. O commit kontrol edilmez ve sarı satır bu kelimeyi gösterir, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
 
 ## Geliştirme
 
