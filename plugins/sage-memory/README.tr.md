@@ -64,6 +64,14 @@ Flag'ler: `--kind --scope --status --persistence --policy --tag --anchor --direc
 
 `import` bir markdown dosyasının ya da bir başlığın altındaki bölümün her maddesini, kaynağı o dosya olan sıradan bir kayıt olarak yazar. Başka bir dosyada tutulan notları bir kez depoya taşır; içe alınan kayıtlar sonra diğerleri gibi ilgiye göre hatırlatılır. Başlığında "retired" geçen bir bölüm alt bölümleriyle birlikte atlanır. İçe alınan bir kayıt importance 0.8 ve confidence 0.9 ile başlar, çünkü elle tutulmuş bir kuraldır: `remember`'ın varsayılanlarıyla (0.6 ve 0.75) bir sorunun andığı içe alınmış not, prompt reminder eşiğinin hemen altında kaldı. Rapor daemon'un her maddeyle ne yaptığını sayar (eklendi, zaten vardı, near-duplicate'e katıldı, reddedildi) ve her katılmayı adıyla yazar, çünkü katılma iki metinden birini tutar. Bu repository'nin 13 memory-save dosyasında ölçüldü: 2093 madde 2000 kayıt oldu; 0 red, 11 zaten vardı, 82 katılma. Katılmaların neredeyse hepsi iki kez yazılmış aynı bilgiydi.
 
+## memory-save'den import
+
+`import` tek dosya alır ve session'ın başlatıldığı projenin deposuna yazar. Bir memory-save dizininin tamamını taşımak için projenin kök dizininde `claude` aç ve aşağıdaki prompt'u yapıştır. Prompt, modelin slash komutu çalıştırmasını sağlayan `self-command` mod'unu ister. Model her turn'de bir import çalıştırır; her import'un çıktısı sonraki prompt olarak döner, böylece zincir son dosyaya kadar sen dokunmadan ilerler. Aynı prompt her projede değişmeden çalışır.
+
+    sage-memory'ye bu projenin eski memory-save dosyalarını import et. Dizin: ~/.cli-tweaks/memory/<git root dizininin adı>/. Önce MEMORY.md, sonra dizindeki diğer bütün .md dosyaları, alfabetik sırayla. MEMORY.pre-migration.md, " 2.md" ile biten dosyaları ve .txt dosyalarını atla. Her dosya için mcp__self-command__run ile `sage-memory` komutunu `import "<tam path>"` argümanıyla çalıştır. Bir turn'de yalnız bir komut çalıştır ve turn'ü bitir. Çıktı sonraki prompt olarak geldiğinde bir sonraki dosyaya geç. Dizin yoksa ya da boşsa bunu söyle ve dur. Sonunda her dosyanın added, exact ve near sayılarını bir tablo olarak ver.
+
+Her dosya bir turn sürer; 20 topic dosyalı bir proje 20 turn alır. Dizin adı `claude`'u açtığın dizinden değil, git root'tan gelir. Bir memory-save dizininin adı repository'sinin adından farklıysa model dizinin olmadığını söyler ve durur; o durumda path'i prompt'a kendin yaz.
+
 ## Modelin çağırabildiği tool'lar
 
 On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `update` ve `delete` hemen listelenir, diğerleri ToolSearch arkasında bekler. Hiçbiri onay sormaz: her biri yalnız mod'un kendi depolarına yazar. Bir session kaydı onu yazan session'a aittir.
