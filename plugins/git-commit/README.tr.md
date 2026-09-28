@@ -19,6 +19,8 @@ Bir commit skill'i modele nasıl commit atacağını söyler: path'ler tek tek y
 7. Sen her kural için bir satır okursun. [sidebar](../sidebar) açıksa satırlar onun stream'ine `git command stopped` ya da `git command noted` başlığıyla düşer; kesin kural kırmızı, yumuşak kural sarıdır. Sidebar kapalıysa `git-commit: stopped: skill not opened` gibi tek bir transcript satırı düşer.
 8. Mod açıkken engine'in commit attribution metni boştur, böylece modele `Co-Authored-By` trailer'ı eklemesi söylenmez.
 
+Claude Code 2.1.284 üzerindeki canlı denemede gate şunları durdurdu: skill açılmadan çalıştırılan bir `git commit`, bir `git add .`, `.gitignore`'un adını verdiği bir dosyaya `git add -f`, `Co-Authored-By: Claude` satırı taşıyan bir commit ve prompt'un istemediği bir `git push`. Model `git-commit:commit`'i açınca durum bloğunu okudu ve aynı commit geçti. `note` modunda `git add .` çalıştı; model çiğnenen kuralı ve stage edilen üç yeni dosyayı okudu.
+
 ## Kurallar
 
 Kesin kurallar (`deny` modu komutu durdurur):

@@ -19,6 +19,8 @@ A commit skill tells the model how to commit: explicit paths, no AI signature, n
 7. You read one line per rule: in the [sidebar](../sidebar) stream while it is open (red for a hard rule, yellow for a soft one, under `git command stopped` or `git command noted`), else one transcript line such as `git-commit: stopped: skill not opened`.
 8. While the mod is on, the engine's commit attribution text is empty, so the model is not told to add a `Co-Authored-By` trailer.
 
+In the live check on Claude Code 2.1.284 the gate stopped a `git commit` run without the skill, a `git add .`, a `git add -f` of a file `.gitignore` names, a commit with a `Co-Authored-By: Claude` line, and a `git push` the prompt did not ask for. After the model opened `git-commit:commit`, it read the state block and the same commit ran. In `note` mode `git add .` ran, and the model read the broken rule and the three new files it staged.
+
 ## Rules
 
 Hard rules (`deny` mode stops the command):
