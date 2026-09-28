@@ -1,6 +1,6 @@
 # task-poke
 
-Bir Claude Code Mod'u. Bir ana döngü turu bittiğinde ve task listesi hâlâ pending ya da in-progress task taşıyorsa bir devam prompt'u gönderir. Engine'in kendi task listesini session'ın başlangıcında okur, yani bugün resume ettiğiniz bir session'da haftalar önce açılmış bir liste ilk turdan sayılır, o task'lar oluşturulurken mod kurulu olsun ya da olmasın. Arka arkaya 99 poke'tan sonra, `/task-poke limit <n>` ile ayarladığınız limitten sonra ya da hiçbir şeyi ilerletmeyen üç poke'tan sonra durur. Yazdığınız bir prompt sayımı sıfırlar.
+Model sekiz adımlık bir task listesi yazar, üçünü bitirir ve turn'ünü bir özetle kapatır; session sen "devam et" yazana kadar boşta bekler. Bu mod bunu senin yerine yapar: bir ana döngü turu bittiğinde task listesi hâlâ pending ya da in-progress task taşıyorsa bir devam prompt'u gönderir. Engine'in kendi task listesini session başında okur; yani bugün resume ettiğin bir session'da haftalar önce açılmış bir liste, o task'lar oluşturulurken mod kurulu olsa da olmasa da ilk turdan sayılır. Arka arkaya 99 poke'tan sonra, `/task-poke limit <n>` ile ayarladığın sınırdan sonra ya da hiçbir şeyi ilerletmeyen üç poke'tan sonra durur. Gönderdiğin bir prompt (composer'dan, bridge'den ya da SDK'dan) sayımı sıfırlar.
 
 İki task formatını da okur:
 
@@ -28,7 +28,7 @@ Modelin kendisinin çağırdığı bir `TaskList` aynı okunur: sonucu bütün l
 
 Claude Code task takip tool'larını yalnız Claude 3.x, Opus 4.0 ile 4.7, Sonnet 4.0 ile 4.6 ve Haiku 4.5 üzerinde sunar. Diğer her modelde mod'un sayacak bir şeyi olmaz. Bu yüzden mod `session.start` anında Claude Code process'i için `CLAUDE_CODE_ENABLE_TODO_TOOLS=1` ayarlar ve Claude Code task tool'larını her modelde sunar.
 
-- Mod kendiniz ayarladığınız bir değeri değiştirmez. `CLAUDE_CODE_ENABLE_TODO_TOOLS=0` task tool'larını kapalı tutar.
+- Mod senin kendin ayarladığın bir değeri değiştirmez. `CLAUDE_CODE_ENABLE_TODO_TOOLS=0` task tool'larını kapalı tutar.
 - Mod, `/task-poke off` saklıyken değişkeni ayarlamaz. `/task-poke off` task tool'ları üzerinde sonraki session'dan itibaren geçerli olur.
 - Değişken ayrıca session'ın başlattığı her Bash komutuna ve MCP server'a ulaşır.
 - `CLAUDE_CODE_ENABLE_TASKS=false` Task tool'larını `TodoWrite` ile değiştirir. Mod iki formatı da okur.
@@ -77,21 +77,21 @@ Sayım, bir şeyi ilerleten ilk turda sıfıra döner, yani uzun bir task üzeri
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install task-poke@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
-Tek bir session için yerel bir checkout'tan yükleyin:
+Yerel bir checkout'tan tek session için yüklemek istersen:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/task-poke
 
-Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin (2.1.278 üzerinde ölçüldü):
+Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle (2.1.278 üzerinde ölçüldü):
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-Claude Code'u yeniden başlatın. Mod task tool'larını session başlangıcında açar, yani yukarıdaki listenin dışındaki bir modelde task tool'ları sonraki session'dan gelir.
+Claude Code'u yeniden başlat. Mod task tool'larını session başlangıcında açar, yani yukarıdaki listenin dışındaki bir modelde task tool'ları sonraki session'dan gelir.
 
 ## Nereye uzanır
 
@@ -120,7 +120,7 @@ Reach L2, Claude'u sürer. Transcript'i okur. Bir environment variable yazar.
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

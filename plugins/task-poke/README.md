@@ -1,6 +1,6 @@
 # task-poke
 
-A Claude Code Mod. When a main-loop turn ends and the task list still has pending or in-progress tasks, it submits a continue prompt. It reads the engine's own task list at the session's start, so a list opened weeks ago in a session you resume today is counted from the first turn, whether or not the mod was installed when those tasks were made. It stops after 99 consecutive pokes, after the limit you set with `/task-poke limit <n>`, or after three pokes in a row that moved nothing. A prompt you type resets the count.
+The model writes a task list of eight steps, finishes three, and ends its turn with a summary; the session then sits idle until you type "go on". This mod does that for you: when a main-loop turn ends and the task list still has pending or in-progress tasks, it submits a continue prompt. It reads the engine's own task list at the session's start, so a list opened weeks ago in a session you resume today is counted from the first turn, whether or not the mod was installed when those tasks were made. It stops after 99 consecutive pokes, after the limit you set with `/task-poke limit <n>`, or after three pokes in a row that moved nothing. A prompt you send (from the composer, the bridge or the SDK) resets the count.
 
 It reads both task formats:
 
@@ -77,7 +77,7 @@ The count goes back to zero at the first turn that moved something, so a model w
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install task-poke@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag:
+Function hooks are early access, and nothing loads without the flag:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
@@ -120,7 +120,7 @@ Reach L2, drives Claude. Reads the transcript. Writes one environment variable.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
