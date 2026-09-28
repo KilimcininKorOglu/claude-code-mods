@@ -1,10 +1,10 @@
 # mcp-doctor
 
-A Claude Code Mod that tells you when an MCP server failed to connect or dropped, with a button that reconnects it, and says so again when the server is back. The engine tells only the model about a failed server; this mod tells the person.
+When an MCP server fails to connect or drops, the engine tells only the model; you find out why a tool does not work only when the model runs into it. This mod tells you, with a button that reconnects the server, and says so again when the server is back.
 
 ## What it does
 
-1. At session start, at the end of each main-loop turn and after each engine note about deferred tools, the mod reads the engine's own list of servers that are not connected. It asks the built-in `ToolSearch` tool, whose result names each failed server (`failed_mcp_servers`) and each server still connecting (`pending_mcp_servers`). The engine adds that list only to an answer with no match, so the query selects a tool that cannot exist. The call leaves nothing in the model's context.
+1. At session start, at the end of each main-loop turn, after each engine note about deferred tools, after `/mcp-doctor on` and after a reconnect, the mod reads the engine's own list of servers that are not connected. It asks the built-in `ToolSearch` tool, whose result names each failed server (`failed_mcp_servers`) and each server still connecting (`pending_mcp_servers`). The engine adds that list only to an answer with no match, so the query selects a tool that cannot exist. The call leaves nothing in the model's context.
 2. The engine's `deferred_tools_delta` note to the model is read too: its "configured but failed to connect" block names failed servers, and its "available again (MCP server reconnected)" line names the tool prefixes that came back. The note reaches the model unchanged.
 3. A server that is not connected gets one section in the [sidebar](../sidebar) that stays for the session, with the engine's reason and a reconnect button. `not connected` is red and the reason faint:
 
@@ -29,7 +29,7 @@ claude.ai connectors (servers named `claude.ai <name>`) are left out, because th
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install mcp-doctor@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -64,7 +64,7 @@ Reach L2, it drives Claude: it runs the `/mcp reconnect` command.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
