@@ -1,13 +1,15 @@
-import type { EngineInterface, Register } from 'claude-code'
-import { BAND_ROWS, CLIP_COLUMNS, configOf, helpText, isStyle, nameProblem, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
+import type { EngineInterface, Register, Timer } from 'claude-code'
+import { BAND_ROWS, CLIP_COLUMNS, clipNames, configOf, editNames, helpText, isStyle, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
 import { clipFromGif, isClip, type Clip } from './clip.ts'
 import { bytesOf } from './gif.ts'
 import type { NextMessage, SceneProps } from './scene.tsx'
 
 interface State {
   cfg: Config
-  /** The saved clips by name, as the store holds them. */
+  /** The saved clips by name, as the store held them at the last read. */
   clips: Map<string, Clip>
+  /** The stored clip names and stamp the clips were loaded at (`clipsMark`), so a read loads them again only after a change. */
+  clipsMark: string
   /** When the band first saw the model working in this turn; null while it is idle. */
   since: number | null
   /** The scene and seed of the running turn, and the scene of the one before. */
@@ -16,6 +18,8 @@ interface State {
   last: string | null
   /** The region the scene was last drawn in, which the next scene of the same turn takes. */
   size?: Size
+  /** The timer that reads the settings again while a turn runs. */
+  reread?: Timer
 }
 
 type Size = { width: number; height: number }
@@ -28,6 +32,10 @@ const MAX_BIG_GIF_BYTES = 32 * 1024 * 1024
 /** The store key of the saved clip names, and the prefix of each clip's own key. */
 const CLIPS_KEY = 'clips'
 const CLIP_PREFIX = 'clip:'
+/** The store key of the stamp each import and remove writes, which a replaced clip changes too. */
+const CLIPS_REV_KEY = 'clipsRev'
+/** How often a running turn reads the settings again, so a change made in another window shows within seconds. */
+const REREAD_MS = 2000
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -38,11 +46,8 @@ function errorText(err: unknown): string {
  * after it was saved (`cat`), so the clip never hides the scene.
  */
 async function loadClips($: EngineInterface): Promise<Map<string, Clip>> {
-  const names = await $.store.get(CLIPS_KEY)
   const clips = new Map<string, Clip>()
-  if (!Array.isArray(names)) return clips
-  for (const name of names) {
-    if (typeof name !== 'string' || nameProblem(name) !== null) continue
+  for (const name of clipNames(await $.store.get(CLIPS_KEY))) {
     const clip = await $.store.get(`${CLIP_PREFIX}${name}`)
     if (isClip(clip)) clips.set(name, clip)
   }
@@ -54,6 +59,59 @@ async function loadConfig($: EngineInterface, clips: readonly string[]): Promise
   return configOf(enabled, style, delay, clips)
 }
 
+/** The stored clip names with the stamp beside them; it differs after any window added, replaced or removed a clip. */
+async function clipsMark($: EngineInterface): Promise<string> {
+  const [names, rev] = await Promise.all([$.store.get(CLIPS_KEY), $.store.get(CLIPS_REV_KEY)])
+  return JSON.stringify([names ?? null, rev ?? null])
+}
+
+/** Loads the clips again once their mark moved, and only then, because each clip costs one store read, which grows with the whole store. */
+async function refreshClips($: EngineInterface, state: State): Promise<void> {
+  const mark = await clipsMark($)
+  if (mark === state.clipsMark) return
+  state.clips = await loadClips($)
+  state.clipsMark = mark
+}
+
+/**
+ * Reads the settings and the saved clips again, because every window shares the store, and answers whether
+ * the band changes: the mod was turned on or off, or the style or the delay changed. A new style takes the
+ * place of the scene a running turn shows, as `/idle-art <scene>` does in the window that ran it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<boolean> {
+  await refreshClips($, state)
+  const was = state.cfg
+  state.cfg = await loadConfig($, [...state.clips.keys()])
+  if (state.cfg.style !== was.style && state.since !== null) pickScene(state)
+  return state.cfg.enabled !== was.enabled || state.cfg.style !== was.style || state.cfg.delaySec !== was.delaySec
+}
+
+/** Reads the settings again, and redraws the band when another window changed what it shows. */
+async function sync($: EngineInterface, state: State): Promise<void> {
+  if (await readSettings($, state)) $.ui.invalidate('ui.render')
+}
+
+/** The timer's read: a read that fails is named once and stops the timer, and the next turn reads again. */
+async function rereadOrStop($: EngineInterface, state: State): Promise<void> {
+  try {
+    await sync($, state)
+  } catch (err) {
+    stopRereading(state)
+    $.ui.log(`the settings could not be read again: ${errorText(err)}`)
+  }
+}
+
+function stopRereading(state: State): void {
+  state.reread?.cancel()
+  state.reread = undefined
+}
+
+/** The turn ended: the next one picks its scene again, and nothing reads the settings until it begins. */
+function endTurn(state: State): void {
+  state.since = null
+  stopRereading(state)
+}
+
 /** Picks the next scene and its seed, never the one shown last. */
 function pickScene(state: State): void {
   state.style = pickStyle(state.cfg.style, state.last, Math.random, [...state.clips.keys()])
@@ -61,11 +119,16 @@ function pickScene(state: State): void {
   state.seed = Math.floor(Math.random() * 2 ** 31)
 }
 
-/** A turn began: pick its scene and seed, and redraw once the delay has passed. */
+/**
+ * A turn began: pick its scene and seed, redraw once the delay has passed, and read the settings again
+ * every 2 seconds while the turn runs.
+ */
 function beginTurn($: EngineInterface, state: State, now: number): void {
   state.since = now
   pickScene(state)
   if (state.cfg.delaySec > 0) $.clock.after(state.cfg.delaySec * 1000, () => $.ui.invalidate('ui.render'))
+  stopRereading(state)
+  state.reread = $.clock.every(REREAD_MS, () => void rereadOrStop($, state))
 }
 
 /** The props of the current scene in a region; under `random` the scene gives way to another once it has run. */
@@ -141,8 +204,14 @@ async function streamedStdout($: EngineInterface, argv: string[]): Promise<strin
   }
 }
 
-async function saveClips($: EngineInterface, state: State): Promise<void> {
-  await $.store.set(CLIPS_KEY, [...state.clips.keys()])
+/**
+ * Adds one name to the stored clip names or takes it out, over what the store holds now, so a clip another
+ * window saved meanwhile stays listed; the new stamp makes every window load the clips again, this one too.
+ */
+async function writeClipNames($: EngineInterface, state: State, name: string, keep: boolean): Promise<void> {
+  await $.store.set(CLIPS_KEY, editNames(clipNames(await $.store.get(CLIPS_KEY)), name, keep))
+  await $.store.set(CLIPS_REV_KEY, Math.random().toString(36).slice(2))
+  await refreshClips($, state)
 }
 
 /** Turns a GIF into a clip, keeps it in the store under its name, and says what was kept. */
@@ -162,17 +231,15 @@ async function importGif($: EngineInterface, state: State, typed: string, name: 
     return `cannot save ${name}: ${errorText(err)}. The store holds 4 MiB in all; /idle-art remove <name> frees room.`
   }
   const replaced = state.clips.has(name)
-  state.clips.set(name, clip)
-  await saveClips($, state)
+  await writeClipNames($, state, name, true)
   const kept = dropped > 0 ? `${clip.frames.length} of ${frames} frames (the rest dropped to fit)` : `${frames} frames`
   return `${replaced ? 'replaced' : 'saved'} ${name}: ${kept}, ${clip.width}×${clip.height} cells. Use it with /idle-art ${name}; random draws it too.`
 }
 
 async function removeClip($: EngineInterface, state: State, name: string): Promise<string> {
   if (!state.clips.has(name)) return `no saved clip is named ${name}`
-  state.clips.delete(name)
   await $.store.delete(`${CLIP_PREFIX}${name}`)
-  await saveClips($, state)
+  await writeClipNames($, state, name, false)
   const wasChosen = state.cfg.style === name
   if (wasChosen) {
     state.cfg.style = 'random'
@@ -228,19 +295,19 @@ async function apply($: EngineInterface, state: State, action: Action): Promise<
 }
 
 export const register: Register = on => {
-  const state: State = { cfg: configOf(undefined, undefined, undefined, []), clips: new Map(), since: null, style: null, seed: 0, last: null }
+  const state: State = { cfg: configOf(undefined, undefined, undefined, []), clips: new Map(), clipsMark: '', since: null, style: null, seed: 0, last: null }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    state.clips = await loadClips($)
-    state.cfg = await loadConfig($, [...state.clips.keys()])
+    await readSettings($, state)
     await $.command.register({ name: 'idle-art', description: 'ASCII animation above the prompt while the model works: on, off, a scene, random, delay, import a GIF (idle-art)', immediate: true })
     return r
   })
 
+  // The band's draw reads no store: it draws from the settings the last read left.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const drawn = await next(e)
-    if (!e.props.isWorking) state.since = null
+    if (!e.props.isWorking) endTurn(state)
     if (!state.cfg.enabled || e.surface !== 'terminal' || e.props.hasSurvey || !e.props.isWorking) return drawn
     const props = await sceneFor($, state, e.props)
     if (props === null) return drawn
@@ -261,12 +328,23 @@ export const register: Register = on => {
     return props === undefined ? next(e) : { props }
   })
 
+  // Each turn reads the settings at its start, so an on, an off or a style another window stored applies here
+  // too, also while this window has the mod off and draws nothing.
+  on('turn.start', async ($, e, next) => {
+    const r = await next(e)
+    await sync($, state)
+    return r
+  })
+
   // The band is not drawn idle between two turns, so the main loop's turn end is what starts the next
   // turn with a new style and its own delay.
   on('turn.complete', async (_, e, next) => {
-    if (e.agentId === undefined) state.since = null
+    if (e.agentId === undefined) endTurn(state)
     return next(e)
   })
 
-  on('command.run', { command: 'idle-art' }, async ($, e) => ({ text: await apply($, state, parseArgs(e.args)) }))
+  on('command.run', { command: 'idle-art' }, async ($, e) => {
+    await sync($, state)
+    return { text: await apply($, state, parseArgs(e.args)) }
+  })
 }

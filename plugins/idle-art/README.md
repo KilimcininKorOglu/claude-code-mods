@@ -67,11 +67,11 @@ A name is lowercase letters, digits and dashes, up to 24 characters, and cannot 
     /idle-art remove <name>            delete a saved clip; a style set to it goes back to random
     /idle-art help
 
-The settings and the clips stay in the mod's store, shared by every project, and survive updates.
+The settings and the clips stay in the mod's store, shared by every project and every window, and survive updates. Each window reads them again at each `/idle-art` command, at each turn's start, and every 2 seconds while a turn runs, so an on, an off, a style, a delay or a clip set in another window shows here within 2 seconds in a running turn, and at the next turn otherwise. Two windows that import at the same time keep both clips.
 
 ## How it draws
 
-An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is true. The `Client` runs `hooks/scene.tsx` on the drawing thread: a 16 ms `surface.every` tick advances the scene by 16 ms and asks for the next frame, so no hook runs per frame. Measured on 2.1.283, the frame clock keeps that rate: the cat, which walks 5 cells a second, moved 5 cells in each second of a live band. Each built-in scene is a pure module under `hooks/art/` that answers a grid of cells; a saved clip reaches the drawing thread in the `Client`'s props and plays from `hooks/clip.ts`. A row draws as one `Text` per run of one colour. The hooks module picks the scene and a random seed when the band first shows a working turn, a `$.clock.after` timer redraws the band once the delay has passed, and the main loop's `turn.complete` ends the turn, so the next one picks again. Under `random` the drawing thread counts a scene's time itself, and once it has run it posts the scene's name with `surface.post`; the `ui.message` hook picks the next scene and answers with its props, which the running instance takes in place. A message that names a scene no longer showing changes nothing, so a late or repeated post cannot skip one. No clip travels to the drawing thread before its turn to show, because one clip may take most of the 100,000 characters a `Client`'s props hold. The GIF decoder in `hooks/gif.ts` is written for this mod and needs no tool on the machine.
+An `AbovePrompt` `ui.render` hook mounts a `Client` element while `isWorking` is true. The `Client` runs `hooks/scene.tsx` on the drawing thread: a 16 ms `surface.every` tick advances the scene by 16 ms and asks for the next frame, so no hook runs per frame. Measured on 2.1.283, the frame clock keeps that rate: the cat, which walks 5 cells a second, moved 5 cells in each second of a live band. Each built-in scene is a pure module under `hooks/art/` that answers a grid of cells; a saved clip reaches the drawing thread in the `Client`'s props and plays from `hooks/clip.ts`. A row draws as one `Text` per run of one colour. The hooks module picks the scene and a random seed when the band first shows a working turn, a `$.clock.after` timer redraws the band once the delay has passed, and the main loop's `turn.complete` ends the turn, so the next one picks again. While a turn runs, a `$.clock.every` timer reads the settings and the clip names again every 2 seconds, and a `turn.start` hook reads them at each turn's start, so the draw itself never reads the store. The clips load again only when the stored names or the stamp an import or a remove writes changed, because one read of the store takes longer as the whole store grows: 0.28 ms for a small store and 3.1 ms for one of 3.5 MB, measured on 2.1.283. Under `random` the drawing thread counts a scene's time itself, and once it has run it posts the scene's name with `surface.post`; the `ui.message` hook picks the next scene and answers with its props, which the running instance takes in place. A message that names a scene no longer showing changes nothing, so a late or repeated post cannot skip one. No clip travels to the drawing thread before its turn to show, because one clip may take most of the 100,000 characters a `Client`'s props hold. The GIF decoder in `hooks/gif.ts` is written for this mod and needs no tool on the machine.
 
 ## Install
 
@@ -98,17 +98,18 @@ Restart Claude Code, or run `/reload-plugins` in an open session. The mod is on 
 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
-    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, ui.message, turn.complete, command.run{command=idle-art}
-    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via loadClips, loadConfig), $.store.set (via importGif, removeClip, saveClips, setting), $.ui.invalidate (via beginTurn, setting), $.ui.resolve
+    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, ui.message, turn.start, turn.complete, command.run{command=idle-art}
+    ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.every (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via clipsMark, loadClips, loadConfig, writeClipNames), $.store.set (via importGif, removeClip, setting, writeClipNames), $.ui.invalidate (via beginTurn, setting, sync), $.ui.log (via rereadOrStop), $.ui.resolve
+    ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: HOME
     ❯ ./register.tsx surface modules: hooks/scene.tsx
 
 Reach L2, runs `base64` to read a GIF over 4 MiB.
 
-    1. Reads:    the band's props (working, survey, rows, columns) and the clock; its settings and clips from the store; the GIF a /idle-art import names, once, when it is 32 MiB or smaller; HOME and the session's directory to resolve that path
-    2. Runs:     base64 -i <path> for a GIF over 4 MiB, once per import; no fork; one timer per turn for the delay, and the drawing thread's 100 ms tick while the band shows
+    1. Reads:    the band's props (working, survey, rows, columns) and the clock; its settings and clips from the store, at each command, at each turn's start and every 2 seconds while a turn runs; the GIF a /idle-art import names, once, when it is 32 MiB or smaller; HOME and the session's directory to resolve that path
+    2. Runs:     base64 -i <path> for a GIF over 4 MiB, once per import; no fork; one timer per turn for the delay, one that reads the settings every 2 seconds while a turn runs, and the drawing thread's 100 ms tick while the band shows
     3. Sends:    nothing; no network call and nothing to the model
-    4. Persists: the on/off state, the style, the delay and each imported clip in the mod's store
+    4. Persists: the on/off state, the style, the delay, each imported clip, and a stamp of the last import or remove in the mod's store
     5. Hostile input: a GIF is untrusted bytes: the decoder bounds every read by the file's length, refuses a broken code stream or a missing color table, stops at 500 frames, and an import that fails keeps nothing; a stored clip of the wrong shape is skipped at load; the command takes a fixed word list, a whole number from 0 to 60, and a clip name of lowercase letters, digits and dashes
 
 ## Limits

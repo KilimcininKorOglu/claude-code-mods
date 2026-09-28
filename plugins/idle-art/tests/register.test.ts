@@ -6,13 +6,22 @@ tier('user')
 
 const T0 = Date.parse('2026-09-26T12:00:00Z')
 
-/** The world: the store, the clock, the files by path (base64), and whether the store refuses a write as full. */
-type World = { store: Record<string, unknown>; clock: MockClock; files: Map<string, string>; sizes: Map<string, number>; full: boolean }
+/**
+ * The world: the store, the clock, the files by path (base64), whether the store refuses a write as full,
+ * how many store reads the mod made, and what another window does while a GIF is read.
+ */
+type World = { store: Record<string, unknown>; clock: MockClock; files: Map<string, string>; sizes: Map<string, number>; full: boolean; reads: number; duringRead?: () => void }
+
+/** A clip of one frame, two cells wide, as another window's import leaves it in the store. */
+const WINK = { width: 2, height: 1, delays: [100], frames: [[[['ab', '#ffffff']]]] }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { store: { ...store }, clock: mock.clock(on, { now: T0 }), files: new Map(), sizes: new Map(), full: false }
+  const w: World = { store: { ...store }, clock: mock.clock(on, { now: T0 }), files: new Map(), sizes: new Map(), full: false, reads: 0 }
   mock.env(on, { HOME: '/Users/u' })
-  on('store.get', (_, e) => ({ value: w.store[e.key] }))
+  on('store.get', (_, e) => {
+    w.reads += 1
+    return { value: w.store[e.key] }
+  })
   on('store.set', (_, e) => {
     if (w.full) throw new Error('the store is over 4 MiB')
     w.store[e.key] = e.value
@@ -34,7 +43,10 @@ function world(on: On, store: Record<string, unknown> = {}): World {
     for (let i = 0; i < out.length; i += 65_536) yield { stream: 'stdout' as const, text: out.slice(i, i + 65_536) }
     return { value: { code: 0, signal: null } }
   })
-  on('fs.read', (_, e) => ({ value: { base64: w.files.get(e.path) ?? '' } }) as never)
+  on('fs.read', (_, e) => {
+    w.duringRead?.()
+    return { value: { base64: w.files.get(e.path) ?? '' } } as never
+  })
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   // The engine's own band: an empty box.
@@ -230,5 +242,77 @@ describe('register', () => {
     expect((await $.command.run(run('delay 99'))).text).toContain('delay takes whole seconds from 0 to 60')
     expect((await $.command.run(run('rainbow'))).text).toContain('unknown scene: rainbow')
     expect(w.store.delay).toBe(0)
+  })
+
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on, { delay: 0, style: 'matrix' })
+    on('turn.start', (_, e) => ({ turnId: e.turnId }))
+    on('turn.complete', (_, e) => ({ text: e.answer }))
+    await $.session.start(start)
+    const ui = await $.ui.mount({ plugin: 'idle-art', surface: 'terminal', component: 'AbovePrompt', props: BAND_PROPS })
+    const drawn = async (): Promise<string> => JSON.stringify(await ui.drawn())
+    expect(await drawn()).toContain('"style":"matrix"')
+    // Every window shares the store: another one turned the mod off, and this one never ran the command.
+    // The running turn reads the settings every 2 seconds, and the picture goes.
+    w.store.enabled = false
+    await w.clock.advance(1900)
+    expect(await drawn()).toContain('"style":"matrix"')
+    await w.clock.advance(100)
+    expect(await drawn()).not.toContain('scene.tsx')
+    // It turns the mod on again and chooses fire: the picture comes back as fire.
+    w.store.enabled = true
+    w.store.style = 'fire'
+    await w.clock.advance(2000)
+    expect(await drawn()).toContain('"style":"fire"')
+    // It imports a clip and chooses it: this window loads the clip and draws it.
+    w.store['clip:wink'] = WINK
+    w.store.clips = ['wink']
+    w.store.clipsRev = 'an import in another window'
+    w.store.style = 'wink'
+    await w.clock.advance(2000)
+    expect(await drawn()).toContain('"style":"wink"')
+    expect(await drawn()).toContain('"clip":{"width":2')
+    // This window turns the mod off and the turn ends: nothing reads the store while no turn runs.
+    expect((await $.command.run(run('off'))).text).toBe('off · style wink · shows 0s into a turn')
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+    w.store.enabled = true
+    w.store.delay = 5
+    const reads = w.reads
+    await w.clock.advance(10_000)
+    expect(w.reads).toBe(reads)
+    expect(await drawn()).not.toContain('scene.tsx')
+    // The next turn reads the on and the delay another window stored, and draws once 5 seconds have passed.
+    await $.turn.start({ text: 'devam et', turnId: 't2' })
+    expect(await drawn()).not.toContain('scene.tsx')
+    await w.clock.advance(5000)
+    expect(await drawn()).toContain('"style":"wink"')
+    // A command reads the settings first, so its answer is what the store holds now.
+    w.store.style = 'aquarium'
+    expect((await $.command.run(run(''))).text).toBe('on · style aquarium · shows 5s into a turn')
+  })
+
+  test('an import keeps a clip another window saved meanwhile, and a clip replaced or removed there is read here', async ($, on) => {
+    const w = world(on, { delay: 0 })
+    w.files.set('/work/a.gif', TWO_FRAMES)
+    await $.session.start(start)
+    // Another window saves wink while this one reads the GIF: the names this one writes keep it.
+    w.duringRead = () => {
+      w.store['clip:wink'] = WINK
+      w.store.clips = ['wink']
+    }
+    expect((await $.command.run(run('import a.gif blink'))).text).toBe('saved blink: 2 frames, 32×8 cells. Use it with /idle-art blink; random draws it too.')
+    w.duringRead = undefined
+    expect(w.store.clips).toEqual(['wink', 'blink'])
+    expect((await $.command.run(run('list'))).text).toBe('built in: matrix, fire, aquarium, cat\nsaved clips: wink (1 frames, 2×1), blink (2 frames, 32×8)')
+    // Another window imports wink again under the same name: the stamp it writes makes this window read it.
+    w.store['clip:wink'] = { ...WINK, delays: [100, 100], frames: [...WINK.frames, ...WINK.frames] }
+    w.store.clipsRev = 'wink imported again'
+    expect((await $.command.run(run('list'))).text).toContain('wink (2 frames, 2×1)')
+    // Another window removes blink: this window no longer lists it or takes it as a style.
+    delete w.store['clip:blink']
+    w.store.clips = ['wink']
+    w.store.clipsRev = 'blink removed'
+    expect((await $.command.run(run('list'))).text).toBe('built in: matrix, fire, aquarium, cat\nsaved clips: wink (2 frames, 2×1)')
+    expect((await $.command.run(run('blink'))).text).toContain('unknown scene: blink')
   })
 })

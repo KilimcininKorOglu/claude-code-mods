@@ -39,6 +39,20 @@ export function nameProblem(name: string): string | null {
   return null
 }
 
+/**
+ * The clip names as the store holds them: a value that is not a list reads as none, and a name the mod
+ * refuses now is left out, as one a built-in scene took after it was saved (`cat`).
+ */
+export function clipNames(stored: unknown): string[] {
+  return Array.isArray(stored) ? stored.filter((n): n is string => typeof n === 'string' && nameProblem(n) === null) : []
+}
+
+/** The clip names with `name` added at the end, or taken out; a name already listed keeps its place. */
+export function editNames(names: readonly string[], name: string, keep: boolean): string[] {
+  if (!keep) return names.filter(n => n !== name)
+  return names.includes(name) ? [...names] : [...names, name]
+}
+
 /** The settings as the store holds them; a missing or broken value takes its default. */
 export function configOf(enabled: unknown, style: unknown, delay: unknown, clips: readonly string[]): Config {
   const delaySec = typeof delay === 'number' && Number.isInteger(delay) && delay >= 0 && delay <= MAX_DELAY_SEC ? delay : DEFAULT_DELAY_SEC
