@@ -1,6 +1,6 @@
 # storage-guard
 
-Model bir oturum token'ını en kısa yol olduğu için `localStorage`'a koyar; artık sayfadaki her script onu okuyabilir. Bu mod, bir edit tarayıcı verisini cookie yerine `localStorage` ya da `sessionStorage` ile sakladığında bunu modele söyler. Not Edit'in sonucuyla birlikte gelir ve her satırı gösterir, böylece model veriyi aynı turn'de bir cookie'ye taşır. Varsayılan olarak hiçbir şey durdurulmaz; `deny` modunda bir dosya storage'ı kullandıkça commit, push ve merge durur.
+Model bir login token'ını en kısa yol o olduğu için `localStorage`'a koyar; artık sayfadaki her script onu okuyabilir. Bu mod, bir edit tarayıcı verisini cookie yerine `localStorage` ya da `sessionStorage` ile sakladığında bunu modele söyler. Not Edit'in sonucuyla birlikte gelir ve her satırı gösterir, böylece model veriyi aynı turn'de bir cookie'ye taşır. Varsayılan olarak hiçbir şey durdurulmaz; `deny` modunda bir dosya storage'ı kullandıkça commit, push ve merge durur.
 
 ## Ne yapar
 
@@ -37,7 +37,7 @@ Model bir oturum token'ını en kısa yol olduğu için `localStorage`'a koyar; 
 
        storage-guard: 1 place(s) still store data in localStorage or sessionStorage: src/auth.ts:12. Move the data to a cookie, or take the lines out.
 
-   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız edit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu not olmasa model bulguyu yalnız edit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
 
 8. `deny` modunda bir dosya storage'ı kullandıkça mod `git commit`, `git push` ve `git merge`'ü de durdurur; `--dry-run`, `--help` ya da `-h` taşıyan bir komut durdurulmaz. Durdurmadan önce açık her dosyayı yeniden okur; böylece modelin düzelttiği bir dosya gate'i kendiliğinden açar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit açık dosyaların hiçbirini içermiyorsa geçmesine izin verir ve kaç tanesinin hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/storage-guard mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
