@@ -222,13 +222,6 @@ export function failedGit(stderr: string): GitState {
 
 const isDirty = (t: Tree): boolean => t.staged + t.modified + t.untracked + t.conflicted > 0
 
-/** The changes as `2 staged, 3 modified, 1 untracked`, or `clean`. */
-function changesText(t: Tree): string {
-  const parts = [[t.staged, 'staged'], [t.modified, 'modified'], [t.untracked, 'untracked'], [t.conflicted, 'conflicted']] as const
-  const named = parts.filter(([n]) => n > 0).map(([n, what]) => `${n} ${what}`)
-  return named.length === 0 ? 'clean' : named.join(', ')
-}
-
 /** The effort setting of the main loop's last request: a level, a budget, none for a model without one, or not read yet. */
 export type Effort = string | number | null | undefined
 
@@ -330,14 +323,12 @@ function fillText(c: Reading['context']): string {
 
 /**
  * The context line: the window's fill, then the split of the last main-loop request, the one that holds the
- * window now. Without that request's split the whole line takes the fill's colour, as before; with it only
- * the two percentages are coloured.
+ * window now, when it is known. Only the percentages are coloured.
  */
 function contextLine(c: Reading['context'], last: Split | undefined): Line {
   if (c.percent === undefined) return { text: 'ctx: no reply yet', kind: 'dim' }
-  const fill = fillText(c)
-  if (last === undefined) return { text: `ctx ${c.percent}%${fill}`, kind: contextTone(c.percent) }
-  return partsLine([part('ctx ', undefined), part(`${c.percent}%`, contextTone(c.percent)), part(fill, undefined), ...windowParts(last)])
+  const fill = [part('ctx ', undefined), part(`${c.percent}%`, contextTone(c.percent)), part(fillText(c), undefined)]
+  return partsLine(last === undefined ? fill : [...fill, ...windowParts(last)])
 }
 
 /**
@@ -421,13 +412,26 @@ function modelLine(model: string, effort: Effort, sent: Effort): Line {
   return partsLine([part('model ', undefined), part(shortModel(model), modelTone(model)), part(' · ', undefined), ...effortParts(effort, sent)])
 }
 
-/** The git line: branch, changes and upstream, yellow while the tree has changes and green when clean. */
+/** The changes as `2 staged, 3 modified, 1 untracked`, each count yellow and a conflict red, or a green `clean`. */
+function changesParts(t: Tree): Part[] {
+  const counts = [[t.staged, 'staged'], [t.modified, 'modified'], [t.untracked, 'untracked'], [t.conflicted, 'conflicted']] as const
+  const named = counts.filter(([n]) => n > 0).map(([n, what]) => part(`${n} ${what}`, what === 'conflicted' ? 'error' : 'warn'))
+  return named.length === 0 ? [part('clean', 'ok')] : named.flatMap((p, i) => (i === 0 ? [p] : [part(', ', undefined), p]))
+}
+
+/** The commits ahead of and behind the upstream, `↑2 ↓0`, each count yellow above zero and faint at zero. */
+function upstreamParts(ab: Tree['ab']): Part[] {
+  if (ab === undefined) return [part('no upstream', 'dim')]
+  const count = (arrow: string, n: number): Part => part(`${arrow}${n}`, n > 0 ? 'warn' : 'dim')
+  return [count('↑', ab.ahead), part(' ', undefined), count('↓', ab.behind)]
+}
+
+/** The git line: branch, changes and upstream, with the branch and the separators uncoloured. */
 export function gitLine(git: GitState | undefined): Line {
   if (git === undefined) return { text: 'git: not read yet', kind: 'dim' }
   if (git.kind === 'none') return { text: 'git: this folder is not a git repository', kind: 'dim' }
   if (git.kind === 'error') return { text: `git: ${git.message}`, kind: 'dim' }
-  const upstream = git.ab === undefined ? 'no upstream' : `↑${git.ab.ahead} ↓${git.ab.behind}`
-  return { text: `${git.head} · ${changesText(git)} · ${upstream}`, kind: isDirty(git) ? 'warn' : 'ok' }
+  return partsLine([part(`${git.head} · `, undefined), ...changesParts(git), part(' · ', undefined), ...upstreamParts(git.ab)])
 }
 
 /** Another live session, from its registry file under `<config dir>/sessions/<pid>.json`. */

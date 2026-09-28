@@ -33,9 +33,19 @@ describe('git status', () => {
     expect(parseStatus('# branch.head x\nu UU N... 100644 100644 100644 100644 a b c f\n').conflicted).toBe(1)
   })
 
-  test('a changed tree reads yellow, a clean one green, and a directory outside git says so', () => {
-    expect(gitLine(parseStatus(DIRTY))).toEqual({ text: 'main · 1 staged, 1 modified, 1 untracked · no upstream', kind: 'warn' })
-    expect(gitLine(parseStatus(CLEAN))).toEqual({ text: 'main · clean · ↑2 ↓1', kind: 'ok' })
+  test('only the state is coloured: each count of changed files yellow, a conflict red, clean green, a commit count yellow above zero; a directory outside git says so', () => {
+    expect(gitLine(parseStatus(DIRTY))).toEqual({
+      text: 'main · 1 staged, 1 modified, 1 untracked · no upstream',
+      parts: [{ text: 'main · ' }, { text: '1 staged', kind: 'warn' }, { text: ', ' }, { text: '1 modified', kind: 'warn' }, { text: ', ' }, { text: '1 untracked', kind: 'warn' }, { text: ' · ' }, { text: 'no upstream', kind: 'dim' }],
+    })
+    expect(gitLine(parseStatus(CLEAN))).toEqual({
+      text: 'main · clean · ↑2 ↓1',
+      parts: [{ text: 'main · ' }, { text: 'clean', kind: 'ok' }, { text: ' · ' }, { text: '↑2', kind: 'warn' }, { text: ' ' }, { text: '↓1', kind: 'warn' }],
+    })
+    expect(gitLine({ kind: 'repo', head: 'main', ab: { ahead: 0, behind: 3 }, staged: 0, modified: 2, untracked: 0, conflicted: 1 })).toEqual({
+      text: 'main · 2 modified, 1 conflicted · ↑0 ↓3',
+      parts: [{ text: 'main · ' }, { text: '2 modified', kind: 'warn' }, { text: ', ' }, { text: '1 conflicted', kind: 'error' }, { text: ' · ' }, { text: '↑0', kind: 'dim' }, { text: ' ' }, { text: '↓3', kind: 'warn' }],
+    })
     expect(failedGit('fatal: not a git repository (or any of the parent directories): .git\n')).toEqual({ kind: 'none' })
     expect(gitLine(failedGit('fatal: not a git repository (or any of the parent directories): .git\n'))).toEqual({ text: 'git: this folder is not a git repository', kind: 'dim' })
     expect(gitLine(failedGit('\nfatal: detected dubious ownership\n'))).toEqual({ text: 'git: fatal: detected dubious ownership', kind: 'dim' })
@@ -49,7 +59,7 @@ describe('reading', () => {
 
   test('the section reads context, tokens, cost, model with thinking, version and git, in that order', () => {
     expect(sidebarLines(reading())).toEqual([
-      { text: 'ctx 25% · 245k / 1.0M', kind: 'ok' },
+      { text: 'ctx 25% · 245k / 1.0M', parts: [{ text: 'ctx ' }, { text: '25%', kind: 'ok' }, { text: ' · 245k / 1.0M' }] },
       { text: 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k · CH 92%', parts: [{ text: 'tokens T 1.2M · I 3k · O 45k · TH 0 · CR 1.1M · CW 80k' }, { text: ' · CH ' }, { text: '92%', kind: 'ok' }] },
       { text: 'cost $1.23' },
       {
@@ -57,7 +67,7 @@ describe('reading', () => {
         parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'effort ' }, { text: 'high', kind: 'warn' }],
       },
       { text: 'Claude Code 2.1.282' },
-      { text: 'main · clean · ↑2 ↓1', kind: 'ok' },
+      { text: 'main · clean · ↑2 ↓1', parts: [{ text: 'main · ' }, { text: 'clean', kind: 'ok' }, { text: ' · ' }, { text: '↑2', kind: 'warn' }, { text: ' ' }, { text: '↓1', kind: 'warn' }] },
     ])
   })
 

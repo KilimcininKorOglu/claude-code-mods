@@ -154,7 +154,7 @@ describe('session-watch', () => {
     await step($, 'high')
     await $.turn.complete(turn())
     expect(w.bar.lines.at(-1)).toEqual([
-      { text: 'ctx 12% · 120k / 1.0M', kind: 'ok' },
+      { text: 'ctx 12% · 120k / 1.0M', parts: [{ text: 'ctx ' }, { text: '12%', kind: 'ok' }, { text: ' · 120k / 1.0M' }] },
       { text: 'tokens T 10k · I 1k · O 500 · TH 0 · CR 8k · CW 500 · CH 84%', parts: [{ text: 'tokens T 10k · I 1k · O 500 · TH 0 · CR 8k · CW 500' }, { text: ' · CH ' }, { text: '84%', kind: 'warn' }] },
       { text: 'cost $0.50' },
       {
@@ -162,7 +162,7 @@ describe('session-watch', () => {
         parts: [{ text: 'model ' }, { text: 'opus-5-5', kind: 'error' }, { text: ' · ' }, { text: 'effort ' }, { text: 'high', kind: 'warn' }],
       },
       { text: 'Claude Code 2.1.282' },
-      { text: 'main · clean · ↑0 ↓0', kind: 'ok' },
+      { text: 'main · clean · ↑0 ↓0', parts: [{ text: 'main · ' }, { text: 'clean', kind: 'ok' }, { text: ' · ' }, { text: '↑0', kind: 'dim' }, { text: ' ' }, { text: '↓0', kind: 'dim' }] },
     ])
     expect(w.statuses.at(-1)).toBe(undefined)
   })
