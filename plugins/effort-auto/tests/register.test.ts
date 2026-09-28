@@ -81,7 +81,7 @@ describe('effort-auto', () => {
     const w = world(on)
     await started($)
     await prompt($, 'redesign the cache layer')
-    expect(w.asked).toEqual([{ model: 'haiku', effort: 'low', prompt: 'The request:\n<request>\nredesign the cache layer\n</request>\nThe level:' }])
+    expect(w.asked).toEqual([{ model: 'haiku', effort: 'low', prompt: 'The request:\n<request>\nredesign the cache layer\n</request>\nWhen the request names a level itself, that level is the answer, word for word.\nThe level:' }])
     await step($)
     await step($)
     expect(w.sent).toEqual(['max', 'max'])

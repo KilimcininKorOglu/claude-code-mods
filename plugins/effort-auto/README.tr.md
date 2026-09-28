@@ -4,7 +4,7 @@ Bu Claude Code Mod'u, yazdığınız her prompt'un zorluğunu küçük bir model
 
 ## Ne yapar
 
-1. Session boştayken yazdığınız her prompt önce en düşük effort'la haiku'ya gider. Haiku'ya tek bir soru sorulur: bu istek ne kadar düşünme gerektiriyor? Haiku tek kelimeyle cevap verir: `low`, `medium`, `high`, `xhigh` ya da `max`. Prompt'un ilk 4.000 karakterini okur. Ölçülen cevap süresi yaklaşık 0,6 saniye.
+1. Session boştayken yazdığınız her prompt önce en düşük effort'la haiku'ya gider. Haiku'ya tek bir soru sorulur: bu istek ne kadar düşünme gerektiriyor? Haiku tek kelimeyle cevap verir: `low`, `medium`, `high`, `xhigh` ya da `max`. Prompt'un ilk 4.000 karakterini okur. Ölçülen cevap süresi yaklaşık 0,6 saniye. Kendi seviyesini söyleyen bir prompt, dili ne olursa olsun ("bunu effort seviyesi medium ile çöz", "mit niedrigem Aufwand (low effort)", "推論レベルは medium"), o seviyeyi alır: haiku'ya isteği puanlamak yerine o seviyeyi döndürmesi söylenir. 2.1.283 üzerinde ölçüldü: Türkçe, Almanca, Japonca ve İngilizce dört böyle prompt 12 çalışmanın 12'sinde istenen seviyeyi aldı; `medium` kelimesini başka bir anlamda kullanan bir prompt ("medium boyutlu bir resim") da `medium` okundu.
 2. O turn'deki ana döngünün her model isteği bu seviyeyle gider. Seviye session'ın kendi effort'unun altında da olabilir, üstünde de. Subagent'lar kendi effort'larını korur.
 3. Session ayarlarına hiçbir şey yazılmaz. Turn bitince sonraki turn yine session'ın effort'uyla başlar, kendi prompt'u puanlanırsa o seviyeyi alır.
 4. Task notification'ları, plugin'lerin gönderdiği prompt'lar ve çalışan bir turn'ün üstüne yazdığınız prompt'lar puanlanmaz. Bu turn'ler session'ın effort'uyla çalışır.

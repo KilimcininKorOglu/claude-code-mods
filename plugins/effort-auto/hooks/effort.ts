@@ -26,6 +26,7 @@ export function keepsCacheAcrossEffort(model: string): boolean {
 export const RATER_SYSTEM = [
   'You rate how much reasoning a coding agent needs for the request it just received.',
   'Answer with one word and nothing else: low, medium, high, xhigh or max.',
+  'First check whether the request itself names the reasoning or effort level to use, in any language. If it does, answer exactly that level, even when the work looks larger or smaller, and do not rate the request.',
   'low: a greeting, a thank-you, a yes or no, a lookup, a one-line change.',
   'medium: a small edit, a clear question about code, running a known command.',
   'high: a change across several files, or a bug whose place is known.',
@@ -36,7 +37,7 @@ export const RATER_SYSTEM = [
 /** The rater's prompt: the person's request, cut to what the rater needs to judge it. */
 export function raterPrompt(text: string): string {
   const cut = text.length > MAX_PROMPT_CHARS ? `${text.slice(0, MAX_PROMPT_CHARS)}\n[cut]` : text
-  return `The request:\n<request>\n${cut}\n</request>\nThe level:`
+  return `The request:\n<request>\n${cut}\n</request>\nWhen the request names a level itself, that level is the answer, word for word.\nThe level:`
 }
 
 /** The level a rater's reply names, or undefined when it names none. */

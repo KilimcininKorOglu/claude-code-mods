@@ -4,7 +4,7 @@ A Claude Code Mod that has a small model rate how hard each of your prompts is, 
 
 ## What it does
 
-1. Each prompt you type while the session is idle goes to haiku first, at its lowest effort, with one question: how much reasoning does this request need? Haiku answers one word: `low`, `medium`, `high`, `xhigh` or `max`. It reads the first 4,000 characters of the prompt. Measured: an answer in about 0.6 seconds.
+1. Each prompt you type while the session is idle goes to haiku first, at its lowest effort, with one question: how much reasoning does this request need? Haiku answers one word: `low`, `medium`, `high`, `xhigh` or `max`. It reads the first 4,000 characters of the prompt. Measured: an answer in about 0.6 seconds. A prompt that names its own level, in any language ("solve this at medium effort", "mit niedrigem Aufwand (low effort)", "推論レベルは medium"), gets that level: haiku is told to answer it instead of rating the request. Measured on 2.1.283: four such prompts in Turkish, German, Japanese and English got the named level in 12 of 12 runs; a prompt that used the word `medium` for something else ("a medium sized image") was also read as `medium`.
 2. Every model request of the main loop in that turn goes out at that level, below or above the session's own effort. A subagent keeps its own effort.
 3. Nothing is written to the session's settings. When the turn ends, the next one starts from the session's effort again, unless its own prompt is rated.
 4. A task notification, a plugin's prompt, or a prompt you type over a running turn is not rated, so its turn runs at the session's effort.
