@@ -155,7 +155,7 @@
     {
       "name": "disk-janitor",
       "source": "./plugins/disk-janitor",
-      "description": "Measures the build artifacts of the project, shows them on the status line above 5 GB, and deletes the ones you pick in the /janitor pane; data directories are never listed.",
+      "description": "Measures the build artifacts of the repository, shows them on the status line from 5 GB, and deletes the ones you pick in the /disk-janitor pane; data directories are never listed.",
       "category": "development",
       "tags": [
         "mods",
