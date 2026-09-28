@@ -4,7 +4,7 @@ A Claude Code Mod for the retrieval fallback: when a `curl` or `wget` is refused
 
 ## What it does
 
-1. The mod hooks the Bash tool. After a `curl` or `wget` call it reads the command's own output, both streams, for a status an automated-client filter answers with: `403` or `429`, in any of the forms those commands print (`HTTP/2 403`, `403 Forbidden`, `curl: (22) ... error: 403`, `429 Too Many Requests`, `Rate limit`).
+1. The mod hooks the Bash tool. After a `curl` or `wget` call it reads the command's own output, both streams, for a status an automated-client filter answers with: `403` or `429`, in any of the forms those commands print (`HTTP/2 403`, `403 Forbidden`, `curl: (22) ... error: 403`, `status: 403`, `429 Too Many Requests`, `Rate limit`).
 2. A command that already sets a User-Agent (`-A`, `--user-agent`, `-U`, a `User-Agent` header) is left alone: the advice is spent.
 3. The model reads this note after the tool's result:
 
