@@ -1,6 +1,6 @@
 # slash-chain
 
-A Claude Code Mod that runs slash commands joined with `&&` one after another, as a shell does: `/tiny && /context` runs `/context` once `/tiny` ended well. Without the mod the engine runs the first command alone and drops the rest.
+You type `/init && /initialize` and expect the second to run too; the engine runs the first command alone and drops the rest without a word. This mod runs slash commands joined with `&&` one after another, as a shell does: `/tiny && /context` runs `/context` once `/tiny` ended well.
 
 ## What it does
 
@@ -43,7 +43,7 @@ Measured on 2.1.281: `/fail && /exit`, where `/fail` asked for a write that fail
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install slash-chain@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -81,7 +81,7 @@ Reach L2, it drives Claude: it runs the slash commands you chained.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test

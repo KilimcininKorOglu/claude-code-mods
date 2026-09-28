@@ -1,6 +1,6 @@
 # slash-chain
 
-`&&` ile birleştirilmiş slash komutlarını bir shell'in yaptığı gibi sırayla çalıştıran bir Claude Code Mod'u: `/tiny && /context`, `/tiny` iyi bitince `/context` komutunu çalıştırır. Mod olmadan engine yalnız ilk komutu çalıştırır ve gerisini atar.
+`/init && /initialize` yazarsın ve ikincisinin de çalışmasını beklersin; engine ise yalnız ilk komutu çalıştırır, gerisini sessizce atar. Bu mod `&&` ile birleştirilmiş slash komutlarını bir shell'in yaptığı gibi sırayla çalıştırır: `/tiny && /context`, `/tiny` iyi bitince `/context`'i çalıştırır.
 
 ## Ne yapar
 
@@ -18,7 +18,7 @@
        all 2 command(s) ran
        stopped after /tiny: its turn ended with aborted; not run: /context
 
-5. Bir zincir beklerken yazdığınız bir prompt ya da yeni bir zincir onu iptal eder: `cancelled; not run: /context`. Yeni zincir oradan başlar. Tek başına yazdığınız bir komut (`/cost`) bekleyen zincirin yanında çalışır ve onu iptal etmez, çünkü mod yalnız argümanlarında `&& /<name>` olan komutları hook'lar. Engine yine de her plugin komutunun çıktısının önüne bu modun adını yazar (`task-poke+slash-chain: ...`): yazacağı adları yalnız bir hook'un `command` matcher'ına bakarak seçer, bir zincir ise herhangi bir komutla başlayabilir, yani bu hook tek bir komut adı veremez (2.1.281 üzerinde iki probe plugin ile ölçüldü: hiç çalışmayan, yalnız `args` matcher'ı olan bir hook adlandırıldı, `command` matcher'ı olan bir hook adlandırılmadı).
+5. Bir zincir beklerken yazdığın bir prompt ya da yeni bir zincir onu iptal eder: `cancelled; not run: /context`. Yeni zincir oradan başlar. Tek başına yazdığın bir komut (`/cost`) bekleyen zincirin yanında çalışır ve onu iptal etmez, çünkü mod yalnız argümanlarında `&& /<name>` olan komutları hook'lar. Engine yine de her plugin komutunun çıktısının önüne bu modun adını yazar (`task-poke+slash-chain: ...`): yazacağı adları yalnız bir hook'un `command` matcher'ına bakarak seçer, bir zincir ise herhangi bir komutla başlayabilir, yani bu hook tek bir komut adı veremez (2.1.281 üzerinde iki probe plugin ile ölçüldü: hiç çalışmayan, yalnız `args` matcher'ı olan bir hook adlandırıldı, `command` matcher'ı olan bir hook adlandırılmadı).
 
 ## Bir adım sözle başarısız olduğunda
 
@@ -43,13 +43,13 @@ Mod `mcp__slash-chain__fail` (`reason`) tool'unu session başlangıcında tanım
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install slash-chain@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
+1. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
 
@@ -58,7 +58,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, tool.describe{tool=mcp__slash-chain__fail}, tool.call{tool=mcp__slash-chain__fail}, command.run{command=slash-chain}, command.run{args=/"(?:^|\\s)&&\\s*\\/[A-Za-z0-9_:.-]+(?=\\s|$)"/}, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit
     ❯ ./register.ts calls: $.clock.after (via advance), $.command.register, $.command.run (via runStep), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register, $.ui.log (via advance, cancel, runFirst, stop)
 
-Reach L2, Claude'u yönlendirir: zincirlediğiniz slash komutlarını çalıştırır.
+Reach L2: Claude'u yönlendirir, zincirlediğin slash komutlarını çalıştırır.
 
     1. Okur:     her slash komutunun argümanlarını, her skill prompt'unun adını, her pane'in id'sini ve focus'unu, ve her main-loop turn'ünün bitiş nedenini. Hiçbir dosyayı, prompt metnini ya da cevabı okumaz; bir `fail` çağrısının sebebini okur.
     2. Çalıştırır: bir zincirde ilkinden sonraki her komutu, bir kere, onun için yazdığınız argümanlarla; session başlangıcında bir tool tanımlar, `mcp__slash-chain__fail`
@@ -81,7 +81,7 @@ Reach L2, Claude'u yönlendirir: zincirlediğiniz slash komutlarını çalışt�
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
