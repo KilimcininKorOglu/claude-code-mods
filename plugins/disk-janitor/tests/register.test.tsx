@@ -30,13 +30,17 @@ type World = {
   inGit: boolean
 }
 
-const dir = (name: string): FsEntry => ({ name, kind: 'dir', size: 0, isLink: false })
+const dir = (name: string): FsEntry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
 
-function processAnswer(w: World, argv: readonly string[]): { exitCode: number; stdout: string; stderr: string } {
-  const ok = (stdout: string) => ({ exitCode: 0, stdout, stderr: '' })
-  if (argv[1] === 'rev-parse') return w.inGit ? ok(`${ROOT}\n`) : { exitCode: 128, stdout: '', stderr: 'not a git repository' }
+type Answer = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false }
+
+const answer = (exitCode: number, stdout: string, stderr = ''): Answer => ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
+
+function processAnswer(w: World, argv: readonly string[]): Answer {
+  const ok = (stdout: string) => answer(0, stdout)
+  if (argv[1] === 'rev-parse') return w.inGit ? ok(`${ROOT}\n`) : answer(128, '', 'not a git repository')
   if (argv[1] === 'ls-files') return ok(w.ignored)
-  if (argv[1] === 'check-ignore') return w.notIgnored.has(argv.at(-1) ?? '') ? { exitCode: 1, stdout: '', stderr: '' } : ok('')
+  if (argv[1] === 'check-ignore') return w.notIgnored.has(argv.at(-1) ?? '') ? answer(1, '') : ok('')
   if (argv[0] === 'du') return ok(argv.slice(3).map(p => `${w.sizes.get(p) ?? 0}\t${p}`).join('\n'))
   if (argv[0] === 'rm') {
     const path = argv.at(-1) ?? ''
