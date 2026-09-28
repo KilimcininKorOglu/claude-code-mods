@@ -40,11 +40,8 @@ export type Status = (typeof STATUSES)[number]
 export const PERSISTENCES = ['permanent', 'long_lived', 'short_lived'] as const
 export type Persistence = (typeof PERSISTENCES)[number]
 
-/**
- * `never` keeps a memory out of every automatic path to the model, `always` sends it with the
- * session's start and after each compaction, `auto` lets relevance decide.
- */
-export const CONTEXT_POLICIES = ['never', 'auto', 'always'] as const
+/** `never` keeps a memory out of every automatic path to the model, `auto` lets relevance decide. */
+export const CONTEXT_POLICIES = ['never', 'auto'] as const
 export type ContextPolicy = (typeof CONTEXT_POLICIES)[number]
 
 /**

@@ -2,7 +2,6 @@ import type { EngineInterface, Register } from 'claude-code'
 import { countsLine, launchOf, NODE_PROBE, nodeProblem, setupText, stateLine, statusText, tokenOf, valueOf, type Line, type LinkView, type SessionCounts } from './link.ts'
 import { hexOf, keySource, projectKey, projectNameFrom } from './project.ts'
 import {
-  alwaysBlock,
   CHANGE_TOOLS,
   isReminding,
   isTracked,
@@ -101,7 +100,7 @@ const USAGE = [
   '  remember [flags] <text> · update <id> [flags] [text] · delete <id> · forget <query> · recover <id>',
   '  audience remember --role <type> <text> | clear <id> | transfer <from> <to>',
   '  hygiene · verify [id] · candidates [list|accept|reject|resolve] · triage [apply] · compact [apply]',
-  '  import <path> [--section <heading>] [--always] [--kind <kind>] [--scope project|user]',
+  '  import <path> [--section <heading>] [--kind <kind>] [--scope project|user]',
   '  pane (the memory manager)',
   '  model [name] · remind tools|prompt|subagent [on|off] · consolidate|curate [on|off] · daily [on|off] · capture outcomes|errors [on|off]',
   'flags: --kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
@@ -522,7 +521,7 @@ async function candidateAction($: EngineInterface, state: State, action: string,
 /** Writes each bullet of a markdown file, or of one section of it, as a memory. */
 async function importCommand($: EngineInterface, state: State, rest: string): Promise<string> {
   const flags = importFlagsOf(wordsOf(rest))
-  if (flags.errors.length > 0) return [...flags.errors, 'expects import <path> [--section <heading>] [--always] [--kind <kind>] [--scope project|user]'].join('\n')
+  if (flags.errors.length > 0) return [...flags.errors, 'expects import <path> [--section <heading>] [--kind <kind>] [--scope project|user]'].join('\n')
   const bullets = bulletsOf(await $.fs.read(flags.path), flags.section)
   if (bullets === undefined) return `${flags.path} has no heading "${flags.section ?? ''}"`
   const sessionId = await $.session.id()
@@ -707,8 +706,7 @@ async function forSubagent($: EngineInterface, state: State, e: Spawn): Promise<
   if (!(await isReady(state)) || (await $.store.get('remindSubagent')) === false) return undefined
   const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt.slice(0, 4000) }
   const ranking = await ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
-  const always = await ask<Memory[]>($, state, '/remind/always', { sessionId: body.sessionId, limit: 100 }, REMIND_MS)
-  const block = subagentReminder(always, ranking.audience, ranking.task)
+  const block = subagentReminder(ranking.audience, ranking.task)
   return block.sent.length > 0 ? block : undefined
 }
 
@@ -728,16 +726,6 @@ async function countUse($: EngineInterface, state: State, loopKey: string, answe
 async function newContext($: EngineInterface, state: State, loopKey: string): Promise<void> {
   state.loops.delete(loopKey)
   if (await isReady(state)) await ask($, state, '/context/new', { sessionId: await $.session.id(), loop: loopKey })
-}
-
-/** The block of `always` memories for a session's start, /clear, resume and each compaction. */
-async function alwaysText($: EngineInterface, state: State): Promise<string | undefined> {
-  if (!(await isReady(state))) return undefined
-  const memories = await ask<Memory[]>($, state, '/remind/always', { sessionId: await $.session.id(), limit: 100 })
-  const text = alwaysBlock(memories)
-  if (text === undefined) return undefined
-  await ask($, state, '/memory/reminded', { sessionId: await $.session.id(), trigger: 'always', ids: memories.map(memory => memory.id) })
-  return text
 }
 
 function verifiedLine(what: string, report: { staled: string[]; reactivated: string[] }): Line | undefined {
@@ -1262,14 +1250,13 @@ function withContext<R extends { additionalContext?: readonly string[] }>(r: R, 
   return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
 }
 
-/** /clear fixes the system prompt note again and forgets every loop; a compaction starts the main loop over; every start gets the `always` memories. */
-async function atSessionStart($: EngineInterface, state: State, source: string): Promise<string | undefined> {
+/** /clear fixes the system prompt note again and forgets every loop; a compaction starts the main loop over. */
+async function atSessionStart($: EngineInterface, state: State, source: string): Promise<void> {
   if (source === 'clear') {
     state.guidance = await readEnabled($, state)
     state.loops.clear()
   }
   if (source === 'compact') await guarded($, 'starting the context over', () => newContext($, state, MAIN_LOOP))
-  return guarded($, 'the always memories', () => alwaysText($, state))
 }
 
 /** A prompt the person typed, not a command: the prompts a reminder goes with. */
@@ -1308,10 +1295,11 @@ export const register: Register = on => {
     return r.text === null || !state.guidance ? r : { text: `${r.text}\n\n${SYSTEM_NOTE}` }
   })
 
-  // Every source (startup, resume, /clear, compaction) gets the `always` memories; /clear and a compaction start the context over.
+  // /clear and a compaction start the main loop's context over.
   on('classic.SessionStart', async ($, e, next) => {
     const r = await next(e)
-    return e.agent_id === undefined ? withContext(r, await atSessionStart($, state, e.source)) : r
+    if (e.agent_id === undefined) await atSessionStart($, state, e.source)
+    return r
   })
 
   // A subagent's compaction; the main loop's arrives through classic.SessionStart above.

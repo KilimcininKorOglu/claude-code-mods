@@ -291,7 +291,7 @@ export function bulletsOf(markdown: string, heading: string | undefined): string
 }
 
 /** The flags of `import`: the file, the section, and what every imported memory becomes. */
-export type ImportFlags = { path: string; section?: string; always: boolean; kind?: Kind; scope: 'project' | 'user'; errors: string[] }
+export type ImportFlags = { path: string; section?: string; kind?: Kind; scope: 'project' | 'user'; errors: string[] }
 
 function importErrors(words: readonly string[], at: number, flags: Flags, path: string): string[] {
   const section = words[at + 1]
@@ -302,24 +302,23 @@ function importErrors(words: readonly string[], at: number, flags: Flags, path: 
   return errors
 }
 
-/** Takes `--section <heading>` and `--always` out of the words; the rest are the path and the `--kind`/`--scope` flags. */
+/** Takes `--section <heading>` out of the words; the rest are the path and the `--kind`/`--scope` flags. */
 export function importFlagsOf(words: readonly string[]): ImportFlags {
   const at = words.indexOf('--section')
-  const rest = words.filter((word, i) => word !== '--always' && (at === -1 || (i !== at && i !== at + 1)))
+  const rest = words.filter((_, i) => at === -1 || (i !== at && i !== at + 1))
   const flags = flagsOf(rest)
   const path = flags.text.split(' ')[0] ?? ''
   const section = at === -1 ? undefined : words[at + 1]
-  return { path, section, always: words.includes('--always'), kind: flags.kind, scope: flags.scope === 'user' ? 'user' : 'project', errors: importErrors(words, at, flags, path) }
+  return { path, section, kind: flags.kind, scope: flags.scope === 'user' ? 'user' : 'project', errors: importErrors(words, at, flags, path) }
 }
 
-/** One imported bullet as a memory: the file is its source, `--always` puts it in every start. */
+/** One imported bullet as a memory, with the file as its source. */
 export function importInput(text: string, flags: ImportFlags, sessionId: string): RememberInput {
   return {
     text,
     scope: flags.scope,
     kind: flags.kind ?? 'convention',
     persistence: 'long_lived',
-    ...(flags.always ? { contextPolicy: 'always' as const } : {}),
     sources: [{ type: 'legacy_memory', path: flags.path, sessionId }],
   }
 }

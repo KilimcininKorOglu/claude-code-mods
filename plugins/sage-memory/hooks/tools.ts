@@ -165,7 +165,7 @@ export const TOOLS: readonly ToolDef[] = [
         confidence: number(0, 1),
         freshness: number(0, 1),
         persistence: PERSISTENCE,
-        contextPolicy: choice(['never', 'auto', 'always'], 'never: no automatic reminder; auto: when relevant; always: at every session start and compaction.'),
+        contextPolicy: choice(['never', 'auto'], 'never: no automatic reminder; auto: when relevant.'),
         status: choice(STATUSES, 'New lifecycle status.'),
         supersedes: texts('Memory ids this replaces.'),
         contradicts: texts('Memory ids this contradicts.'),

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { after, describe, test } from 'node:test'
 import { markReminded, nextEpoch } from '../contexts.ts'
-import { alwaysFor, rankForPrompt, rankForSubagent, rankForTools, type ToolsRequest } from '../remind.ts'
+import { rankForPrompt, rankForSubagent, rankForTools, type ToolsRequest } from '../remind.ts'
 import { updateMemory } from '../update.ts'
 import { cleanUp } from './support.ts'
 import { world } from './world.ts'
@@ -22,12 +22,11 @@ describe('a reminder after a tool batch', () => {
     w.close()
   })
 
-  test('the gates hold back a low importance, a never or always policy, and a repeated text', async () => {
+  test('the gates hold back a low importance, a never policy, and a repeated text', async () => {
     const w = world()
     const anchors = [{ type: 'file' as const, path: 'src/app.ts' }]
     const minor = (await w.remember({ text: 'The app entry has a comment about the old logo', anchors, importance: 0.3 })).memory
     await w.remember({ text: 'The app entry holds the license banner', anchors, contextPolicy: 'never' })
-    await w.remember({ text: 'The app entry is the only place that reads process.env', anchors, contextPolicy: 'always' })
     const project = (await w.remember({ text: 'The app entry is started by the dev server', anchors })).memory
     await w.remember({ text: 'The app entry is started by the dev server', scope: 'user' }, w.global)
     const ranking = rankForTools(w.readers('s1', 'main'), { ...READ_APP, query: 'The app entry is started by the dev server' })
@@ -90,19 +89,6 @@ describe('what a subagent starts with', () => {
     const start = rankForSubagent(w.readers('s1'), { role: 'Explore', task: 'find where payment webhooks retry', audienceLimit: 20, taskLimit: 8 })
     assert.deepEqual(start.audience.map(m => m.id), [user.id, role.id])
     assert.deepEqual(start.task.map(c => c.memory.id), [task.id])
-    w.close()
-  })
-})
-
-describe('the always block', () => {
-  test('active always memories of both stores with no audience, most important first', async () => {
-    const w = world()
-    const project = (await w.remember({ text: 'Commit through the commit skill only', contextPolicy: 'always', importance: 0.7 })).memory
-    const user = (await w.remember({ text: 'Answer in the language of the question', scope: 'user', contextPolicy: 'always', importance: 0.95 }, w.global)).memory
-    await w.remember({ text: 'Explore agents always read the ADRs', contextPolicy: 'always', audience: { roles: ['explore'] } })
-    const archived = (await w.remember({ text: 'Use npm for every install', contextPolicy: 'always' })).memory
-    await w.run(op => updateMemory(op, { id: archived.id, patch: { status: 'archived' } }))
-    assert.deepEqual(alwaysFor(w.readers('s1'), 100).map(m => m.id), [user.id, project.id])
     w.close()
   })
 })

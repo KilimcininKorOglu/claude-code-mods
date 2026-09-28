@@ -11,9 +11,9 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
 3. **Memory reminder'lar.** Bir reminder, modelin kayıtlı proje hafızası olarak okuduğu `<memory>` girdilerinden oluşan bir bloktur. System prompt'taki bir not bloğu tanıtır:
    - bir dosya tool batch'inden sonra (Read, Grep, Glob, LSP, Edit, Write, NotebookEdit ve dosya adı taşıyan MCP tool'ları), o yollara bağlı ve devam eden görevlerle ilgili kayıtlar; context doldukça daha az (%65'in altında 8, %82'ye kadar 3, %95'e kadar 1, üstünde hiç);
    - yazdığınız bir prompt'la, ona uyan en fazla 8 kayıt;
-   - bir subagent'a, görevinin önünde: `always` kayıtlar, onun tipi ya da permission mode'u için yazılmış kayıtlar, sonra göreviyle ilgili kayıtlar;
-   - her başlangıçta, `/clear`'da, resume'da ve compaction'da, `always` policy'li her kayıt.
-   Her kayıt bir context'te bir kez gider. Compaction yeni bir context başlatır, kayıt yeniden gidebilir. Hatırlatılan bir kaydı kullanan cevap bir kullanım sayılır.
+   - bir subagent'a, görevinin önünde: onun tipi ya da permission mode'u için yazılmış kayıtlar, sonra göreviyle ilgili kayıtlar.
+
+   memory-save'in `MEMORY.md`'yi gönderdiği gibi her başlangıçta giden bir kayıt yoktur: her kayıt yalnız ilgili olduğunda gider. Her kayıt bir context'te bir kez gider. Compaction yeni bir context başlatır, kayıt yeniden gidebilir. Hatırlatılan bir kaydı kullanan cevap bir kullanım sayılır.
 4. **Öğrenme.** Prompt'unuz ya da bir tool çağrısı olan her ana loop turn'ünden sonra bir consolidator (varsayılan haiku) cevabı, turn'ün okuduğu ve yazdığı dosyaları, son 10 Bash komutunu ve tamamlanan görevleri okur ve saklanmaya değeri İngilizce ekler. Dosya yazan bir turn'den sonra bir curator o dosyaların kayıtlarını gözden geçirir: supersede, merge, recalibrate, çelişki işareti ya da archive. Permanent bir kayıt asla supersede, contradict ya da archive edilmez.
 5. **Doğrulama.** Bir edit, değişen dosyaya bağlı kayıtları yeniden kontrol eder (yol, content hash, symbol, komut, agent, git blob); anchor'ı tutmayan kayıt stale olur. Bir `mv`, `git mv` ya da `Move-Item` taşıma diskte gerçekleşince anchor'ları dosyayla taşır. Oturum sonunda daemon hygiene'i arka planda, depo başına saatte en fazla bir kez çalıştırır: doğrulama, kopyalar, çelişkiler, inceleme önerileri ve transcript'i silinmiş oturumların session kayıtlarının silinmesi.
 6. **Arama.** Her zaman tam metin arama (FTS5). `/sage-memory setup`'tan sonra ayrıca çok dilli bir embedding modeli (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline; böylece bir soru başka dildeki bir kaydı bulabilir. Yalnız bu kanaldan gelen bir sonuç 0.46 cosine ister; bunun altında kalan bir yeniden ifade tam metin aramasına ve anchor'lara kalır (ölçüldü: `deploy.sh betiği nerede` sorusu `Deploys go through the deploy.sh script...` kaydını 0.55 ile buldu, `Uygulamayı sunucuya nasıl gönderiyoruz?` 0.46'nın altında kaldı).
@@ -31,7 +31,7 @@ Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kont
 
 ## Pane
 
-`/sage-memory pane` ya da `manage` butonu bellek yöneticisini açar, tekrar çalıştırmak kapatır. Bir arama alanı, bir scope filtresi ve bir status filtresi vardır, kayıtlar 30'luk sayfalarla listelenir (`next`, `previous`). Bir satırda Enter kaydı butonlarıyla gösterir: `mark stale`, `make active`, `archive`, `permanent`, `always`, `delete` (ikinci basış ister) ve silinmiş bir kayıt için `recover`. `candidates` bekleyen önerileri listeler: yeni bir kaydı accept ya da reject edin, bir incelemeyi `delete`, `archive` ya da `keep` ile çözün.
+`/sage-memory pane` ya da `manage` butonu bellek yöneticisini açar, tekrar çalıştırmak kapatır. Bir arama alanı, bir scope filtresi ve bir status filtresi vardır, kayıtlar 30'luk sayfalarla listelenir (`next`, `previous`). Bir satırda Enter kaydı butonlarıyla gösterir: `mark stale`, `make active`, `archive`, `permanent`, `delete` (ikinci basış ister) ve silinmiş bir kayıt için `recover`. `candidates` bekleyen önerileri listeler: yeni bir kaydı accept ya da reject edin, bir incelemeyi `delete`, `archive` ya da `keep` ile çözün.
 
 ## Komut
 
@@ -47,7 +47,7 @@ Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kont
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
     /sage-memory triage [apply]           bütün kayıtların incelemesi; `apply` olmadan kuru çalışır
     /sage-memory compact [apply]          kısaltma ve birleştirme önerisi; `apply` yazar
-    /sage-memory import <yol> [--section <başlık>] [--always] [--kind <kind>] [--scope project|user]
+    /sage-memory import <yol> [--section <başlık>] [--kind <kind>] [--scope project|user]
     /sage-memory model [ad]               consolidator, curator, triage ve compact'ın modeli (haiku)
     /sage-memory remind tools|prompt|subagent [on|off]
     /sage-memory consolidate|curate [on|off]
@@ -56,7 +56,7 @@ Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kont
 
 Flag'ler: `--kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts`.
 
-`import` bir markdown dosyasının ya da bir bölümünün her maddesini bir kayıt olarak yazar. `--always` onlara `always` policy'sini verir; böylece `/sage-memory import ~/.cli-tweaks/memory/<proje>/MEMORY.md --section "CRITICAL RULES" --always` bu kuralları memory-save'in yaptığı gibi görünür tutar.
+`import` bir markdown dosyasının ya da bir başlığın altındaki bölümün her maddesini, kaynağı o dosya olan sıradan bir kayıt olarak yazar. Başka bir dosyada tutulan notları bir kez depoya taşır; içe alınan kayıtlar sonra diğerleri gibi ilgiye göre hatırlatılır.
 
 ## Modelin çağırabildiği tool'lar
 
@@ -84,7 +84,7 @@ Function hooks erken erişimdedir. Flag olmadan hiçbir şey yüklenmez. Açık 
 Claude Code 2.1.283'te `claude plugin validate` ile doğrulandı (validator `calls:` satırını kendisi kısaltıyor):
 
     ❯ ./register.tsx hooks: session.start, tool.describe{tool=/"^mcp__sage-memory__"/}, tool.check{tool=/"^mcp__sage-memory__"/}, tool.call{tool=/"^mcp__sage-memory__"/}, prompt.section{name=env_info_simple}, classic.SessionStart, session.compact, prompt.context, prompt.attachment, classic.PostToolBatch, prompt.submit, agent.spawn, turn.complete, tool.call{tool=/"^(Edit|Write|NotebookEdit|MultiEdit)$"/}, tool.call{tool=Bash}, session.end, command.run{command=sage-memory}, ui.render{component=Pane}, ui.close, turn.start
-    ❯ ./register.tsx calls: $.clock.after (via scheduleDaily, within), $.clock.every (via pollSetup), $.clock.now (via captureOutcome, consolidate, dailyRun, fileProposals, scheduleDaily, triageReport), $.command.register, $.env.get (via layoutFor), $.fs.read (via importCommand, launch), $.http.fetch (via ask), $.model.complete (via answerOf, consolidate, curate, proposeCompact), $.process.run (via checkNode, git, launch), $.session.cwd, $.session.id (via afterBatch, alwaysText, ask, beforePrompt, captureOutcome, consolidate, countUse, curate, forSubagent, importCommand, newContext, record, remapMoved, rememberCommand, serveTool, verifyChanged), $.session.usage (via budgetOf), $.sidebar.set (via toPerson, toStream), $.store.get (via afterBatch, beforePrompt, captureOutcome, consolidate, curate, dailyRun, forSubagent, jobModel, onByDefault, readEnabled, scheduleDaily, toggle), $.store.set (via dailyRun, modelCommand, onByDefault, setEnabled, toggle), $.tool.call (via completedOf, tasksOf), $.… [+236 chars]
+    ❯ ./register.tsx calls: $.clock.after (via scheduleDaily, within), $.clock.every (via pollSetup), $.clock.now (via captureOutcome, consolidate, dailyRun, fileProposals, scheduleDaily, triageReport), $.command.register, $.env.get (via layoutFor), $.fs.read (via importCommand, launch), $.http.fetch (via ask), $.model.complete (via answerOf, consolidate, curate, proposeCompact), $.process.run (via checkNode, git, launch), $.session.cwd, $.session.id (via afterBatch, ask, beforePrompt, captureOutcome, consolidate, countUse, curate, forSubagent, importCommand, newContext, record, remapMoved, rememberCommand, serveTool, verifyChanged), $.session.usage (via budgetOf), $.sidebar.set (via toPerson, toStream), $.store.get (via afterBatch, beforePrompt, captureOutcome, consolidate, curate, dailyRun, forSubagent, jobModel, onByDefault, readEnabled, scheduleDaily, toggle), $.store.set (via dailyRun, modelCommand, onByDefault, setEnabled, toggle), $.tool.call (via completedOf, tasksOf), $.tool.registe… [+224 chars]
 
 Reach L3: uzun yaşayan yerel bir süreç başlatır, turn'leri bir modele gönderir, `/sage-memory setup`'ta paket ve model indirir.
 

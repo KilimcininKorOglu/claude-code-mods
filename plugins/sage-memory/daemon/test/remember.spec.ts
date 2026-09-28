@@ -109,13 +109,13 @@ describe('remember', () => {
 
   test('a merge never lowers permanence, and changes the context policy only when told', async () => {
     const w = world()
-    const { memory } = await w.remember({ text: MIGRATIONS, persistence: 'permanent', contextPolicy: 'always' })
+    const { memory } = await w.remember({ text: MIGRATIONS, persistence: 'permanent', contextPolicy: 'never' })
     const again = await w.remember({ text: MIGRATIONS, persistence: 'short_lived' })
     assert.equal(again.memory.id, memory.id)
     assert.equal(again.memory.persistence, 'permanent')
-    assert.equal(again.memory.contextPolicy, 'always')
-    const never = await w.remember({ text: MIGRATIONS, contextPolicy: 'never' })
-    assert.equal(never.memory.contextPolicy, 'never')
+    assert.equal(again.memory.contextPolicy, 'never')
+    const auto = await w.remember({ text: MIGRATIONS, contextPolicy: 'auto' })
+    assert.equal(auto.memory.contextPolicy, 'auto')
     w.close()
   })
 

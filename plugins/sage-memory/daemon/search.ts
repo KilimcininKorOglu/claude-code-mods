@@ -17,9 +17,9 @@ export type Visibility = {
   scope?: Scope
 }
 
-export const EVERY_POLICY: readonly ContextPolicy[] = ['never', 'auto', 'always']
+export const EVERY_POLICY: readonly ContextPolicy[] = ['never', 'auto']
 
-/** The context policy an automatic reminder may carry: `never` is kept out, and `always` has its own block. */
+/** The context policy an automatic reminder may carry: `never` is kept out. */
 export const REMINDED_POLICY: readonly ContextPolicy[] = ['auto']
 
 /**

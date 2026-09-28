@@ -42,7 +42,7 @@ export function statusesOf(filter: StatusFilter): Status[] {
   return filter === 'live' ? ['active', 'stale'] : [filter]
 }
 
-export type PaneAction = 'stale' | 'active' | 'archive' | 'permanent' | 'always' | 'delete' | 'recover'
+export type PaneAction = 'stale' | 'active' | 'archive' | 'permanent' | 'delete' | 'recover'
 export type CandidateAction = 'accept' | 'reject' | 'delete' | 'archive' | 'keep'
 
 export type Handlers = {
@@ -67,7 +67,6 @@ export function actionsFor(m: Memory, armed: boolean): { action: PaneAction; lab
   if (m.status !== 'active') actions.push({ action: 'active', label: 'make active' })
   if (m.status !== 'archived') actions.push({ action: 'archive', label: 'archive' })
   actions.push({ action: 'permanent', label: m.persistence === 'permanent' ? 'not permanent' : 'permanent' })
-  actions.push({ action: 'always', label: m.contextPolicy === 'always' ? 'not always' : 'always' })
   actions.push({ action: 'delete', label: armed ? 'press again to delete' : 'delete' })
   return actions
 }
@@ -78,7 +77,6 @@ export function patchFor(m: Memory, action: PaneAction): Partial<Memory> | undef
   if (action === 'active') return { status: 'active' }
   if (action === 'archive') return { status: 'archived' }
   if (action === 'permanent') return { persistence: m.persistence === 'permanent' ? 'long_lived' : 'permanent' }
-  if (action === 'always') return { contextPolicy: m.contextPolicy === 'always' ? 'auto' : 'always' }
   return undefined
 }
 

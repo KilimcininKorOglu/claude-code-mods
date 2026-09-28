@@ -26,16 +26,15 @@ describe('search', () => {
     w.close()
   })
 
-  test("a reminder never carries a never or always memory, an audience's memory, or another session's", async () => {
+  test("a reminder never carries a never memory, an audience's memory, or another session's", async () => {
     const w = world()
     await w.remember({ text: 'Pool sizing is private to the operators', contextPolicy: 'never' })
-    await w.remember({ text: 'Pool sizing follows the core count of the host', contextPolicy: 'always' })
     await w.remember({ text: 'Pool sizing questions go to the explore agent', audience: { roles: ['explore'] } })
     const other = (await w.remember({ text: 'Pool sizing was measured in another session', scope: 'session', ownerSessionId: 's2' })).memory
     const plain = (await w.remember({ text: 'Pool sizing below eight starves the worker sockets' })).memory
     const reminded: Visibility = { statuses: ['active'], policies: REMINDED_POLICY, audienceScoped: false, sessionId: 's1' }
     assert.deepEqual(searchStore(w.project.db, 'pool sizing', reminded, 10).map(m => m.id), [plain.id])
-    assert.equal(searchStore(w.project.db, 'pool sizing', SHOWN, 10).length, 4, 'an explicit read shows the policies and audiences, not another session')
+    assert.equal(searchStore(w.project.db, 'pool sizing', SHOWN, 10).length, 3, 'an explicit read shows the policies and audiences, not another session')
     assert.ok(searchStore(w.project.db, 'pool sizing', { ...SHOWN, allSessions: true }, 10).some(m => m.id === other.id), 'the person reads every session')
     w.close()
   })
@@ -80,7 +79,7 @@ describe('the graph read back', () => {
     const tagged = (await w.remember({ text: 'CI caches the pnpm store between the jobs of one pipeline', tags: ['ci'] })).memory
     const newer = (await w.remember({ text: 'Run pnpm test in CI with the junit reporter enabled', supersedes: [seed.id] })).memory
     await w.remember({ text: 'The docs site builds from the markdown files alone' })
-    const visibility: Visibility = { statuses: ['active', 'superseded'], policies: ['auto', 'always'], audienceScoped: true }
+    const visibility: Visibility = { statuses: ['active', 'superseded'], policies: ['auto'], audienceScoped: true }
     const related = findRelated(w.op(), [seed.id], { visibility, limit: 10, maxDepth: 3 }).map(m => m.id)
     assert.deepEqual(related.sort(), [family.id, tagged.id, newer.id].sort())
     w.close()

@@ -21,7 +21,7 @@ import type { Store, Stores } from './stores.ts'
 const LISTED_STATUSES: readonly Status[] = ['active', 'stale', 'superseded', 'contradicted', 'archived']
 
 /** The policies an explicit read that SAGE served as automatic context leaves `never` out of. */
-const SHOWN_POLICIES = ['auto', 'always'] as const
+const SHOWN_POLICIES = ['auto'] as const
 
 /** At most this many memories of a gathered page get their graph edges. */
 const GATHER_GRAPH_SCAN = 10

@@ -6,7 +6,7 @@ import type { Op } from './op.ts'
 import { descending } from './order.ts'
 import { findRelated } from './related.ts'
 import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
-import { alwaysMemories, memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
+import { memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
 import { REMINDED_POLICY, type Visibility } from './search.ts'
 import type { SemanticQuery } from './vectors.ts'
 
@@ -221,12 +221,4 @@ export function rankForSubagent(readers: Readers, request: SubagentRequest): Sub
     .slice(0, request.audienceLimit)
   const task = rankForPrompt({ ...readers, loop: undefined }, { query: request.task, limit: request.taskLimit }).candidates
   return { audience, task }
-}
-
-/** The memories marked `always` in both stores, most important first. */
-export function alwaysFor(readers: Readers, limit: number): Memory[] {
-  return [readers.project, readers.user]
-    .flatMap(op => alwaysMemories(op, readers.sessionId, limit))
-    .sort(byImportance)
-    .slice(0, limit)
 }

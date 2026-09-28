@@ -222,7 +222,6 @@ function bodiesOf(w: World, path: string): Record<string, unknown>[] {
 function readyWorld(on: On): World {
   const w = world(on)
   for (const path of ['/memory/reminded', '/memory/used', '/context/new']) w.routes.set(path, { counted: 1, epoch: 2 })
-  w.routes.set('/remind/always', [])
   w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
   for (const path of ['/remind/prompt', '/remind/tools']) w.routes.set(path, { candidates: [], rejected: [] })
   return w
@@ -289,17 +288,6 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'agent-7', trigger: 'subagent', ids: ['m1', 'm2'] })
   })
 
-  withSidebar('a subagent also starts with the always memories, first and each once', async ($, on) => {
-    const w = readyWorld(on)
-    const RULE = memory('r1', 'Deploys go through the deploy.sh script in the tools folder.', { contextPolicy: 'always' })
-    w.routes.set('/remind/subagent', { audience: [PNPM], task: [ranked(DAEMON)] })
-    w.routes.set('/remind/always', [RULE, PNPM])
-    await $.session.start(START)
-    await $.agent.spawn({ tool_use_id: 't9', prompt: 'How do we deploy?', description: 'deploy', subagentType: 'general-purpose' } as never)
-    expect(bodiesOf(w, '/memory/reminded').find(b => b.trigger === 'subagent')).toMatchObject({ loop: 'agent-7', ids: ['r1', 'm1', 'm2'] })
-    expect(w.spawned[0]).toContain('<memory id="r1"')
-  })
-
   withSidebar('an answer that names a reminded memory counts one use, once', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })
@@ -311,13 +299,12 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/memory/used')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', source: 'assistant_reference', ids: ['m1'] }])
   })
 
-  withSidebar('the system prompt notes the plugin, the always memories come with each start, and a compaction starts the context over', async ($, on) => {
+  withSidebar('the system prompt notes the plugin, a start adds no block of its own, and a compaction starts the context over', async ($, on) => {
     const w = readyWorld(on)
-    w.routes.set('/remind/always', [PNPM])
     await $.session.start(START)
     expect((await $.prompt.section({ name: 'env_info_simple', text: 'env' })).text).toContain('The user installed the sage-memory plugin.')
     const r = await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
-    expect(r.additionalContext?.[0]).toContain('[sage-memory] project memory kept in view at all times')
+    expect(r.additionalContext).toBe(undefined)
     expect(bodiesOf(w, '/context/new')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', loop: 'main' }])
   })
 
@@ -623,8 +610,8 @@ describe('commands', () => {
     w.routes.set('/memory/forget', { removed: ['a', 'b'], skippedPermanent: ['c'] })
     w.routes.set('/memory/recover', { memory: PNPM })
     await $.session.start(START)
-    await $.command.run(run('update m1 --policy always --freshness 0.5'))
-    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { contextPolicy: 'always', freshness: 0.5 } })
+    await $.command.run(run('update m1 --policy never --freshness 0.5'))
+    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { contextPolicy: 'never', freshness: 0.5 } })
     expect((await $.command.run(run('delete m1 obsolete rule'))).text).toBe('deleted m1; /sage-memory recover m1 brings it back')
     expect(bodiesOf(w, '/memory/delete')[0]).toMatchObject({ id: 'm1', force: true, reason: 'obsolete rule' })
     expect((await $.command.run(run('forget ab'))).text).toBe('expects forget <query of at least 3 characters> [--scope project|user|session]')
@@ -632,16 +619,16 @@ describe('commands', () => {
     expect(String((await $.command.run(run('recover m1'))).text)).toMatch(/^recovered m1/)
   })
 
-  withSidebar('import writes each bullet of one section as a memory kept in view at every start', async ($, on) => {
+  withSidebar('import writes each bullet of one section as a memory', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/memory/remember', { memory: PNPM, outcome: 'added' })
     w.files.set('/notes/MEMORY.md', '# Project\n\n## CRITICAL RULES\n\n- Use pnpm.\n- Run the tests\n  with the cache off.\n\n## Other\n\n- Not this one.\n')
     await $.session.start(START)
-    const r = await $.command.run(run('import /notes/MEMORY.md --section "CRITICAL RULES" --always --scope user'))
+    const r = await $.command.run(run('import /notes/MEMORY.md --section "CRITICAL RULES" --scope user'))
     expect(r.text).toBe('imported 2 of 2 bullet(s) from /notes/MEMORY.md')
     expect(bodiesOf(w, '/memory/remember').map(b => b.input)).toEqual([
-      { text: 'Use pnpm.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'always', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
-      { text: 'Run the tests with the cache off.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'always', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
+      { text: 'Use pnpm.', scope: 'user', kind: 'convention', persistence: 'long_lived', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
+      { text: 'Run the tests with the cache off.', scope: 'user', kind: 'convention', persistence: 'long_lived', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
     ])
     expect((await $.command.run(run('import /notes/MEMORY.md --section Missing'))).text).toBe('/notes/MEMORY.md has no heading "Missing"')
   })
@@ -715,9 +702,9 @@ describe('pane', () => {
     const w = paneWorld(on)
     const ui = await opened($, w)
     await ui.press({ key: 'row:m1' })
-    await ui.press({ key: 'act:always' })
+    await ui.press({ key: 'act:permanent' })
     await settled(w)
-    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { contextPolicy: 'always' } })
+    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { persistence: 'permanent' } })
     await ui.press({ key: 'act:delete' })
     await settled(w)
     expect(bodiesOf(w, '/memory/delete')).toEqual([])

@@ -2,9 +2,9 @@ import type { Audience, Memory } from '../hooks/shared/model.ts'
 import type { Op } from './op.ts'
 import { ancestorPaths, projectPathIfInside } from './paths.ts'
 import { selectMemories, sql } from './rows.ts'
-import { searchStore, visibilityParams, type Visibility } from './search.ts'
+import { visibilityParams, type Visibility } from './search.ts'
 
-/** Memories found by where they point: a path and the directories above it, an audience, the `always` policy. */
+/** Memories found by where they point: a path and the directories above it, an audience. */
 
 type IdRow = { id: string }
 
@@ -100,7 +100,7 @@ const MAX_AUDIENCE_SCAN = 10_000
  * filled or 10,000 rows were read.
  */
 export function memoriesForAudience(op: Op, context: AudienceContext, sessionId: string | undefined, limit: number): Memory[] {
-  const visibility: Visibility = { statuses: ['active'], policies: ['auto', 'always'], audienceScoped: true, sessionId }
+  const visibility: Visibility = { statuses: ['active'], policies: ['auto'], audienceScoped: true, sessionId }
   const params = visibilityParams(visibility)
   const role = contextValue(context.role)
   const mode = contextValue(context.mode)
@@ -116,9 +116,4 @@ export function memoriesForAudience(op: Op, context: AudienceContext, sessionId:
     window *= 3
   }
   return matched.slice(0, limit)
-}
-
-/** The active memories the person marked `always`, written for no audience, most important first. */
-export function alwaysMemories(op: Op, sessionId: string | undefined, limit: number): Memory[] {
-  return searchStore(op.store.db, '', { statuses: ['active'], policies: ['always'], audienceScoped: false, sessionId }, limit)
 }

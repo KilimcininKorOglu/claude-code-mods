@@ -189,20 +189,11 @@ export function promptReminder(ranked: readonly Ranked[], visible: string): { te
   return reminderBlock('project memory related to this prompt', fresh.map(item => item.memory), PROMPT_BUDGET.chars, false)
 }
 
-/**
- * What a subagent starts with: the memories kept in view at all times, the ones written for its role
- * or mode, then the ones about its task, each once.
- */
-export function subagentReminder(always: readonly Memory[], audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
-  const all = [...always, ...audience, ...task.map(item => item.memory)]
+/** What a subagent starts with: the memories written for its role or mode, then the ones about its task, each once. */
+export function subagentReminder(audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
+  const all = [...audience, ...task.map(item => item.memory)]
   const memories = all.filter((memory, i) => all.findIndex(other => other.id === memory.id) === i)
   return reminderBlock('project memory for this agent and its task', memories, SUBAGENT_CHARS, true)
-}
-
-/** The block of memories marked `always`, sent with the session's start and after each compaction. */
-export function alwaysBlock(memories: readonly Memory[]): string | undefined {
-  if (memories.length === 0) return undefined
-  return [`[sage-memory] project memory kept in view at all times`, ...memories.map(memoryEntry)].join('\n')
 }
 
 /** The prompt that goes to a subagent: the reminder block first, then the task as it was written. */
