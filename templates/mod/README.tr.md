@@ -9,13 +9,13 @@ claude plugin marketplace add KilimcininKorOglu/claude-code-mods
 claude plugin install MOD_NAME@kilimcininkoroglu-mods
 ```
 
-Function hook'lar early access. Claude Code'u `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` ile başlatın ya da flag'i `~/.claude/settings.json` içinde kalıcı yapın:
+Function hook'lar henüz early access aşamasında. Claude Code'u `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` ile başlat ya da flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-Claude Code'u yeniden başlatın. Kullanıcının elle atması gereken her adımı buraya yazın: bir key, bir login, bir ayar, devre dışı bırakılacak başka bir plugin.
+Claude Code'u yeniden başlat. Kullanıcının elle yapması gereken her adımı buraya yaz: bir key, bir login, bir ayar, kapatılacak başka bir plugin.
 
 ## Nereye uzanır
 
