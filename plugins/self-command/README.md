@@ -6,13 +6,14 @@ For mod development: lets the model run a slash command in its own session, such
 
 ## What it does
 
-- The model calls `mcp__self-command__run` with `command` (the name without its slash) and `args`. The tool is listed at the start, not behind ToolSearch.
+- The model calls `mcp__self-command__run` with `command` (the name without its slash) and `args`. A leading slash is dropped, and a name written with its arguments (`sage-memory triage`) is split at the first space when `args` is left out. The tool is listed at the start, not behind ToolSearch.
 - Typical calls: `reload-plugins` after `claude plugin update`, `sage-memory triage`, or a mod's own command whose output the model must read to go on.
 - The model reads the command's output as the next prompt:
 
       The command /reload-plugins, which you ran with the self-command tool, ran. Its output:
       Reloaded: 58 plugins · 8 skills · 6 agents · 0 hooks · 1 plugin MCP server · 6 plugin LSP servers
 
+  A command that fails reports `did not run:` with the engine's error instead.
 - Refused at once: a name the session does not list (an alias too), and `/clear`, `/exit`, `/quit`, `/logout`, `/login`, `/resume` and `/rewind`, which clear, end or swap the session.
 
 ## How it works
@@ -41,7 +42,7 @@ Function hooks are early access. Start Claude Code with `CLAUDE_CODE_ENABLE_FUNC
 
 ## What it can reach
 
-Validated on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, tool.describe{tool=/"^mcp__self-command__run$"/}, tool.call{tool=/"^mcp__self-command__run$"/}
     ❯ ./register.ts calls: $.clock.after (via runLater), $.command.list, $.command.run (via runLater, send), $.prompt.submit (via send), $.tool.register, $.ui.log (via send)
@@ -63,6 +64,6 @@ Threat model for self-command (reach L2)
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity limit 10, the build fails above it
-    make typecheck   # needs the /plugin-types output in .claude/types/
+    make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
