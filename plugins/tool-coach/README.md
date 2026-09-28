@@ -1,6 +1,6 @@
 # tool-coach
 
-A Claude Code Mod that stops the model from repeating a tool call that just failed with the same input. The call is not run again until a file or a command has changed something, and the model reads the error it already got instead.
+A Read of a missing file fails, and the model asks for the very same Read again, and again: each round costs a request and brings the same error. This mod stops the model from repeating a tool call that just failed with the same input. The call is not run again until a file or a command has changed something, and the model reads the error it already got instead.
 
 ## What it does
 
@@ -12,9 +12,9 @@ A Claude Code Mod that stops the model from repeating a tool call that just fail
        File does not exist. Note: your current working directory is /w.
        Read the error, change the input, and call again.
 
-   Two calls are the same when their input holds the same values, whatever the order of the keys. A `description` field only labels a call, so it is not compared. The main loop and each subagent keep their own failed calls.
+   The error is the one the model read, cut at 300 characters. Two calls are the same when their input holds the same values, whatever the order of the keys. A `description` field only labels a call, so it is not compared. The main loop and each subagent keep their own failed calls.
 4. A call with any other input runs as usual.
-5. A successful Edit, Write, NotebookEdit or Bash call drops every kept call, because it may have changed what the failed call needed: a file now exists, a command started a server. So does each new turn, because you may have changed something by hand.
+5. A successful Edit, Write, NotebookEdit or Bash call drops every kept call, because it may have changed what the failed call needed: a file now exists, a command started a server. So does each new turn, because you may have changed something by hand, and so does `/tool-coach on` or `off`.
 6. The same moment writes one line, so you see which call was refused. With the [sidebar](../sidebar) open, the line is an entry in its stream, the tool name red and the rest faint; else it goes to the transcript:
 
        tool-coach: Read call repeated after it failed, not run
@@ -31,7 +31,7 @@ In the live check the model read a missing file, then asked for the same Read ag
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install tool-coach@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -63,7 +63,7 @@ Reach L0, draws and remembers.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
