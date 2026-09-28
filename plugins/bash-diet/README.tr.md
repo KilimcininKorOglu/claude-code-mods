@@ -8,11 +8,11 @@ Bir Bash komutunun ekrana bastıklarının çoğu model için gürültüdür: pr
 2. Komutu bir shell'in okuduğu gibi okur. Öndeki değişkenler ve wrapper'lar (`FOO=1`, `timeout 60`, `nice`, `env`, `sudo`) ayıklanır. `cd app && cargo test` gibi bir zincirde çıktı basan tek komut filtrelenir. Bir pipeline iki durumda filtrelenir: son aşaması `grep` ya da `rg` olduğunda, ya da çıktıyı üreten komuttan sonra yalnız `cat`, `head` ya da takip etmeyen bir `tail` geldiğinde.
 3. Filtre, çıktıyı ne için okuyacaksan onu tutar, gerisini atar:
    - Geçen bir test koşusu sayı satırına iner. Başarısız olan koşu her hatayı mesajıyla ve senin kodundaki stack frame'leriyle tutar.
-   - Bir build diagnostic'lerini tutar; her birini bir kez, önce hataları, sonra da sonucu.
+   - Build çıktısında her diagnostic bir kez kalır: önce hatalar, en sonda da sonuç.
    - Bir liste, arama ya da tablo satırlarını bir sınıra kadar tutar ve geri kalanın sayısını söyleyerek biter.
    - Progress bar'lar, indirme satırları, spinner'lar ve renk kodları her yerde atılır.
-4. İki komuta çıktıyı küçülten bir flag ekler: sayı, aralık ya da format verilmemişse `git log -10`, bir de `pytest --tb=short -q`. Hiçbir aracı JSON gibi daha büyük bir formata geçirmez, çünkü başarısız bir komutun metni hook'a 10.000 karakterde kesilmiş gelir ve bir JSON raporu bu sınırı düz metinden çok önce aşar. Model JSON'u kendisi isterse (`go test -json`, `jest --json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json`, `ruff check --output-format=json`) filtre o raporu okur. Flag yalnız permission kontrolü yeni komutu modelin yazdığı komutla aynı okuyorsa eklenir. Argümanlar zaten bir format seçmişse, komut bir pipeline'ın ya da zincirin içindeyse, `sudo`'dan sonra geliyorsa ya da bir redirect varsa hiç eklenmez.
-5. Çıktının %5'inden ya da 40 karakterden az kazandıran filtre sonucu atılır, model çıktıyı olduğu gibi okur; senin kuralların da aynı eşiğe tabidir. Bundan küçük bir kazanç yalnız modelin okuduğunu değiştirir ve kimsenin işine yaramayan bir küçülmeyi sayar. İki durumda filtrelenmiş sonuç her zaman kalır:
+4. İki komuta çıktıyı küçülten bir flag ekler: sayı, aralık ya da format verilmemişse `git log -10`, bir de `pytest --tb=short -q`. Hiçbir aracı JSON gibi daha büyük bir formata geçirmez, çünkü başarısız bir komutun metni hook'a 10.000 karakterde kesilmiş gelir ve bir JSON raporu bu sınırı düz metinden çok önce aşar. Model JSON'u kendisi isterse (`go test -json`, `jest --json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json`, `ruff check --output-format=json`) filtre o raporu okur. Flag ancak permission kontrolü yeni komuta, modelin yazdığı komuta verdiği cevabın aynısını veriyorsa eklenir. Argümanlar zaten bir format seçmişse, komut bir pipeline'ın ya da zincirin içindeyse, `sudo`'dan sonra geliyorsa ya da bir redirect varsa hiç eklenmez.
+5. Çıktının %5'inden ya da 40 karakterden az kazandıran filtre sonucu atılır, model çıktıyı olduğu gibi okur; senin kuralların da aynı eşiğe tabidir. Daha küçük bir kazanç, modelin okuduğu metni boşuna değiştirir ve işe yaramayan bir küçülmeyi kazanç diye sayar. İki durumda filtrelenmiş sonuç her zaman kalır:
    - Bir credential değeri maskelenmiş `env` ya da `printenv` listesi. Bunun için tam çıktı dosyası tutulmaz, çünkü o dosya maskelenen değerleri içerirdi; `BASH_DIET_RAW=1 env` onları geri verir.
    - Mod'un eklediği bir flag'den sonraki çıktı, çünkü ham çıktı o zaman modelin istemediği bir formattadır.
 
@@ -116,7 +116,7 @@ O session'dan sonra eklenen filtreler bir deneme projesinde birer kez çalışt�
 Hiçbir filtrenin tanımadığı bir komuta kendi kuralını yazabilirsin. Kurallar iki dosyada durur:
 
 - `~/.claude/bash-diet/filters.json`: bütün projeler için, olduğu gibi çalışır.
-- `<repository>/.bash-diet/filters.json`: tek bir proje için. Yalnız `/bash-diet trust`'tan sonra çalışır, içeriği değişince yeniden durur. Çünkü clone'ladığın bir repository'yle gelen bir dosya modelden çıktı saklayabilir.
+- `<repository>/.bash-diet/filters.json`: tek bir proje için. Yalnız `/bash-diet trust`'tan sonra çalışır ve içeriği değişince yeniden durur, çünkü clone'ladığın bir repository'yle gelen dosya çıktının bir kısmını modelden saklayabilir.
 
 Senin kuralın, aynı komut için mod'un kendi filtresinden önce çalışır. Adımlar bu sırayla işler ve hepsi isteğe bağlıdır:
 
@@ -157,7 +157,7 @@ Hatalı bir dosyanın doğru kuralları yine çalışır; tek bir transcript sat
     /bash-diet gain                          son 90 günün kazancı ve en çok kazandıran aileler
     /bash-diet gain project | daily | graph | history
     /bash-diet cost                          bu session'ın harcaması ve dışarıda tutulan token'ların ne tutacağı
-    /bash-diet discover [days] [all]         modelin önceki session'larda okuduğu çıktı, filtreye göre, ve hiçbir filtrenin okumadığı komutlar
+    /bash-diet discover [days] [all]         modelin önceki session'larda okuduğu çıktı (filtreye göre) ve hiçbir filtrenin okumadığı komutlar
     /bash-diet learn [days] [write]          bir CLI hatasıyla başarısız olan komutlar ve arkasından çalışan doğru biçimleri
 
 - `gain`, `~/.claude/bash-diet/gain/` altındaki kayıtları okur: session ve gün başına bir dosya, 90 gün saklanır. Her rapor önceki ve sonraki karakter sayılarını ölçerek verir. Token sayısı, token başına dört karakter kabul edilerek yapılan bir tahmindir; `history` ve `graph` yalnız karakter gösterir.
