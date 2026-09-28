@@ -4,7 +4,7 @@ Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti vardır, bir C
 
 ## Ne gösterir
 
-**Prompt'un altında bir status line**, her turdan sonra ve her 60 saniyede bir güncellenir:
+**Prompt'un altında bir status line**, her turn'den sonra ve her 60 saniyede bir güncellenir:
 
     limit-watch: 5h 9%, reset in 2h 36m · 7d 15%, reset in 5d 10h · measuring the pace
 
@@ -32,11 +32,11 @@ Bar pane'in genişliğini doldurur. %80 altında yeşil, %80'den itibaren sarı 
 
     limit-watch: 5-hour limit passed 80% (now 82%), resets 22:40 (in 1h 5m)
 
-Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir session onu tekrarlamaz, aynı anda açık ikinci bir session da tekrarlamaz: her sample uyarmadan önce uyarılmış seviyeleri store'dan yeniden okur. Aynı anda sample alan iki session yine ikisi de uyarabilir. Limit reset olduktan sonra uyarılar yeniden gelir.
+Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir session onu tekrarlamaz, aynı anda açık ikinci bir session da tekrarlamaz: mod her örnekte, uyarmadan önce uyarılmış seviyeleri store'dan yeniden okur. Yine de tam aynı anda örnek alan iki session'ın ikisi de uyarabilir. Limit reset olduktan sonra uyarılar yeniden gelir.
 
 ## Sayılar nasıl oluşur
 
-- `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana döngü turundan sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başlangıcında ya da timer'da başarısız olan bir okuma bir kere `cannot read the usage limits: <error>` olarak log'lanır ve 60 saniyelik timer çalışmaya devam eder.
+- `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana loop turn'ünden sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başlangıcında ya da timer'da başarısız olan bir okuma bir kere `cannot read the usage limits: <error>` olarak log'lanır ve 60 saniyelik timer çalışmaya devam eder.
 - Her okuma bir örnektir (`{ at, percent }`) ve `$.store` içinde tutulur, böylece bir restart hızı korur.
 - 5 saatlik ve spend limitleri hızı örneklerinden okur: yakın bir aralığın bütün örneklerinden en küçük kareler ile geçirilen doğrunun eğimi, saat başına yüzde olarak. Her örnek hesaba girer, bu yüzden iki uçtan birindeki tek bir tam sayı adımı hızı tek başına belirlemez. Aralık 5 saatlik limit için son bir saat, spend limiti için son 24 saattir; böylece hız şu an nasıl çalıştığını izler. Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (spend limiti) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
 - 7 günlük limit hızı cycle'ın şimdiye kadarki ortalaması olarak okur: yüzde, cycle'ın başından beri geçen süreye bölünür (`resetsAt` eksi 7 gün). Geceler, boş saatler ve hiçbir session'ın çalışmadığı süre de bu süreye girer, yani hız için örnek gerekmez. Hız cycle'ın ikinci gününden itibaren gösterilir. Bu kuraldan önce ölçüldü: 2,4 yoğun saatten sonra %4, `7d hits 100% in ~2d 8h` olarak okundu, çünkü o saatlerin hızı iki güne aralıksız yayıldı; aynı okumanın cycle ortalaması limiti yaklaşık 6 günde doldurur.
@@ -74,7 +74,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
 
-Reach L0, çizer ve hatırlar.
+Reach L0: çizer ve hatırlar.
 
     1. Okur:     $.session.usage'ın rate-limit window'larını (kind, kullanılan yüzde, reset zamanı); dört hook'unun event payload'larını
     2. Çalıştırır: hiçbir şey; interaktif bir session'da bir 60 saniyelik timer
