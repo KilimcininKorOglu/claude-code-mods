@@ -4,7 +4,7 @@
 
 ## Ne yapar
 
-1. Mod her session başında ve her ana loop turn'ünün sonunda host'un diskte tuttuklarını okur:
+1. Mod her session başında, her ana loop turn'ünün sonunda ve etkileşimli bir session'da 60 sn'de bir host'un diskte tuttuklarını okur:
    - `~/.claude/plugins/installed_plugins.json` (`CLAUDE_CONFIG_DIR` ayarlıysa, host'un okuduğu gibi `$CLAUDE_CONFIG_DIR/plugins/`). Bu dosya her `<plugin>@<marketplace>` için scope başına kurulu sürümü söyler: user kurulumu ve adını verdiği proje için bir proje kurulumu. Başka bir projenin proje kurulumu okunmaz; geçerli iki kurulumdan eski sürüm karşılaştırılır;
    - her marketplace'in clone'undaki kendi `.claude-plugin/marketplace.json`'ı; plugin'in clone içinde nerede durduğunu söyler (bir marketplace plugin'lerini `plugins/` altında tutar, bir diğeri kökünde tek bir plugin'dir);
    - o plugin'in `.claude-plugin/plugin.json`'ı, yani clone'un sunduğu sürüm.
@@ -18,7 +18,7 @@
 
    Her satırda kurulu sürüm soluk, sunulan sürüm ise atlamanın büyüklüğüne göre renklidir: yeni bir major sürüm kırmızı, yeni bir minor sarı, yeni bir patch yeşil. Sekizinciden sonraki satırlar soluk tek bir satırda sayılır; altlarındaki soluk update komutu ilk sekiz satırın plugin'lerini sayar. Sidebar kapalıysa ya da kurulu değilse aynı bulgu tek bir transcript satırıdır.
 4. Kurulu her plugin clone'unun sürümündeyken hiçbir şey çizilmez; bu durum oluşur oluşmaz section kalkar.
-5. Her turn sonundaki ölçüm, session başının yakalayamadıklarını yakalar: bu session açıkken başka bir pencerede güncellediğin bir plugin'i ya da marketplace'i ve bu mod ilk ölçtüğünde henüz pane'ini açmamış bir sidebar'ı. Bulgu transcript'e bir kez düşer; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
+5. Her turn sonundaki ölçüm ve 60 sn'lik ölçüm, session başının yakalayamadıklarını yakalar: bu session açıkken başka bir pencerede güncellediğin bir plugin'i ya da marketplace'i ve bu mod ilk ölçtüğünde henüz pane'ini açmamış bir sidebar'ı. 60 sn'lik ölçüm bunları bu session boştayken de yakalar. Bulgu transcript'e bir kez düşer; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
 6. `/mod-doctor` hemen yeniden ölçer ve ayarı, kapsamı, kaç plugin tuttuğunu ve hangilerinin geride olduğunu yazar. `/mod-doctor marketplace <ad>` kapsamı tek bir marketplace'e daraltır, `marketplace all` yeniden genişletir.
 
 Clone ancak son `claude plugin marketplace update` kadar yenidir; yani bu mod "marketplace'i güncelledim, plugin'leri güncelledim mi?" sorusunu cevaplar, "GitHub'da daha yeni bir sürüm var mı?" sorusunu değil.
@@ -46,10 +46,10 @@ Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey 
 
 ## Nereye uzanır
 
-Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.284 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=mod-doctor}, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.fs.read (via readText), $.sidebar.clear (via clearShown), $.sidebar.set (via toPerson), $.store.get (via readScope, readSettings), $.store.set (via setEnabled, setScope), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.every, $.command.register, $.env.get, $.fs.read (via readText), $.sidebar.clear (via clearShown), $.sidebar.set (via toPerson), $.store.get (via readScope, readSettings), $.store.set (via setEnabled, setScope), $.ui.log (via toPerson)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 

@@ -9,11 +9,15 @@ const USAGE = 'expects nothing (the status), on, off or marketplace <name | all>
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'mod-doctor', key: 'behind' }
 
+/** How often an idle session measures again, so an update run in another window shows without a turn. */
+const MEASURE_MS = 60_000
+
 /**
  * The on/off setting, the scope read, how many plugins are installed in it, which are behind, the host's
- * config directory, the directory the session started in and what was last said to the person.
+ * config directory, the directory the session started in, what was last said to the person, and whether
+ * a measure after the session's start is under way.
  */
-type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; cwd: string; said: string }
+type State = { enabled: boolean; scope: string; count: number; behind: Mod[]; config: string; cwd: string; said: string; measuring: boolean }
 
 /** Where the host keeps the record of every installed plugin. */
 function recordPath(config: string): string {
@@ -136,6 +140,21 @@ async function check($: EngineInterface, state: State): Promise<void> {
   else await toPerson($, state)
 }
 
+/**
+ * The measure of a turn's end and of the timer: the settings read again, then a check while on. One runs
+ * at a time, so a timer that fires during a turn end's measure does not stack a second one.
+ */
+async function measureAgain($: EngineInterface, state: State): Promise<void> {
+  if (state.measuring || state.config === '') return
+  state.measuring = true
+  try {
+    await readSettings($, state)
+    if (state.enabled) await check($, state)
+  } finally {
+    state.measuring = false
+  }
+}
+
 /** Writes the scope the person named; it holds across sessions, because it lives in $.store. */
 async function setScope($: EngineInterface, state: State, arg: string): Promise<string> {
   const name = marketplaceOf(arg)
@@ -169,7 +188,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
   await $.store.set(ENABLED_KEY, on)
   if (on) await check($, state)
   else await clearShown($, state)
-  return on ? 'on: the installed plugins are measured at each session start and at the end of each turn' : 'off: nothing is measured'
+  return on ? 'on: the installed plugins are measured at each session start, at the end of each turn and every 60 s' : 'off: nothing is measured'
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
@@ -187,7 +206,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', cwd: '', said: '' }
+  const state: State = { enabled: true, scope: ALL, count: 0, behind: [], config: '', cwd: '', said: '', measuring: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -200,8 +219,9 @@ export const register: Register = on => {
       argumentHint: '[on | off | marketplace <name | all>]',
       immediate: true,
     })
-    // The session's first measure; each turn's end measures again.
+    // The session's first measure; each turn's end measures again, and an interactive session every 60 s.
     if (state.enabled && state.config !== '') await check($, state)
+    if (e.isInteractive) $.clock.every(MEASURE_MS, () => void measureAgain($, state))
     return r
   })
 
@@ -215,9 +235,7 @@ export const register: Register = on => {
    */
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId !== undefined || state.config === '') return r
-    await readSettings($, state)
-    if (state.enabled) await check($, state)
+    if (e.agentId === undefined) await measureAgain($, state)
     return r
   })
 }

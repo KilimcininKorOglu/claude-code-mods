@@ -4,7 +4,7 @@ You run `claude plugin marketplace update`, the clone gets the new versions, and
 
 ## What it does
 
-1. At each session start, and again at the end of each main-loop turn, the mod reads what the host keeps on disk:
+1. At each session start, at the end of each main-loop turn, and every 60 s in an interactive session, the mod reads what the host keeps on disk:
    - `~/.claude/plugins/installed_plugins.json` (`$CLAUDE_CONFIG_DIR/plugins/` instead when `CLAUDE_CONFIG_DIR` is set, as the host reads it), which names the version installed of each `<plugin>@<marketplace>` per scope: the user install, and a project install for the project it names. A project install of another project is not read, and of two installs in force the older version is compared;
    - each marketplace's own `.claude-plugin/marketplace.json` in its clone, which says where that plugin sits inside it (one marketplace keeps its plugins under `plugins/`, another is one plugin at its root);
    - that plugin's `.claude-plugin/plugin.json`, the version the clone offers.
@@ -18,7 +18,7 @@ You run `claude plugin marketplace update`, the clone gets the new versions, and
 
    In each row the installed version is faint and the offered version is coloured by the jump: a new major version red, a new minor version yellow, a new patch green. The rows past the eighth are counted in one faint line, and the faint update command under them names the plugins of the first eight rows. With the sidebar closed, or without that mod installed, the same finding is one transcript line.
 4. Nothing is drawn while every installed plugin is at its clone's version, and the section is taken down as soon as that is true.
-5. The measure at each turn's end catches what the session start cannot: a plugin or a marketplace you updated in another window while this session was open, and a sidebar whose own plugin had not opened its pane yet when this mod first measured. The finding reaches the transcript once; a later measure of the same finding says nothing.
+5. The measure at each turn's end and the 60 s one catch what the session start cannot: a plugin or a marketplace you updated in another window while this session was open, and a sidebar whose own plugin had not opened its pane yet when this mod first measured. The 60 s measure also catches them while this session is idle. The finding reaches the transcript once; a later measure of the same finding says nothing.
 6. `/mod-doctor` measures again on the spot and prints the setting, the scope, how many plugins it holds and which are behind. `/mod-doctor marketplace <name>` narrows it to one marketplace, and `marketplace all` widens it back.
 
 The clone is only as new as the last `claude plugin marketplace update`, so this mod answers "I updated the marketplace, did I update the plugins?", not "is there a newer version on GitHub?".
@@ -46,10 +46,10 @@ Function hooks are early access, and nothing loads without the flag. To keep it 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.284:
 
     ❯ ./register.ts hooks: session.start, command.run{command=mod-doctor}, turn.complete
-    ❯ ./register.ts calls: $.command.register, $.env.get, $.fs.read (via readText), $.sidebar.clear (via clearShown), $.sidebar.set (via toPerson), $.store.get (via readScope, readSettings), $.store.set (via setEnabled, setScope), $.ui.log (via toPerson)
+    ❯ ./register.ts calls: $.clock.every, $.command.register, $.env.get, $.fs.read (via readText), $.sidebar.clear (via clearShown), $.sidebar.set (via toPerson), $.store.get (via readScope, readSettings), $.store.set (via setEnabled, setScope), $.ui.log (via toPerson)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 

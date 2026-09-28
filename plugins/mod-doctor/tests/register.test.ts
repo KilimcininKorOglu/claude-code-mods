@@ -165,6 +165,27 @@ describe('mod-doctor', () => {
     expect(w.logs).toHaveLength(2)
   })
 
+  withSidebar('an idle session measures again every 60 s, so an update run in another window takes the rows down', async ($, on) => {
+    const w = world(on, RECORD)
+    const clock = mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') })
+    const bar: Bar = { open: true, sections: [], cleared: 0 }
+    seatSidebar(on, bar)
+    await started($)
+    expect(bar.sections.at(-1)?.lines[0]).toBe('sidebar 0.4.1 → 0.5.0')
+    // The person ran the update in another window; this session has no turn.
+    w.record = JSON.stringify({ plugins: { 'cache-warm@kilimcininkoroglu-mods': [{ version: '0.5.0' }] } })
+    await clock.advance(59_000)
+    expect(bar.cleared).toBe(0)
+    await clock.advance(1000)
+    expect(bar.cleared).toBe(1)
+    // Turned off in another window, the timer measures nothing more.
+    w.store.set('enabled', false)
+    await clock.advance(60_000)
+    const reads = w.reads.length
+    await clock.advance(60_000)
+    expect(w.reads.length).toBe(reads)
+  })
+
   test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
     const w = world(on, RECORD)
     await started($)
