@@ -36,12 +36,14 @@ import {
   evidenceText,
   MIN_ANSWER,
   noted,
+  relativeTo,
   safeCommand,
   topByImportance,
   type TurnEvidence,
 } from './consolidate.ts'
+import { CURATE_MS, CURATE_TOKENS, CURATED_FILES, CURATOR_SYSTEM, curatorPrompt, emptyTally, MAX_TARGETS, PER_FILE, stepsOf, tallyLine, type Step, type Tally } from './curate.ts'
 import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
-import type { Memory, MemoryPage, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
+import type { Candidate, Memory, MemoryPage, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol.ts'
 
@@ -505,12 +507,63 @@ async function consolidate($: EngineInterface, state: State, answer: string, tur
   if (digest !== undefined) await ask($, state, '/memory/remember', { input: digest })
 }
 
+/** The memories the curator audits: those anchored to the turn's written files, then the targets of pending candidates. */
+async function curatorTargets($: EngineInterface, state: State, written: readonly string[]): Promise<Memory[]> {
+  const found = new Map<string, Memory>()
+  for (const path of written.slice(0, CURATED_FILES)) {
+    for (const memory of await ask<Memory[]>($, state, '/memory/for-path', { path, limit: PER_FILE })) if (found.size < MAX_TARGETS) found.set(memory.id, memory)
+  }
+  const pending = (await ask<Candidate[]>($, state, '/candidates/list', {})).filter(candidate => candidate.status === 'pending' && candidate.targetMemoryId !== undefined)
+  for (const candidate of pending) {
+    if (found.size >= MAX_TARGETS || found.has(candidate.targetMemoryId ?? '')) continue
+    const memory = await ask<Memory | undefined>($, state, '/memory/get', { id: candidate.targetMemoryId })
+    if (memory !== undefined && memory !== null) found.set(memory.id, memory)
+  }
+  return [...found.values()]
+}
+
+/** New memories that take the place of old ones: each written, then the first new one supersedes the old ones it did not merge into. */
+async function replaceWith($: EngineInterface, state: State, step: Extract<Step, { kind: 'replace' }>): Promise<void> {
+  const written: Memory[] = []
+  for (const input of step.inputs) written.push((await ask<RememberResult>($, state, '/memory/remember', { input })).memory)
+  const successor = written.find(memory => !step.replaced.includes(memory.id))
+  const replaced = step.replaced.filter(id => !written.some(memory => memory.id === id))
+  if (successor !== undefined && replaced.length > 0) await ask($, state, '/memory/update', { id: successor.id, patch: { supersedes: replaced } })
+}
+
+async function applyStep($: EngineInterface, state: State, step: Step, tally: Tally): Promise<void> {
+  try {
+    if (step.kind === 'update') await ask($, state, '/memory/update', { id: step.id, patch: step.patch })
+    else await replaceWith($, state, step)
+    tally[step.count] += 1
+  } catch (err) {
+    await toStream($, 'error', { text: `a curator step was not applied: ${errorText(err)}`, kind: 'error' })
+  }
+}
+
+/** Audits the memories about the files a turn wrote, and applies what the model decided about the ids it was shown. */
+async function curate($: EngineInterface, state: State, answer: string, written: readonly string[]): Promise<void> {
+  if (written.length === 0 || !(await isReady(state)) || (await $.store.get('curate')) === false) return
+  const targets = await curatorTargets($, state, written.map(path => relativeTo(state.project?.root ?? '', path)))
+  if (targets.length === 0) return
+  const prompt = curatorPrompt(written.map(path => relativeTo(state.project?.root ?? '', path)), answer, targets)
+  const r = await $.model.complete({ model: await jobModel($), system: CURATOR_SYSTEM, prompt, maxTokens: CURATE_TOKENS, timeoutMs: CURATE_MS })
+  if (!r.isAnswered) {
+    await toStream($, 'error', { text: `the curator got no answer (${r.reason})`, kind: 'error' })
+    return
+  }
+  const tally = emptyTally()
+  for (const step of stepsOf(r.text, targets, await $.session.id())) await applyStep($, state, step, tally)
+  const line = tallyLine(tally)
+  if (line !== undefined) await toStream($, 'curator', { text: line, kind: 'ok' })
+}
+
 /** Starts a consolidation after a main-loop answer the person asked for or a tool worked on; the turn does not wait for it. */
 function afterAnswer($: EngineInterface, state: State, answer: string): void {
   if (!state.worth || answer.trim().length < MIN_ANSWER) return
   state.worth = false
   const turn = state.turn
-  void guarded($, 'the consolidator', () => consolidate($, state, answer, turn))
+  void guarded($, 'the consolidator', () => consolidate($, state, answer, turn)).then(() => guarded($, 'the curator', () => curate($, state, answer, turn.written)))
 }
 
 /** Notes what a main-loop tool batch touched, for the consolidator. */

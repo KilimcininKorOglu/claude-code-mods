@@ -44,6 +44,7 @@ type World = {
   tools: string[]
   asked: { system: string; prompt: string; model: string }[]
   modelText?: string
+  curatorText?: string
 }
 
 function world(on: On): World {
@@ -78,7 +79,8 @@ function world(on: On): World {
   on('session.id', () => ({ value: 'sess-1' }))
   on('model.complete', (_, e) => {
     w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model })
-    return { value: w.modelText === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text: w.modelText, usage: {} } } as never
+    const text = (e.system ?? '').includes('memory curator') ? w.curatorText : w.modelText
+    return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
   })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
   on('tool.describe', (_, e) => ({ description: e.description }))
@@ -413,5 +415,39 @@ describe('consolidator', () => {
     await settled(w)
     expect(w.lines).toContain('the consolidator got no answer (empty-reply)')
     expect(bodiesOf(w, '/memory/remember')).toEqual([])
+  })
+})
+
+describe('curator', () => {
+  withSidebar('after a turn that wrote a file, the memories about it are audited and the decisions applied to the ids shown', async ($, on) => {
+    const w = readyWorld(on)
+    const OLD = memory('m3', 'The daemon closes itself ten minutes after its last request.', { anchors: [{ type: 'file', path: 'daemon/server.ts' }] })
+    const KEPT = memory('m4', 'The server file holds the idle timer and the socket.', { anchors: [{ type: 'file', path: 'daemon/server.ts' }], persistence: 'permanent' })
+    w.routes.set('/memory/for-path', [OLD, KEPT])
+    w.routes.set('/candidates/list', [])
+    w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
+    w.routes.set('/memory/update', { memory: DAEMON, superseded: ['m3'] })
+    w.modelText = '{"operations":[]}'
+    w.curatorText = JSON.stringify({
+      operations: [
+        { action: 'merge', targetIds: ['m3', 'm4', 'unknown'], text: 'The daemon closes itself five minutes after its last request.', type: 'fact', priority: 'high', reason: 'timer changed' },
+        { action: 'supersede', targetId: 'm4', reason: 'permanent' },
+        { action: 'recalibrate', targetId: 'm4', importance: 1.5, status: 'archived', reason: 'x' },
+        { action: 'contradict', targetId: 'm3', contradictsWith: 'a fact', reason: 'no id' },
+      ],
+    })
+    await $.session.start(START)
+    await $.turn.start({ text: 'x', turnId: 't' } as never)
+    await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Edit', tool_input: { file_path: '/src/my app/daemon/server.ts' }, tool_use_id: 't1', tool_response: 'ok' }] } as never)
+    await $.turn.complete(answered('The idle timeout is now five minutes in the daemon server.'))
+    await settled(w)
+    expect(w.asked.map(a => a.system.slice(0, 30))).toEqual(['You are a memory consolidator.', 'You are a fast, automated memo'])
+    expect(w.asked[1]?.prompt).toContain('Modified files:\ndaemon/server.ts')
+    expect(bodiesOf(w, '/memory/for-path')[0]).toMatchObject({ path: 'daemon/server.ts', limit: 4 })
+    expect(bodiesOf(w, '/memory/update')).toEqual([
+      { project: expect.anything(), sessionId: 'sess-1', id: 'm2', patch: { supersedes: ['m3'] } },
+      { project: expect.anything(), sessionId: 'sess-1', id: 'm4', patch: { importance: 1 } },
+    ])
+    expect(w.lines).toContain('curated: 1 merged, 1 recalibrated')
   })
 })
