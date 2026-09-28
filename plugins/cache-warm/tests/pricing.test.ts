@@ -11,6 +11,7 @@ describe('priceOf', () => {
     expect(priceOf('claude-opus-5[1m]')).toEqual({ read: 0.5, write: 10, output: 25 })
     expect(priceOf('claude-opus-4-8')).toEqual({ read: 0.5, write: 10, output: 25 })
     expect(priceOf('claude-sonnet-5')).toEqual({ read: 0.2, write: 4, output: 10 })
+    expect(priceOf('claude-sonnet-5-5[1m]')).toEqual({ read: 0.2, write: 4, output: 10 })
     expect(priceOf('claude-sonnet-4-6')).toEqual({ read: 0.3, write: 6, output: 15 })
     expect(priceOf('claude-haiku-4-5-20251001')).toEqual({ read: 0.1, write: 2, output: 5 })
   })
@@ -31,6 +32,7 @@ describe('priceOf', () => {
   test('fast mode leaves a model without fast rates at its standard rates', async () => {
     expect(priceOf('claude-opus-4-6', true)).toEqual({ read: 0.5, write: 10, output: 25 })
     expect(priceOf('claude-sonnet-5', true)).toEqual({ read: 0.2, write: 4, output: 10 })
+    expect(priceOf('claude-sonnet-5-5', true)).toEqual({ read: 0.2, write: 4, output: 10 })
     expect(priceOf('gpt-9', true)).toBe(null)
   })
 
