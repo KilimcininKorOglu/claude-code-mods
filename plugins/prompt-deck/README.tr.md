@@ -8,8 +8,8 @@
 2. `/prompt-deck add <text>` bir prompt'u elle sabitler. Sabitlenmiş bir prompt ilk sırada, eklendiği düzende çizilir ve sayımlar onu banttan itemez. Uzunluk limiti yoktur ve sayımlar gibi proje başına tutulur. En fazla 5 prompt sabitlenir, çünkü bant 5 tane tutar. `/prompt-deck remove <n>` birini çözer.
 3. Bir prompt 3 kullanımdan sonra banda ulaşır. Bant en çok kullanılan 5 tanesini çizer, eşitlikte en yenisi önce, `1: commitle  2: devam et ...` biçiminde, her etiket genişlikten payına kesilir.
 4. Prompt kutusu boşken bir rakam tuşu o prompt'u anında gönderir. Bir tıklama ya da ctrl+x tab ve Enter da gönderir. Bir basış bir kullanım daha sayılır.
-5. Bir anket bandı tutarken, bir tur çalışırken ya da bir agent'ın transcript'i görüntüdeyken bant çizilmez.
-6. Sayımlar ve sabitlenmiş prompt'lar plugin store'da yaşar, proje başına bir deck, o projenin her session'ı tarafından paylaşılır. Proje, session'ın git top level'ıdır; yoksa çalışma dizini. Deck bu tam path ile key'lenir, yani `app` adlı iki checkout iki ayrı deck tutar; status projeyi path'inin son parçasıyla adlandırır. Proje başına en fazla 200 prompt tutulur; en az kullanılan ve en eski olan önce gider.
+5. Bant alanını bir anket tutarken, bir turn çalışırken ya da bir agent'ın transcript'i ekrandayken bant çizilmez.
+6. Sayımlar ve sabitlenmiş prompt'lar plugin store'da durur: proje başına bir deck, o projenin bütün session'ları ortak kullanır. Proje, session'ın git top level'ıdır; yoksa çalışma dizini. Deck bu tam path ile key'lenir, yani `app` adlı iki checkout iki ayrı deck tutar; status projeyi path'inin son parçasıyla adlandırır. Proje başına en fazla 200 prompt tutulur; en az kullanılan ve en eski olan önce gider.
 7. 0.2.0 öncesi bir sürümün deck'i her projeyi tek bir yerde sayıyordu. 0.2.0'ı yükleyen ilk proje o sayımları bir kere alır ve bunu bir satırda söyler; diğer her proje boş başlar.
 8. 0.5.0 öncesi bir sürümün deck'i yalnız proje adıyla key'leniyordu. 0.5.0'ı yükleyen o addaki ilk checkout onu bir kere kendi path'inin key'ine taşır ve bunu bir satırda söyler; aynı addaki başka bir checkout boş başlar.
 
@@ -21,7 +21,7 @@ Canlı kontrolde sabitlenmiş bir `Yalnız tamam kelimesini yaz.` `1: Yalnız ta
 
     /prompt-deck                on ya da off, proje ve kullanımlarıyla prompt'ları
     /prompt-deck list           aynısı
-    /prompt-deck add <text>     kendi prompt'unuzu sabitler, sayılanlardan önce çizilir
+    /prompt-deck add <text>     kendi prompt'unu sabitler, sayılanlardan önce çizilir
     /prompt-deck remove <n>     listenin n. sırasındaki prompt'u unutur, sabitlenmiş ya da sayılan
     /prompt-deck clear          her prompt'u unutur
     /prompt-deck on | off       varsayılan on; off sayımları korur
@@ -49,7 +49,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.tsx hooks: session.start, command.run{command=prompt-deck}, prompt.submit, ui.render{component=AbovePrompt}
     ❯ ./register.tsx calls: $.clock.after (via sendPrompt), $.clock.now (via countUse), $.command.register, $.command.run (via sendPrompt), $.process.run (via resolveRoot), $.prompt.submit (via submitPrompt), $.session.cwd (via resolveRoot), $.store.delete (via adoptLegacy, adoptNamed), $.store.get (via adoptLegacy, adoptNamed, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy, adoptNamed, sendPrompt, submitPrompt), $.ui.resolve
 
-Reach L2, git çalıştırır ve Claude'u sürer: bir basış bir prompt gönderir.
+Reach L2: git çalıştırır ve Claude'u yönlendirir; bir basış bir prompt gönderir.
 
     1. Okur:     gönderilen her prompt'un metnini ve origin'ini; session'ın çalışma dizinini
     2. Çalıştırır: git rev-parse --show-toplevel, session başına bir kere, projenin kökünü bulmak için
@@ -60,7 +60,7 @@ Reach L2, git çalıştırır ve Claude'u sürer: bir basış bir prompt gönder
 ## Sınırlar
 
 - 80 karakterden uzun ya da birkaç satırlı bir prompt hiçbir zaman sayılmaz. `/prompt-deck add` tek satırda her uzunluğu alır.
-- Bant yalnız terminal'de çizilir, çünkü engine `AbovePrompt` olayını yalnız orada raise eder.
+- Bant yalnız terminal'de çizilir, çünkü engine `AbovePrompt` event'ini yalnız orada tetikler.
 - Yalnız büyük küçük harf ya da noktalama ile ayrılan iki prompt ayrı sayılır.
 - On/off ayarı her proje için tek bir ayardır.
 
