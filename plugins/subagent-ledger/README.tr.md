@@ -5,7 +5,7 @@ Bir işi beş subagent'a dağıtırsın, sonunda `/cost` tek bir toplam verir: h
 ## Ne yapar
 
 1. Mod `agent.spawn`'ı hook'lar; bu olay subagent'ın ne olduğunu söyler: agent type'ı (`Explore`, `general-purpose`, bir plugin'in agent'ı, `fork`) ve görevinin tek satırlık açıklaması. Mod bunları, spawn'ın çözdüğü modelle birlikte, spawn'ın cevapladığı agent id'si altında tutar ve satırı hemen çalışıyor olarak çizer.
-2. Her subagent loop'unun `turn.complete`'ini hook'lar. O turn subagent'ın cevabıdır, yani çalışmayı bitirir: turn bir cevapla bittiyse `done`, kesildiyse, reddedildiyse ya da bir API hatasıyla bittiyse `stopped`. Bu turn'lerin her biri bir turn, kendi `durationMs`'i ve token'ları ekler: engine'in o turn için bildirdiği input, output, cache okumaları ve cache yazmaları. Turn ayrıca onu cevaplayan modeli söyler; bu model spawn'ın modelinin yerine geçer ve vendor ön eki ile tam bir id'nin tarihi olmadan çizilir, yani `claude-haiku-4-5-20251001` `haiku-4-5` olarak okunur. Bir ana loop turn'ü sayılmaz.
+2. Her subagent loop'unun `turn.complete`'ini hook'lar. O turn subagent'ın cevabıdır, yani çalışmayı bitirir: turn bir cevapla bittiyse `done`, kesildiyse, reddedildiyse ya da bir API hatasıyla bittiyse `stopped`. Bu turn'lerin her biri deftere bir turn, kendi `durationMs`'ini ve token'larını ekler: engine'in o turn için bildirdiği input, output, cache okumaları ve cache yazmaları. Turn ayrıca onu cevaplayan modeli söyler; bu model spawn'ın modelinin yerine geçer ve vendor ön eki ile tam bir id'nin tarihi olmadan çizilir, yani `claude-haiku-4-5-20251001` `haiku-4-5` olarak okunur. Bir ana loop turn'ü sayılmaz.
 3. Bir model isteği olan `turn.step`'i hook'lar. Cevap vermiş bir subagent'ın loop'u yeniden çalışırsa, örneğin SendMessage onu devam ettirirse, satır yeniden çalışıyor olarak çizilir. Bir ana loop adımı okunmaz.
 4. [sidebar](../sidebar) açıkken defter session boyunca duran tek bir `subagents` section'ıdır; her spawn'da, her subagent turn'ünde ve bir subagent yeniden çalıştığında yeniden yazılır:
 
@@ -51,10 +51,10 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L0: çizer ve hatırlar.
 
-    1. Okur:     her spawn'ın agent type'ını, açıklamasını ve çözülmüş modelini, her subagent turunun id'sini, süresini, bitiş sebebini, modelini ve token sayılarını, ve her model isteğinin agent id'sini. Hiçbir prompt, cevap, dosya ve tool sonucu okumaz.
+    1. Okur:     her spawn'ın agent type'ını, açıklamasını ve çözülmüş modelini, her subagent turn'ünün id'sini, süresini, bitiş sebebini, modelini ve token sayılarını ve her model isteğinin agent id'sini. Hiçbir prompt, cevap, dosya ve tool sonucu okumaz.
     2. Çalıştırır: hiçbir şey
     3. Gönderir: modele hiçbir şey; satırlar ve status line yalnız kişi içindir
-    4. Saklar:   $.store içinde on/off ayarını ve limiti; defterin kendisi bellekte yaşar ve session ile biter
+    4. Saklar:   $.store içinde on/off ayarını ve limiti; defterin kendisi bellekte durur ve session'la birlikte gider
     5. Düşman girdi: çizilen tek metin agent type'ı, spawn'ın kendi açıklaması (40 karaktere kesilmiş) ve engine'in bildirdiği model id'sidir
 
 ## Sınırlar
