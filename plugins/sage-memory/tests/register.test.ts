@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 import type { Memory } from '../hooks/shared/model.ts'
-import { countsLine } from '../hooks/link.ts'
+import { countsLine, stateLines, storedLine } from '../hooks/link.ts'
 
 tier('user')
 
@@ -146,10 +146,22 @@ describe('sage-memory', () => {
     expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['info:reminded 6', 'warn:used 1', 'ok:added 3'])
   })
 
+  test('the stored counts line draws the project count green and the global count blue', () => {
+    const line = storedLine({ project: 2054, global: 12 })
+    expect(line.text).toBe('this project: 2054 active · global: 12 active')
+    expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['ok:2054 active', 'info:12 active'])
+  })
+
+  test('a ready daemon puts the project on one line and the embeddings under it', () => {
+    const lines = stateLines({ state: 'ready', pid: 1, embedding: { state: 'failed', error: 'no model' } }, 'my app')
+    expect(lines.map(line => `${line.kind}:${line.text}`)).toEqual(['ok:daemon ready · my app', 'warn:embeddings failed: no model'])
+    expect(stateLines({ state: 'starting' }, 'my app')).toHaveLength(1)
+  })
+
   withSidebar('starts the daemon, asks it with the token over the socket, and shows it ready', async ($, on) => {
     const w = world(on)
     await $.session.start(START)
-    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings off · /sage-memory setup / this session: reminded 0 · used 0 · added 0')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 0 · used 0 · added 0')
     expect(w.argvs.find(a => a.includes('--dir'))?.slice(-2)).toEqual(['--dir', '/Users/k/.claude/sage-memory'])
     const status = w.fetches[0]
     if (status === undefined) throw new Error('no fetch reached the daemon')
@@ -166,7 +178,7 @@ describe('sage-memory', () => {
     const stats = (active: number) => ({ total: active + 3, byStatus: { active, stale: 3 }, byKind: {}, edges: 0 })
     w.routes.set('/memory/stats', { project: stats(2031), user: stats(12) })
     await $.session.start(START)
-    const section = 'daemon ready · my app · embeddings off · /sage-memory setup / this project: 2031 active · global: 12 active / this session: reminded 0 · used 0 · added 0'
+    const section = 'daemon ready · my app / embeddings off · /sage-memory setup / this project: 2031 active · global: 12 active / this session: reminded 0 · used 0 · added 0'
     expect(w.lines.at(-1)).toBe(section)
     w.routes.delete('/memory/stats')
     await $.command.run(run('on'))
@@ -224,7 +236,7 @@ describe('sage-memory', () => {
     w.routes.set('/embed/status', { embedding: { state: 'ready', modelId: 'paraphrase-multilingual', dims: 384 }, setup: { state: 'done', indexed: 3, startedAt: '', finishedAt: '' } })
     await w.clock.advance(2000)
     expect(w.logs).toContain('setup done: 3 memories embedded')
-    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings paraphrase-multilingual / this session: reminded 0 · used 0 · added 0')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings paraphrase-multilingual / this session: reminded 0 · used 0 · added 0')
   })
 
   withSidebar('a session end asks for the automatic hygiene run', async ($, on) => {
@@ -311,7 +323,7 @@ describe('memory reminders', () => {
     expect(w.lines.at(-1)).toBe('reminded (prompt): Install packages with pnpm, never with')
     // Only the word is coloured, blue, so a reminder stands apart from an addition, a change and a deletion.
     expect(painted(w, 'reminder').at(-1)).toBe('info:reminded')
-    expect(w.lines.at(-2)).toBe('daemon ready · my app · embeddings off · /sage-memory setup / this session: reminded 1 · used 0 · added 0')
+    expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1 · used 0 · added 0')
   })
 
   withSidebar('a slash command and a turned-off mod ask the daemon nothing', async ($, on) => {

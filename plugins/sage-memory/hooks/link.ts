@@ -108,6 +108,20 @@ export function stateLine(link: LinkView, project: string): Line {
   return { text: `daemon ready · ${project} · ${embeddingText(link.embedding, link.setup)}`, kind: link.embedding.state === 'failed' ? 'warn' : 'ok' }
 }
 
+function embeddingKind(e: EmbedState): Tone {
+  if (e.state === 'failed') return 'warn'
+  return e.state === 'ready' ? 'ok' : 'dim'
+}
+
+/** The sidebar's first lines: the daemon and the project on one, the embeddings under it once the daemon is ready. */
+export function stateLines(link: LinkView, project: string): Line[] {
+  if (link.state !== 'ready') return [stateLine(link, project)]
+  return [
+    { text: `daemon ready · ${project}`, kind: 'ok' },
+    { text: embeddingText(link.embedding, link.setup), kind: embeddingKind(link.embedding) },
+  ]
+}
+
 /** The `/sage-memory` status answer. */
 export function statusText(enabled: boolean, link: LinkView, project: string): string {
   return `${enabled ? 'on' : 'off'} · ${stateLine(link, project).text}`
@@ -129,7 +143,12 @@ export type StoredCounts = { project: number; global: number }
 
 /** The sidebar's line of what the stores hold, once the daemon has answered it. */
 export function storedLine(stored: StoredCounts): Line {
-  return { text: `this project: ${stored.project} active · global: ${stored.global} active`, kind: 'dim' }
+  return partsLine([
+    faint('this project: '),
+    { text: `${stored.project} active`, kind: 'ok' },
+    faint(' · global: '),
+    { text: `${stored.global} active`, kind: 'info' },
+  ], 'dim')
 }
 
 /** The sidebar's last line while the daemon answers: this session's counts. */

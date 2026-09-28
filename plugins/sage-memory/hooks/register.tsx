@@ -9,6 +9,7 @@ import {
   partsLine,
   setupText,
   stateLine,
+  stateLines,
   statusText,
   storedLine,
   tokenOf,
@@ -242,10 +243,10 @@ async function readStored($: EngineInterface, state: State): Promise<void> {
 
 /** The section: the daemon's state; once it answers, what the stores hold and what this session did. */
 async function show($: EngineInterface, state: State): Promise<void> {
-  const first = stateLine(state.link, state.project?.name ?? '')
-  if (state.link.state !== 'ready') return toPerson($, [first])
+  const first = stateLines(state.link, state.project?.name ?? '')
+  if (state.link.state !== 'ready') return toPerson($, first)
   await readStored($, state)
-  await toPerson($, [first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts)])
+  await toPerson($, [...first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts)])
 }
 
 /** The timed redraw: the store counts read again while the daemon is ready, one at a time. */

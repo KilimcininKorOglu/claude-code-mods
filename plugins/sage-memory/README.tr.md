@@ -24,12 +24,13 @@ Her başlangıçta bütünüyle yüklenen bir memory dosyası context'i doldurac
 [sidebar](../sidebar) açıkken mod orada tek bir `memory` section'ı tutar; section'daki `manage` tuşu pane'i açar:
 
     sage-memory: memory
-    daemon ready · my-app · embeddings off · /sage-memory setup
+    daemon ready · my-app
+    embeddings off · /sage-memory setup
     this project: 2031 active · global: 12 active
     this session: reminded 4 · used 1 · added 2
     [ manage ]
 
-İkinci satır bu projenin deposundaki ve global depodaki aktif kayıtları sayar; section her çizildiğinde sayılar daemon'dan okunur. Etkileşimli bir session section'ı 60 sn'de bir yeniden çizer; böylece başka bir session'ın ya da projenin kaydettiği kayıt, bu session boştayken de görünür. Bu okuma bir istektir, bu yüzden etkileşimli bir session açık kaldıkça daemon kapanmaz. Global depo `user` kayıtlarını tutar ve bu kayıtlar her projede hatırlatılır. Üçüncü satır bu session'ın yaptıklarını sayar: hatırlatılan kayıtlar, bir cevabın kullandıkları ve modelin ya da consolidator'ın ekledikleri. Her sayı kendi renginde çizilir: reminded mavi, used sarı, added yeşil.
+İlk satır daemon'un cevap verdiğini söyler ve projeyi adlandırır; ikinci satır embeddings modelini adlandırır, model başarısız olduysa sarıdır. Üçüncü satır bu projenin deposundaki ve global depodaki aktif kayıtları sayar; section her çizildiğinde sayılar daemon'dan okunur. Etkileşimli bir session section'ı 60 sn'de bir yeniden çizer; böylece başka bir session'ın ya da projenin kaydettiği kayıt, bu session boştayken de görünür. Bu okuma bir istektir, bu yüzden etkileşimli bir session açık kaldıkça daemon kapanmaz. Global depo `user` kayıtlarını tutar ve bu kayıtlar her projede hatırlatılır; proje sayısı yeşil, global sayı mavidir. Dördüncü satır bu session'ın yaptıklarını sayar: hatırlatılan kayıtlar, bir cevabın kullandıkları ve modelin ya da consolidator'ın ekledikleri. Her sayı kendi renginde çizilir: reminded mavi, used sarı, added yeşil.
 
 Altındaki stream her reminder'ı soluk gösterir; yalnız `reminded` kelimesi mavidir. Bir kayıttaki her değişiklik de bir satırdır; değişikliği model, consolidator, curator ya da bir kontrol yapmış olabilir. Satırda yalnız ne olduğunu söyleyen kelime renklidir: eklenen yeşil, değişen sarı (güncellenen, birleştirilen, stale olan, taşınan), silinen kırmızı. Bir hata kırmızı bir satırdır. Sidebar kapalıyken ilk satır status line'a, stream satırları transcript'e gider.
 

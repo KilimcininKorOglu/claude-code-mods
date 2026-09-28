@@ -24,12 +24,13 @@ It runs beside [memory-save](../memory-save): memory-save hands the model all of
 While the [sidebar](../sidebar) is open, the mod keeps one `memory` section there, with a `manage` button that opens the pane:
 
     sage-memory: memory
-    daemon ready · my-app · embeddings off · /sage-memory setup
+    daemon ready · my-app
+    embeddings off · /sage-memory setup
     this project: 2031 active · global: 12 active
     this session: reminded 4 · used 1 · added 2
     [ manage ]
 
-The second line counts the active memories of this project's store and of the global store, read from the daemon at each draw of the section. An interactive session draws the section again every 60 s, so a memory another session or project saved shows while this one is idle. That read is a request, so the daemon stays up while an interactive session is open. The global store holds the `user` memories, which every project is reminded of. The third line counts what this session did: the memories it was reminded of, the ones an answer used, and the ones the model or the consolidator added. Each count is drawn in its own colour: reminded blue, used yellow, added green.
+The first line says the daemon answers and names the project; the second names the embeddings model, yellow when it failed. The third line counts the active memories of this project's store and of the global store, read from the daemon at each draw of the section. An interactive session draws the section again every 60 s, so a memory another session or project saved shows while this one is idle. That read is a request, so the daemon stays up while an interactive session is open. The global store holds the `user` memories, which every project is reminded of; the project count is green, the global count blue. The fourth line counts what this session did: the memories it was reminded of, the ones an answer used, and the ones the model or the consolidator added. Each count is drawn in its own colour: reminded blue, used yellow, added green.
 
 Under it, the stream shows each reminder faint, with only the word `reminded` in blue. Each change to a memory, made by the model, the consolidator, the curator or a check, is a line in which only the word that says what happened is coloured: added green, changed yellow (updated, merged, gone stale, moved), deleted red. A failure is a red line. With the sidebar closed, the first line goes to the status line and the stream lines to the transcript.
 
