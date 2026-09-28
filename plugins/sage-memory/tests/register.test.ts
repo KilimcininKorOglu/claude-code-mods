@@ -89,11 +89,11 @@ function world(on: On): World {
     w.argvs.push([...e.argv])
     if (e.argv[0] === 'git') {
       const common = e.argv.includes('--git-common-dir')
-      return { value: { exitCode: 0, stdout: common ? '/src/my app/.git\n' : '/src/my app\n', stderr: '' } }
+      return { value: { exitCode: 0, stdout: common ? '/src/my app/.git\n' : '/src/my app\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = e.argv[1] === '-p' ? w.node : LAUNCH_OK
     if (e.argv.includes('--dir')) w.lost = undefined
-    return { value: { exitCode: 0, stdout, stderr: '' } }
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('session.id', () => ({ value: 'sess-1' }))
   on('model.complete', (_, e) => {
