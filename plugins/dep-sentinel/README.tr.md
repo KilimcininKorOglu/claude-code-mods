@@ -28,7 +28,7 @@ Model bir paket kurarken adını aklından yazar. O ad yanlış yazılmış olab
    Not ile satır ayrı kanallardır: model satırı hiç okumaz, sen de notu hiç okumazsın.
 7. [sidebar](../sidebar) açıksa kontrolsüz ve atlanan paketler onun stream'ine gider, her paket bir satır; transcript temiz kalır. Kontrolsüz paketin adı kırmızı, sebebi soluk görünür. İstek üzerine atlanan paket sarıdır, çünkü onu sen istedin. Bir kayıt, yenileri onu pane'den itene kadar durur. Sidebar kapalıysa ya da kurulu değilse satırlar yukarıdaki gibi transcript'e düşer.
 
-8. Kontrolsüz bir bulgu hiçbir zaman hatırlanan bir cevap değildir. Borçlu olunan kontrol yeniden çalışır, bulgu da iki yoldan kapanır. Aynı paketin aynı ekosistemde sonradan kurulması onu kontrol eder (npm'deki `lodash`, PyPI'deki `lodash`'ı kapatmaz). Korunan bir git komutu da kontrolü kendisi çalıştırır, iki modda da. Kayıt silinir, yerine yenisi gelir:
+8. Mod kontrolsüz bir paket için bellekteki eski cevaba güvenmez: eksik kalan kontrol yeniden çalışır ve bulgu iki yoldan kapanır. Aynı paketin aynı ekosistemde sonradan kurulması onu kontrol eder (npm'deki `lodash`, PyPI'deki `lodash`'ı kapatmaz). Korunan bir git komutu da kontrolü kendisi çalıştırır, iki modda da. Kayıt silinir, yerine yenisi gelir:
 
        dep-sentinel: a later install checked the packages that stayed unchecked: lodash
        dep-sentinel: the registry and OSV.dev answered for the packages that stayed unchecked: lodash
@@ -43,9 +43,9 @@ Model bir paket kurarken adını aklından yazar. O ad yanlış yazılmış olab
 
        dep-sentinel: 1 package(s) are still installed unchecked: lodash. Run the install again so the registry and OSV.dev answer, or take the package out.
 
-   Her prompt'ta değil, her turn'de bir not gelir. Bu olmasa bulgu yalnız kurulum anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü aynı bulgu zaten pane'de.
+   Her prompt'ta değil, her turn'de bir not gelir. Bu not olmasa model bulguyu yalnız kurulum anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü aynı bulgu zaten pane'de.
 
-10. `deny` modunda mod, bir paket kontrolsüz kaldığı sürece `git commit`, `git push` ve `git merge` komutlarını da durdurur. Gate önce borçlu olunan kontrolü çalıştırır; yalnız ağ kesik olduğu için takılan paket gate'i kendiliğinden açar. Registry'nin hâlâ cevap vermediği paket komutu durdurur. Bunu aşmanın yolu yoktur; gate'i yalnız sen `/dep-sentinel mode note` ile kapatırsın. Varsayılan `note` modudur ve hiçbir git komutunu durdurmaz, ama git komutunda aynı kontrolü çalıştırır; böylece çözülmüş bir bulgu pane'de kalmaz. Kurulum ise yukarıdaki gibi iki modda da durdurulur.
+10. `deny` modunda mod, bir paket kontrolsüz kaldığı sürece `git commit`, `git push` ve `git merge` komutlarını da durdurur. Gate önce eksik kalan kontrolü çalıştırır; paket yalnız ağ kesik olduğu için takıldıysa gate kendiliğinden açılır. Registry'nin hâlâ cevap vermediği paket komutu durdurur. Bunu aşmanın yolu yoktur; gate'i yalnız sen `/dep-sentinel mode note` ile kapatırsın. Varsayılan `note` modudur ve hiçbir git komutunu durdurmaz, ama git komutunda aynı kontrolü çalıştırır; böylece çözülmüş bir bulgu pane'de kalmaz. Kurulum ise yukarıdaki gibi iki modda da durdurulur.
 
 Canlı denemede `npm install --dry-run lodash@4.17.15` en güncel version 4.18.1 ve 6 OSV id'siyle durduruldu, `npm install --dry-run lodahs` lodash taklidi olarak MAL-2025-25502 OSV id'siyle durduruldu, `npm install --dry-run left-pad` ise çalıştı.
 
