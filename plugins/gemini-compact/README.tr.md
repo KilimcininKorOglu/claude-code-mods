@@ -1,6 +1,6 @@
 # gemini-compact
 
-Context dolunca Claude onu bir Claude isteğiyle daha sıkıştırır: bütün context'i okur, bir özet yazar ve bu istek Claude kullanımından düşer. Bu mod o işi Gemini'ye verir. İki modu vardır:
+Context dolunca Claude onu bir Claude isteği daha göndererek sıkıştırır: bu istek bütün context'i okur, bir özet yazar ve Claude kullanımından düşer. Bu mod o işi Gemini'ye verir. İki modu vardır:
 
 - **summary** (varsayılan): Gemini konuşmanın en yeni 6 mesajdan önceki kısmını özetler; o mesajlar özetin ardından kelimesi kelimesine kalır. Claude özet yazmaz; engine'in yerleşik özeti yalnız Gemini başarısız olunca çalışır.
 - **prune**: Gemini eski her tool çağrısı için karar verir: çağrı ve çıktısı kalsın mı, çıktısı kısaltılarak mı kalsın, yoksa gitsin mi. Kullanıcının ve asistanın her mesajı kelimesi kelimesine kalır. Hiçbir şey özetlenmez.
@@ -24,7 +24,7 @@ Claude kullanımından en çok tasarruf için summary modunu seç. Her mesajın 
 5. Konuşma, tek bir kullanıcı mesajına (önce bir not, sonra özet) ve ardından kalan mesajlara dönüşür; kalan mesajlar engine'in kendi mesajları olarak geri gider.
 6. Şu durumlarda yerleşik özet çalışır ve bir satır nedenini söyler: key yoksa, en yeni mesajlardan önce hiçbir şey yoksa, Gemini başarısız olursa, özet 200 karakterden kısaysa ya da çıktı sınırında (32.768 token) kesildiyse, ya da sonuç konuşmadan küçük değilse.
 
-İki modda da isteği gemini-core kurar: `gemini-compact` için tuttuğu key, model ve thinking seviyesiyle. Cevabı da o okur. HTTP 503'ten ("high demand") sonra mod 1 sn, 2 sn ve 3 sn sonra yeniden sorar; toplam en fazla dört deneme olur. Beklemesi 60 sn'yi aşacak bir deneme başlamaz. 429'dan ya da bir key hatasından sonra gemini-core, elinde başka key varsa isteği onunla verir.
+İki modda da isteği gemini-core kurar: `gemini-compact` için tuttuğu key, model ve thinking seviyesiyle. Cevabı da o okur. HTTP 503'ten ("high demand") sonra mod 1 sn, 2 sn ve 3 sn sonra yeniden sorar; toplam en fazla dört deneme olur. Beklemesi 60 sn'yi aşacak bir deneme başlamaz. 429'dan ya da bir key hatasından sonra gemini-core, elinde başka bir key varsa isteği onunla yeniden gönderir.
 
 2.1.277 üzerinde yapılan canlı denemede `/compact` `gemini-3.5-flash-lite` ile 2,6 saniye sürdü, Claude hiçbir compaction isteği göndermedi ve ardından model yalnız özetlenen kısımda geçen bir kelimeyi ve bir dosyayı adıyla andı.
 
