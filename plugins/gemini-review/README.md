@@ -1,31 +1,31 @@
 # gemini-review
 
-A Claude Code Mod that has Gemini review every commit the model makes. Before a Bash `git commit` runs, Gemini reads the change the commit records and the conversation. A blocking finding stops the commit and the model reads why; a minor finding lets the commit run and the model reads it after the result.
+The model writes code, commits it, and nobody reads the diff before it lands: a hardcoded key, a bug the change brings in, or a change that is not what you asked for goes into history. This mod has Gemini review every commit the model makes. Before a Bash `git commit` runs, Gemini reads the change the commit records and the conversation. A blocking finding stops the commit and the model reads why; a minor finding lets the commit run and the model reads it after the result.
 
 ## What it does
 
 1. The mod hooks the Bash tool. A command with a `git commit` in it (the `commit` skill included) is reviewed before it runs; any other command runs untouched.
-2. It reads the command without a shell: `cd <dir>` and `git -C <dir>` set the directory, `git add` before the commit in the same command says what gets staged, and `commit -a`, `add -u` and `add -A` say that every tracked or untracked change goes in. A commit message in a heredoc or in quotes is not read as a command. `git commit --help` and `--dry-run` record nothing and are not reviewed.
+2. It reads the command without a shell: `cd <dir>` and `git -C <dir>` set the directory, `git add` before the commit in the same command says what gets staged, and `commit -a`, `add -u` and `add -A` say that every tracked or untracked change goes in. Paths given to the commit itself (`git commit -m x -- a.ts`) mean git records those paths from the working tree and nothing else, and the review reads just those. A commit message in a heredoc or in quotes is not read as a command. `git commit --help`, `-h` and `--dry-run` record nothing and are not reviewed.
    A command that runs anything else before the commit (`echo x >> f && git commit -am ...`) is stopped before it runs, and the model reads that it must commit in a Bash call of its own. The review reads the change before the command runs, so what those steps change would not be in it: such a commit went through with an empty diff and no review (measured on 2.1.278). Commands after the commit (`&& git push`) are allowed.
-3. It collects the change with git, run by argv in the Bash tool's directory (`$.session.cwd()` follows a Bash `cd`, measured on 2.1.278): the index, a path the command stages from the working tree (the index still holds its older content until `git add` runs), and each new file whole.
-4. It sends the diff and the conversation in one `generateContent` request with a schema: a list of findings, each `blocker` or `minor`, with a file, a line and a message. gemini-core builds the request with the key, the model and the thinking level it holds for `gemini-review`, and reads the answer.
-5. `blocker` means a bug the change introduces, data loss, a security hole, a secret or credential in the diff, or a change that contradicts what the user asked for. Everything else is `minor`.
+3. It collects the change with git, run by argv in the Bash tool's directory (`$.session.cwd()` follows a Bash `cd`, measured on 2.1.278): the index, a path the command stages from the working tree (the index still holds its older content until `git add` runs), and each new file whole, at most 200 of them. Each git call has 20 seconds. When the change is empty, the commit runs with no review and no line.
+4. It sends the diff and the conversation in one `generateContent` request with a schema: a list of findings, each `blocker` or `minor`, with a file, a line and a message. The diff always goes whole. When the conversation is over `maxInputChars` (2,000,000 characters by default), its longest tool outputs are cut to one common length, each keeping its head and tail. gemini-core builds the request with the key, the model and the thinking level it holds for `gemini-review`, and reads the answer.
+5. `blocker` means a bug the change introduces, data loss, a security hole, a secret or credential in the diff, or a change that contradicts what you asked for. Everything else is `minor`.
 6. The verdict:
-   - a blocker: the command does not run; the model reads each blocker and the minor notes, with the instruction to fix and commit again, or, when a finding is wrong, to tell the user why and run the same command with `GEMINI_REVIEW_SKIP=1` in front;
+   - a blocker: the command does not run; the model reads each blocker and the minor notes, with the instruction to fix and commit again, or, when a finding is wrong, to tell you why and run the same command with `GEMINI_REVIEW_SKIP=1` in front;
    - only minor findings: the commit runs and the model reads the notes after the result;
    - no finding: the commit runs and the model reads one line saying the review found nothing.
-7. When the review cannot answer (no key, an HTTP error, a malformed answer, a git error, a diff over 1,500,000 characters), the commit runs, a transcript line says why, and the model reads the reason.
-8. Gemini answers HTTP 503 ("high demand") now and then, often after 10 seconds or more. As gemini-core reads it, the mod asks again after 1 s, 2 s and 3 s, at most four times, and starts no attempt once 60 s have passed. A hook's 10-second budget counts its `$.clock` waits but not its requests, so the waits stay short.
+7. When the review cannot answer (no key, an HTTP error, a malformed answer or one cut at the output limit, a git error, a diff over 1,500,000 characters), the commit runs, a transcript line says why, and the model reads the reason.
+8. Gemini answers HTTP 503 ("high demand") now and then, often after 10 seconds or more. gemini-core then has the mod ask again after 1 s, 2 s and 3 s, at most four attempts in all, and no attempt starts whose wait would end past 60 s. A hook's 10-second budget counts its `$.clock` waits but not its requests, so the waits stay short. After a 429 or a key error, gemini-core hands over the request with its next key, when it holds one.
 
 In a live check on 2.1.278 with `gemini-3.8-flash`, a commit of a file with `sk_live_...` was stopped with `sub/pay.ts:1: Hardcoded live Stripe secret key committed in source code`, a `git add pay.ts sub.ts && git commit` after the fix ran, a `GEMINI_REVIEW_SKIP=1` commit ran unreviewed, and an invalid key let the commit run with `Gemini HTTP 400: API key not valid`. Of eight reviews in that session, four got an answer (one after two 503s, 42.5 seconds in all) and four got only 503 answers and let the commit run.
 
 ## What it shows
 
-A toast after each review, and the last one in `/gemini-review`:
+After each review a toast stays for 10 seconds, and `/gemini-review` shows the last one:
 
     gemini-review: reviewed 1 file(s) · 1 blocker, 0 minor · 2k in, 515 out · sent to Gemini free tier
 
-A transcript line after every review, so you read what the model was told. The line holds the findings alone, without the instruction:
+The `sent to Gemini free tier` part appears only on the free tier. A transcript line follows every review, so you read what the model was told. The line holds the findings alone, without the instruction:
 
     gemini-review: commit reviewed: 2 file(s), nothing to report
     gemini-review: commit reviewed with 1 minor note(s): pay.ts:12: Name the constant.
@@ -40,9 +40,9 @@ The context and the line are separate channels: the model never reads the line, 
     /gemini-review on | off     off: commits run without a review; on is refused while gemini-core has no key
     /gemini-review reset        off again, the default
 
-The review is off after an install, so nothing is sent to Gemini before you set a key and turn it on.
+The review is off after an install, so nothing goes to Gemini before you set a key and turn it on.
 
-The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level are gemini-core's:
+The key, the tier, the model (default `gemini-3.8-flash`) and the thinking level belong to gemini-core:
 
     /gemini-core model review gemini-3.7-flash
     /gemini-core thinking review low
@@ -57,7 +57,7 @@ Every review sends the diff and the conversation: your prompts, the commands the
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-review@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -74,11 +74,13 @@ After an update from 0.1.x: `claude plugin update` does not add gemini-core (mea
 
 | Option | Default | What it sets |
 |---|---|---|
-| `maxInputChars` | `2000000` | Characters of conversation sent at most |
+| `maxInputChars` | `2000000` | Characters of conversation sent at most, 10,000 to 4,000,000; the diff always goes whole |
+
+A value outside the range, or one that is not a whole number, falls back to the default.
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.278:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, command.run{command=gemini-review}, tool.call{tool=Bash}
     ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via review, runCommand, storeEnabled), $.http.fetch (via askGemini), $.process.run (via collectDiff, git), $.session.cwd (via review), $.session.messages (via review), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.ui.log, $.ui.toast (via verdictOf)
@@ -103,7 +105,7 @@ Reach L3, reaches the network.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
