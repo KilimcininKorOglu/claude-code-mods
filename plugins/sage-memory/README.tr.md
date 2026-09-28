@@ -96,11 +96,11 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı (validat
 
 Reach L3: uzun yaşayan yerel bir process başlatır, turn'leri bir modele gönderir, `/sage-memory setup`'ta paket ve model indirir.
 
-    1. Reads:    oturumun cevapları, prompt'ları, subagent görevleri ve dosya tool çağrıları; bir kaydın bağlı olduğu dosyalar; içe aldığınız markdown dosyası; biten oturumları bulmak için transcript dizini
-    2. Runs:     node (sürüm kontrolü, launcher, daemon), git rev-parse ve git hash-object, setup'ta npm install; hepsi argv ile, shell yok
-    3. Sends:    consolidate edilen her turn'ü, curate edilen dosya kümesini, triage ve compact isteklerini seçtiğiniz modele (varsayılan haiku); setup'ta npm registry'ye ve Hugging Face'e istekler; daemon yalnız ~/.claude/sage-memory içindeki bir Unix socket'i dinler
-    4. Persists: kayıtlar, grafları, audit log ve reminder defteri ~/.claude/sage-memory altında SQLite'ta; ayarlar modun $.store'unda
-    5. Hostile input: bir kayıt, bir modelin ya da tool'un yazdığı metindir ve escape edilmiş bir <memory> fence'i içinde geri verilir; secret'a benzeyen bir metin yazılırken reddedilir; bir kayıt yalnız her isteğin token'ını kontrol eden daemon üzerinden değişir
+    1. Okur:     session'ın cevaplarını, prompt'larını, subagent görevlerini ve dosya tool çağrılarını; bir kaydın bağlı olduğu dosyaları; içe aldığın markdown dosyasını; biten session'ları bulmak için transcript dizinini
+    2. Çalıştırır: node (sürüm kontrolü, launcher, daemon), git rev-parse ve git hash-object, setup'ta npm install; hepsi argv ile, shell yok
+    3. Gönderir: consolidate edilen her turn'ü, curate edilen dosya kümesini, triage ve compact isteklerini seçtiğin modele (varsayılan haiku); setup'ta npm registry'ye ve Hugging Face'e istekler; daemon yalnız ~/.claude/sage-memory içindeki bir Unix socket'i dinler
+    4. Saklar:   kayıtları, graflarını, audit log'u ve reminder defterini ~/.claude/sage-memory altında SQLite'ta; ayarları mod'un $.store'unda
+    5. Düşman girdi: bir kayıt, bir modelin ya da tool'un yazdığı metindir ve escape edilmiş bir <memory> fence'i içinde geri verilir; secret'a benzeyen bir metin yazılırken reddedilir; bir kayıt yalnız her isteğin token'ını kontrol eden daemon üzerinden değişir
 
 ## Ölçümler
 
