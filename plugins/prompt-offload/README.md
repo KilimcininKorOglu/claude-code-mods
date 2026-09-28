@@ -1,14 +1,14 @@
 # prompt-offload
 
-A Claude Code Mod that writes a long pasted prompt to a file and sends the model its first lines with the path, so one paste does not fill the context.
+You paste a long log, a stack trace or a whole file into the prompt, and all of it stays in the context for the rest of the session, also when the model needed one part of it. This mod writes a long pasted prompt to a file and sends the model its first lines with the path, so one paste does not fill the context.
 
 ## What it does
 
 1. Each prompt you type, or send through Remote Control, is measured. A notification, a peer message, a schedule or another plugin's prompt is left alone.
 2. A prompt longer than the limit (2000 characters by default) is written to `$TMPDIR/prompt-offload/<hash>.txt`, whole and unchanged. The hash covers the text and the time it was sent.
-3. The model reads the first 200 characters of the prompt, cut at a line break when the head holds one, then one line naming the file, the character count and the line count, and telling it to read the file before answering.
+3. The model reads the first 200 characters of the prompt, then one line naming the file, the character count and the line count, and telling it to read the file before answering. When those 200 characters hold a line break past their middle, the head is cut at the last one.
 4. The transcript gets one line: how many characters went to the file and where.
-5. A failed write is not a lost prompt: the whole prompt reaches the model as it is, and the reason is logged once.
+5. A failed write is not a lost prompt: the whole prompt reaches the model as it is, and the reason is logged once until a different one comes.
 
 In the live check a 2980-character prompt was written to the file, the model read the file with `Read` and answered the question that only the tail of the prompt held.
 
@@ -23,7 +23,7 @@ In the live check a 2980-character prompt was written to the file, the model rea
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-offload@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -59,7 +59,7 @@ Reach L2, writes files and runs a process.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test

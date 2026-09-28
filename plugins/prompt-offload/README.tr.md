@@ -1,36 +1,36 @@
 # prompt-offload
 
-Uzun bir yapıştırılmış prompt'u bir dosyaya yazan ve modele ilk satırlarını path ile gönderen bir Claude Code Mod'u, böylece tek bir yapıştırma context'i doldurmaz.
+Prompt'a uzun bir log, bir stack trace ya da koca bir dosya yapıştırırsın; modelin işine yalnız bir kısmı yarasa da hepsi session'ın geri kalanında context'te kalır. Bu mod uzun bir yapıştırılmış prompt'u bir dosyaya yazar ve modele ilk satırlarını path ile birlikte gönderir; böylece tek bir yapıştırma context'i doldurmaz.
 
 ## Ne yapar
 
-1. Yazdığınız ya da Remote Control üzerinden gönderdiğiniz her prompt ölçülür. Bir notification, bir peer mesajı, bir schedule ya da başka bir plugin'in prompt'u dokunulmadan bırakılır.
-2. Limitten (varsayılan 2000 karakter) uzun bir prompt `$TMPDIR/prompt-offload/<hash>.txt` dosyasına, bütün ve değiştirilmeden yazılır. Hash, metni ve gönderildiği zamanı kapsar.
-3. Model prompt'un ilk 200 karakterini okur, baş kısım bir satır sonu taşıyorsa orada kesilir; sonra dosyayı, karakter sayısını ve satır sayısını adlandıran ve cevap vermeden önce dosyayı okumasını söyleyen bir satır.
-4. Transcript bir satır alır: dosyaya kaç karakter gittiği ve nereye.
-5. Başarısız bir yazma kaybolmuş bir prompt değildir: bütün prompt modele olduğu gibi ulaşır ve sebep bir kere log'lanır.
+1. Yazdığın ya da Remote Control üzerinden gönderdiğin her prompt ölçülür. Bir notification, bir peer mesajı, bir schedule ya da başka bir plugin'in prompt'u olduğu gibi bırakılır.
+2. Sınırdan (varsayılan 2000 karakter) uzun bir prompt `$TMPDIR/prompt-offload/<hash>.txt`'ye bütün ve değişmeden yazılır. Hash metni ve gönderildiği zamanı kapsar.
+3. Model prompt'un ilk 200 karakterini okur; ardından dosyayı, karakter sayısını ve satır sayısını söyleyen ve cevap vermeden önce dosyayı okumasını isteyen tek bir satır gelir. Bu 200 karakterin ortasından sonra bir satır sonu varsa baş kısım sonuncusunda kesilir.
+4. Transcript'e tek bir satır düşer: dosyaya kaç karakter gittiği ve nereye.
+5. Başarısız bir yazma prompt'u kaybettirmez: prompt'un tamamı modele olduğu gibi ulaşır, neden de farklı bir hata gelene kadar bir kez yazılır.
 
-Canlı kontrolde 2980 karakterlik bir prompt dosyaya yazıldı, model dosyayı `Read` ile okudu ve yalnız prompt'un son kısmında olan soruyu cevapladı.
+Canlı denemede 2980 karakterlik bir prompt dosyaya yazıldı; model dosyayı `Read` ile okudu ve yalnız prompt'un son kısmında duran soruyu cevapladı.
 
 ## Komut
 
-    /prompt-offload              on ya da off, ve limit
-    /prompt-offload on | off     varsayılan on
-    /prompt-offload limit <n>    en az 500 karakter; session'lar arasında tutulur
+    /prompt-offload              açık mı kapalı mı, ve sınır
+    /prompt-offload on | off     varsayılan açık
+    /prompt-offload limit <n>    en az 500 karakter; session'lar arasında korunur
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-offload@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. `$TMPDIR/prompt-offload` okumasına izin verin ya da bir dosyanın ilk `Read` işleminin sorduğu izin sorusunu cevaplayın.
-2. Claude Code'u yeniden başlatın.
+1. `$TMPDIR/prompt-offload`'u okumaya izin ver, ya da bir dosyanın ilk `Read`'inin sorduğu izin sorusunu cevapla.
+2. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
 
@@ -41,7 +41,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: TMPDIR
 
-Reach L2, dosya yazar ve bir process çalıştırır.
+Reach L2: dosya yazar ve bir process çalıştırır.
 
     1. Okur:     gönderilen her prompt'un metnini ve origin'ini, ve TMPDIR
     2. Çalıştırır: mkdir -p, argv ile
@@ -51,15 +51,15 @@ Reach L2, dosya yazar ve bir process çalıştırır.
 
 ## Sınırlar
 
-- Dosya mod tarafından silinmez; temp dizinini sistem temizler.
+- Mod dosyayı silmez; temp dizinini sistem temizler.
 - Prompt'taki bir attachment, bir görsel ya da bir dosya referansı sayılmaz ve taşınmaz: mod yalnız metni ölçer.
-- Model bütün prompt'u görmek için bir `Read` çağrısına ihtiyaç duyar, yani hemen cevaplayacağı bir prompt bir tool çağrısına mal olur.
-- 500 karakterin altındaki bir limit reddedilir, çünkü 200 karakterlik bir baş kısım prompt'tan çok az şey bırakır.
+- Model prompt'un tamamını görmek için bir `Read` yapmak zorundadır; yani hemen cevaplayacağı bir prompt bir tool çağrısına mal olur.
+- 500 karakterin altındaki bir sınır reddedilir, çünkü 200 karakterlik bir baş kısım prompt'un çok azını geride bırakır.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
