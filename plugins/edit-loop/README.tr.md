@@ -1,47 +1,47 @@
 # edit-loop
 
-Model bir turn içinde aynı dosyayı beş kere düzenlediğinde bunu modele söyleyen bir Claude Code Mod'u. Böylece model tekrar denemek yerine kök sebebi yeniden okur. Hiçbir şey durdurulmaz.
+Bir düzeltme işe yaramayınca model aynı dosyayı tekrar tekrar düzenlemeye başlar, her seferinde biraz farklı bir tahminle. Bir turn'de aynı dosyanın beş kez düzenlenmesi çoğu zaman modelin anlamak yerine tahmin yürüttüğünü gösterir. Bu mod o anı fark eder ve modele durmasını, kodu yeniden okumasını ve bir sonraki edit'ten önce kök nedeni söylemesini hatırlatır. Hiçbir şeyi durdurmaz.
 
 ## Ne yapar
 
-1. Mod Edit, Write ve NotebookEdit tool'larını hook'lar. Başarılı her çağrı, kendi dosyası için bir edit sayılır. Reddedilen ya da başarısız çağrı sayılmaz.
-2. Sayaç loop ve dosya başına tutulur: main loop ve her subagent ayrı sayar. Yeni bir turn her sayacı sıfırlar.
-3. Bir turn'de bir dosyanın üçüncü edit'i yalnız sizi uyarır, sarı renkte:
+1. Edit, Write ve NotebookEdit tool'larını izler. Başarılı her çağrı dosyasının bir edit'i sayılır; reddedilen ya da başarısız olan çağrı sayılmaz.
+2. Sayılar loop ve dosya başına ayrı tutulur: ana loop ve her subagent kendi sayısını tutar. Yeni bir turn her sayıyı sıfırlar.
+3. Bir turn'de aynı dosyanın üçüncü edit'i yalnız seni uyarır:
 
        edit-loop: 3rd edit of hooks/a.ts in this turn
 
    Model bu sayıda hiçbir şey okumaz.
-4. Bir turn'de bir dosyanın beşinci edit'i, sonucundan sonra şu notu alır:
+4. Bir turn'de aynı dosyanın beşinci edit'i, sonucunun hemen ardından şu notu alır:
 
        edit-loop: this turn edited hooks/a.ts 5 times. Stop editing it, re-read the code path and state the root cause before the next edit.
 
-   Dosya session'ın başladığı git repository'sinin içindeyse path o köke göre yazılır. Yani `plugins/a` içinde açılan bir session, `plugins/b` içindeki bir dosyayı `plugins/b/x.ts` olarak gösterir. Git repository'si dışında path session'ın başladığı dizine göre yazılır. Bu kök session başlangıcında bir kere okunur, çünkü bir Bash `cd` session'ın kendi dizinini kaydırır. Not dosya ve turn başına bir kere gelir; altıncı ve sonraki edit'ler not almaz.
-5. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır talimat cümlesi olmadan yalnız bulguyu taşır ve kırmızı çizilir:
+   Dosya, session'ın başladığı git repository'sinin içindeyse yol o repository'ye göre yazılır; yani `plugins/a` içinde açılmış bir session, `plugins/b`'deki bir dosyayı `plugins/b/x.ts` olarak gösterir. Git repository'si dışında yol, session'ın başladığı dizine göredir. Bu kök session başlarken bir kez okunur, çünkü Bash'te bir `cd` session'ın kendi dizinini değiştirir. Not her dosya ve turn için bir kez gelir; altıncı ve sonraki edit'ler not almaz.
+5. Aynı anda transcript'e tek bir satır düşer, böylece modele ne söylendiğini görürsün. Satırda talimat yoktur, yalnız bulgu vardır:
 
        edit-loop: 5th edit of hooks/a.ts in this turn
 
-   Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken iki satır da oraya gider, stream'in içinde kayıtlar olarak; transcript temiz kalır. Orada rengi sıra sayısı (`3rd`, `5th`) taşır, sarı ya da kırmızı; path varsayılan renkte kalır, `in this turn` soluk çizilir. Bir kayıt, yenileri onu pane'in dışına itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken yukarıdaki transcript satırı yazılır.
+   Not ile satır ayrı kanallardır: model satırı, sen de notu hiç okumazsın.
+6. [sidebar](../sidebar) açıksa iki satır da transcript yerine onun stream'ine gider, transcript temiz kalır. Orada rengi sıra sayısı (`3rd`, `5th`) taşır: üçüncü edit'te sarı, beşincide kırmızı; yol varsayılan renkte kalır, `in this turn` soluktur. Kayıt, yenileri onu pane'den itene kadar durur. Sidebar yoksa satırlar yukarıdaki gibi transcript'e düşer.
 
-Canlı testte model bir turn'de bir dosyayı altı kere düzenledi. Beşinci edit'ten sonra notu okudu, dosyayı yeniden okudu, edit'lerin neden kasıtlı olduğunu söyledi ve notu kelimesi kelimesine aktardı. Diğer beş edit not almadı.
+Canlı denemede model bir turn'de aynı dosyayı altı kez düzenledi. Beşinci edit'ten sonra notu okudu, dosyayı yeniden okudu, edit'lerin neden bilerek yapıldığını açıkladı ve notu kelimesi kelimesine aktardı. Diğer beş edit not almadı.
 
 ## Komut
 
-    /edit-loop            on ya da off
-    /edit-loop on | off   varsayılan on
+    /edit-loop            açık mı kapalı mı
+    /edit-loop on | off   varsayılan açık
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install edit-loop@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
+1. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
 
@@ -50,24 +50,24 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, command.run{command=edit-loop}, turn.start, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}
     ❯ ./register.ts calls: $.command.register, $.process.run (via shownRootOf), $.session.cwd (via afterEdit, shownRootOf), $.sidebar.set (via toPerson), $.store.get (via readSettings), $.store.set (via runCommand), $.ui.log (via toPerson)
 
-Reach L2, bir process çalıştırır.
+Reach L2: bir process çalıştırır.
 
-    1. Okur:     her Edit, Write ve NotebookEdit çağrısının dosya path'ini; session'ın dizinini ve git repository kökünü
-    2. Çalıştırır: session başlangıcında bir kere `git rev-parse --show-toplevel`, path'leri repository köküne göre göstermek için
-    3. Gönderir: bir turn'de bir dosyanın beşinci edit'inden sonra modele bir not, üçüncü ve beşincide transcript'e bir satır; makineden hiçbir şey çıkmaz
-    4. Saklar:   $.store içinde on/off ayarını; sayaçlar bir turn boyunca bellekte yaşar
-    5. Düşman girdi: path yalnız karşılaştırılır ve notta yazılır, hiç açılmaz
+    1. Okur:     her Edit, Write ve NotebookEdit çağrısının dosya yolunu; session'ın dizinini ve git repository kökünü
+    2. Çalıştırır: yolları repository köküne göre göstermek için session başında bir kez `git rev-parse --show-toplevel`
+    3. Gönderir: bir turn'de aynı dosyanın beşinci edit'inden sonra modele bir not, üçüncü ve beşinci edit'te transcript'e bir satır; makineden dışarı bir şey çıkmaz
+    4. Saklar:   $.store içinde açık/kapalı ayarını; sayılar bir turn boyunca bellekte durur
+    5. Düşman girdi: yol yalnız karşılaştırılır ve notta yazılır, hiçbir zaman açılmaz
 
 ## Sınırlar
 
-- Bash üzerinden yapılan bir edit (`sed -i`, bir heredoc, bir script) sayılmaz.
-- Bir dosyanın beş edit'i kasıtlı olabilir, örneğin parça parça yazılan uzun bir dosya. Not bir sebep ister, hiçbir şeyi durdurmaz.
-- Sayaç, tool çağrısının adlandırdığı path'i izler, yani iki farklı yazımla (bir link, `..`) gelen tek dosya iki kere sayılır.
+- Bash üzerinden yapılan bir düzenleme (`sed -i`, bir heredoc, bir script) sayılmaz.
+- Aynı dosyanın beş edit'i bilerek yapılmış olabilir, örneğin parça parça yazılan uzun bir dosya. Not bir neden ister, hiçbir şeyi durdurmaz.
+- Sayı, yolu tool çağrısının yazdığı biçimde izler; iki farklı yazılışla (bir link, `..`) anılan tek bir dosya iki kez sayılır.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
