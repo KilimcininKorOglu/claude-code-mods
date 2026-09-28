@@ -1,6 +1,6 @@
 # shot-inline
 
-A Claude Code Mod that draws each PNG or JPG the model saves or reads under its tool row, so you see the screenshot the model looked at without opening the file.
+The model takes a screenshot or reads a picture, draws a conclusion from it, and you see only a file path. To check what it looked at you open the file yourself. This mod draws each PNG or JPG the model saves or reads under its tool row, so you see the screenshot the model looked at without opening the file.
 
 ## What it does
 
@@ -10,7 +10,7 @@ A Claude Code Mod that draws each PNG or JPG the model saves or reads under its 
    - a Bash command that names such a file, when the file exists after the command (the last one named first).
 2. A PNG is measured from its header. A PNG over 4 MiB, and a JPG, are measured with `sips`.
 3. A JPG is copied once to `$TMPDIR/shot-inline/<hash>.png` with `sips -s format png`, because the terminal draws PNG only. The hash covers the path and the modification time.
-4. The tool row draws the picture under itself: at most 80 columns wide and 24 rows tall, in the picture's shape. The terminal reads the file itself; no pixel crosses the engine.
+4. The tool row draws the picture under itself, in the picture's shape: at most 80 columns wide (fewer when the terminal is narrower, and one column per 8 pixels for a small picture, so it is not stretched) and 24 rows tall. The terminal reads the file itself; no pixel crosses the engine.
 5. A terminal with the kitty graphics protocol (kitty, Ghostty, read from `TERM`, `TERM_PROGRAM` and `KITTY_WINDOW_ID`) draws the pixels themselves. Every other terminal draws the same box as block cells: `sips` writes a BMP of exactly the pixels the cells hold, and the mod reads its rows. By default a cell is a quadrant character (`▘`, `▞`, `▐`, `▙` and the rest) over two by two pixels: the cell's pixels are split at the middle of the colour channel that spreads widest, the brighter side is drawn in its mean colour and the darker side is the background. That is twice the pixels of a half block across, at the cost of two colours per four pixels. `/shot-inline glyphs half` goes back to half blocks (`▀`), two pixels a cell, each in its own colour. The BMP is made once per picture and pixel size. The cells of each picture are kept for the newest box it was drawn in, so a resize replaces them, and they go with the picture once the newest 200 pictures push it out.
 
 iTerm2 has an inline image protocol of its own, and the engine does not use it, so iTerm2 takes the block-cell path as well. The protocol is chosen inside the engine's `Image` element, so no mod can change it. Only the terminal surface draws a picture.
@@ -30,7 +30,7 @@ In the live check a `Read` of a PNG and of a JPG each drew under its row, the JP
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install shot-inline@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -70,7 +70,7 @@ Reach L2, runs processes and writes files.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
