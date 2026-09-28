@@ -1,6 +1,6 @@
 # output-flood
 
-A Claude Code Mod that measures how much of your context each Bash command spent. When a command's output passes a size limit, the mod tells the model what it cost and which narrower command would have answered the same question.
+The model runs `pytest tests/ -v` or `find .` for one answer, and tens of KB of output land in the context and stay there for the rest of the session. The next requests carry that weight, and the model does not know what it cost. This mod measures how much of your context each Bash command spent. When a command's output passes a size limit, it tells the model what it cost and which narrower command would have answered the same question.
 
 ## What it does
 
@@ -11,12 +11,12 @@ A Claude Code Mod that measures how much of your context each Bash command spent
 
    The advice follows the kind of command: a test runner, `git log`/`diff`/`show`, a filesystem walk (`find`, `ls`, `du`, `tree`), a package install, a file or JSON read, container logs. A command of no known kind is told to send its output to a file and read the range it needs.
 3. No advice is ever a pipe into `tail` or `head`. A long run whose output is cut at the end hides the failure that scrolled past; every suggestion narrows what the command produces instead.
-4. The same moment writes one line to the transcript, the finding alone, without the instruction the model reads:
+4. At the same moment one line reaches the transcript, the finding alone, without the instruction the model reads:
 
        output-flood: 30 KB of output from "pytest tests/ -v", over 20 KB
 
-5. While the [sidebar](../sidebar) is open, that finding goes there instead, the size on the first line (yellow under twice the limit, red at or above it, with `over N KB` faint) and the advice faint under it, as an entry in its stream, and the transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
-6. One command text is reported once per session. Its size still counts towards the total `/output-flood` prints.
+5. While the [sidebar](../sidebar) is open, that finding goes there instead, as an entry in its stream: the size on the first line (yellow under twice the limit, red at or above it, with `over N KB` faint) and the advice faint under it. The transcript stays clean. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+6. One command is reported once per session, known by its first 60 characters. Its size still counts towards the total `/output-flood` prints.
 
 ## Command
 
@@ -29,7 +29,7 @@ A Claude Code Mod that measures how much of your context each Bash command spent
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install output-flood@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -63,7 +63,7 @@ Reach L1, reads the session.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
