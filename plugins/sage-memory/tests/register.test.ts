@@ -41,6 +41,8 @@ type World = {
   spawned: string[]
   tasks: { id: string; status: string; subject: string }[]
   toolFails: boolean
+  /** What a tool the world runs returns: a file's text for Read. */
+  toolText: string
   tools: string[]
   asked: { system: string; prompt: string; model: string }[]
   modelText?: string
@@ -53,7 +55,7 @@ type World = {
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], asked: [], files: new Map(), panes: [], buttons: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], files: new Map(), panes: [], buttons: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -110,7 +112,7 @@ function world(on: On): World {
   on('session.end', () => ({ sessionId: 'sess-1' }) as never)
   on('tool.call', (_, e) => {
     if (e.tool === 'TaskList') return { result: { tasks: w.tasks } } as never
-    return { result: 'ok', isError: w.toolFails } as never
+    return { result: w.toolText, isError: w.toolFails } as never
   })
   on('http.fetch', (_, e) => {
     const init = (e.init ?? {}) as { socketPath?: string; headers?: Record<string, string>; body?: string }
@@ -252,27 +254,58 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/remind/prompt')).toEqual([])
   })
 
-  withSidebar('a file read reminds of the memories on its path and the tasks in progress, leaving out what the result already shows', async ($, on) => {
+  withSidebar("a file read's own result carries the memories of its path and the tasks in progress, leaving out what the file already shows", async ($, on) => {
     const w = readyWorld(on)
     w.tasks = [{ id: '1', status: 'in_progress', subject: 'Shorten the idle timeout' }, { id: '2', status: 'pending', subject: 'Write docs' }]
+    w.toolText = 'Install packages with pnpm, never with npm, in this repository.'
     w.routes.set('/remind/tools', { candidates: [ranked(DAEMON, ['anchor:file']), ranked(PNPM)], rejected: [] })
     await $.session.start(START)
-    const calls = [{ tool_name: 'Read', tool_input: { file_path: '/src/my app/daemon/server.ts' }, tool_use_id: 't1', tool_response: 'Install packages with pnpm, never with npm, in this repository.' }]
-    const r = await $.classic.PostToolBatch({ tool_calls: calls } as never)
+    const r = await $.tool.call({ tool: 'Read', file_path: '/src/my app/daemon/server.ts' } as never)
     const body = bodiesOf(w, '/remind/tools')[0]
     expect(body).toMatchObject({ loop: 'main', paths: ['/src/my app/daemon/server.ts'], mutation: false })
     expect(String(body?.query)).toContain('Shorten the idle timeout')
     expect(String(body?.query)).not.toContain('Write docs')
-    expect(r.additionalContext?.[0]).toContain('<memory id="m2"')
-    expect(r.additionalContext?.[0]).not.toContain('<memory id="m1"')
+    const context = 'context' in r ? (r.context ?? []) : []
+    expect(context[0]).toContain('<memory id="m2"')
+    expect(context[0]).not.toContain('<memory id="m1"')
+    const batch = await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: '/src/my app/daemon/server.ts' }, tool_use_id: 't1', tool_response: w.toolText }] } as never)
+    expect(batch.additionalContext).toBe(undefined)
   })
 
-  withSidebar('a nearly full context sends no reminder after tools', async ($, on) => {
+  withSidebar('two memories of one file, one per function, both ride on its read', async ($, on) => {
     const w = readyWorld(on)
-    w.percent = 96
+    const first = memory('f1', 'startServer binds the socket before it writes server.json.', { anchors: [{ type: 'symbol', path: 'daemon/server.ts', symbol: 'startServer' }] })
+    const second = memory('f2', 'closeIdle waits for the write queue before it closes a store.', { anchors: [{ type: 'symbol', path: 'daemon/server.ts', symbol: 'closeIdle' }] })
+    w.routes.set('/remind/tools', { candidates: [ranked(first, ['anchor:symbol']), ranked(second, ['anchor:symbol'])], rejected: [] })
     await $.session.start(START)
-    const r = await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: '/a.ts' }, tool_use_id: 't1', tool_response: '' }] } as never)
-    expect(r.additionalContext).toBe(undefined)
+    const r = await $.tool.call({ tool: 'Read', file_path: '/src/my app/daemon/server.ts' } as never)
+    const context = 'context' in r ? (r.context ?? []).join('\n') : ''
+    expect(context).toContain('<memory id="f1"')
+    expect(context).toContain('<memory id="f2"')
+  })
+
+  // A text under 24 characters is never matched as already visible, so only the claim keeps it to one result.
+  withSidebar('parallel reads that find the same short memory carry it once', async ($, on) => {
+    const w = readyWorld(on)
+    const SHORT = memory('s1', 'Port 4000 is taken.', { anchors: [{ type: 'directory', path: 'daemon' }] })
+    w.routes.set('/remind/tools', { candidates: [ranked(SHORT, ['anchor:directory'])], rejected: [] })
+    await $.session.start(START)
+    const results = await Promise.all(['/src/my app/daemon/a.ts', '/src/my app/daemon/b.ts'].map(path => $.tool.call({ tool: 'Read', file_path: path } as never)))
+    const carrying = results.filter(r => 'context' in r && (r.context ?? []).some(text => text.includes('<memory id="s1"')))
+    expect(bodiesOf(w, '/remind/tools')).toHaveLength(2)
+    expect(carrying).toHaveLength(1)
+    expect(bodiesOf(w, '/memory/reminded').flatMap(b => b.ids as string[])).toEqual(['s1'])
+  })
+
+  withSidebar('Bash and a nearly full context carry no reminder', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/remind/tools', { candidates: [ranked(DAEMON, ['anchor:file'])], rejected: [] })
+    await $.session.start(START)
+    await $.tool.call({ tool: 'Bash', command: 'cat /a.ts' } as never)
+    expect(bodiesOf(w, '/remind/tools')).toEqual([])
+    w.percent = 96
+    const r = await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
+    expect('context' in r ? r.context : undefined).toBe(undefined)
     expect(bodiesOf(w, '/remind/tools')).toEqual([])
   })
 

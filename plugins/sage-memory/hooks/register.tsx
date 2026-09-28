@@ -134,8 +134,8 @@ type State = {
   guidance: boolean
   /** Per loop: what its context already shows, and the memories it was reminded of and has not used yet. */
   loops: Map<string, Loop>
-  /** The subjects of the tasks in progress, read once per main-loop turn. */
-  tasks?: string[]
+  /** The subjects of the tasks in progress, read once per main-loop turn, so parallel tool calls share one read. */
+  tasks?: Promise<string[]>
   /** Whether this session declared the memory tools; a declared tool cannot be taken back. */
   declared: boolean
   /** What the main loop's turn touched, for the consolidator. */
@@ -154,7 +154,11 @@ type State = {
   counts: SessionCounts
 }
 
-type Loop = { visible: string; reminded: Memory[] }
+/**
+ * What one loop's context holds: the text it shows, the reminded memories it has not used yet, and the
+ * ids a tool reminder picked, marked at the pick so a parallel call does not pick them again.
+ */
+type Loop = { visible: string; reminded: Memory[]; claimed: Set<string> }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -622,7 +626,7 @@ async function isReady(state: State): Promise<boolean> {
 function loopOf(state: State, key: string): Loop {
   const found = state.loops.get(key)
   if (found !== undefined) return found
-  const loop: Loop = { visible: '', reminded: [] }
+  const loop: Loop = { visible: '', reminded: [], claimed: new Set() }
   state.loops.set(key, loop)
   return loop
 }
@@ -661,11 +665,19 @@ async function deliver($: EngineInterface, state: State, loopKey: string, trigge
  * The subjects of the tasks in progress, read once per main-loop turn. A session without the task
  * tools answers with a refusal, which leaves the query without tasks.
  */
-async function tasksOf($: EngineInterface, state: State): Promise<string[]> {
-  if (state.tasks !== undefined) return state.tasks
-  const answer = await $.tool.call({ tool: 'TaskList' })
-  state.tasks = 'deny' in answer && answer.deny !== undefined ? [] : tasksInProgress(answer.result)
+function tasksOf($: EngineInterface, state: State): Promise<string[]> {
+  state.tasks ??= readTasks($)
   return state.tasks
+}
+
+async function readTasks($: EngineInterface): Promise<string[]> {
+  return tasksInProgress(await taskList($))
+}
+
+/** The TaskList result, or nothing while the session has no task tools (the call is refused). */
+async function taskList($: EngineInterface): Promise<unknown> {
+  const answer = await $.tool.call({ tool: 'TaskList' })
+  return 'deny' in answer && answer.deny !== undefined ? undefined : answer.result
 }
 
 /** How much a reminder may carry: the main loop's by how full its context is, a subagent's the whole budget. */
@@ -673,21 +685,34 @@ async function budgetOf($: EngineInterface, loopKey: string): Promise<ReturnType
   return toolBudget(loopKey === MAIN_LOOP ? (await $.session.usage()).context.percent : 0)
 }
 
-/** The reminder after a batch of tool calls, or nothing. Every result the batch read joins what the loop shows. */
-async function afterBatch($: EngineInterface, state: State, calls: readonly ToolCall[], loopKey: string): Promise<string | undefined> {
+/**
+ * The reminder bound to one file tool's result, or nothing. The result joins what the loop shows first,
+ * so a memory the file already states is not sent.
+ */
+async function afterCall($: EngineInterface, state: State, call: ToolCall, loopKey: string): Promise<string | undefined> {
   const loop = loopOf(state, loopKey)
-  for (const call of calls) loop.visible = seen(loop.visible, responseText(call.tool_response))
-  const reminding = calls.filter(isReminding)
-  if (reminding.length === 0 || !(await isReady(state)) || (await $.store.get('remindTools')) === false) return undefined
+  loop.visible = seen(loop.visible, responseText(call.tool_response))
+  if (!(await isReady(state)) || (await $.store.get('remindTools')) === false) return undefined
   const budget = await budgetOf($, loopKey)
   if (budget.count === 0) return undefined
-  const paths = [...new Set(reminding.flatMap(pathsOf))]
+  const paths = pathsOf(call)
   const tasks = loopKey === MAIN_LOOP ? await tasksOf($, state) : []
-  const mutation = reminding.some(call => CHANGE_TOOLS.has(call.tool_name))
-  const body = { sessionId: await $.session.id(), loop: loopKey, paths, query: queryOf(reminding, paths, tasks), mutation, limit: CANDIDATES }
+  const body = { sessionId: await $.session.id(), loop: loopKey, paths, query: queryOf([call], paths, tasks), mutation: CHANGE_TOOLS.has(call.tool_name), limit: CANDIDATES }
   const ranking = await ask<Ranking>($, state, '/remind/tools', body, REMIND_MS)
-  return deliver($, state, loopKey, 'tools', toolReminder(ranking.candidates, loop.visible, budget, loopKey !== MAIN_LOOP, tasks.length > 0))
+  // The pick and its claim run in one synchronous step: a parallel call's pick comes after it and skips these ids.
+  const fresh = ranking.candidates.filter(item => !loop.claimed.has(item.memory.id))
+  const block = toolReminder(fresh, loop.visible, budget, loopKey !== MAIN_LOOP, tasks.length > 0)
+  for (const memory of block.sent) loop.claimed.add(memory.id)
+  return deliver($, state, loopKey, 'tools', block)
 }
+
+/** A tool call as the reminder reads it: its name, its input, and its result as the model reads it. */
+function callOfTool(e: { tool: string }, r: { text?: string; result?: unknown }): ToolCall {
+  return { tool_name: e.tool, tool_input: e, tool_response: r.text ?? r.result }
+}
+
+/** The file tools a reminder rides on, and every MCP tool but this mod's own; `isReminding` narrows an MCP tool to one that names a file. */
+const REMINDING_TOOLS = /^(Read|Grep|Glob|LSP|Edit|Write|NotebookEdit|MultiEdit|mcp__(?!sage-memory__).+)$/
 
 /** The reminder with a prompt the person typed, or nothing. */
 async function beforePrompt($: EngineInterface, state: State, text: string): Promise<string | undefined> {
@@ -795,8 +820,7 @@ async function jobModel($: EngineInterface): Promise<string> {
 
 /** The subjects of the tasks completed, or none while the session has no task tools. */
 async function completedOf($: EngineInterface): Promise<string[]> {
-  const answer = await $.tool.call({ tool: 'TaskList' })
-  return 'deny' in answer && answer.deny !== undefined ? [] : completedTasks(answer.result)
+  return completedTasks(await taskList($))
 }
 
 /** The active memories of one store, most important first. */
@@ -1245,9 +1269,9 @@ async function endHygiene($: EngineInterface, state: State): Promise<void> {
   await ask($, state, '/memory/hygiene', { automatic: true }, END_MS)
 }
 
-/** A hook result with one more context text, or unchanged when there is none. */
-function withContext<R extends { additionalContext?: readonly string[] }>(r: R, text: string | undefined): R {
-  return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
+/** A tool result with one more context text the model reads right after it, or unchanged when there is none. */
+function withToolContext<R extends { context?: readonly string[] }>(r: R, text: string | undefined): R {
+  return text === undefined ? r : { ...r, context: [...(r.context ?? []), text] }
 }
 
 /** /clear fixes the system prompt note again and forgets every loop; a compaction starts the main loop over. */
@@ -1326,10 +1350,23 @@ export const register: Register = on => {
     return r
   })
 
-  on('classic.PostToolBatch', async ($, e, next) => {
+  // The batch adds no reminder: each file tool's result carries its own (below). What the other tools
+  // returned joins what the loop shows, and the main loop's batch is evidence for the consolidator.
+  on('classic.PostToolBatch', async (_, e, next) => {
     const r = await next(e)
+    const loop = loopOf(state, e.agent_id ?? MAIN_LOOP)
+    for (const call of e.tool_calls.filter(call => !isReminding(call))) loop.visible = seen(loop.visible, responseText(call.tool_response))
     if (e.agent_id === undefined) noteBatch(state, e.tool_calls)
-    return withContext(r, await guarded($, 'the reminder after the tools', () => afterBatch($, state, e.tool_calls, e.agent_id ?? MAIN_LOOP)))
+    return r
+  })
+
+  // A file tool's result carries the memories of its own paths. Measured on 2.1.283 (10 runs each), the
+  // model called a reminder there a suspicious instruction 1 time in 10, and one after the batch 4 times.
+  on('tool.call', { tool: REMINDING_TOOLS }, async ($, e, next) => {
+    const r = await next(e)
+    const call = callOfTool(e, r)
+    if (!succeeded(r) || !isReminding(call)) return r
+    return withToolContext(r, await guarded($, 'the reminder after the tool', () => afterCall($, state, call, e.agentId ?? MAIN_LOOP)))
   })
 
   on('prompt.submit', async ($, e, next) => {
