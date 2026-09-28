@@ -4,7 +4,7 @@ Model bir dev sunucusunu `(cmd &)` ile başlatır, session biter ve sunucu port'
 
 ## Ne yapar
 
-1. Session başında, her main-loop turn sonunda ve `/orphan-server` komutunda mod, bir TCP port'unu dinleyen process'leri okur (`lsof -nP -iTCP -sTCP:LISTEN`).
+1. Session başında, her ana loop turn'ünün sonunda ve `/orphan-server` komutunda mod, bir TCP port'unu dinleyen process'leri okur (`lsof -nP -iTCP -sTCP:LISTEN`).
 2. Yalnız parent'ı 1 olan (onu başlatan shell'den sonra yaşayan) ve working directory'si session'ın git repository'si ya da onun altındaki bir dizin olan process'i tutar.
 3. Her biri için bu repository'nin transcript'lerinde onu başlatan Bash çağrısını okur: process başladığında çalışan (model onu yazdıktan sonra, sonucundan önce) ve komutu process'in argümanlarını içeren bir çağrı. Transcript'lerin yalnız o çağrının düşebileceği dakikalardaki satırları okunur ve her process bir kere aranır.
 4. Bulunan sunucular tek bir [sidebar](../sidebar) section'ında, en eskisi önce, her biri bir stop tuşuyla durur. Her satırda portlar sarı, yaş sarı ve bir günü geçince kırmızı, başka bir session'ın id'si soluktur; `this session` varsayılan renkte kalır:
@@ -44,10 +44,10 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
-Reach L2, process çalıştırır ve sinyal gönderir.
+Reach L2: process çalıştırır ve sinyal gönderir.
 
     1. Okur:     dinleyen TCP process'lerini (pid, port'lar, parent, yaş, argümanlar, working directory) ve bu repository'nin session'larının transcript satırlarını, her birinin başlama anı çevresindeki dakikalar için
-    2. Çalıştırır: git rev-parse --show-toplevel session başına bir kere; lsof, ps ve grep session başında, her turn sonunda ve /orphan-server komutunda; durdurduğunuz bir sunucu için kill -TERM ve kill -KILL
+    2. Çalıştırır: git rev-parse --show-toplevel session başına bir kere; lsof, ps ve grep session başında, her turn sonunda ve /orphan-server komutunda; durdurduğun bir sunucu için kill -TERM ve kill -KILL
     3. Gönderir: modele ve network'e hiçbir şey
     4. Saklar:   $.store içinde on/off ayarını
     5. Düşman girdi: bir process'in argümanları ve bir transcript'in komutları metin olarak çizilir ve metin olarak karşılaştırılır, hiç çalıştırılmaz; bir stop'un pid'i sinyal gönderilmeden önce yeniden okunur
