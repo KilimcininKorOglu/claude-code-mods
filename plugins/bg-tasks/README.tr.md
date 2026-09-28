@@ -21,8 +21,8 @@ Model arka planda bir dev server ya da dosya izleyici başlatır, işine devam e
        [ stop ]    12m  model  npm run dev
        [ stop ]     3m  you    tail -f logs/app.log
 
-   Bir satırda Enter'a basınca o task engine'in TaskStop tool'uyla durdurulur; onay senin basışındır. Pane ardından `stopped: npm run dev` der ya da sebebiyle birlikte `not stopped: ...` yazar; bu durumda task listede kalır.
-5. [sidebar](../sidebar) açıksa liste oraya gider ve status line boş kalır. Başlığında sayı yazan (`2 running`) tek bir section olur; içinde aynı satırlar ve her task için bir `[ stop ... ]` butonu vardır. Satırda yaş ve task'ı kimin başlattığı soluk, komut varsayılan renktedir. Yaş bir saati geçince sarıya döner, böylece kontrolden çıkmış bir task göze çarpar. Buton `/bg-tasks stop <id>` çalıştırır ve task'ı aynı yoldan durdurur. Sidebar yoksa her şey yukarıdaki gibi işler.
+   Bir satırda Enter'a basınca mod o task'ı engine'in TaskStop tool'uyla durdurur; ayrıca onay sorulmaz, onay senin basmandır. Ardından pane `stopped: npm run dev` yazar. Task durmadıysa sebebiyle birlikte `not stopped: ...` yazar ve task listede kalır.
+5. [sidebar](../sidebar) açıksa liste oraya gider ve status line boş kalır. Liste, başlığında sayıyı gösteren (`2 running`) tek bir section'dır; içinde aynı satırlar ve her task için bir `[ stop ... ]` butonu vardır. Satırda yaş ve task'ı kimin başlattığı soluk, komut varsayılan renktedir. Yaş bir saati geçince sarıya döner, böylece kontrolden çıkmış bir task göze çarpar. Buton `/bg-tasks stop <id>` çalıştırır ve task'ı aynı yoldan durdurur. Sidebar yoksa her şey yukarıdaki gibi işler.
 6. Kendiliğinden biten bir task sidebar'ın stream'ine de bir kayıt bırakır. Böylece yukarıdaki section yalnız çalışanları gösterirken pane, bitenlerin kaydını da tutar. Kayıt task'ın nasıl bittiğini söyler ve yalnız o kelime renklidir: `completed` için yeşil `finished`, sarı `killed`, kırmızı `failed` (ya da engine'in bildirdiği başka herhangi bir status):
 
        bg-tasks: task finished
