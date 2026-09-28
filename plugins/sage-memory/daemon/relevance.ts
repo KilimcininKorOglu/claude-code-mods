@@ -106,19 +106,39 @@ function exactAnchorMatch(memory: Memory, normalizedQuery: string): Relevance | 
 type Matches = { matched: string[]; anchor: string[]; tag: string[]; answers: boolean; queryCount: number }
 
 /**
+ * A memory's terms, each identifier also split into its words (`RETRY_LIMIT`, `retryLimit` and
+ * `retry-limit` also hold `retry` and `limit`), so a question in plain words finds it.
+ */
+function memoryTerms(text: string): Set<string> {
+  const words = text.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2').replace(/[_.-]+/g, ' ')
+  return new Set([...informativeTerms(text), ...informativeTerms(words)])
+}
+
+/** The longest suffix a query word may add to a memory term and still match it, as Turkish `limiti` does to `limit`. */
+const MAX_SUFFIX = 4
+const MIN_STEM = 4
+
+/** A query term the memory holds as is, or as the stem of a suffixed word. */
+function holds(terms: ReadonlySet<string>, term: string): boolean {
+  if (terms.has(term)) return true
+  for (let end = term.length - 1; end >= Math.max(MIN_STEM, term.length - MAX_SUFFIX); end--) if (terms.has(term.slice(0, end))) return true
+  return false
+}
+
+/**
  * The query terms a memory holds in its text, tags, and symbol, command or role anchors. An
  * anchor path is matched as a path, never word by word, or a memory about one `store.ts` would
  * match every other.
  */
 function termMatches(memory: Memory, queryTerms: readonly string[]): Matches {
-  const text = new Set(informativeTerms(memory.text))
-  const tags = new Set(memory.tags.flatMap(informativeTerms))
-  const anchors = new Set(memory.anchors.flatMap(anchor => informativeTerms([anchor.symbol, anchor.command, anchor.role].filter(Boolean).join(' '))))
-  const matched = queryTerms.filter(term => text.has(term) || tags.has(term) || anchors.has(term))
+  const text = memoryTerms(memory.text)
+  const tags = new Set(memory.tags.flatMap(tag => [...memoryTerms(tag)]))
+  const anchors = memoryTerms(memory.anchors.map(anchor => [anchor.symbol, anchor.command, anchor.role].filter(Boolean).join(' ')).join(' '))
+  const matched = queryTerms.filter(term => holds(text, term) || holds(tags, term) || holds(anchors, term))
   return {
     matched,
-    anchor: matched.filter(term => anchors.has(term)),
-    tag: matched.filter(term => tags.has(term)),
+    anchor: matched.filter(term => holds(anchors, term)),
+    tag: matched.filter(term => holds(tags, term)),
     answers: matched.length / queryTerms.length >= 0.6 || matched.length >= 4,
     queryCount: queryTerms.length,
   }
