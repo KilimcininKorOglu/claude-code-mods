@@ -134,5 +134,12 @@ export function storedLine(stored: StoredCounts): Line {
 
 /** The sidebar's last line while the daemon answers: this session's counts. */
 export function countsLine(counts: SessionCounts): Line {
-  return { text: `this session: reminded ${counts.reminded} · used ${counts.used} · added ${counts.added}`, kind: 'dim' }
+  return partsLine([
+    faint('this session: '),
+    { text: `reminded ${counts.reminded}`, kind: 'info' },
+    faint(' · '),
+    { text: `used ${counts.used}`, kind: 'warn' },
+    faint(' · '),
+    { text: `added ${counts.added}`, kind: 'ok' },
+  ], 'dim')
 }

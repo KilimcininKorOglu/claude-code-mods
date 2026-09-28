@@ -1,6 +1,7 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 import type { Memory } from '../hooks/shared/model.ts'
+import { countsLine } from '../hooks/link.ts'
 
 tier('user')
 
@@ -139,6 +140,12 @@ function world(on: On): World {
 const START = { surface: 'terminal', isInteractive: true, cwd: '/src/my app/sub' } as const
 
 describe('sage-memory', () => {
+  test('the session counts line draws reminded blue, used yellow and added green', () => {
+    const line = countsLine({ reminded: 6, used: 1, added: 3 })
+    expect(line.text).toBe('this session: reminded 6 · used 1 · added 3')
+    expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['info:reminded 6', 'warn:used 1', 'ok:added 3'])
+  })
+
   withSidebar('starts the daemon, asks it with the token over the socket, and shows it ready', async ($, on) => {
     const w = world(on)
     await $.session.start(START)
