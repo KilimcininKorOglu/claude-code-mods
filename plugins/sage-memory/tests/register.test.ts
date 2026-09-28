@@ -94,7 +94,7 @@ function world(on: On): World {
   on('model.complete', (_, e) => {
     w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model })
     const system = e.system ?? ''
-    const text = system.startsWith('Rate this') ? w.rateText : system.startsWith('Do these two') ? w.mergeText : system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
+    const text = system.startsWith('Rate one memory') ? w.rateText : system.startsWith('Do these two') ? w.mergeText : system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
     return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
   })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })

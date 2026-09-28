@@ -98,7 +98,9 @@ Drop a candidate that only says:
   durations, test results, costs;
 - what a file, function, or directory contains, or which tools and languages
   the project uses, because the code already shows it;
-- a convention or a workflow inferred from one action of this turn.
+- a convention or a workflow inferred from one action of this turn;
+- general programming knowledge that holds in any project, such as what an
+  error message means or how a language feature works.
 
 Examples, none of them from this project:
 - "Created src/utils/date.ts and committed it." Drop: this turn's work.
@@ -110,6 +112,8 @@ Examples, none of them from this project:
 - "The build took 42 s and 118 tests passed." Drop: a status of this turn.
 - "The project keeps its React components under src/components." Drop: the
   code shows it.
+- "A null pointer error means the value was never set; check it first." Drop:
+  true in every project.
 - "Webhook handlers must answer within 5 s, because the payment provider
   retries after that." Keep: a constraint and its reason.
 - "Token refresh failed when the server clock ran ahead; the client now pads
