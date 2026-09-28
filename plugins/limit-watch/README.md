@@ -1,6 +1,6 @@
 # limit-watch
 
-A Claude Code Mod that keeps the subscription usage limits on screen. A Claude subscription has a 5-hour limit and a 7-day limit, and a Claude gateway can add a spend limit. Claude Code shows them only in a notice when a limit is almost full. limit-watch shows them for the whole session, counts down to each reset, forecasts when the current pace fills a limit, and logs a warning when a limit passes 80% and 95%.
+A Claude subscription has a 5-hour limit and a 7-day limit, and a Claude gateway can add a spend limit. Claude Code shows them only in a notice when a limit is almost full, so you learn where you stand when it is already late. This mod keeps them on screen for the whole session, counts down to each reset, forecasts when the current pace fills a limit, and logs a warning when a limit passes 80% and 95%.
 
 ## What it shows
 
@@ -11,8 +11,8 @@ A Claude Code Mod that keeps the subscription usage limits on screen. A Claude s
 The last part is one of these:
 
 - `5h hits 100% in ~1h 40m`: at the current pace this limit fills before its reset. When more than one limit fills, the first one is named.
-- `no limit fills before its reset`: every limit resets before the current pace fills it.
-- `measuring the pace`: no limit has samples over a long enough span yet.
+- `no limit fills before its reset`: every limit resets before the current pace fills it, or its pace is flat.
+- `measuring the pace`: no limit has a long enough span yet.
 - `5h limit reached`: a limit is at 100%.
 
 An API key session reports no limits. The status line then reads `no usage limits reported yet`. A new session also shows this until Claude answers once.
@@ -49,7 +49,7 @@ Each warning comes once per limit cycle. A new session in the same cycle does no
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install limit-watch@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag:
+Function hooks are early access, and nothing loads without the flag:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
@@ -69,7 +69,7 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.281:
+Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
@@ -93,7 +93,7 @@ Reach L0, draws and remembers.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test

@@ -1,6 +1,6 @@
 # limit-watch
 
-Subscription kullanım limitlerini ekranda tutan bir Claude Code Mod'u. Bir Claude subscription'ı 5 saatlik ve 7 günlük bir limit taşır, bir Claude gateway ise bir spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmaya yakınken bir uyarıda gösterir. limit-watch bunları session boyunca gösterir, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar.
+Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti vardır, bir Claude gateway de spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmak üzereyken bir uyarıda gösterir; nerede olduğunu iş işten geçtiğinde öğrenirsin. Bu mod limitleri session boyunca ekranda tutar, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar.
 
 ## Ne gösterir
 
@@ -11,8 +11,8 @@ Subscription kullanım limitlerini ekranda tutan bir Claude Code Mod'u. Bir Clau
 Son kısım şunlardan biridir:
 
 - `5h hits 100% in ~1h 40m`: bugünkü hızda bu limit reset'inden önce dolar. Birden fazla limit doluyorsa ilki adlandırılır.
-- `no limit fills before its reset`: her limit, bugünkü hız onu doldurmadan önce reset olur.
-- `measuring the pace`: hiçbir limitin henüz yeterince uzun bir aralıkta örneği yok.
+- `no limit fills before its reset`: her limit, bugünkü hız onu doldurmadan önce reset olur, ya da hızı düzdür.
+- `measuring the pace`: hiçbir limitin henüz yeterince uzun bir aralığı yok.
 - `5h limit reached`: bir limit %100'de.
 
 Bir API key session'ı hiçbir limit bildirmez. Status line o zaman `no usage limits reported yet` der. Yeni bir session da Claude bir kere cevap verene kadar bunu gösterir.
@@ -38,7 +38,7 @@ Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir ses
 
 - `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana döngü turundan sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başlangıcında ya da timer'da başarısız olan bir okuma bir kere `cannot read the usage limits: <error>` olarak log'lanır ve 60 saniyelik timer çalışmaya devam eder.
 - Her okuma bir örnektir (`{ at, percent }`) ve `$.store` içinde tutulur, böylece bir restart hızı korur.
-- 5 saatlik ve spend limitleri hızı örneklerinden okur: yakın bir aralığın bütün örneklerinden en küçük kareler ile geçirilen doğrunun eğimi, saat başına yüzde olarak. Her örnek hesaba girer, bu yüzden iki uçtan birindeki tek bir tam sayı adımı hızı tek başına belirlemez. Aralık 5 saatlik limit için son bir saat, spend limiti için son 24 saattir; böylece hız bugün nasıl çalıştığınızı izler. Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (spend limiti) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
+- 5 saatlik ve spend limitleri hızı örneklerinden okur: yakın bir aralığın bütün örneklerinden en küçük kareler ile geçirilen doğrunun eğimi, saat başına yüzde olarak. Her örnek hesaba girer, bu yüzden iki uçtan birindeki tek bir tam sayı adımı hızı tek başına belirlemez. Aralık 5 saatlik limit için son bir saat, spend limiti için son 24 saattir; böylece hız şu an nasıl çalıştığını izler. Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (spend limiti) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
 - 7 günlük limit hızı cycle'ın şimdiye kadarki ortalaması olarak okur: yüzde, cycle'ın başından beri geçen süreye bölünür (`resetsAt` eksi 7 gün). Geceler, boş saatler ve hiçbir session'ın çalışmadığı süre de bu süreye girer, yani hız için örnek gerekmez. Hız cycle'ın ikinci gününden itibaren gösterilir. Bu kuraldan önce ölçüldü: 2,4 yoğun saatten sonra %4, `7d hits 100% in ~2d 8h` olarak okundu, çünkü o saatlerin hızı iki güne aralıksız yayıldı; aynı okumanın cycle ortalaması limiti yaklaşık 6 günde doldurur.
 - Status line'ın son kısmı %100'e kalan süre için `(100 - percent) / pace` kullanır. O süreden önce reset olan bir limit dolan sayılmaz.
 - Yeni bir cycle, `resetsAt` 5 dakikadan fazla kaydığında başlar; `resetsAt` taşımayan bir limit içinse yüzde yarım puandan fazla düştüğünde. Yeni bir cycle o limitin örneklerini ve uyarılarını temizler.
@@ -49,27 +49,27 @@ Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir ses
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install limit-watch@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
 
-Tek bir session için yerel bir checkout'tan yükleyin:
+Yerel bir checkout'tan tek session için yüklemek istersen:
 
     CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/limit-watch
 
-Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. Bir Claude subscription ile giriş yapın (`/login`). Bir API key üzerindeki session hiçbir limit bildirmez ve status line `no usage limits reported yet` olarak kalır.
-3. Bir prompt gönderin. Limitler son API cevabından gelir, yani status line ilk cevaptan sonra dolar. Pane'i `/limit-watch` ile açın.
+1. Claude Code'u yeniden başlat.
+2. Bir Claude subscription ile giriş yap (`/login`). API key ile açılan bir session hiçbir limit bildirmez ve status line `no usage limits reported yet` olarak kalır.
+3. Bir prompt gönder. Limitler son API cevabından gelir, yani status line ilk cevaptan sonra dolar. Pane'i `/limit-watch` ile aç.
 
 ## Nereye uzanır
 
-Claude Code 2.1.281 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
@@ -93,7 +93,7 @@ Reach L0, çizer ve hatırlar.
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
