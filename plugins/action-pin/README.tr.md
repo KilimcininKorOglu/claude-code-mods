@@ -11,12 +11,12 @@
 
        action-pin: this edit uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8. A tag or a branch can be moved to other code after a review, so a workflow with write access runs whatever it points at then. Write each as the SHA with the tag as a comment, for example: uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
 
-   En fazla 10 action adıyla anılır ve sorulur; fazlası yalnız sayılır. GitHub cevap vermezse action SHA'sız anılır, not yine de sabitlemeyi ister, hata da farklı bir hata gelene kadar bir kez log'a yazılır.
+   Notta en fazla 10 action adıyla geçer ve yalnız bunlar GitHub'a sorulur; fazlası yalnız sayılır. GitHub cevap vermezse action SHA'sız geçer ama not yine sabitlemeyi ister. Hata log'a bir kez yazılır ve farklı bir hata gelene kadar tekrarlanmaz.
 5. Aynı anda transcript'e tek satır düşer, böylece modele ne söylendiğini görürsün. Satırda workflow ve action'ları vardır, talimat yoktur. Workflow'un adı geçer, çünkü edit'i model gördü, sen görmedin:
 
        action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
 
-   Not ile satır ayrı kanallardır: model satırı, sen de notu hiç okumazsın. Workflow, session'ın başladığı git repository'sine göre gösterilir; repository dışındaysan session'ın dizinine göre. Bu path sidebar kaydının da key'idir, yani her workflow'un kendi kaydı olur. Kök session başlarken bir kez okunur, çünkü Bash'te bir `cd` session'ın kendi dizinini değiştirir.
+   Not ile satır ayrı kanallardır: model satırı, sen de notu hiç okumazsın. Workflow'un path'i, session'ın başladığı git repository'sinin köküne göre yazılır; repository dışındaysan session'ın dizinine göre. Bu path sidebar kaydının da key'idir, yani her workflow'un kendi kaydı olur. Kök session başlarken bir kez okunur, çünkü Bash'teki bir `cd` session'ın dizinini değiştirir.
 6. [sidebar](../sidebar) açıksa bulgu transcript yerine onun stream'ine gider, transcript temiz kalır. Önce kırmızıyla workflow gelir, sonra her action için bir satır: action varsayılan renkte, hareket eden ref kırmızı, gösterdiği commit soluk. Sidebar yoksa satır yukarıdaki gibi transcript'e düşer.
 7. Bulgu, workflow o action'ları sabitleyene kadar açık kalır. Sonraki her Edit ya da Write'tan sonra mod açık workflow'ların hepsini yeniden okur; ref'lerinin hepsi sabitlenmiş olan kapanır. Artık yerinde olmayan workflow da kapanır, çünkü hiçbir action kullanmıyordur. Yerinde olup okunamayan workflow'un bulgusu açık kalır, çünkü okunmamış dosya hiçbir şey kanıtlamaz:
 
@@ -28,7 +28,7 @@
 
        action-pin: 1 action(s) are still used by a moving ref: actions/checkout@v4. Pin each to the commit SHA of that ref, or take the step out.
 
-   Not her prompt'ta değil, turn başına bir kez gelir. Bu olmasa bulgu yalnız edit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
+   Not her prompt'ta değil, turn başına bir kez gelir. Bu not olmasa model bulguyu yalnız edit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
 9. `deny` modunda mod, bir workflow hâlâ hareket eden bir ref'le action kullanıyorken `git commit`, `git push` ve `git merge` komutlarını da durdurur. Durdurmadan önce açık workflow'ların her birini yeniden okur; model bir dosyayı sabitlediyse gate kendiliğinden açılır. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit açık workflow'ların hiçbirini içermiyorsa geçmesine izin verir ve sana kaç bulgunun hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/action-pin mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
 ## Komut
