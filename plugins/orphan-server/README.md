@@ -1,6 +1,6 @@
 # orphan-server
 
-A Claude Code Mod that lists the servers a Bash call of the model started in this repository and left listening on a port, with their age and session and a stop button for each. A server started with `(cmd &)` outlives the session that started it, and nothing else tells you it still runs.
+The model starts a dev server with `(cmd &)`, the session ends, and the server keeps holding its port. Days later you get `address already in use`, and nothing else tells you the server still runs. This mod lists the servers a Bash call of the model started in this repository and left listening on a port, with their age and session and a stop button for each.
 
 ## What it does
 
@@ -26,7 +26,7 @@ A Claude Code Mod that lists the servers a Bash call of the model started in thi
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install orphan-server@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -64,7 +64,7 @@ Reach L2, it runs processes and sends signals.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test

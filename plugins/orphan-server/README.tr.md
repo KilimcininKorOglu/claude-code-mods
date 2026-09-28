@@ -1,6 +1,6 @@
 # orphan-server
 
-Modelin bir Bash çağrısıyla bu repository'de başlattığı ve bir port'u dinler halde bıraktığı sunucuları, yaşları ve session'larıyla birlikte, her biri için bir stop tuşuyla listeleyen bir Claude Code Mod'u. `(cmd &)` ile başlayan bir sunucu onu başlatan session'dan sonra da yaşar ve hâlâ çalıştığını size başka hiçbir şey söylemez.
+Model bir dev sunucusunu `(cmd &)` ile başlatır, session biter ve sunucu port'u tutmaya devam eder. Günler sonra aynı port'u açmak istediğinde `address already in use` alırsın ve sunucunun hâlâ çalıştığını sana başka hiçbir şey söylemez. Bu mod, modelin bir Bash çağrısıyla bu repository'de başlattığı ve bir port'u dinler halde bıraktığı sunucuları yaşları ve session'larıyla birlikte, her biri için bir stop tuşuyla listeler.
 
 ## Ne yapar
 
@@ -26,14 +26,14 @@ Modelin bir Bash çağrısıyla bu repository'de başlattığı ve bir port'u di
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install orphan-server@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. Section ve stop tuşları için [sidebar](../sidebar) mod'unu kurun. O olmadan mod tek bir transcript satırı yazar ve bir sunucuyu `/orphan-server stop <pid>` durdurur.
+1. Claude Code'u yeniden başlat.
+2. Section ve stop tuşları için [sidebar](../sidebar) mod'unu kur. O olmadan mod tek bir transcript satırı yazar ve bir sunucuyu `/orphan-server stop <pid>` durdurur.
 
 ## Nereye uzanır
 
@@ -58,13 +58,13 @@ Reach L2, process çalıştırır ve sinyal gönderir.
 - Hâlâ çalışan bir wrapper üzerinden başlayan sunucu (`npm run dev`, `make serve`) listelenmez, çünkü parent'ı 1 değil, wrapper'dır.
 - Eşleşme zamana ve komut metnine dayanır. Aynı çağrıda aynı argümanlarla başlayan iki process ayrı ayrı birer sunucu olarak okunur ve ikisi de listelenir.
 - Argümanları 3 karakterden kısa bir process hiç eşleşmez.
-- Claude Code dışında elle başlattığınız bir sunucu hiç listelenmez, çünkü hiçbir transcript onun Bash çağrısını tutmaz.
-- `lsof` ve `ps` yalnız sizin process'leriniz için cevap verir.
+- Claude Code dışında elle başlattığın bir sunucu hiç listelenmez, çünkü hiçbir transcript onun Bash çağrısını tutmaz.
+- `lsof` ve `ps` yalnız senin process'lerin için cevap verir.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
