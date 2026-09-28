@@ -130,6 +130,8 @@ type State = {
   polling: boolean
   /** The connection under way, which a hook that needs the daemon waits for. */
   connecting?: Promise<void>
+  /** A relaunch after the daemon went away, shared by every request that found it gone. */
+  relinking?: Promise<void>
   /** Whether the system prompt carries the plugin's note; fixed at a session's start and at /clear. */
   guidance: boolean
   /** Per loop: what its context already shows, and the memories it was reminded of and has not used yet. */
@@ -240,8 +242,14 @@ async function launch($: EngineInterface, layout: Layout): Promise<string> {
   return tokenOf(await $.fs.read(layout.serverFile))
 }
 
-/** One daemon route, for this project and this session: its value, or an error that names the route. */
-async function ask<T>($: EngineInterface, state: State, path: string, body: Record<string, unknown>, ms = CALL_MS): Promise<T> {
+type Sent = { response: { status: number; text: string } } | { gone: string }
+
+/**
+ * One request to the daemon. A refused connection (the daemon closed after five idle minutes) and a
+ * 401 (another session replaced it, so the token changed) read as a daemon that is gone; a request
+ * that runs past its time is only late, and throws.
+ */
+async function send($: EngineInterface, state: State, path: string, body: Record<string, unknown>, ms: number): Promise<Sent> {
   if (state.layout === undefined || state.token === undefined) throw new Error('the daemon is not connected')
   const init = {
     method: 'POST',
@@ -249,8 +257,35 @@ async function ask<T>($: EngineInterface, state: State, path: string, body: Reco
     headers: { authorization: `Bearer ${state.token}`, 'content-type': 'application/json' },
     body: JSON.stringify({ project: state.project, sessionId: await $.session.id(), ...body }),
   }
-  const r = await within($, ms, path, $.http.fetch(`http://sage-memory${path}`, init))
-  return valueOf<T>(path, r.status, r.text)
+  const fetching = $.http.fetch(`http://sage-memory${path}`, init).then(
+    (response): Sent => (response.status === 401 ? { gone: 'the daemon refused the token' } : { response }),
+    (err: unknown): Sent => ({ gone: errorText(err) }),
+  )
+  return within($, ms, path, fetching)
+}
+
+/** Starts or joins the daemon again and reads its token; every request that found it gone waits for this one relaunch. */
+function relink($: EngineInterface, state: State): Promise<void> {
+  state.relinking ??= relaunch($, state).finally(() => {
+    state.relinking = undefined
+  })
+  return state.relinking
+}
+
+async function relaunch($: EngineInterface, state: State): Promise<void> {
+  if (state.layout === undefined) throw new Error('the daemon is not connected')
+  state.token = await launch($, state.layout)
+}
+
+/** One daemon route, for this project and this session: its value, or an error that names the route. A daemon that is gone is started again once. */
+async function ask<T>($: EngineInterface, state: State, path: string, body: Record<string, unknown>, ms = CALL_MS): Promise<T> {
+  let sent = await send($, state, path, body, ms)
+  if ('gone' in sent) {
+    await relink($, state)
+    sent = await send($, state, path, body, ms)
+  }
+  if ('gone' in sent) throw new Error(`${path}: the daemon is gone and did not come back: ${sent.gone}`)
+  return valueOf<T>(path, sent.response.status, sent.response.text)
 }
 
 /** Checks Node, finds the project, starts or joins the daemon, and reads its embeddings. */

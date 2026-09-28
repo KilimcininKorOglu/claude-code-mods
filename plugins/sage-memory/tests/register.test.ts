@@ -43,6 +43,8 @@ type World = {
   toolFails: boolean
   /** What a tool the world runs returns: a file's text for Read. */
   toolText: string
+  /** How the daemon is lost until the launcher runs again: its socket refuses, or it refuses the token. */
+  lost?: 'socket' | 'token'
   tools: string[]
   asked: { system: string; prompt: string; model: string }[]
   modelText?: string
@@ -85,6 +87,7 @@ function world(on: On): World {
       return { value: { exitCode: 0, stdout: common ? '/src/my app/.git\n' : '/src/my app\n', stderr: '' } }
     }
     const stdout = e.argv[1] === '-p' ? w.node : LAUNCH_OK
+    if (e.argv.includes('--dir')) w.lost = undefined
     return { value: { exitCode: 0, stdout, stderr: '' } }
   })
   on('session.id', () => ({ value: 'sess-1' }))
@@ -118,6 +121,8 @@ function world(on: On): World {
     const init = (e.init ?? {}) as { socketPath?: string; headers?: Record<string, string>; body?: string }
     const path = new URL(e.url).pathname
     w.fetches.push({ url: path, socketPath: init.socketPath, auth: init.headers?.authorization, body: JSON.parse(init.body ?? '{}') as Record<string, unknown> })
+    if (w.lost === 'socket') throw new Error('connect ENOENT daemon.sock')
+    if (w.lost === 'token') return { value: { status: 401, ok: false, headers: {}, text: JSON.stringify({ ok: false, error: 'unauthorized' }) } }
     const route = w.routes.get(path)
     const value = typeof route === 'function' ? (route as (body: Record<string, unknown>) => unknown)(w.fetches.at(-1)?.body ?? {}) : route
     const reply = value === undefined ? { ok: false, error: 'no such route' } : { ok: true, value }
@@ -196,6 +201,23 @@ describe('sage-memory', () => {
     expect((await $.command.run(run(''))).text).toBe('on · daemon ready · my app · embeddings off · /sage-memory setup')
     await $.session.start(START)
     expect(w.argvs.filter(a => a.includes('--dir'))).toHaveLength(1)
+  })
+
+  withSidebar('a daemon that closed while idle, or was replaced, is launched again once and the request goes through', async ($, on) => {
+    const w = world(on)
+    w.routes.set('/memory/stats', { project: { total: 2, byStatus: { active: 2 }, byKind: {}, edges: 0 }, user: { total: 0, byStatus: {}, byKind: {}, edges: 0 } })
+    w.routes.set('/audit', [])
+    await $.session.start(START)
+    const launches = () => w.argvs.filter(a => a.includes('--dir')).length
+    expect(launches()).toBe(1)
+    w.lost = 'socket'
+    const [stats, audit] = await Promise.all([$.command.run(run('stats')), $.command.run(run('audit'))])
+    expect(String(stats.text)).toMatch(/^project: 2 memories \(2 active\)/)
+    expect(audit.text).toBe('the audit log is empty')
+    expect(launches()).toBe(2)
+    w.lost = 'token'
+    expect(String((await $.command.run(run('stats'))).text)).toMatch(/^project: 2 memories/)
+    expect(launches()).toBe(3)
   })
 
   withSidebar('answers an unknown word with the usage', async ($, on) => {
