@@ -38,8 +38,8 @@ Not, yalnız ripwire'ın uyumsuz olduğunu kanıtladıklarını değil, bütün 
 
        contract-watch: 1 changed signature(s) still leave a caller behind: parse changed from 1 to 2 parameter(s), 1 caller(s) do not match. Bring each caller to the new signature, or take the signature change back.
 
-   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız edit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
-9. `deny` modunda aynı an, değişmiş bir imza bir çağıranı geride bıraktığı sürece komutu da durdurur. Gate nottan daha dar bir ölçü kullanır: onu yalnız `incompatible` sayısı sıfırdan büyük olan bir kontrol tutar, yani ripwire'ın sabit parametre sayısı kanıtıyla adını verdiği çağıranlar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`, repository başına bir kez) ve commit bu imzaların bulunduğu dosyaların hiçbirini içermiyorsa geçmesine izin verir, sana kaç bulgunun hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/contract-watch mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu not olmasa model bulguyu yalnız edit anında bir kez duyar ve sonra unuturdu; bulgu da pane'de öylece dururdu. Sana yeni bir satır düşmez, çünkü pane aynı bulguyu zaten gösteriyor.
+9. `deny` modunda mod, değişmiş bir imza bir çağıranı geride bıraktığı sürece bu git komutunu da durdurur. Gate nottan daha dar bir ölçü kullanır: onu yalnız `incompatible` sayısı sıfırdan büyük olan bir kontrol tutar, yani ripwire'ın sabit parametre sayısı kanıtıyla adını verdiği çağıranlar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`, repository başına bir kez) ve commit bu imzaların bulunduğu dosyaların hiçbirini içermiyorsa geçmesine izin verir, sana kaç bulgunun hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün bulgular geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/contract-watch mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
 Canlı denemede model Edit'inden sonra notu okudu ve iki çağıranın güncellenene kadar derlenmeyeceğini söyledi.
 
@@ -61,7 +61,7 @@ Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod y
 
 ## Kurulumdan sonra
 
-1. [ripwire](https://github.com/redhat-et/ripwire)'ı kur ve PATH'e ekle. O olmadan, değişen bir imza `the callers were not checked: ...` satırını sarı bir kayıt olarak yazar (sidebar kapalıysa transcript'e), farklı bir hata gelene kadar bir kez; edit de eskisi gibi geçer.
+1. [ripwire](https://github.com/redhat-et/ripwire)'ı kur ve PATH'e ekle. ripwire yoksa değişen bir imza `the callers were not checked: ...` satırını sarı bir kayıt olarak yazar (sidebar kapalıysa transcript'e). Satır farklı bir hata gelene kadar bir kez yazılır ve edit her zamanki gibi geçer.
 2. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
