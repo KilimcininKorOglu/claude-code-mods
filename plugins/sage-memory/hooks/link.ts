@@ -88,6 +88,11 @@ export function openingOf(text: string): string {
   return text.split(/\s+/).slice(0, 10).join(' ')
 }
 
+/** A scope as a stream line names it: `user` memories live in the global store, which the section calls global. */
+export function scopeLabel(scope: string): string {
+  return scope === 'user' ? 'global' : scope
+}
+
 function embeddingText(e: EmbedState, setup: SetupJob | undefined): string {
   if (setup?.state === 'running') return `setup: ${setup.step} ${setup.detail}`.trim()
   if (e.state === 'off') return 'embeddings off · /sage-memory setup'

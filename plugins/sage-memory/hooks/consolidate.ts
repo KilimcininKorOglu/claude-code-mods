@@ -6,7 +6,7 @@
  * keep carry a memory. SAGE's session digest, the answer's opening kept for 14 days, is not written:
  * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
-import { openingOf, wordLine, type Line } from './link.ts'
+import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
 import { ANCHOR_TYPES, KINDS, PATH_ANCHOR_TYPES, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
@@ -330,5 +330,5 @@ export function additionsOf(text: string, sessionId: string, root: string): Reme
 
 /** The line the person reads for a memory the consolidator added; `added` is green. */
 export function addedLine(memory: Memory): Line {
-  return wordLine('', 'added', 'ok', ` (${memory.scope}): ${openingOf(memory.text)}`)
+  return wordLine('', 'added', 'ok', ` (${scopeLabel(memory.scope)}): ${openingOf(memory.text)}`)
 }

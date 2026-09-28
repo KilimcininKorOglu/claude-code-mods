@@ -3,7 +3,7 @@
  * body each call becomes. Descriptions are SAGE's, with the tool names of this plugin and the
  * sentences the code does not keep corrected. Pure code; `register.tsx` makes every call.
  */
-import { openingOf, wordLine, type Line } from './link.ts'
+import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
 import { ANCHOR_TYPES, KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model.ts'
 
 type Schema = Record<string, unknown>
@@ -388,7 +388,7 @@ function rememberedLine(value: unknown): Line | undefined {
   const memory = (value as Partial<RememberResult>).memory
   if (memory === undefined) return undefined
   const opening = openingOf(memory.text)
-  return addedBy('remember', value) ? modelLine('added', 'ok', ` (${memory.scope}): ${opening}`) : modelLine('merged', 'warn', ` into ${memory.id}: ${opening}`)
+  return addedBy('remember', value) ? modelLine('added', 'ok', ` (${scopeLabel(memory.scope)}): ${opening}`) : modelLine('merged', 'warn', ` into ${memory.id}: ${opening}`)
 }
 
 /** `: <reason>` when the model gave one. */

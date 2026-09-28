@@ -432,26 +432,33 @@ describe('memory tools', () => {
 
   withSidebar('what the model adds, merges, rewrites, deletes or forgets is named with only its verb coloured, and an addition counts', async ($, on) => {
     const w = readyWorld(on)
-    w.routes.set('/memory/remember', (body: Record<string, unknown>) => ({ memory: PNPM, outcome: (body.input as { text: string }).text === 'again' ? 'merged' : 'added' }))
+    const GLOBAL = { ...PNPM, id: 'm9', scope: 'user', text: 'Answer in Turkish.' }
+    w.routes.set('/memory/remember', (body: Record<string, unknown>) => {
+      const input = body.input as { text: string; scope?: string }
+      return { memory: input.scope === 'user' ? GLOBAL : PNPM, outcome: input.text === 'again' ? 'merged' : 'added' }
+    })
     w.routes.set('/memory/update', { memory: PNPM })
     w.routes.set('/memory/delete', { deleted: true })
     w.routes.set('/memory/forget', { removed: ['m3', 'm4'], skippedPermanent: [] })
     await $.session.start(START)
     await $.tool.call({ tool: TOOL('remember'), text: PNPM.text } as never)
+    // A `user` memory lives in the global store, so its line says global, as the section's count does.
+    await $.tool.call({ tool: TOOL('remember'), text: GLOBAL.text, scope: 'user' } as never)
     await $.tool.call({ tool: TOOL('remember'), text: 'again' } as never)
     await $.tool.call({ tool: TOOL('update'), id: 'm2', text: 'The limit is 20.' } as never)
     await $.tool.call({ tool: TOOL('delete'), id: 'm1', force: true, reason: 'the daemon reconnects by itself since 5a9c2c4' } as never)
     await $.tool.call({ tool: TOOL('forget'), query: ' old parser ', force: true } as never)
     expect(streamOf(w, 'model')).toEqual([
       'the model added (project): Install packages with pnpm, never with npm, in this repository.',
+      'the model added (global): Answer in Turkish.',
       'the model merged into m1: Install packages with pnpm, never with npm, in this repository.',
       'the model updated m2: "The limit is 20."',
       'the model deleted m1: the daemon reconnects by itself since 5a9c2c4',
       'the model forgot 2 memory(ies) matching "old parser"',
     ])
-    expect(painted(w, 'model')).toEqual(['ok:added', 'warn:merged', 'warn:updated', 'error:deleted', 'error:forgot'])
-    // The merge wrote no new memory, so the session counts one addition.
-    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/ · added 1$/)
+    expect(painted(w, 'model')).toEqual(['ok:added', 'ok:added', 'warn:merged', 'warn:updated', 'error:deleted', 'error:forgot'])
+    // The merge wrote no new memory, so the session counts two additions.
+    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/ · added 2$/)
   })
 
   withSidebar('remember writes through the daemon with this session as its source, a session memory owned by it', async ($, on) => {
