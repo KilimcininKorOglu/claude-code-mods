@@ -42,6 +42,24 @@ import {
   type TurnEvidence,
 } from './consolidate.ts'
 import { CURATE_MS, CURATE_TOKENS, CURATED_FILES, CURATOR_SYSTEM, curatorPrompt, emptyTally, MAX_TARGETS, PER_FILE, stepsOf, tallyLine, type Step, type Tally } from './curate.ts'
+import {
+  auditText,
+  bulletsOf,
+  candidatesText,
+  detailText,
+  fileText,
+  flagsOf,
+  graphText,
+  hygieneText,
+  importFlagsOf,
+  importInput,
+  listText,
+  patchOf as flagPatchOf,
+  rememberInputOf,
+  statsText,
+  verifyText,
+  wordsOf,
+} from './commands.ts'
 import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture.ts'
 import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact.ts'
 import {
@@ -69,13 +87,23 @@ import {
   type Score,
 } from './triage.ts'
 import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
-import type { Candidate, Memory, MemoryPage, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
+import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol.ts'
 
 const ENABLED_KEY = 'enabled'
 const SECTION = { consumer: 'sage-memory', key: 'state' }
-const USAGE = 'expects nothing (the state), on, off, setup, triage [apply], compact [apply], daily [on|off] or capture outcomes|errors [on|off]'
+const USAGE = [
+  'expects one of:',
+  '  (nothing) the state · on · off · setup',
+  '  show <id> · search <query> · file <path> · graph <id|query> · audit [n] · stats',
+  '  remember [flags] <text> · update <id> [flags] [text] · delete <id> · forget <query> · recover <id>',
+  '  audience remember --role <type> <text> | clear <id> | transfer <from> <to>',
+  '  hygiene · verify [id] · candidates [list|accept|reject|resolve] · triage [apply] · compact [apply]',
+  '  import <path> [--section <heading>] [--always] [--kind <kind>] [--scope project|user]',
+  '  model [name] · remind tools|prompt|subagent [on|off] · consolidate|curate [on|off] · daily [on|off] · capture outcomes|errors [on|off]',
+  'flags: --kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
+].join('\n')
 
 /** How long each kind of call may take before the mod names it late. */
 const NODE_MS = 10_000
@@ -317,12 +345,239 @@ async function dailyCommand($: EngineInterface, state: State, rest: string): Pro
   return answer
 }
 
-/** The subcommands that act on the memories or their settings. */
-async function jobCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+/** The answer while the daemon cannot take a request, or undefined once it can. */
+async function notReady(state: State): Promise<string | undefined> {
+  return (await isReady(state)) ? undefined : `the daemon is not ready: ${statusText(state.enabled, state.link, state.project?.name ?? '')}`
+}
+
+// ── Reading ────────────────────────────────────────────────────────────
+
+async function showCommand($: EngineInterface, state: State, id: string): Promise<string> {
+  if (id === '') return 'expects show <id>'
+  const memory = await ask<Memory | null>($, state, '/memory/get', { id })
+  return memory === null ? `no memory ${id}` : detailText(memory)
+}
+
+async function searchCommand($: EngineInterface, state: State, query: string): Promise<string> {
+  if (query === '') return 'expects search <query>'
+  return listText(await ask<Memory[]>($, state, '/memory/search', { query, limit: 30, includeStale: true, allSessions: true }), `nothing matches "${query}"`)
+}
+
+async function fileCommand($: EngineInterface, state: State, path: string): Promise<string> {
+  if (path === '') return 'expects file <path>'
+  return fileText(await ask<FileMemories>($, state, '/memory/for-file', { path, allSessions: true }))
+}
+
+async function graphCommand($: EngineInterface, state: State, query: string): Promise<string> {
+  if (query === '') return 'expects graph <id or query>'
+  return graphText(await ask<GraphEdge[]>($, state, '/memory/graph', { query, depth: 2, limit: 60, allSessions: true }))
+}
+
+async function auditCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const limit = /^\d+$/.test(rest) ? Math.min(Number(rest), 1000) : 30
+  return auditText(await ask<AuditEntry[]>($, state, '/audit', { limit: Math.max(limit, 1) }))
+}
+
+async function statsCommand($: EngineInterface, state: State): Promise<string> {
+  return statsText(await ask<{ project: StoreStats; user: StoreStats }>($, state, '/memory/stats', {}))
+}
+
+async function readCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+  if (word === 'show') return showCommand($, state, rest)
+  if (word === 'search') return searchCommand($, state, rest)
+  if (word === 'file') return fileCommand($, state, rest)
+  if (word === 'graph') return graphCommand($, state, rest)
+  return word === 'audit' ? auditCommand($, state, rest) : statsCommand($, state)
+}
+
+// ── Writing ────────────────────────────────────────────────────────────
+
+async function rememberCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const flags = flagsOf(wordsOf(rest))
+  if (flags.errors.length > 0 || flags.text === '') return [...flags.errors, flags.text === '' ? 'expects remember [flags] <text>' : ''].filter(line => line !== '').join('\n')
+  const result = await ask<RememberResult>($, state, '/memory/remember', { input: rememberInputOf(flags, await $.session.id()) })
+  return `${result.outcome === 'added' ? 'added' : 'merged into'} ${detailText(result.memory)}`
+}
+
+async function updateCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const [id = '', ...words] = wordsOf(rest)
+  const flags = flagsOf(words)
+  const patch = flagPatchOf(flags)
+  if (id === '' || Object.keys(patch).length === 0) return 'expects update <id> and at least one flag or a new text'
+  if (flags.errors.length > 0) return flags.errors.join('\n')
+  const result = await ask<{ memory: Memory }>($, state, '/memory/update', { id, patch })
+  return `updated ${detailText(result.memory)}`
+}
+
+/** The person's own delete is the authorization `force` asks for. */
+async function deleteCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const [id = '', ...reason] = wordsOf(rest)
+  if (id === '') return 'expects delete <id> [reason]'
+  await ask($, state, '/memory/delete', { id, force: true, reason: reason.join(' ') || 'deleted by the person' })
+  return `deleted ${id}; /sage-memory recover ${id} brings it back`
+}
+
+async function forgetCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const flags = flagsOf(wordsOf(rest))
+  if (flags.text.length < 3) return 'expects forget <query of at least 3 characters> [--scope project|user|session]'
+  const result = await ask<{ removed: string[]; skippedPermanent: string[] }>($, state, '/memory/forget', { query: flags.text, scope: flags.scope, force: true })
+  return `forgot ${result.removed.length} memory(ies)${result.skippedPermanent.length > 0 ? `, kept ${result.skippedPermanent.length} permanent` : ''}`
+}
+
+async function recoverCommand($: EngineInterface, state: State, id: string): Promise<string> {
+  if (id === '') return 'expects recover <id>'
+  return `recovered ${detailText((await ask<{ memory: Memory }>($, state, '/memory/recover', { id, reason: 'recovered by the person' })).memory)}`
+}
+
+/** The memories written for one subagent type move to another, keeping their modes. */
+async function transferAudience($: EngineInterface, state: State, from: string, to: string): Promise<string> {
+  const scoped = (await allMemories($, state)).filter(m => m.audience?.roles?.some(role => role.toLowerCase() === from.toLowerCase()))
+  const failed: string[] = []
+  let moved = 0
+  for (const m of scoped) {
+    const roles = [...new Set((m.audience?.roles ?? []).map(role => (role.toLowerCase() === from.toLowerCase() ? to : role)))]
+    if (await attempt(failed, m.id, () => ask($, state, '/memory/update', { id: m.id, patch: { audience: { ...m.audience, roles } } }))) moved += 1
+  }
+  return [`moved ${moved} of ${scoped.length} memory(ies) from ${from} to ${to}`, ...failed.map(line => `  failed: ${line}`)].join('\n')
+}
+
+async function audienceCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const [sub = '', ...words] = wordsOf(rest)
+  if (sub === 'remember') return audienceRemember($, state, words, rest)
+  if (sub === 'clear' && words[0] !== undefined) return updateAudience($, state, words[0])
+  if (sub === 'transfer' && words.length === 2) return transferAudience($, state, words[0] ?? '', words[1] ?? '')
+  return 'expects audience remember --role <type> <text> | clear <id> | transfer <from-type> <to-type>'
+}
+
+/** A memory for a subagent type or a permission mode; one of the two is required. */
+async function audienceRemember($: EngineInterface, state: State, words: readonly string[], rest: string): Promise<string> {
+  const flags = flagsOf(words)
+  if (flags.roles === undefined && flags.modes === undefined) return 'expects audience remember --role <type> [--mode <mode>] <text>'
+  return rememberCommand($, state, rest.replace(/^\s*remember\s*/, ''))
+}
+
+async function updateAudience($: EngineInterface, state: State, id: string): Promise<string> {
+  await ask($, state, '/memory/update', { id, patch: { audience: {} } })
+  return `${id} is general project memory now`
+}
+
+async function writeCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+  if (word === 'remember') return rememberCommand($, state, rest)
+  if (word === 'update') return updateCommand($, state, rest)
+  if (word === 'delete') return deleteCommand($, state, rest)
+  if (word === 'forget') return forgetCommand($, state, rest)
+  return word === 'recover' ? recoverCommand($, state, rest) : audienceCommand($, state, rest)
+}
+
+// ── Upkeep ─────────────────────────────────────────────────────────────
+
+async function hygieneCommand($: EngineInterface, state: State): Promise<string> {
+  const runs = await ask<{ project: HygieneRun; user: HygieneRun }>($, state, '/memory/hygiene', {})
+  return [runs.project, runs.user].map(run => (run.state === 'done' ? hygieneText(run.report) : `hygiene ${run.state}`)).join('\n')
+}
+
+async function verifyCommand($: EngineInterface, state: State, id: string): Promise<string> {
+  return verifyText(await ask<VerifyReport>($, state, '/memory/verify', id === '' ? {} : { id }))
+}
+
+async function candidatesCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const [action = 'list', id = '', ...more] = wordsOf(rest)
+  if (action === 'list') return candidatesText(await ask<Candidate[]>($, state, '/candidates/list', {}))
+  if (id === '') return 'expects candidates [list | accept <id> | reject <id> [reason] | resolve <id> delete|archive|keep]'
+  return candidateAction($, state, action, id, more)
+}
+
+type Accepted = { candidate: Candidate; memory?: Memory; resolution?: { decision: string; applied: boolean }; alreadyResolved: boolean }
+
+/** What an accept did: a new memory, a review's decision, or nothing for a candidate resolved before. */
+function acceptedText(accepted: Accepted): string {
+  if (accepted.alreadyResolved) return `${accepted.candidate.id} was ${accepted.candidate.status} already`
+  if (accepted.resolution !== undefined) return `accepted the review: ${accepted.resolution.decision}${accepted.resolution.applied ? '' : ' (the target was left as it is)'}`
+  return accepted.memory === undefined ? `accepted ${accepted.candidate.id}` : `accepted: ${detailText(accepted.memory)}`
+}
+
+async function candidateAction($: EngineInterface, state: State, action: string, id: string, more: readonly string[]): Promise<string> {
+  if (action === 'accept') return acceptedText(await ask<Accepted>($, state, '/candidates/accept', { id }))
+  if (action === 'reject') {
+    await ask($, state, '/candidates/reject', { id, reason: more.join(' ') || 'rejected by the person' })
+    return `rejected ${id}`
+  }
+  if (action !== 'resolve') return `unknown candidates action ${action}`
+  const resolution = await ask<{ decision: string; applied: boolean }>($, state, '/candidates/resolve', { id, decision: more[0] ?? '', reason: more.slice(1).join(' ') || undefined })
+  return `resolved ${id}: ${resolution.decision}${resolution.applied ? '' : ' (the target was left as it is)'}`
+}
+
+/** Writes each bullet of a markdown file, or of one section of it, as a memory. */
+async function importCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const flags = importFlagsOf(wordsOf(rest))
+  if (flags.errors.length > 0) return [...flags.errors, 'expects import <path> [--section <heading>] [--always] [--kind <kind>] [--scope project|user]'].join('\n')
+  const bullets = bulletsOf(await $.fs.read(flags.path), flags.section)
+  if (bullets === undefined) return `${flags.path} has no heading "${flags.section ?? ''}"`
+  const sessionId = await $.session.id()
+  const failed: string[] = []
+  let added = 0
+  for (const bullet of bullets) if (await attempt(failed, bullet.slice(0, 60), () => ask($, state, '/memory/remember', { input: importInput(bullet, flags, sessionId) }))) added += 1
+  return [`imported ${added} of ${bullets.length} bullet(s) from ${flags.path}`, ...failed.map(line => `  refused: ${line}`)].join('\n')
+}
+
+async function upkeepCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+  if (word === 'hygiene') return hygieneCommand($, state)
+  if (word === 'verify') return verifyCommand($, state, rest)
+  if (word === 'candidates') return candidatesCommand($, state, rest)
   if (word === 'triage') return triageCommand($, state, rest)
   if (word === 'compact') return compactCommand($, state, rest)
-  if (word === 'daily') return dailyCommand($, state, rest)
-  return word === 'capture' ? captureCommand($, rest) : USAGE
+  return importCommand($, state, rest)
+}
+
+// ── Settings ───────────────────────────────────────────────────────────
+
+async function modelCommand($: EngineInterface, name: string): Promise<string> {
+  if (name === '') return `the LLM jobs use ${await jobModel($)}`
+  await $.store.set('model', name)
+  return `the LLM jobs use ${name} from now on`
+}
+
+const REMINDS: Record<string, { key: string; what: string }> = {
+  tools: { key: 'remindTools', what: 'reminders after file tools' },
+  prompt: { key: 'remindPrompt', what: 'reminders with a prompt' },
+  subagent: { key: 'remindSubagent', what: 'reminders for a subagent' },
+}
+
+/** An on-by-default setting: stored false turns it off. */
+async function onByDefault($: EngineInterface, key: string, what: string, word: string): Promise<string> {
+  if (word !== 'on' && word !== 'off') return `${what} ${(await $.store.get(key)) === false ? 'off' : 'on'}`
+  await $.store.set(key, word === 'on')
+  return `${what} ${word}`
+}
+
+async function remindCommand($: EngineInterface, rest: string): Promise<string> {
+  const [which = '', word = ''] = rest.toLowerCase().split(/\s+/)
+  const remind = REMINDS[which]
+  return remind === undefined ? 'expects remind tools|prompt|subagent [on|off]' : onByDefault($, remind.key, remind.what, word)
+}
+
+async function settingCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+  const value = rest.trim().toLowerCase()
+  if (word === 'model') return modelCommand($, rest.trim())
+  if (word === 'remind') return remindCommand($, rest)
+  if (word === 'consolidate') return onByDefault($, 'consolidate', 'the consolidator', value)
+  if (word === 'curate') return onByDefault($, 'curate', 'the curator', value)
+  return word === 'daily' ? dailyCommand($, state, rest) : captureCommand($, rest)
+}
+
+const READ_WORDS = new Set(['show', 'search', 'file', 'graph', 'audit', 'stats'])
+const WRITE_WORDS = new Set(['remember', 'update', 'delete', 'forget', 'recover', 'audience'])
+const UPKEEP_WORDS = new Set(['hygiene', 'verify', 'candidates', 'triage', 'compact', 'import'])
+const SETTING_WORDS = new Set(['model', 'remind', 'consolidate', 'curate', 'daily', 'capture'])
+
+/** The subcommands past on, off and setup: a setting answers while the daemon is down, the rest need it. */
+async function jobCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+  if (SETTING_WORDS.has(word)) return settingCommand($, state, word, rest)
+  if (!READ_WORDS.has(word) && !WRITE_WORDS.has(word) && !UPKEEP_WORDS.has(word)) return USAGE
+  const down = await notReady(state)
+  if (down !== undefined) return down
+  if (READ_WORDS.has(word)) return readCommand($, state, word, rest.trim())
+  return WRITE_WORDS.has(word) ? writeCommand($, state, word, rest) : upkeepCommand($, state, word, rest.trim())
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
@@ -408,7 +663,7 @@ async function afterBatch($: EngineInterface, state: State, calls: readonly Tool
   const loop = loopOf(state, loopKey)
   for (const call of calls) loop.visible = seen(loop.visible, responseText(call.tool_response))
   const reminding = calls.filter(isReminding)
-  if (reminding.length === 0 || !(await isReady(state))) return undefined
+  if (reminding.length === 0 || !(await isReady(state)) || (await $.store.get('remindTools')) === false) return undefined
   const budget = await budgetOf($, loopKey)
   if (budget.count === 0) return undefined
   const paths = [...new Set(reminding.flatMap(pathsOf))]
@@ -422,7 +677,7 @@ async function afterBatch($: EngineInterface, state: State, calls: readonly Tool
 /** The reminder with a prompt the person typed, or nothing. */
 async function beforePrompt($: EngineInterface, state: State, text: string): Promise<string | undefined> {
   await follow($, state)
-  if (!(await isReady(state))) return undefined
+  if (!(await isReady(state)) || (await $.store.get('remindPrompt')) === false) return undefined
   const body = { sessionId: await $.session.id(), loop: MAIN_LOOP, query: text.slice(0, 4000), limit: CANDIDATES }
   const ranking = await ask<Ranking>($, state, '/remind/prompt', body, REMIND_MS)
   return deliver($, state, MAIN_LOOP, 'prompt', promptReminder(ranking.candidates, loopOf(state, MAIN_LOOP).visible))
@@ -433,7 +688,7 @@ type Spawn = { prompt: string; subagentType: string; permissionMode?: string }
 /** What a subagent starts with, or nothing. */
 async function forSubagent($: EngineInterface, state: State, e: Spawn): Promise<Block | undefined> {
   await follow($, state)
-  if (!(await isReady(state))) return undefined
+  if (!(await isReady(state)) || (await $.store.get('remindSubagent')) === false) return undefined
   const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt.slice(0, 4000) }
   const ranking = await ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
   const block = subagentReminder(ranking.audience, ranking.task)

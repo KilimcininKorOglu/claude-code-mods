@@ -47,10 +47,11 @@ type World = {
   curatorText?: string
   rateText?: string
   mergeText?: string
+  files: Map<string, string>
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], asked: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], asked: [], files: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -68,7 +69,7 @@ function world(on: On): World {
     return { value: true }
   })
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/k' : undefined }))
-  on('fs.read', () => ({ value: JSON.stringify({ token: 'secret-token' }) }))
+  on('fs.read', (_, e) => ({ value: e.path.endsWith('server.json') ? JSON.stringify({ token: 'secret-token' }) : (w.files.get(e.path) ?? '') }))
   on('process.run', (_, e) => {
     w.argvs.push([...e.argv])
     if (e.argv[0] === 'git') {
@@ -176,7 +177,7 @@ describe('sage-memory', () => {
   withSidebar('answers an unknown word with the usage', async ($, on) => {
     world(on)
     await $.session.start(START)
-    expect((await $.command.run(run('frobnicate'))).text).toBe('expects nothing (the state), on, off, setup, triage [apply], compact [apply], daily [on|off] or capture outcomes|errors [on|off]')
+    expect(String((await $.command.run(run('frobnicate'))).text)).toMatch(/^expects one of:\n  \(nothing\) the state · on · off · setup\n/)
   })
 })
 
@@ -564,5 +565,60 @@ describe('triage, compact and capture', () => {
     const inputs = bodiesOf(w, '/memory/remember').map(b => b.input as Record<string, unknown>)
     expect(inputs).toHaveLength(1)
     expect(inputs[0]).toMatchObject({ kind: 'error_pattern', anchors: [{ type: 'command', command: 'npm test' }] })
+  })
+})
+
+describe('commands', () => {
+  withSidebar('remember reads its flags: a session memory is owned by this session, the person is its source', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: PNPM, outcome: 'added' })
+    await $.session.start(START)
+    const r = await $.command.run(run('remember --kind convention --scope session --tag build,tools --symbol "src/a b.ts#run" --importance 0.9 Use pnpm here'))
+    expect(String(r.text)).toMatch(/^added m1 \[convention · project · active\]/)
+    expect(bodiesOf(w, '/memory/remember')[0]?.input).toEqual({
+      text: 'Use pnpm here', kind: 'convention', scope: 'session', tags: ['build', 'tools'], anchors: [{ type: 'symbol', path: 'src/a b.ts', symbol: 'run' }],
+      importance: 0.9, ownerSessionId: 'sess-1', sources: [{ type: 'user', sessionId: 'sess-1' }],
+    })
+    expect(String((await $.command.run(run('remember --importance 2 x'))).text)).toBe('--importance must be a number from 0 to 1 (got "2")')
+  })
+
+  withSidebar('update, delete, forget and recover reach their routes; the person authorizes a delete', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/update', { memory: PNPM, superseded: [] })
+    w.routes.set('/memory/delete', { deleted: true })
+    w.routes.set('/memory/forget', { removed: ['a', 'b'], skippedPermanent: ['c'] })
+    w.routes.set('/memory/recover', { memory: PNPM })
+    await $.session.start(START)
+    await $.command.run(run('update m1 --policy always --freshness 0.5'))
+    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { contextPolicy: 'always', freshness: 0.5 } })
+    expect((await $.command.run(run('delete m1 obsolete rule'))).text).toBe('deleted m1; /sage-memory recover m1 brings it back')
+    expect(bodiesOf(w, '/memory/delete')[0]).toMatchObject({ id: 'm1', force: true, reason: 'obsolete rule' })
+    expect((await $.command.run(run('forget ab'))).text).toBe('expects forget <query of at least 3 characters> [--scope project|user|session]')
+    expect((await $.command.run(run('forget pnpm --scope user'))).text).toBe('forgot 2 memory(ies), kept 1 permanent')
+    expect(String((await $.command.run(run('recover m1'))).text)).toMatch(/^recovered m1/)
+  })
+
+  withSidebar('import writes each bullet of one section as a memory kept in view at every start', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: PNPM, outcome: 'added' })
+    w.files.set('/notes/MEMORY.md', '# Project\n\n## CRITICAL RULES\n\n- Use pnpm.\n- Run the tests\n  with the cache off.\n\n## Other\n\n- Not this one.\n')
+    await $.session.start(START)
+    const r = await $.command.run(run('import /notes/MEMORY.md --section "CRITICAL RULES" --always --scope user'))
+    expect(r.text).toBe('imported 2 of 2 bullet(s) from /notes/MEMORY.md')
+    expect(bodiesOf(w, '/memory/remember').map(b => b.input)).toEqual([
+      { text: 'Use pnpm.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'always', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
+      { text: 'Run the tests with the cache off.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'always', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
+    ])
+    expect((await $.command.run(run('import /notes/MEMORY.md --section Missing'))).text).toBe('/notes/MEMORY.md has no heading "Missing"')
+  })
+
+  withSidebar('a reminder the person turned off is not asked for, and a setting answers while the daemon is down', async ($, on) => {
+    const w = readyWorld(on)
+    await $.session.start(START)
+    expect((await $.command.run(run('remind prompt off'))).text).toBe('reminders with a prompt off')
+    await $.prompt.submit(typed('which package manager do we use?'))
+    expect(bodiesOf(w, '/remind/prompt')).toEqual([])
+    expect((await $.command.run(run('model sonnet'))).text).toBe('the LLM jobs use sonnet from now on')
+    expect(w.store.get('model')).toBe('sonnet')
   })
 })
