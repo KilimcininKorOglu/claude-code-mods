@@ -12,6 +12,9 @@ const USAGE = 'expects nothing (the list), stop <pid>, on or off'
 /** How long a server has to end after SIGTERM before it gets SIGKILL. */
 const GRACE_MS = 5000
 
+/** How often an idle session scans again, so a server another session left or stopped shows without a turn. */
+const SCAN_MS = 60_000
+
 /** What one listener was found to be, so a later scan does not read the transcripts for it again. */
 type Seen = { startedAt: number; orphan: Orphan | undefined }
 
@@ -19,6 +22,7 @@ type Seen = { startedAt: number; orphan: Orphan | undefined }
  * The on/off setting, the repository whose servers are read, the transcript directories of its
  * sessions, this session's id, what each listener was found to be, the servers of the last scan by pid,
  * the pids the sidebar shows, the pids the last transcript line named, and the work in flight, so two scans never interleave.
+ * `ticking` holds while a timed scan waits or runs, and `failed` is the failure line a timed scan logged last.
  */
 type State = {
   enabled: boolean
@@ -30,6 +34,8 @@ type State = {
   shown: string
   logged: string
   chain: Promise<void>
+  ticking: boolean
+  failed: string
 }
 
 function errorText(err: unknown): string {
@@ -139,6 +145,27 @@ function later($: EngineInterface, state: State): void {
   })
 }
 
+/**
+ * The timed scan of an idle session. A tick that fires while the last one still waits or runs is
+ * skipped, and a failure is logged once until a scan passes again, so a broken lsof does not write a
+ * line a minute.
+ */
+async function tick($: EngineInterface, state: State): Promise<void> {
+  if (state.ticking) return
+  state.ticking = true
+  try {
+    await readSettings($, state)
+    if (state.enabled) await serial(state, () => scan($, state))
+    state.failed = ''
+  } catch (err) {
+    const text = `the servers were not read: ${errorText(err)}`
+    if (text !== state.failed) $.ui.log(text)
+    state.failed = text
+  } finally {
+    state.ticking = false
+  }
+}
+
 /** The process as it runs now, or undefined when it is gone. */
 async function readProc($: EngineInterface, pid: number): Promise<Proc | undefined> {
   const procs = procsOf(await output($, ['ps', '-o', 'pid=,ppid=,etime=,args=', '-p', String(pid)]), await $.clock.now())
@@ -191,7 +218,7 @@ async function setEnabled($: EngineInterface, state: State, on: boolean): Promis
   state.enabled = on
   await $.store.set(ENABLED_KEY, on)
   if (on) later($, state)
-  return on ? 'on: the servers are read at session start and at the end of each turn' : 'off: the servers are read only when you run /orphan-server'
+  return on ? 'on: the servers are read at session start, at the end of each turn and every 60 s' : 'off: the servers are read only when you run /orphan-server'
 }
 
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
@@ -204,7 +231,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, root: '', dirs: [], sid: '', seen: new Map(), listed: new Map(), shown: '', logged: '', chain: Promise.resolve() }
+  const state: State = { enabled: true, root: '', dirs: [], sid: '', seen: new Map(), listed: new Map(), shown: '', logged: '', chain: Promise.resolve(), ticking: false, failed: '' }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -215,6 +242,7 @@ export const register: Register = on => {
     state.dirs = config === '' ? [] : [...new Set([transcriptDir(config, state.root), transcriptDir(config, e.cwd)])]
     await $.command.register({ name: 'orphan-server', description: 'Servers the model started that still listen in this repository: list, stop <pid>, on, off (orphan-server)', argumentHint: '[stop <pid> | on | off]', immediate: true })
     if (state.enabled) later($, state)
+    if (e.isInteractive) $.clock.every(SCAN_MS, () => void tick($, state))
     return r
   })
 

@@ -4,7 +4,7 @@ The model starts a dev server with `(cmd &)`, the session ends, and the server k
 
 ## What it does
 
-1. At session start, at the end of each main-loop turn and at `/orphan-server`, the mod reads the processes that listen on a TCP port (`lsof -nP -iTCP -sTCP:LISTEN`).
+1. At session start, at the end of each main-loop turn, every 60 s in an interactive session and at `/orphan-server`, the mod reads the processes that listen on a TCP port (`lsof -nP -iTCP -sTCP:LISTEN`). The 60 s scan shows a server another session left, or takes down the row of one stopped elsewhere, while this session is idle. A 60 s scan that fails logs its reason once, until a scan passes again.
 2. It keeps only a process whose parent is 1 (it outlived the shell that started it) and whose working directory is the session's git repository or a directory under it.
 3. It reads this repository's transcripts for the Bash call that started each one: a call that ran while the process started (after the model wrote it, before its result) and whose command holds the process's arguments. Only the transcript lines of the minutes that call can sit in are read, and each process is looked up once.
 4. The servers found stand in one [sidebar](../sidebar) section, oldest first, with a stop button each. In each row the ports are yellow, the age yellow and red past one day, and another session's id faint; `this session` stays in the default colour:
@@ -37,17 +37,17 @@ Function hooks are early access, and nothing loads without the flag. To keep it 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.284:
 
     ❯ ./register.ts hooks: session.start, command.run{command=orphan-server}, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via later, stop), $.clock.now (via listenersIn, readProc, runCommand, show, toSidebar), $.command.register, $.env.get, $.process.run (via output, rootOf), $.session.id, $.sidebar.clear (via toSidebar), $.sidebar.set (via toSidebar, toStream), $.store.get (via readSettings), $.store.set (via setEnabled), $.ui.log (via later, show, stop, toStream)
+    ❯ ./register.ts calls: $.clock.after (via later, stop), $.clock.every, $.clock.now (via listenersIn, readProc, runCommand, show, toSidebar), $.command.register, $.env.get, $.process.run (via output, rootOf), $.session.id, $.sidebar.clear (via toSidebar), $.sidebar.set (via toSidebar, toStream), $.store.get (via readSettings), $.store.set (via setEnabled), $.ui.log (via later, show, stop, tick, toStream)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L2, it runs processes and sends signals.
 
     1. Reads:    the listening TCP processes (pid, ports, parent, age, arguments, working directory), and the transcript lines of this repository's sessions for the minutes around each one's start
-    2. Runs:     git rev-parse --show-toplevel once per session; lsof, ps and grep at session start, at each turn's end and at /orphan-server; kill -TERM and kill -KILL for a server you stop
+    2. Runs:     git rev-parse --show-toplevel once per session; lsof, ps and grep at session start, at each turn's end, every 60 s in an interactive session and at /orphan-server; kill -TERM and kill -KILL for a server you stop
     3. Sends:    nothing to the model and nothing to the network
     4. Persists: in $.store, the on/off setting
     5. Hostile input: a process's arguments and a transcript's commands are drawn as text and compared as text, never run; the pid of a stop is read again before a signal is sent

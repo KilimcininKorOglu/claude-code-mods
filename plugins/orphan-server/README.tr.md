@@ -4,7 +4,7 @@ Model bir dev sunucusunu `(cmd &)` ile başlatır, session biter ve sunucu port'
 
 ## Ne yapar
 
-1. Session başında, her ana loop turn'ünün sonunda ve `/orphan-server` komutunda mod, bir TCP port'unu dinleyen process'leri okur (`lsof -nP -iTCP -sTCP:LISTEN`).
+1. Session başında, her ana loop turn'ünün sonunda, etkileşimli bir session'da 60 sn'de bir ve `/orphan-server` komutunda mod, bir TCP port'unu dinleyen process'leri okur (`lsof -nP -iTCP -sTCP:LISTEN`). 60 sn'lik tarama, bu session boştayken başka bir session'ın bıraktığı sunucuyu gösterir ya da başka yerde durdurulan bir sunucunun satırını kaldırır. Başarısız olan bir 60 sn'lik tarama sebebini bir kere yazar; bir tarama yeniden geçene kadar tekrar yazmaz.
 2. Yalnız parent'ı 1 olan (onu başlatan shell'den sonra yaşayan) ve working directory'si session'ın git repository'si ya da onun altındaki bir dizin olan process'i tutar.
 3. Her biri için bu repository'nin transcript'lerinde onu başlatan Bash çağrısını okur: process başladığında çalışan (model onu yazdıktan sonra, sonucundan önce) ve komutu process'in argümanlarını içeren bir çağrı. Transcript'lerin yalnız o çağrının düşebileceği dakikalardaki satırları okunur ve her process bir kere aranır.
 4. Bulunan sunucular tek bir [sidebar](../sidebar) section'ında, en eskisi önce, her biri bir stop tuşuyla durur. Her satırda portlar sarı, yaş sarı ve bir günü geçince kırmızı, başka bir session'ın id'si soluktur; `this session` varsayılan renkte kalır:
@@ -37,17 +37,17 @@ Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey 
 
 ## Nereye uzanır
 
-Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.284 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=orphan-server}, turn.complete
-    ❯ ./register.ts calls: $.clock.after (via later, stop), $.clock.now (via listenersIn, readProc, runCommand, show, toSidebar), $.command.register, $.env.get, $.process.run (via output, rootOf), $.session.id, $.sidebar.clear (via toSidebar), $.sidebar.set (via toSidebar, toStream), $.store.get (via readSettings), $.store.set (via setEnabled), $.ui.log (via later, show, stop, toStream)
+    ❯ ./register.ts calls: $.clock.after (via later, stop), $.clock.every, $.clock.now (via listenersIn, readProc, runCommand, show, toSidebar), $.command.register, $.env.get, $.process.run (via output, rootOf), $.session.id, $.sidebar.clear (via toSidebar), $.sidebar.set (via toSidebar, toStream), $.store.get (via readSettings), $.store.set (via setEnabled), $.ui.log (via later, show, stop, tick, toStream)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L2: process çalıştırır ve sinyal gönderir.
 
     1. Okur:     dinleyen TCP process'lerini (pid, port'lar, parent, yaş, argümanlar, working directory) ve bu repository'nin session'larının transcript satırlarını, her birinin başlama anı çevresindeki dakikalar için
-    2. Çalıştırır: git rev-parse --show-toplevel session başına bir kere; lsof, ps ve grep session başında, her turn sonunda ve /orphan-server komutunda; durdurduğun bir sunucu için kill -TERM ve kill -KILL
+    2. Çalıştırır: git rev-parse --show-toplevel session başına bir kere; lsof, ps ve grep session başında, her turn sonunda, etkileşimli bir session'da 60 sn'de bir ve /orphan-server komutunda; durdurduğun bir sunucu için kill -TERM ve kill -KILL
     3. Gönderir: modele ve network'e hiçbir şey
     4. Saklar:   $.store içinde on/off ayarını
     5. Düşman girdi: bir process'in argümanları ve bir transcript'in komutları metin olarak çizilir ve metin olarak karşılaştırılır, hiç çalıştırılmaz; bir stop'un pid'i sinyal gönderilmeden önce yeniden okunur

@@ -28,6 +28,8 @@ type World = {
   bar: { open: boolean; sections: Section[]; cleared: string[] }
   /** The store every window shares, which a test writes as another window. */
   store: Map<string, unknown>
+  /** Every host command fails, as a missing lsof would. */
+  broken?: boolean
 }
 
 const PYTHON = '/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/Resources/Python.app/Contents/MacOS/Python'
@@ -86,7 +88,10 @@ function world(on: On): { w: World; clock: ReturnType<typeof mock.clock> } {
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
-  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: answer(w, e.argv, clock.now()), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('process.run', (_, e) => {
+    if (w.broken === true) throw new Error('lsof: command not found')
+    return { value: { exitCode: 0, stdout: answer(w, e.argv, clock.now()), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
   return { w, clock }
 }
 
@@ -165,6 +170,38 @@ describe('orphan-server', () => {
     await clock.advance(1)
     expect(w.signals).toEqual(['kill -TERM 3214', 'kill -KILL 3214'])
     expect(w.logs.at(-1)).toBe('stopped :8787 Python -m http.server 8787')
+  })
+
+  withSidebar('an idle session scans every 60 s, and a scan that fails is logged once until one passes', async ($, on) => {
+    const { w, clock } = world(on)
+    seatSidebar(on, w)
+    w.bar.open = true
+    await started($)
+    await clock.settle()
+    expect(w.bar.sections).toEqual([])
+    // A server another session left shows without a turn here.
+    w.procs = [server()]
+    await clock.advance(60_000)
+    await clock.settle()
+    expect(w.bar.sections.map(s => s.lines[0]?.text)).toEqual([':8787 Python -m http.server 8787 · 3h 1m · session 450600b2'])
+    // Stopped from another window, the row goes at the next tick.
+    w.procs = []
+    await clock.advance(60_000)
+    await clock.settle()
+    expect(w.bar.cleared).toEqual(['orphans'])
+    w.broken = true
+    await clock.advance(60_000)
+    await clock.settle()
+    await clock.advance(60_000)
+    await clock.settle()
+    expect(w.logs.filter(l => l.startsWith('the servers were not read'))).toHaveLength(1)
+    w.broken = false
+    await clock.advance(60_000)
+    await clock.settle()
+    w.broken = true
+    await clock.advance(60_000)
+    await clock.settle()
+    expect(w.logs.filter(l => l.startsWith('the servers were not read'))).toHaveLength(2)
   })
 
   test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
