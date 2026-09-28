@@ -12,7 +12,7 @@ Bir MCP server bağlanamadığında ya da bağlantısı koptuğunda engine bunu 
        [ reconnect flaky ]
 
    Sidebar kapalıyken tek bir transcript satırı aynı şeyi söyler ve komutu verir: `flaky: not connected (disconnected); /mcp-doctor reconnect flaky`. Section, sidebar açıldıktan sonraki ilk ölçümde çizilir.
-4. Tuş `/mcp-doctor reconnect <server>`'ı çalıştırır. Bu komut engine'e `/mcp reconnect <server>`'ı çalıştırtır ve listeyi yeniden okur. Ardından hâlâ bağlanamayan bir server, engine'in cevabını taşıyan tek bir satır alır.
+4. Tuş `/mcp-doctor reconnect <server>`'ı çalıştırır. Bu komut engine'in `/mcp reconnect <server>` komutunu çalıştırır ve listeyi yeniden okur. Ardından hâlâ bağlanamayan bir server, engine'in cevabını taşıyan tek bir satır alır.
 5. Geri gelen bir server'ın section'ı kalkar ve `connected again` kısmı yeşil olan tek bir satır gelir: `flaky: connected again`. Hâlâ bağlanmakta olan bir server'a dokunulmaz.
 6. Aynı hata bir kez yazılır. Aynı server'ı yine başarısız bulan sonraki bir turn hiçbir şey yazmaz.
 
@@ -51,7 +51,7 @@ Reach L2: Claude'u yönlendirir, `/mcp reconnect` komutunu çalıştırır.
     2. Çalıştırır: ToolSearch'ü her session başında, her turn sonunda ve her deferred_tools_delta notunda bir kere; /mcp reconnect <server> komutunu tuşa her basışta bir kere
     3. Gönderir: modele ve network'e hiçbir şey
     4. Saklar:   $.store içinde on/off ayarını
-    5. Düşman girdi: server adları ve hata metinleri engine'den ve server config'inden gelir; metin olarak çizilir, hiç çalıştırılmaz, ve reconnect komutu adı yalnız argüman olarak alır
+    5. Düşman girdi: server adları ve hata metinleri engine'den ve server config'inden gelir; metin olarak çizilir, hiç çalıştırılmaz ve reconnect komutu adı yalnız argüman olarak alır
 
 ## Sınırlar
 
