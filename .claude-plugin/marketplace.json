@@ -11,7 +11,7 @@
     {
       "name": "task-poke",
       "source": "./plugins/task-poke",
-      "description": "Submits a continue prompt when a main-loop turn ends while the TodoWrite or Task tools list still has unfinished tasks, at most 99 times in a row by default. Turns the task tools on for every model unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set. Reach L2: one $.prompt.submit per turn, reads the transcript, sets one env variable, stores one boolean.",
+      "description": "Submits a continue prompt while the task list has unfinished tasks, at most 99 times in a row by default, and turns the task tools on for every model unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set.",
       "category": "productivity",
       "tags": [
         "mods",
@@ -39,7 +39,7 @@
     {
       "name": "memory-save",
       "source": "./plugins/memory-save",
-      "description": "Loads ~/.cli-tweaks/memory/<project>/MEMORY.md into the session at startup, /clear and compaction, and saves project learnings to it after every main-loop turn through a tool-less $.model.fork in the background, so the stop is never blocked and no memory edit reaches the transcript. Shows the result on its status line.",
+      "description": "Loads MEMORY.md into the session and saves project learnings to it after every turn through a tool-less fork in the background, without blocking the stop.",
       "category": "productivity",
       "tags": [
         "mods",
@@ -65,7 +65,7 @@
     {
       "name": "prompt-time",
       "source": "./plugins/prompt-time",
-      "description": "Draws the time under each of your messages and each text block of the model's replies in the transcript, the time alone for today and the date too for older ones, also for the messages of a resumed session. Display only: nothing reaches the model.",
+      "description": "Draws the time under each of your messages and each text block of the model's replies, also for a resumed session whose transcript is 4 MiB or smaller. Display only: nothing reaches the model.",
       "category": "productivity",
       "tags": [
         "mods",
@@ -78,7 +78,7 @@
     {
       "name": "gemini-compact",
       "source": "./plugins/gemini-compact",
-      "description": "Moves compaction from Claude to Gemini. Summary mode (default): Gemini summarizes the conversation and the newest messages stay verbatim. Prune mode: every message stays and Gemini keeps, truncates or drops each older tool call. /gemini-compact sets the mode, on/off and the automatic threshold; gemini-core holds the key, tier, model and thinking level.",
+      "description": "Moves compaction from Claude to Gemini: in summary mode Gemini summarizes the conversation and the newest messages stay verbatim, in prune mode every message stays and Gemini keeps, cuts or drops older tool calls. Off until /gemini-compact on; gemini-core holds the key, tier, model and thinking level.",
       "category": "productivity",
       "tags": [
         "mods",
@@ -92,7 +92,7 @@
     {
       "name": "gemini-advisor",
       "source": "./plugins/gemini-advisor",
-      "description": "A Gemini advisor the model calls by itself: Gemini reads the whole conversation and the model's message and answers with a second opinion as the tool result. /gemini-advisor sets on/off; gemini-core holds the key, tier, model and thinking level.",
+      "description": "Gives the model a Gemini advisor tool it calls by itself: Gemini reads the whole conversation and the model's message and answers with a second opinion. Off until /gemini-advisor on; gemini-core holds the key, tier, model and thinking level.",
       "category": "development",
       "tags": [
         "mods",
@@ -106,7 +106,7 @@
     {
       "name": "gemini-review",
       "source": "./plugins/gemini-review",
-      "description": "Gemini reviews each Bash git commit the model makes: the diff and the conversation. A blocker (a bug, data loss, a security hole, a committed secret) stops the commit and the model reads why; minor notes reach the model after the commit; a failed review lets the commit run with a warning. /gemini-review sets on/off; gemini-core holds the key, tier, model and thinking level.",
+      "description": "Has Gemini review every git commit the model runs, from the staged diff and the conversation, and stops a commit with a blocking finding: a bug, data loss, a security hole or a committed secret. Off until /gemini-review on; gemini-core holds the key, tier, model and thinking level.",
       "category": "development",
       "tags": [
         "mods",
@@ -120,7 +120,7 @@
     {
       "name": "gemini-core",
       "source": "./plugins/gemini-core",
-      "description": "One place for the Gemini settings of every Gemini mod: the keys and the tier for all, the model and the thinking level for each. Adds $.gemini, which builds each mod's Gemini request, reads the answer and moves to the next key after a quota or key error. /gemini-core sets them and picks a model from Google's model list.",
+      "description": "Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place: adds $.gemini, which builds their Gemini requests, reads the answers and moves to the next key after a quota or key error, and picks a model from Google's list.",
       "category": "development",
       "tags": [
         "mods",
@@ -133,7 +133,7 @@
     {
       "name": "flaky-memory",
       "source": "./plugins/flaky-memory",
-      "description": "Remembers which tests failed on which code and tells the model when a failing test also passed on the same code, so it treats a flaky test as flaky.",
+      "description": "Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code.",
       "category": "development",
       "tags": [
         "mods",
@@ -144,7 +144,7 @@
     {
       "name": "gemini-plan-review",
       "source": "./plugins/gemini-plan-review",
-      "description": "Has Gemini review each plan before it reaches you, and sends a plan with a blocking finding back to the model, at most twice.",
+      "description": "Has Gemini review each plan before the approval dialog, from the plan and the conversation, and sends a plan with a blocking finding back to the model, at most twice. Off until /gemini-plan-review on; gemini-core holds the key, tier, model and thinking level.",
       "category": "development",
       "tags": [
         "mods",
@@ -166,7 +166,7 @@
     {
       "name": "contract-watch",
       "source": "./plugins/contract-watch",
-      "description": "After the model changes a function signature with Edit, lists the callers ripwire finds, so the model fixes them before the build does.",
+      "description": "After the model changes a function signature with Edit, adds the callers ripwire finds to the Edit's result, so the model fixes them before the build does.",
       "category": "development",
       "tags": [
         "mods",
@@ -177,7 +177,7 @@
     {
       "name": "doc-drift-watch",
       "source": "./plugins/doc-drift-watch",
-      "description": "After each commit the model makes, tells it which doc lines that commit made stale, from ripwire doc-drift.",
+      "description": "After each commit the model makes, adds the doc lines that commit made stale (file:line references, symbol names) to the commit's result, from ripwire doc-drift, and holds each finding open until the doc holds again.",
       "category": "development",
       "tags": [
         "mods",
@@ -188,7 +188,7 @@
     {
       "name": "prompt-deck",
       "source": "./plugins/prompt-deck",
-      "description": "Learns the short prompts you send often in this project, draws them with the ones you pin, above the prompt; a digit key sends one at once.",
+      "description": "Learns the short prompts you send often in this project and draws them, with the ones you pin by hand, above the prompt; with the prompt box empty, a digit key sends one at once.",
       "category": "development",
       "tags": [
         "mods",
@@ -210,7 +210,7 @@
     {
       "name": "diagram-render",
       "source": "./plugins/diagram-render",
-      "description": "Renders the mermaid blocks of the model replies with an installed mmdc and draws each picture under its reply.",
+      "description": "Renders the mermaid blocks of the model's replies with an installed mmdc after each turn and draws each picture under its reply.",
       "category": "development",
       "tags": [
         "mods",
@@ -221,7 +221,7 @@
     {
       "name": "dep-sentinel",
       "source": "./plugins/dep-sentinel",
-      "description": "Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one.",
+      "description": "Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one, naming the latest version.",
       "category": "development",
       "tags": [
         "mods",
@@ -232,7 +232,7 @@
     {
       "name": "edit-loop",
       "source": "./plugins/edit-loop",
-      "description": "Tells the model when it has edited the same file five times in one turn, so it re-reads the root cause instead of trying again.",
+      "description": "Adds a note to the fifth edit of one file in one turn, so the model re-reads the code path and states the root cause instead of trying again.",
       "category": "development",
       "tags": [
         "mods",
@@ -243,7 +243,7 @@
     {
       "name": "i18n-watch",
       "source": "./plugins/i18n-watch",
-      "description": "Tells the model when an edit uses translation keys that one or more locale files lack.",
+      "description": "After an edit that calls translation keys, names the keys the JSON, Laravel PHP, YAML or gettext locale files lack, and the languages that lack them.",
       "category": "development",
       "tags": [
         "mods",
@@ -254,7 +254,7 @@
     {
       "name": "env-sync",
       "source": "./plugins/env-sync",
-      "description": "Tells the model when a commit reads env variables that .env.example lacks.",
+      "description": "After each commit the model makes, names the env variables its added lines read that .env.example lacks, with the file and line of each.",
       "category": "development",
       "tags": [
         "mods",
@@ -265,7 +265,7 @@
     {
       "name": "sql-concat-watch",
       "source": "./plugins/sql-concat-watch",
-      "description": "Tells the model when an edit builds SQL by joining strings instead of passing query parameters.",
+      "description": "After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters.",
       "category": "development",
       "tags": [
         "mods",
@@ -276,7 +276,7 @@
     {
       "name": "lockfile-sync",
       "source": "./plugins/lockfile-sync",
-      "description": "Tells the model when a commit changes the dependencies of a manifest but not its lockfile.",
+      "description": "After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix).",
       "category": "development",
       "tags": [
         "mods",
@@ -287,7 +287,7 @@
     {
       "name": "bg-tasks",
       "source": "./plugins/bg-tasks",
-      "description": "Shows the background shell tasks of the session on the status line, and stops one from the /bg pane.",
+      "description": "Shows the background shell tasks of the session on the status line or in the shared sidebar, with the oldest one's age, and stops one from the /bg-tasks pane.",
       "category": "development",
       "tags": [
         "mods",
@@ -298,7 +298,7 @@
     {
       "name": "action-pin",
       "source": "./plugins/action-pin",
-      "description": "Notes each GitHub Actions step an edit pins to a moving tag, with the commit SHA to use instead.",
+      "description": "After an edit that adds a GitHub Actions step pinned to a tag or a branch, names the commit SHA to write instead, from the GitHub API.",
       "category": "development",
       "tags": [
         "mods",
@@ -309,7 +309,7 @@
     {
       "name": "sidebar",
       "source": "./plugins/sidebar",
-      "description": "Opens one shared sidebar pane that every other mod writes its sections, lines and buttons into.",
+      "description": "Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through $.sidebar; each stream entry is stamped with its time and kept in a per-project log the next session takes back.",
       "category": "development",
       "tags": [
         "mods",
@@ -320,7 +320,7 @@
     {
       "name": "prompt-offload",
       "source": "./plugins/prompt-offload",
-      "description": "Writes a long pasted prompt to a temp file and sends the model its first lines with the path, so one paste does not fill the context.",
+      "description": "Writes a prompt longer than the limit (2000 characters by default) to a temp file and sends the model its first 200 characters with the path, so one paste does not fill the context.",
       "category": "development",
       "tags": [
         "mods",
@@ -331,7 +331,7 @@
     {
       "name": "config-parse",
       "source": "./plugins/config-parse",
-      "description": "Checks each JSON, YAML, TOML or .env file an Edit or Write touches, and notes the parse error at once instead of at the next build.",
+      "description": "Parses each JSON, YAML, TOML or .env file an Edit or Write touches, notes a parse error at once instead of at the next build, and says so again when a later edit fixes it.",
       "category": "development",
       "tags": [
         "mods",
@@ -342,7 +342,7 @@
     {
       "name": "error-poke",
       "source": "./plugins/error-poke",
-      "description": "Sends one continue prompt after a turn an API error killed, at most 99 times in a row by default.",
+      "description": "Sends one continue prompt after a turn an API error killed, so the half-done work carries on instead of the session going idle, at most 99 times in a row by default.",
       "category": "development",
       "tags": [
         "mods",
@@ -353,7 +353,7 @@
     {
       "name": "output-flood",
       "source": "./plugins/output-flood",
-      "description": "Notes a Bash result over a size limit and names the way to narrow it.",
+      "description": "Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question.",
       "category": "development",
       "tags": [
         "mods",
@@ -364,7 +364,7 @@
     {
       "name": "ua-fallback",
       "source": "./plugins/ua-fallback",
-      "description": "Notes the fallback User-Agent after a curl or wget that answered 403 or 429, with its limits.",
+      "description": "After a curl or wget an automated-client filter answered 403 or 429, gives the model the browser User-Agent to retry with, and the two cases where it must not.",
       "category": "development",
       "tags": [
         "mods",
@@ -375,7 +375,7 @@
     {
       "name": "subagent-ledger",
       "source": "./plugins/subagent-ledger",
-      "description": "Shows each subagent of the session with its turns, duration, model and tokens, and marks a costly one.",
+      "description": "Shows each subagent of the session with its turns, time, model and tokens, the costliest first, yellow while it runs and green once it answered, and marks one that passed the token limit.",
       "category": "development",
       "tags": [
         "mods",
@@ -386,7 +386,7 @@
     {
       "name": "mod-doctor",
       "source": "./plugins/mod-doctor",
-      "description": "Names each installed plugin whose marketplace clone offers a newer version.",
+      "description": "Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the claude plugin update command that closes the gap.",
       "category": "development",
       "tags": [
         "mods",
@@ -397,7 +397,7 @@
     {
       "name": "commit-cadence",
       "source": "./plugins/commit-cadence",
-      "description": "Names the uncommitted files at the end of each turn, so finished work is committed as it lands.",
+      "description": "Names the uncommitted files to you at the end of each turn, and tells the model at the next prompt to commit each finished piece as it lands.",
       "category": "development",
       "tags": [
         "mods",
@@ -408,7 +408,7 @@
     {
       "name": "storage-guard",
       "source": "./plugins/storage-guard",
-      "description": "Tells the model when an edit stores browser data with localStorage or sessionStorage instead of a cookie.",
+      "description": "After an edit that keeps browser data in localStorage or sessionStorage, names each line, so the model stores the data in a cookie instead.",
       "category": "development",
       "tags": [
         "mods",
@@ -430,7 +430,7 @@
     {
       "name": "mcp-doctor",
       "source": "./plugins/mcp-doctor",
-      "description": "Tells the person when an MCP server failed to connect or dropped, with a reconnect button, and when it is back.",
+      "description": "Tells you when an MCP server failed to connect or dropped, with the engine's reason and a reconnect button, and when it is back; claude.ai connectors are left out.",
       "category": "development",
       "tags": [
         "mods",
@@ -441,7 +441,7 @@
     {
       "name": "orphan-server",
       "source": "./plugins/orphan-server",
-      "description": "Lists the servers a Bash call of the model started in this repository that still listen on a port, with their age, session and a stop button.",
+      "description": "Lists the servers a Bash call of the model started in this repository and left listening on a port, with their age and session, and stops one with SIGTERM, then SIGKILL.",
       "category": "development",
       "tags": [
         "mods",
@@ -452,7 +452,7 @@
     {
       "name": "slash-chain",
       "source": "./plugins/slash-chain",
-      "description": "Runs slash commands joined with && one after another, waits for each turn, pane or dialog to end, and stops the chain at a failed command or a turn that ended without an answer.",
+      "description": "Runs slash commands joined with && one after another, waits for each command's turn, pane or dialog to end, and stops the chain at a command that failed or a turn that ended without an answer.",
       "category": "development",
       "tags": [
         "mods",
@@ -485,7 +485,7 @@
     {
       "name": "bash-diet",
       "source": "./plugins/bash-diet",
-      "description": "Shrinks each Bash result before the model reads it: per-command filters for git, test runners, linters, package managers, containers and file tools, the full output kept in a file. Needs function hooks (early access).",
+      "description": "Shrinks each Bash result before the model reads it: per-command filters for git, test runners, linters, package managers, containers and file tools, the full output kept in a file.",
       "category": "development",
       "tags": [
         "mods",
@@ -496,7 +496,7 @@
     {
       "name": "session-watch",
       "source": "./plugins/session-watch",
-      "description": "Shows this session's state in the sidebar: context fill, token totals, cost, model and thinking level, the Claude Code version, and the git branch and status.",
+      "description": "Shows this session's state in the sidebar: context fill, token totals, cost, model and effort, the Claude Code version, the other sessions of this machine, and the git branch and status.",
       "category": "development",
       "tags": [
         "mods",

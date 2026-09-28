@@ -1,7 +1,7 @@
 {
   "name": "output-flood",
-  "version": "0.4.1",
-  "description": "Notes a Bash result over a size limit and names the way to narrow it. Needs function hooks (early access).",
+  "version": "0.4.2",
+  "description": "Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

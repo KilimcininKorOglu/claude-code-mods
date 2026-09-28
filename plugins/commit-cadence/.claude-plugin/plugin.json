@@ -1,7 +1,7 @@
 {
   "name": "commit-cadence",
-  "version": "0.1.3",
-  "description": "Names the uncommitted files at the end of each turn, so finished work is committed as it lands. Needs function hooks (early access).",
+  "version": "0.1.4",
+  "description": "Names the uncommitted files to you at the end of each turn, and tells the model at the next prompt to commit each finished piece as it lands. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

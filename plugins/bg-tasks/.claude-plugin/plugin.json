@@ -1,7 +1,7 @@
 {
   "name": "bg-tasks",
-  "version": "0.4.2",
-  "description": "Shows the background shell tasks of the session on the status line or in the shared sidebar, and stops one from the /bg-tasks pane. Needs function hooks (early access).",
+  "version": "0.4.3",
+  "description": "Shows the background shell tasks of the session on the status line or in the shared sidebar, with the oldest one's age, and stops one from the /bg-tasks pane. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,7 +1,7 @@
 {
   "name": "diagram-render",
-  "version": "0.1.1",
-  "description": "Renders the mermaid blocks of the model replies with an installed mmdc and draws each picture under its reply. Needs function hooks (early access).",
+  "version": "0.1.2",
+  "description": "Renders the mermaid blocks of the model's replies with an installed mmdc after each turn and draws each picture under its reply. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,7 +1,7 @@
 {
   "name": "sidebar",
-  "version": "0.15.0",
-  "description": "Opens one shared sidebar pane that every other mod writes its sections, lines and buttons into. Needs function hooks (early access).",
+  "version": "0.15.1",
+  "description": "Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through $.sidebar; each stream entry is stamped with its time and kept in a per-project log the next session takes back. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

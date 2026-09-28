@@ -39,24 +39,24 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 
 | Mod | What it does | Reach |
 |---|---|---|
-| [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 99 times in a row. | L2 |
+| [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 99 times in a row by default, and turns the task tools on for every model unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set. | L2 |
 | [limit-watch](plugins/limit-watch) | Shows the subscription usage limits under the prompt or in the shared sidebar with a reset countdown and a projection, opens a /limit-watch pane, and logs once when a limit passes 80% and 95%. | L0 |
 | [memory-save](plugins/memory-save) | Loads `MEMORY.md` into the session and saves project learnings to it after every turn through a tool-less fork in the background, without blocking the stop. | L2 |
 | [sage-memory](plugins/sage-memory) | Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn. | L3 |
 | [cache-warm](plugins/cache-warm) | Keeps the 1-hour prompt cache warm for a window you set, or with no end in every session under always, with one cache-shared fork per idle stretch and one keep-warm message after a resume, arms a window for you after a paid cold write, and shows the cache state, the cold price and this session's cold writes. | L2 |
-| [prompt-time](plugins/prompt-time) | Draws the time under each of your messages and each text block of the model's replies, also for a resumed session whose transcript is under 4 MiB. | L1 |
-| [gemini-compact](plugins/gemini-compact) | Moves compaction from Claude to Gemini: a Gemini summary with the newest messages verbatim, or Gemini decisions that keep, cut or drop older tool calls. | L3 |
-| [gemini-advisor](plugins/gemini-advisor) | Gives the model a Gemini advisor tool it calls by itself: Gemini reads the conversation and the model's message and answers with a second opinion. | L3 |
-| [gemini-core](plugins/gemini-core) | Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place, builds their Gemini requests, and picks a model from Google's list. | L3 |
-| [gemini-review](plugins/gemini-review) | Has Gemini review every commit the model makes, from the diff and the conversation, and stops a commit with a blocking finding. | L3 |
-| [gemini-plan-review](plugins/gemini-plan-review) | Has Gemini review each plan before the approval dialog, from the plan and the conversation, and sends a plan with a blocking finding back to the model, at most twice. | L3 |
+| [prompt-time](plugins/prompt-time) | Draws the time under each of your messages and each text block of the model's replies, also for a resumed session whose transcript is 4 MiB or smaller. Display only: nothing reaches the model. | L1 |
+| [gemini-compact](plugins/gemini-compact) | Moves compaction from Claude to Gemini: in summary mode Gemini summarizes the conversation and the newest messages stay verbatim, in prune mode every message stays and Gemini keeps, cuts or drops older tool calls. Off until `/gemini-compact on`; gemini-core holds the key, tier, model and thinking level. | L3 |
+| [gemini-advisor](plugins/gemini-advisor) | Gives the model a Gemini advisor tool it calls by itself: Gemini reads the whole conversation and the model's message and answers with a second opinion. Off until `/gemini-advisor on`; gemini-core holds the key, tier, model and thinking level. | L3 |
+| [gemini-core](plugins/gemini-core) | Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place: adds `$.gemini`, which builds their Gemini requests, reads the answers and moves to the next key after a quota or key error, and picks a model from Google's list. | L3 |
+| [gemini-review](plugins/gemini-review) | Has Gemini review every git commit the model runs, from the staged diff and the conversation, and stops a commit with a blocking finding: a bug, data loss, a security hole or a committed secret. Off until `/gemini-review on`; gemini-core holds the key, tier, model and thinking level. | L3 |
+| [gemini-plan-review](plugins/gemini-plan-review) | Has Gemini review each plan before the approval dialog, from the plan and the conversation, and sends a plan with a blocking finding back to the model, at most twice. Off until `/gemini-plan-review on`; gemini-core holds the key, tier, model and thinking level. | L3 |
 | [flaky-memory](plugins/flaky-memory) | Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code. | L2 |
 | [disk-janitor](plugins/disk-janitor) | Measures the build artifacts of the repository, shows them on the status line from 5 GB, and deletes the ones you pick in the `/disk-janitor` pane; data directories are never listed. | L2 |
 | [contract-watch](plugins/contract-watch) | After the model changes a function signature with Edit, adds the callers [ripwire](https://github.com/redhat-et/ripwire) finds to the Edit's result, so the model fixes them before the build does. | L2 |
-| [doc-drift-watch](plugins/doc-drift-watch) | After each commit the model makes, adds the doc lines that commit made stale (file:line references, symbol names) to the commit's result, from [ripwire](https://github.com/redhat-et/ripwire) doc-drift, and holds each doc open until it holds again. | L2 |
+| [doc-drift-watch](plugins/doc-drift-watch) | After each commit the model makes, adds the doc lines that commit made stale (file:line references, symbol names) to the commit's result, from [ripwire](https://github.com/redhat-et/ripwire) doc-drift, and holds each finding open until the doc holds again. | L2 |
 | [prompt-deck](plugins/prompt-deck) | Learns the short prompts you send often in this project and draws them, with the ones you pin by hand, above the prompt; with the prompt box empty, a digit key sends one at once. | L2 |
-| [config-parse](plugins/config-parse) | Parses each JSON, YAML, TOML or `.env` file an Edit or Write touches, notes the parse error at once, and says so again when a later edit fixes it. | L2 |
-| [prompt-offload](plugins/prompt-offload) | Writes a prompt longer than the limit to a temp file and sends the model its first 200 characters with the path, so one paste does not fill the context. | L2 |
+| [config-parse](plugins/config-parse) | Parses each JSON, YAML, TOML or `.env` file an Edit or Write touches, notes a parse error at once instead of at the next build, and says so again when a later edit fixes it. | L2 |
+| [prompt-offload](plugins/prompt-offload) | Writes a prompt longer than the limit (2000 characters by default) to a temp file and sends the model its first 200 characters with the path, so one paste does not fill the context. | L2 |
 | [shot-inline](plugins/shot-inline) | Draws each PNG or JPG the model saves or reads under its tool row: pixels in kitty and Ghostty, quadrant block cells in every other terminal. | L2 |
 | [diagram-render](plugins/diagram-render) | Renders the mermaid blocks of the model's replies with an installed `mmdc` after each turn and draws each picture under its reply. | L2 |
 | [dep-sentinel](plugins/dep-sentinel) | Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one, naming the latest version. | L3 |
@@ -66,13 +66,13 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [sql-concat-watch](plugins/sql-concat-watch) | After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters. | L2 |
 | [storage-guard](plugins/storage-guard) | After an edit that keeps browser data in `localStorage` or `sessionStorage`, names each line, so the model stores the data in a cookie instead. | L2 |
 | [lockfile-sync](plugins/lockfile-sync) | After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix). | L3 |
-| [bg-tasks](plugins/bg-tasks) | Shows the running background shell tasks on the status line with the oldest one's age, and stops one from the `/bg-tasks` pane. | L2 |
-| [sidebar](plugins/sidebar) | Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through `$.sidebar`; each finding is stamped with its time and kept in a per-project log the next session takes back. | L2 |
-| [action-pin](plugins/action-pin) | After an edit that adds a GitHub Actions step pinned to a tag or a branch, names each one with the commit SHA to write instead, from the GitHub API. | L3 |
-| [error-poke](plugins/error-poke) | Submits one continue prompt after a turn an API error killed, so the half-done work carries on instead of the session going idle, at most 99 times in a row. | L2 |
+| [bg-tasks](plugins/bg-tasks) | Shows the background shell tasks of the session on the status line or in the shared sidebar, with the oldest one's age, and stops one from the `/bg-tasks` pane. | L2 |
+| [sidebar](plugins/sidebar) | Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through `$.sidebar`; each stream entry is stamped with its time and kept in a per-project log the next session takes back. | L2 |
+| [action-pin](plugins/action-pin) | After an edit that adds a GitHub Actions step pinned to a tag or a branch, names the commit SHA to write instead, from the GitHub API. | L3 |
+| [error-poke](plugins/error-poke) | Sends one continue prompt after a turn an API error killed, so the half-done work carries on instead of the session going idle, at most 99 times in a row by default. | L2 |
 | [output-flood](plugins/output-flood) | Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question. | L1 |
 | [ua-fallback](plugins/ua-fallback) | After a `curl` or `wget` an automated-client filter answered 403 or 429, gives the model the browser User-Agent to retry with, and the two cases where it must not. | L1 |
-| [commit-cadence](plugins/commit-cadence) | Measures the working tree at the end of each turn, names the uncommitted files to you, and tells the model at the next prompt to commit each finished piece as it lands. | L2 |
+| [commit-cadence](plugins/commit-cadence) | Names the uncommitted files to you at the end of each turn, and tells the model at the next prompt to commit each finished piece as it lands. | L2 |
 | [context-restore](plugins/context-restore) | Hands a skill or command call the current text of its file when the file changed on disk after the session loaded it, and hands the model a rules file or the global CLAUDE.md that changed on disk. | L1 |
 | [mod-doctor](plugins/mod-doctor) | Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the `claude plugin update` command that closes the gap. | L1 |
 | [subagent-ledger](plugins/subagent-ledger) | Shows each subagent of the session with its turns, time, model and tokens, the costliest first, yellow while it runs and green once it answered, and marks one that passed the token limit. | L0 |
@@ -82,7 +82,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [ask-autopick](plugins/ask-autopick) | Picks the recommended option of a question that waited unanswered for a set time, so a session you left does not stop. Off until you turn it on. | L2 |
 | [desk-notify](plugins/desk-notify) | Sends a desktop notification when a question or a plan waits for your answer, and when a turn ends or fails. | L2 |
 | [bash-diet](plugins/bash-diet) | Shrinks each Bash result before the model reads it: per-command filters for git, test runners, linters, package managers, containers and file tools, the full output kept in a file. | L2 |
-| [session-watch](plugins/session-watch) | Shows this session's state in the sidebar: context fill, token totals, cost, model and thinking level, the Claude Code version, and the git branch and status. | L2 |
+| [session-watch](plugins/session-watch) | Shows this session's state in the sidebar: context fill, token totals, cost, model and effort, the Claude Code version, the other sessions of this machine, and the git branch and status. | L2 |
 | [idle-art](plugins/idle-art) | Draws an ASCII animation above the prompt while the model works: matrix rain, fire, an aquarium, a cat, or a GIF of your own imported as a character clip for every project. Display only: nothing reaches the model. | L2 |
 | [tool-coach](plugins/tool-coach) | Stops the model from repeating a tool call that just failed with the same input, until a file or command has changed something. | L0 |
 | [effort-auto](plugins/effort-auto) | Has a small model rate how hard each prompt is and runs that turn at the matching effort, on the models whose prompt cache survives an effort change. | L3 |
@@ -106,9 +106,14 @@ plugins/<mod>/                    one directory per mod
   .claude-plugin/plugin.json      plugin manifest
   hooks/hooks.json                names the module: "modules": ["./register.ts"]
   hooks/register.ts               exports register(on, options); register.tsx in a mod that draws
+  hooks/<pure>.ts                 parsers, text builders and state types, with no $
   types/index.d.ts                a noun or tool input the mod declares, when it has one
+  commands/send.md                a mod that hands the model a prompt runs it as /<mod>:send
+  skills/<name>/SKILL.md          a skill the mod ships (git-commit)
+  daemon/                         a long-lived Node process the hooks reach over a Unix socket (sage-memory)
   tests/register.test.ts          tests with claude-code/testing
-  tsconfig.json
+  Makefile, package.json          make install, lint, typecheck, validate, test, check
+  eslint.config.js, tsconfig.json lint with a complexity limit of 10, type check
   README.md                       validator output and threat model
   README.tr.md                    the same README in Turkish, kept in step with it
 templates/mod/                    the template that make new-mod copies
@@ -128,7 +133,15 @@ Load a mod for one session:
 CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/<mod>
 ```
 
-Run `/plugin-types` inside that session to write `.claude/types/` for type checking. The directory is version-specific and git-ignored.
+Run `/plugin-types` inside that session to write `.claude/types/` for type checking. The directory is version-specific and git-ignored. Then run the checks of one mod from its directory:
+
+```sh
+cd plugins/<mod>
+make install
+make check
+```
+
+`make check` runs eslint (complexity limit 10), `tsc`, `claude plugin validate` and `claude plugin test`.
 
 ## License
 

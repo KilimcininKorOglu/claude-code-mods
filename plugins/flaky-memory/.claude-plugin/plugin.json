@@ -1,7 +1,7 @@
 {
   "name": "flaky-memory",
-  "version": "0.4.0",
-  "description": "Remembers which tests failed on which code and tells the model when a failing test also passed on the same code, so it treats a flaky test as flaky. Needs function hooks (early access).",
+  "version": "0.4.1",
+  "description": "Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

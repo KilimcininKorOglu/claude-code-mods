@@ -1,7 +1,7 @@
 {
   "name": "mcp-doctor",
-  "version": "0.2.1",
-  "description": "Tells the person when an MCP server failed to connect or dropped, with a reconnect button, and when it is back. Needs function hooks (early access).",
+  "version": "0.2.2",
+  "description": "Tells you when an MCP server failed to connect or dropped, with the engine's reason and a reconnect button, and when it is back; claude.ai connectors are left out. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,7 +1,7 @@
 {
   "name": "gemini-plan-review",
-  "version": "0.1.0",
-  "description": "Gemini reviews each plan before the approval dialog, with the conversation, and sends a plan with a blocking finding back to the model, at most twice. /gemini-plan-review turns it on or off; gemini-core holds the key, tier, model and thinking level. Needs function hooks (early access).",
+  "version": "0.1.1",
+  "description": "Has Gemini review each plan before the approval dialog, from the plan and the conversation, and sends a plan with a blocking finding back to the model, at most twice. Off until /gemini-plan-review on; gemini-core holds the key, tier, model and thinking level. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

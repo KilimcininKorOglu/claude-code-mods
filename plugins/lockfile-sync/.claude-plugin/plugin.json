@@ -1,7 +1,7 @@
 {
   "name": "lockfile-sync",
-  "version": "0.10.2",
-  "description": "Tells the model when a commit changes the dependencies of a manifest but not its lockfile. Needs function hooks (early access).",
+  "version": "0.10.3",
+  "description": "After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix). Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

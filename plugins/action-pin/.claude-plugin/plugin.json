@@ -1,7 +1,7 @@
 {
   "name": "action-pin",
-  "version": "0.6.1",
-  "description": "Notes each GitHub Actions step an edit pins to a moving tag, with the commit SHA to use instead. Needs function hooks (early access).",
+  "version": "0.6.2",
+  "description": "After an edit that adds a GitHub Actions step pinned to a tag or a branch, names the commit SHA to write instead, from the GitHub API. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

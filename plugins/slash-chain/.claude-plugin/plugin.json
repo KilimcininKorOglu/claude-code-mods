@@ -1,7 +1,7 @@
 {
   "name": "slash-chain",
-  "version": "0.2.1",
-  "description": "Runs slash commands joined with && one after another, waits for each turn, pane or dialog to end, and stops the chain at a failed command or a turn that ended without an answer. Needs function hooks (early access).",
+  "version": "0.2.2",
+  "description": "Runs slash commands joined with && one after another, waits for each command's turn, pane or dialog to end, and stops the chain at a command that failed or a turn that ended without an answer. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

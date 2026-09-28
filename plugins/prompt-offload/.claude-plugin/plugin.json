@@ -1,7 +1,7 @@
 {
   "name": "prompt-offload",
-  "version": "0.1.1",
-  "description": "Writes a long pasted prompt to a temp file and sends the model its first lines with the path, so one paste does not fill the context. Needs function hooks (early access).",
+  "version": "0.1.2",
+  "description": "Writes a prompt longer than the limit (2000 characters by default) to a temp file and sends the model its first 200 characters with the path, so one paste does not fill the context. Needs function hooks (early access).",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",
