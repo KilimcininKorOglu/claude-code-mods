@@ -1,6 +1,6 @@
 # idle-art
 
-A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Five scenes are built in: matrix rain, fire, a star field, an aquarium and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
+A Claude Code Mod that draws an ASCII animation above the prompt while the model works. Four scenes are built in: matrix rain, fire, an aquarium and a cat. You can add your own: `/idle-art import` turns a GIF into a character clip and keeps it for every project. Display only: nothing reaches the model, so the mod costs no tokens and does not touch the prompt cache.
 
 ## What it shows
 
@@ -107,7 +107,7 @@ Validated with `claude plugin validate` on Claude Code 2.1.283:
 Reach L2, runs `base64` to read a GIF over 4 MiB.
 
     1. Reads:    the band's props (working, survey, rows, columns) and the clock; its settings and clips from the store, at each command, at each turn's start and every 2 seconds while a turn runs; the GIF a /idle-art import names, once, when it is 32 MiB or smaller; HOME and the session's directory to resolve that path
-    2. Runs:     base64 -i <path> for a GIF over 4 MiB, once per import; no fork; one timer per turn for the delay, one that reads the settings every 2 seconds while a turn runs, and the drawing thread's 100 ms tick while the band shows
+    2. Runs:     base64 -i <path> for a GIF over 4 MiB, once per import; no fork; one timer per turn for the delay, one that reads the settings every 2 seconds while a turn runs, and the drawing thread's 16 ms tick while the band shows
     3. Sends:    nothing; no network call and nothing to the model
     4. Persists: the on/off state, the style, the delay, each imported clip, and a stamp of the last import or remove in the mod's store
     5. Hostile input: a GIF is untrusted bytes: the decoder bounds every read by the file's length, refuses a broken code stream or a missing color table, stops at 500 frames, and an import that fails keeps nothing; a stored clip of the wrong shape is skipped at load; the command takes a fixed word list, a whole number from 0 to 60, and a clip name of lowercase letters, digits and dashes

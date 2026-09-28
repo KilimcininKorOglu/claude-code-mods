@@ -1,6 +1,6 @@
 # idle-art
 
-Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Beş sahne yerleşik olarak gelir: matrix yağmuru, ateş, yıldız alanı, akvaryum ve bir kedi. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
+Model çalışırken prompt'un üstüne ASCII bir animasyon çizen bir Claude Code Mod'u. Dört sahne yerleşik olarak gelir: matrix yağmuru, ateş, akvaryum ve bir kedi. Kendi animasyonlarını da ekleyebilirsin: `/idle-art import` bir GIF'i karakterlerden oluşan bir klibe çevirir ve bütün projelerde kullanılmak üzere saklar. Yalnız görüntüdür: modele hiçbir şey gitmez, bu yüzden mod token harcamaz ve prompt cache'e dokunmaz.
 
 ## Ne gösterir
 
@@ -107,7 +107,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 Reach L2: 4 MiB'tan büyük bir GIF'i okumak için `base64` çalıştırır.
 
     1. Reads:    band'in props değerleri (çalışıyor mu, anket var mı, satır, sütun) ve saat; store'daki ayarları ve klipleri, her komutta, her turn'ün başında ve bir turn çalışırken 2 saniyede bir; /idle-art import komutunun verdiği GIF'i, 32 MiB veya daha küçükse, bir kez; bu yolu çözmek için HOME ve oturumun dizini
-    2. Runs:     4 MiB'tan büyük bir GIF için import başına bir kez base64 -i <yol>; fork yok; turn başına gecikme için bir timer, bir turn çalışırken ayarları 2 saniyede bir okuyan bir timer, band görünürken çizim thread'inin 100 ms'lik tick'i
+    2. Runs:     4 MiB'tan büyük bir GIF için import başına bir kez base64 -i <yol>; fork yok; turn başına gecikme için bir timer, bir turn çalışırken ayarları 2 saniyede bir okuyan bir timer, band görünürken çizim thread'inin 16 ms'lik tick'i
     3. Sends:    hiçbir şey; network çağrısı yok, modele bir şey gitmez
     4. Persists: açık/kapalı durumu, stil, gecikme, import edilen her klip ve son import ya da remove'un damgası, mod'un store'unda
     5. Hostile input: bir GIF güvenilmeyen byte'lardır: decoder her okumayı dosyanın uzunluğuyla sınırlar, bozuk bir kod akışını ya da eksik bir color table'ı reddeder, 500 karede durur; başarısız bir import hiçbir şey saklamaz; yanlış biçimdeki kayıtlı bir klip yüklenirken atlanır; komut sabit bir kelime listesi, 0 ile 60 arası bir tam sayı ve küçük harf, rakam ve tireden oluşan bir klip adı kabul eder
