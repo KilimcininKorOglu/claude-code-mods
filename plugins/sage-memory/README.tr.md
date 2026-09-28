@@ -48,7 +48,7 @@ Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kont
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
     /sage-memory triage [apply]           bütün kayıtların her değişikliği listeleyen incelemesi; `apply` olmadan kuru çalışır
     /sage-memory compact [apply]          kısaltma ve birleştirme önerisi; `apply` yazar
-    /sage-memory import <yol> [--section <başlık>] [--kind <kind>] [--scope project|user]
+    /sage-memory import <yol> [--section <başlık>] [--kind <kind>] [--scope project|user] [--policy auto|never] [--tag <tag'ler>] [--importance <n>] [--confidence <n>]
     /sage-memory model [ad]               consolidator, curator, triage ve compact'ın modeli (haiku)
     /sage-memory remind tools|prompt|subagent [on|off]
     /sage-memory consolidate|curate [on|off]
@@ -59,7 +59,7 @@ Flag'ler: `--kind --scope --status --persistence --policy --tag --anchor --direc
 
 `triage` her kaydı kurallara, bir değer puanına ve modelin verdiği bir puana göre ayırır, sonra `apply`'ın yazacağı her şeyi listeler: gerekçesiyle her silme, her merge, her puan değişikliği ve importance'ı 0.9 ya da üstü olan bir kayıt için bir inceleme; böyle bir kaydı asla silmez. Modelin 1 ya da 2 verdiği kayıt ve kuralların ya da puanın bulduğu döküntü (bir `wip:` notu, süresi dolmuş bir kayıt) silinir. SAGE bir cevabın kullandığı her kaydı da tutuyordu; bu kural kalktı, çünkü bir kaydın yanlış olduğunu söylemek için onu anan cevap da bir kullanım sayılıyor.
 
-`import` bir markdown dosyasının ya da bir başlığın altındaki bölümün her maddesini, kaynağı o dosya olan sıradan bir kayıt olarak yazar. Başka bir dosyada tutulan notları bir kez depoya taşır; içe alınan kayıtlar sonra diğerleri gibi ilgiye göre hatırlatılır.
+`import` bir markdown dosyasının ya da bir başlığın altındaki bölümün her maddesini, kaynağı o dosya olan sıradan bir kayıt olarak yazar. Başka bir dosyada tutulan notları bir kez depoya taşır; içe alınan kayıtlar sonra diğerleri gibi ilgiye göre hatırlatılır. Başlığında "retired" geçen bir bölüm, alt bölümleriyle birlikte atlanır. İçe alınan bir kayıt importance 0.8 ve confidence 0.9 ile başlar, çünkü elle tutulmuş bir kuraldır: `remember`'ın varsayılanlarıyla (0.6 ve 0.75) bir sorunun andığı içe alınmış not, prompt reminder eşiğinin hemen altında kaldı. Rapor daemon'un her maddeyle ne yaptığını sayar (eklendi, zaten vardı, near-duplicate'e birleşti, reddedildi) ve her birleşmeyi adıyla yazar, çünkü birleşme iki metinden birini tutar. Bu deponun 13 memory-save dosyasında ölçüldü: 2093 madde 2000 kayıt oldu; 0 red, 11 zaten vardı, 82 birleşme. Birleşmelerin neredeyse hepsi iki kez yazılmış aynı bilgiydi.
 
 ## Modelin çağırabildiği tool'lar
 

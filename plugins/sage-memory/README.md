@@ -48,7 +48,7 @@ Under it, the stream shows each reminder (faint), each added memory (green), eac
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
     /sage-memory triage [apply]           a review of every memory that lists each change; a dry run unless `apply`
     /sage-memory compact [apply]          a proposal to shorten and merge; `apply` writes it
-    /sage-memory import <path> [--section <heading>] [--kind <kind>] [--scope project|user]
+    /sage-memory import <path> [--section <heading>] [--kind <kind>] [--scope project|user] [--policy auto|never] [--tag <tags>] [--importance <n>] [--confidence <n>]
     /sage-memory model [name]             the model of the consolidator, curator, triage and compact (haiku)
     /sage-memory remind tools|prompt|subagent [on|off]
     /sage-memory consolidate|curate [on|off]
@@ -59,7 +59,7 @@ Flags: `--kind --scope --status --persistence --policy --tag --anchor --director
 
 `triage` sorts every memory by rules, a value score and a rating from the model, then lists what `apply` would write: each deletion with its reason, each merge, each score patch, and a review for a memory of importance 0.9 or more, which it never deletes. A memory the model rated 1 or 2, and debris the rules or the score find (a `wip:` note, an expired one), is deleted. SAGE also kept every memory an answer had used; that rule is gone, because an answer that names a memory to say it is wrong counts as a use.
 
-`import` writes each bullet of a markdown file, or of one section under a heading, as an ordinary memory with the file as its source. It moves notes kept in another file into the store once; the imported memories are then reminded by relevance like any other.
+`import` writes each bullet of a markdown file, or of one section under a heading, as an ordinary memory with the file as its source. It moves notes kept in another file into the store once; the imported memories are then reminded by relevance like any other. A section whose heading says "retired" is left out with its subsections. An imported memory starts at importance 0.8 and confidence 0.9, because it is a rule you kept by hand: with the defaults of `remember` (0.6 and 0.75) an imported note a question named stayed just under the prompt reminder's gate. The report counts what the daemon did with each bullet (added, already there, folded into a near-duplicate, refused) and names every fold, because a fold keeps one of the two texts. Measured on the 13 memory-save files of this repository: 2093 bullets became 2000 memories, 0 refused, 11 already there and 82 folded; nearly every fold was the same fact written twice.
 
 ## Tools the model can call
 

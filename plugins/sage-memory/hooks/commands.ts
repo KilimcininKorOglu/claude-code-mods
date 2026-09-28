@@ -277,12 +277,33 @@ function sectionOf(markdown: string, heading: string | undefined): string[] | un
   return lines.slice(start + 1, end === -1 ? undefined : end)
 }
 
-/** The bullets of a section: each `- ` or `* ` line at the start, its indented lines joined to it. */
+/** The level of a heading line, or 0 for any other line. */
+function headingLevel(line: string): number {
+  return /^(#{1,6})\s/.exec(line)?.[1]?.length ?? 0
+}
+
+/**
+ * The lines left once every section whose heading names a retired rule is taken out, with its
+ * subsections: a rule the person retired is history, never a memory to remind.
+ */
+function withoutRetired(lines: readonly string[]): string[] {
+  const kept: string[] = []
+  let retiredAt = 0
+  for (const line of lines) {
+    const level = headingLevel(line)
+    if (level > 0 && retiredAt > 0 && level <= retiredAt) retiredAt = 0
+    if (level > 0 && retiredAt === 0 && /\bretired\b/i.test(line)) retiredAt = level
+    if (retiredAt === 0) kept.push(line)
+  }
+  return kept
+}
+
+/** The bullets of a section: each `- ` or `* ` line at the start, its indented lines joined to it; a retired section's are left out. */
 export function bulletsOf(markdown: string, heading: string | undefined): string[] | undefined {
   const lines = sectionOf(markdown, heading)
   if (lines === undefined) return undefined
   const bullets: string[] = []
-  for (const line of lines) {
+  for (const line of withoutRetired(lines)) {
     const bullet = /^[-*]\s+(.*)$/.exec(line)
     if (bullet !== null) bullets.push(bullet[1] ?? '')
     else if (/^\s+\S/.test(line) && bullets.length > 0) bullets[bullets.length - 1] = `${bullets.at(-1)} ${line.trim()}`
@@ -290,8 +311,16 @@ export function bulletsOf(markdown: string, heading: string | undefined): string
   return bullets.map(bullet => bullet.trim()).filter(bullet => bullet !== '')
 }
 
+/**
+ * An imported memory is a rule the person kept by hand, so it starts trusted enough for a prompt
+ * reminder: with `remember`'s own 0.6 and 0.75, an anchorless memory the question named stayed just
+ * under the 0.65 gate (measured on an imported site note).
+ */
+export const IMPORT_IMPORTANCE = 0.8
+export const IMPORT_CONFIDENCE = 0.9
+
 /** The flags of `import`: the file, the section, and what every imported memory becomes. */
-export type ImportFlags = { path: string; section?: string; kind?: Kind; scope: 'project' | 'user'; errors: string[] }
+export type ImportFlags = Pick<Flags, 'kind' | 'contextPolicy' | 'tags' | 'importance' | 'confidence'> & { path: string; section?: string; scope: 'project' | 'user'; errors: string[] }
 
 function importErrors(words: readonly string[], at: number, flags: Flags, path: string): string[] {
   const section = words[at + 1]
@@ -302,14 +331,15 @@ function importErrors(words: readonly string[], at: number, flags: Flags, path: 
   return errors
 }
 
-/** Takes `--section <heading>` out of the words; the rest are the path and the `--kind`/`--scope` flags. */
+/** Takes `--section <heading>` out of the words; the rest are the path and the flags every imported memory takes. */
 export function importFlagsOf(words: readonly string[]): ImportFlags {
   const at = words.indexOf('--section')
   const rest = words.filter((_, i) => at === -1 || (i !== at && i !== at + 1))
   const flags = flagsOf(rest)
   const path = flags.text.split(' ')[0] ?? ''
   const section = at === -1 ? undefined : words[at + 1]
-  return { path, section, kind: flags.kind, scope: flags.scope === 'user' ? 'user' : 'project', errors: importErrors(words, at, flags, path) }
+  const { kind, contextPolicy, tags, importance, confidence } = flags
+  return { path, section, kind, contextPolicy, tags, importance, confidence, scope: flags.scope === 'user' ? 'user' : 'project', errors: importErrors(words, at, flags, path) }
 }
 
 /** One imported bullet as a memory, with the file as its source. */
@@ -319,6 +349,19 @@ export function importInput(text: string, flags: ImportFlags, sessionId: string)
     scope: flags.scope,
     kind: flags.kind ?? 'convention',
     persistence: 'long_lived',
+    contextPolicy: flags.contextPolicy,
+    tags: flags.tags,
+    importance: flags.importance ?? IMPORT_IMPORTANCE,
+    confidence: flags.confidence ?? IMPORT_CONFIDENCE,
     sources: [{ type: 'legacy_memory', path: flags.path, sessionId }],
   }
+}
+
+/** What an import did with its bullets: written anew, folded into an equal memory, folded into a near one, refused. */
+export type ImportTally = { added: number; exact: number; near: string[]; refused: string[] }
+
+/** The report of an import; each near-duplicate fold is named, because it kept one of two texts. */
+export function importReport(path: string, total: number, t: ImportTally): string {
+  const head = `imported ${total - t.refused.length} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.exact} already there, ${t.near.length} folded into a near-duplicate, ${t.refused.length} refused`
+  return [head, ...t.near.map(line => `  folded: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
 }

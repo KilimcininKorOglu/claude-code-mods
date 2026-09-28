@@ -52,6 +52,8 @@ import {
   hygieneText,
   importFlagsOf,
   importInput,
+  importReport,
+  type ImportTally,
   listText,
   patchOf as flagPatchOf,
   rememberInputOf,
@@ -102,7 +104,7 @@ const USAGE = [
   '  remember [flags] <text> · update <id> [flags] [text] · delete <id> · forget <query> · recover <id>',
   '  audience remember --role <type> <text> | clear <id> | transfer <from> <to>',
   '  hygiene · verify [id] · candidates [list|accept|reject|resolve] · triage [apply] · compact [apply]',
-  '  import <path> [--section <heading>] [--kind <kind>] [--scope project|user]',
+  '  import <path> [--section <heading>] [--kind <kind>] [--scope project|user] [--policy <p>] [--tag <t>] [--importance <n>] [--confidence <n>]',
   '  pane (the memory manager)',
   '  model [name] · remind tools|prompt|subagent [on|off] · consolidate|curate [on|off] · daily [on|off] · capture outcomes|errors [on|off]',
   'flags: --kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
@@ -561,17 +563,30 @@ async function candidateAction($: EngineInterface, state: State, action: string,
   return `resolved ${id}: ${resolution.decision}${resolution.applied ? '' : ' (the target was left as it is)'}`
 }
 
+const IMPORT_USAGE = 'expects import <path> [--section <heading>] [--kind <kind>] [--scope project|user] [--policy auto|never] [--tag <tags>] [--importance <0-1>] [--confidence <0-1>]'
+
+/** Writes one imported bullet and counts what the daemon did with it. */
+async function importOne($: EngineInterface, state: State, input: RememberInput, tally: ImportTally): Promise<void> {
+  try {
+    const r = await ask<RememberResult>($, state, '/memory/remember', { input })
+    if (r.outcome === 'added') tally.added += 1
+    else if (r.nearDuplicate) tally.near.push(`"${input.text.slice(0, 60)}" into ${r.memory.id}`)
+    else tally.exact += 1
+  } catch (err) {
+    tally.refused.push(`${input.text.slice(0, 60)}: ${errorText(err)}`)
+  }
+}
+
 /** Writes each bullet of a markdown file, or of one section of it, as a memory. */
 async function importCommand($: EngineInterface, state: State, rest: string): Promise<string> {
   const flags = importFlagsOf(wordsOf(rest))
-  if (flags.errors.length > 0) return [...flags.errors, 'expects import <path> [--section <heading>] [--kind <kind>] [--scope project|user]'].join('\n')
+  if (flags.errors.length > 0) return [...flags.errors, IMPORT_USAGE].join('\n')
   const bullets = bulletsOf(await $.fs.read(flags.path), flags.section)
   if (bullets === undefined) return `${flags.path} has no heading "${flags.section ?? ''}"`
   const sessionId = await $.session.id()
-  const failed: string[] = []
-  let added = 0
-  for (const bullet of bullets) if (await attempt(failed, bullet.slice(0, 60), () => ask($, state, '/memory/remember', { input: importInput(bullet, flags, sessionId) }))) added += 1
-  return [`imported ${added} of ${bullets.length} bullet(s) from ${flags.path}`, ...failed.map(line => `  refused: ${line}`)].join('\n')
+  const tally: ImportTally = { added: 0, exact: 0, near: [], refused: [] }
+  for (const bullet of bullets) await importOne($, state, importInput(bullet, flags, sessionId), tally)
+  return importReport(flags.path, bullets.length, tally)
 }
 
 async function upkeepCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {

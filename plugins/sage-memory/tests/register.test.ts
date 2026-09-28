@@ -711,18 +711,33 @@ describe('commands', () => {
     expect(String((await $.command.run(run('recover m1'))).text)).toMatch(/^recovered m1/)
   })
 
-  withSidebar('import writes each bullet of one section as a memory', async ($, on) => {
+  withSidebar('import writes each bullet of one section as a memory, trusted enough for a reminder', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/memory/remember', { memory: PNPM, outcome: 'added' })
     w.files.set('/notes/MEMORY.md', '# Project\n\n## CRITICAL RULES\n\n- Use pnpm.\n- Run the tests\n  with the cache off.\n\n## Other\n\n- Not this one.\n')
     await $.session.start(START)
-    const r = await $.command.run(run('import /notes/MEMORY.md --section "CRITICAL RULES" --scope user'))
-    expect(r.text).toBe('imported 2 of 2 bullet(s) from /notes/MEMORY.md')
+    const r = await $.command.run(run('import /notes/MEMORY.md --section "CRITICAL RULES" --scope user --policy never --tag rules'))
+    expect(r.text).toBe('imported 2 of 2 bullet(s) from /notes/MEMORY.md: 2 added, 0 already there, 0 folded into a near-duplicate, 0 refused')
+    const source = [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }]
     expect(bodiesOf(w, '/memory/remember').map(b => b.input)).toEqual([
-      { text: 'Use pnpm.', scope: 'user', kind: 'convention', persistence: 'long_lived', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
-      { text: 'Run the tests with the cache off.', scope: 'user', kind: 'convention', persistence: 'long_lived', sources: [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }] },
+      { text: 'Use pnpm.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'never', tags: ['rules'], importance: 0.8, confidence: 0.9, sources: source },
+      { text: 'Run the tests with the cache off.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'never', tags: ['rules'], importance: 0.8, confidence: 0.9, sources: source },
     ])
     expect((await $.command.run(run('import /notes/MEMORY.md --section Missing'))).text).toBe('/notes/MEMORY.md has no heading "Missing"')
+  })
+
+  withSidebar('a whole-file import leaves out retired sections and names every near-duplicate fold and refusal', async ($, on) => {
+    const w = readyWorld(on)
+    w.files.set('/notes/history.md', '# History\n\n- Kept one.\n\n## Retired CRITICAL RULES\n\n- Old rule.\n\n### Detail\n\n- Old detail.\n\n## Later\n\n- Kept two.\n- Kept three.\n')
+    // The daemon adds the first bullet, folds the second into a near-duplicate and refuses the third.
+    const answers = [{ memory: PNPM, outcome: 'added', nearDuplicate: false }, { memory: PNPM, outcome: 'merged', nearDuplicate: true }, undefined]
+    w.routes.set('/memory/remember', () => answers.shift())
+    await $.session.start(START)
+    const text = String((await $.command.run(run('import /notes/history.md'))).text)
+    expect(text.split('\n')[0]).toBe('imported 2 of 3 bullet(s) from /notes/history.md: 1 added, 0 already there, 1 folded into a near-duplicate, 1 refused')
+    expect(text).toContain(`folded: "Kept two." into ${PNPM.id}`)
+    expect(text).toMatch(/refused: Kept three\.: .*no such route/)
+    expect(text).not.toContain('Old')
   })
 
   withSidebar('a reminder the person turned off is not asked for, and a setting answers while the daemon is down', async ($, on) => {
