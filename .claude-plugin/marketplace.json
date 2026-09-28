@@ -571,6 +571,28 @@
         "memory",
         "background"
       ]
+    },
+    {
+      "name": "probe-runner",
+      "source": "./plugins/probe-runner",
+      "description": "For mod development: runs a live check of plugins in a fresh Claude Code session in tmux, types the steps one by one, collects the pane and the transcript, then deletes the temp directory, its transcripts and the inline store files.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
+    },
+    {
+      "name": "self-command",
+      "source": "./plugins/self-command",
+      "description": "For mod development: lets the model run a slash command in its own session, such as /reload-plugins after a plugin update, and read the output as the next prompt.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
