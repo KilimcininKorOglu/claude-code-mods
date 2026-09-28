@@ -10,13 +10,19 @@ The behavior follows the cache-tax mod by Karan Bansal (karanb192/claude-code-mo
 
 **Runs with no end under `always`.** `/cache-warm always` is not a window: the ping goes out every 50 minutes for as long as the session lives, and `/cache-warm off` is the only thing that ends it. The switch is one global key in the mod's own `$.store`, so every later session of every project starts the same loop at its start and after `/clear`. Each turn's end keeps the last request's time in `$.store` under the session's id, and each ping keeps its own read there too, so a module loaded into a running conversation (`/reload-plugins`, an update) pings on time from the later of the two; a session kept warm by pings alone has a last turn older than its cache. When both are over an hour old, the cache is gone and the loop waits for the next turn instead of paying a cold ping. The session's transcript is not read for this, because `/reload-plugins` writes its own line there and the file's last write then reads as a request (measured: a reload 90 seconds after the last turn would have set the ping 90 seconds late). A session with no time kept yet, one that ran an older version, reads the last write of its transcript (`~/.claude/projects/<directory>/<session id>.jsonl`, under `CLAUDE_CONFIG_DIR` when it is set) once, found under the directory the session started in, never the one a shell `cd` moved to; a transcript it cannot find is named in one transcript line. A ping that finds the cache gone does not end this loop: the write that ping paid for is the new cache, the mod says so in one transcript line, counts the write in the session's tally and keeps going. A warm ping reads the context at the read rate, about $0.05 for 200k tokens, so an idle day of pings costs about $1.40.
 
-**Stops when the cache is gone.** This holds for a window with an end, not for `always`. A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the engine has nothing to fork yet, when the API answers the fork with an error (the line names its status and kind), and when the fork is cut before its reply. A reply that carries no text still read the cache, so it counts as a ping. Under `always` such a failure stops the loop for that turn alone: the next turn starts it again, so the session never holds the switch while running nothing.
+**Stops when the cache is gone.** This holds for a window with an end, not for `always`. A warm ping reads the context and writes only its own few tokens. When a ping reads nothing, or writes a tenth of what it read or more, the cache was already gone and the ping itself paid the write. The mod then stops and shows why. It also stops when the API answers the fork with an error (the line names its status and kind), and when the fork is cut before its reply. When the engine has nothing to fork, as in a resumed process before its first reply, the window does not stop: it waits for the next reply, whose turn arms the ping again, and the line says until when the cache holds. A reply that carries no text still read the cache, so it counts as a ping. Under `always` such a failure stops the loop for that turn alone: the next turn starts it again, so the session never holds the switch while running nothing.
 
 **Arms itself after a paid cold write.** When a turn re-writes at least half of a context larger than 20k tokens, the mod counts that cold write and arms a six-hour window, unless a longer window is already armed. Under `always` no six-hour window is armed at all, because the endless loop already keeps that cache.
 
 **Shows the state.** `/cache-status` prints the model, warm or cold, the context size, the cold price, the window, the break-even and this session's cold writes.
 
-A message sent to a cold cache is not stopped or delayed. A resumed session whose cache has lapsed gets one line with the price of its first message. Claude Code dates the cache from the transcript's last reply, which a ping never writes, so the line is left out while the last ping this mod kept for the session read the cache within the hour. After a resume the ping waits for the first reply, because the engine has nothing to fork before it.
+A message sent to a cold cache is not stopped or delayed. A resumed session whose cache has lapsed gets one line with the price of its first message. Claude Code dates the cache from the transcript's last reply, which a ping never writes, so the line is left out while the last ping this mod kept for the session read the cache within the hour.
+
+**Sends a keep-warm message after a resume.** A resumed process cannot fork before its own first reply: `$.model.fork` answers `nothing-to-fork` (measured with a headless `claude --resume`), so no ping can go, and a session closed and opened again 30 minutes later would lose its cache at the hour unless you wrote something. So when an interactive session is resumed while a window or `always` runs, its context is 50k tokens or more and its cache still holds, the mod sends one message three seconds after the resume, through its own `/cache-warm:send` command:
+
+    /cache-warm:send This message was sent by the cache-warm plugin, not by the person. The session was resumed, and a resumed session can keep its prompt cache warm only after a reply. Do not run a tool or continue a task. Reply with the single word: warm
+
+It is a real turn: it reads the cache, the model answers one word, the pair stays in the conversation, and its end arms the ping again. Nothing is sent when the cache is already gone (your next message pays the same write), in a `-p` run, or when you sent a message within those three seconds. Other mods see the turn as any other: `task-poke` may send its continue prompt after it while tasks are open, and `desk-notify` shows its turn-end notification. Measured on 2.1.283 in a resumed interactive session of 116k tokens: the message went out at the resume, the model answered `warm`, and the next ping forked and read 117k tokens. A resume can break part of the prefix by itself (in that session it re-wrote 42k of the 116k; in another, resumed 40 minutes after its last ping, 4k); the keep-warm turn pays that write at the resume instead of your first message.
 
 ## Commands
 
@@ -27,6 +33,7 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
     /cache-warm status        the status line text
     /cache-warm off           stop, forget the window, and turn always off
     /cache-status             the card
+    /cache-warm:send <text>   the keep-warm message the mod sends after a resume; its body is the text alone
 
 ## What it shows
 
@@ -37,7 +44,17 @@ A message sent to a cold cache is not stopped or delayed. A resumed session whos
 
 The `last` part names the last request that read the cache, a ping or a main-loop turn, whichever came last: `last ping read 200k $0.05` or `last turn read 250k $0.07`, never both. A turn's figures are the whole turn's, every request of it summed. The time in brackets is when that answer came, in local time; one of an earlier day carries its day and month, as `(22 Sep 23:10)`. The record is kept in `$.store` under the session's id, so `/reload-plugins` or an update draws it again at once.
 
-While a window runs, an interactive session draws the line again every minute, so the time left and the time to the next ping count down between turns and pings. The `last` part stays on the line.
+While a window runs, an interactive session draws the line again every minute, so the time left and the time to the next ping count down between turns and pings. The `last` part stays on the line. The last minute before a ping reads `ping now`, because minutes round and the line is drawn once a minute; while the ping's fork is out it reads `pinging…`. When the engine has nothing to fork, the line says so instead of counting down:
+
+    cache-warm: always · no ping before the next reply · cache holds until 19:16
+
+**One stream entry per ping attempt** while the sidebar is open, kept in the sidebar's log file (`~/.claude/sidebar/<project>-<date>.log`), so whether a ping went and what it did can be read back later; with the sidebar closed the same text is a transcript line:
+
+    ping sent · read 901k · wrote 0 · $0.45
+    ping found the cache gone · read 0 · wrote 180k · $3.60
+    ping not sent: the conversation has no reply to fork yet; the ping waits for the next reply, and the cache holds until 19:16
+    ping failed: the ping failed, the API answered 529 (overloaded)
+    keep-warm message sent: the session was resumed and its cache holds until 19:16; a resumed session pings only after a reply
 
 While the [sidebar](../sidebar) is open, that line goes there instead, as a `cache window` section that stays for the session and is rewritten at each change, and the status line stays clear. There only the time left (or `always`) is coloured: yellow for a window whose end is nearer than one ping period, green for a window that holds, faint while it waits for the first turn. The ping details after it are faint, and a stopped window shows its `stopped:` front red with the reason in the default colour. With the sidebar closed, or without that mod installed, the status line is drawn as above.
 
@@ -112,15 +129,15 @@ To keep the flag on, add this to `~/.claude/settings.json`:
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm), $.clock.every, $.clock.now, $.command.register (via registerCommands), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via ping), $.session.id, $.session.model, $.session.root (via seedFromTranscript), $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar), $.store.delete (via prune, pruneRequests, startEndless, startWindow, stop), $.store.get (via prune, pruneRequests, readAlways, restore, seedLastRequest), $.store.keys (via prune, pruneRequests), $.store.set (via afterTurn, keepLastRead, startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript), $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after, $.clock.every, $.clock.now, $.command.register (via registerCommands), $.command.run (via keepWarmAfterResume), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via forkPing), $.prompt.submit (via keepWarmAfterResume), $.session.id, $.session.model, $.session.root (via seedFromTranscript), $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar, toStream), $.store.delete (via prune, pruneRequests, startEndless, startWindow, stop), $.store.get, $.store.keys (via prune, pruneRequests), $.store.set (via afterTurn, keepLastRead, startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript, toStream), $.ui.status (via showStatusAt)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 
 Reach L2, drives Claude.
 
     1. Reads:    the time of each main-loop model request; the token counts and model id of each turn and of each ping; the live context size; the origin of each message, to arm a window again; the resume fields Claude Code computes for settings hooks; the session id and model; the last write time of the session's own transcript file, once when the module loads into a running conversation; the fastMode and fastModePerSessionOptIn settings, at the session's start and at each turn's end; its own $.store. It never reads a prompt's text, a file's content or a tool result.
-    2. Runs:     one $.model.fork per idle stretch while a window or the always loop runs, 50 minutes after the last request unless the test setting is used (floor 1 minute); never while off; a ping that found the cache gone ends a window with an end, and under always the loop carries on
-    3. Sends:    only the fork, an API request over the session's own transcript with a fixed one-line prompt
+    2. Runs:     one $.model.fork per idle stretch while a window or the always loop runs, 50 minutes after the last request unless the test setting is used (floor 1 minute); never while off; a ping that found the cache gone ends a window with an end, and under always the loop carries on; after a resume of an interactive session whose cache still holds, one keep-warm message through /cache-warm:send (a plugin prompt when the engine refuses the command), which is a real turn
+    3. Sends:    the fork, an API request over the session's own transcript with a fixed one-line prompt, and after a resume the fixed keep-warm message as a turn of the conversation
     4. Persists: in $.store, the window end, the ping period and the last main-loop request's time and the last ping or turn read (tokens, cost, time) under this session's id, and the global always switch, which the endless loop needs no window key beside; this session's ended window is deleted at stop and at its next start, another session's window one week after it ended, another session's request time and last read once they are an hour old; the cold-write tally lives in memory and ends with the session
     5. Hostile input: the only text it parses is the argument of /cache-warm, matched against a duration pattern and three words; the fork's prompt is a constant, so nothing crafted can reach it
 
@@ -138,7 +155,7 @@ After a minute the status line should read `last ping read <close to your contex
 - The 50-minute ping assumes the 1-hour cache tier, which the main conversation uses.
 - A warm ping proves the cache was warm then. A model or effort switch, an edited CLAUDE.md or a changed tool list breaks the prefix regardless of time, and the next message pays.
 - A ping's output cannot be capped; a model at high effort may think before it answers. The status line prices what the ping really billed.
-- The test engine of `claude plugin test` cannot raise `classic.SessionStart`. The resume and `/clear` logic is covered by unit tests of the pure functions and by a live session check.
+- The resume logic is covered by hook tests that raise `classic.SessionStart` with the resume fields, and by a live check of a resumed interactive session in tmux. Whether a resume keeps the whole prefix is not in the mod's hands: it re-wrote 42k of 116k tokens in one measured session and 4k in another.
 - The cold-write tally is per session and in memory. `/clear` empties it.
 - Fast mode is read from the `fastMode` setting, the saved preference, not from the request. The mod does not see Claude Code fall back to standard speed within a session: a fast mode rate-limit cooldown, usage credits that ran out, or an organization that turned fast mode off. Those turns bill standard rates while the mod prices them fast.
 - Whether a ping, a `$.model.fork`, runs at fast speed while the session does is not measured; the mod prices it at the session's rates.

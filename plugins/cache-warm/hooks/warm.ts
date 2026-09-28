@@ -71,6 +71,17 @@ export interface State {
   stopped: string | null
   /** The short form of the last transcript line, drawn faint under the window line in the sidebar. */
   event?: Line
+  /** A ping's fork is out; the line says so until its answer comes. */
+  pinging: boolean
+  /**
+   * The engine has no reply of this process to fork, as after a resume (measured: `nothing-to-fork`
+   * until the first reply), so no ping can go before the next reply.
+   */
+  waitingReply: boolean
+  /** Only an interactive session sends the keep-warm message after a resume. */
+  interactive: boolean
+  /** When this process resumed the conversation; 0 when it did not. */
+  resumedAt: number
 }
 
 /** The rates the session bills now: its model, at fast mode rates while the setting says so. */
@@ -81,7 +92,7 @@ export function priceNow(s: State): Price | null {
 export function freshState(): State {
   return {
     sid: '', deadline: 0, endless: false, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, fast: false, ctx: 0,
-    compacted: false, coldWrites: [], pending: null, lastRead: null, stopped: null,
+    compacted: false, coldWrites: [], pending: null, lastRead: null, stopped: null, pinging: false, waitingReply: false, interactive: false, resumedAt: 0,
   }
 }
 
@@ -199,6 +210,57 @@ const joined = (parts: Part[]): string => parts.map(p => p.text).join('')
 /** A line made of parts, its `text` their texts joined. */
 export const partsLine = (parts: Part[]): Line => ({ text: joined(parts), parts })
 
+/** When the cache lapses: an hour after the last request that read it. */
+function cacheEnd(s: State, now: number): string {
+  const end = s.lastRequestAt + TTL_MS
+  return end > now ? `cache holds until ${clockText(end, now)}` : `cache ended at ${clockText(end, now)}`
+}
+
+/**
+ * What the window waits for next: its own fork, a reply the engine can fork, or the ping's time. The
+ * last minute reads `ping now`, because minutes round and the line is drawn once a minute.
+ */
+function nextText(s: State, now: number): string {
+  if (s.pinging) return ' · pinging…'
+  if (!s.lastRequestAt || s.compacted) return ' · waiting for the first turn'
+  if (s.waitingReply) return ` · no ping before the next reply · ${cacheEnd(s, now)}`
+  const left = s.lastRequestAt + s.every - now
+  return left < MIN ? ' · ping now' : ` · ping in ${fmtDuration(left)}`
+}
+
+/** Why a ping could not go: this process has no reply to fork yet. */
+export function noReplyText(s: State, now: number): string {
+  return `the conversation has no reply to fork yet; the ping waits for the next reply, and the ${cacheEnd(s, now)}`
+}
+
+/** What one ping attempt did: sent, found the cache gone, not sent, or failed. */
+export type PingOutcome = { kind: 'sent' | 'cold'; usage: Usage; usd: number | null } | { kind: 'unsent' | 'failed'; reason: string }
+
+/** One stream entry per ping attempt; only the verdict is coloured. */
+export function pingLine(o: PingOutcome): Line {
+  if ('reason' in o) return partsLine([o.kind === 'unsent' ? part('ping not sent', 'warn') : part('ping failed', 'error'), part(`: ${o.reason}`, 'dim')])
+  const head = o.kind === 'sent' ? part('ping sent', 'ok') : part('ping found the cache gone', 'error')
+  return partsLine([head, part(` · read ${fmtTok(o.usage.cache_read_input_tokens)} · wrote ${fmtTok(o.usage.cache_creation_input_tokens)} · ${fmtUsd(o.usd)}`, 'dim')])
+}
+
+/** The message a resumed session sends to keep its cache; the model reads it as the person's prompt. */
+export const KEEP_WARM_TEXT =
+  'This message was sent by the cache-warm plugin, not by the person. The session was resumed, and a resumed session can keep its prompt cache warm only after a reply. Do not run a tool or continue a task. Reply with the single word: warm'
+
+/**
+ * Whether a resumed session sends the keep-warm message now: an interactive session under a window or
+ * `always`, with a context worth keeping, whose cache still holds and which sent no request since.
+ */
+export function wantsKeepWarm(s: State, now: number): boolean {
+  if (!s.interactive || !hasWindow(s) || s.compacted || s.ctx < BIG_TOKENS || s.resumedAt === 0) return false
+  return s.lastRequestAt > 0 && s.lastRequestAt < s.resumedAt && now - s.lastRequestAt < TTL_MS
+}
+
+/** The stream entry of the keep-warm message. */
+export function keepWarmLine(s: State, now: number): Line {
+  return partsLine([part('keep-warm message sent', 'ok'), part(`: the session was resumed and its ${cacheEnd(s, now)}; a resumed session pings only after a reply`, 'dim')])
+}
+
 /**
  * The window's state in parts; undefined while no window runs. Only the time left (or `always`) takes
  * the window's colour, the ping details are faint, and a stop shows its `stopped:` front red.
@@ -206,7 +268,7 @@ export const partsLine = (parts: Part[]): Line => ({ text: joined(parts), parts 
 export function statusParts(s: State, now: number): Part[] | undefined {
   if (s.stopped) return [part('stopped:', 'error'), part(` ${s.stopped}`, undefined)]
   if (!hasWindow(s)) return undefined
-  const next = s.lastRequestAt && !s.compacted ? ` · ping in ${fmtDuration(s.lastRequestAt + s.every - now)}` : ' · waiting for the first turn'
+  const next = nextText(s, now)
   const last = s.lastRead
   const ping = last ? [part(` · last ${last.kind} read ${fmtTok(last.read)} ${fmtUsd(last.usd)} (${clockText(last.at, now)})`, 'dim')] : []
   const left = s.endless ? 'always' : `${fmtDuration(s.deadline - now)} left`
@@ -251,6 +313,8 @@ export function windowLine(s: State, now: number): Line {
 export function statusTone(s: State, now: number): 'ok' | 'warn' | 'error' | 'dim' {
   if (s.stopped) return 'error'
   if (!s.lastRequestAt || s.compacted) return 'dim'
+  // No ping can keep the cache before the next reply.
+  if (s.waitingReply) return 'warn'
   if (s.endless) return 'ok'
   return s.deadline - now <= s.every ? 'warn' : 'ok'
 }
@@ -277,10 +341,15 @@ export type ResumeFields = {
   estimated_cache_write_usd?: number
 }
 
-/** The last request of a resumed conversation: its last reply, or a later ping this mod kept. */
+/**
+ * The last request of a resumed conversation: its last reply, or a later ping this mod kept. The resumed
+ * process has no reply of its own to fork until the first one comes.
+ */
 function seedResumeClock(s: State, e: ResumeFields, now: number): void {
   if (typeof e.seconds_since_last_response === 'number') s.lastRequestAt = now - e.seconds_since_last_response * 1000
   if (s.lastRead && s.lastRead.at > s.lastRequestAt) s.lastRequestAt = s.lastRead.at
+  s.resumedAt = now
+  s.waitingReply = true
 }
 
 /** Whether a request this mod kept read the cache within its lifetime. */
@@ -325,6 +394,8 @@ export function resetForClear(s: State): void {
   s.stopped = null
   s.event = undefined
   s.renew = null
+  s.waitingReply = false
+  s.resumedAt = 0
 }
 
 function stateLine(s: State, now: number): string {

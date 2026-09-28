@@ -1,5 +1,6 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, ModelForkResult, On, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
+import { KEEP_WARM_TEXT } from '../hooks/warm.ts'
 
 tier('user')
 
@@ -314,27 +315,38 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
-  test('a reload after pings alone takes the last ping as the last request, and the loop keeps its time', async ($, on) => {
-    // The last turn is two hours old; a ping 20 minutes ago kept the cache.
-    const kept = { kind: 'ping', read: 200_000, write: 0, usd: 0.05, at: START - 20 * MIN }
-    const w = world(on, [warm], { store: [['always', true], ['request:S1', START - 2 * HOUR], ['last:S1', kept]] })
-    w.live.tokens = 200_000
-    await $.session.start(session)
-    expect(w.statuses.at(-1)).toMatch(/^always · ping in 30m · last ping read 200k/)
-    await w.clock.advance(30 * MIN)
-    expect(w.forks).toBe(1)
-  })
-
-  test('waits for the first reply when the engine has nothing to fork, and the next turn pings again', async ($, on) => {
+  test('with no reply to fork the window waits, says until when the cache holds, and the next turn pings again', async ($, on) => {
     const w = world(on, [NOTHING_TO_FORK, warm])
     await $.session.start(session)
     await $.command.run(run('cache-warm', '6h'))
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
-    expect(w.statuses.at(-1)).not.toMatch(/^stopped/)
+    const clock = String.raw`(?:\d+ \w{3} )?\d\d:\d\d`
+    expect(w.statuses.at(-1)).toMatch(new RegExp(`^5h 10m left · no ping before the next reply · cache holds until ${clock} · last turn read`))
+    expect(w.logs.at(-1)).toMatch(new RegExp(`^ping not sent: the conversation has no reply to fork yet; the ping waits for the next reply, and the cache holds until ${clock}$`))
+    // The line no longer counts down to a ping that cannot go, and no second fork is tried.
+    await w.clock.advance(20 * MIN)
+    expect(w.statuses.at(-1)).toMatch(new RegExp(`cache ended at ${clock}`))
+    expect(w.forks).toBe(1)
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(2)
+    expect(w.logs.at(-1)).toBe('ping sent · read 200k · wrote 0 · $0.05')
+  })
+
+  test('the last minute before a ping reads ping now, and the fork out reads pinging', async ($, on) => {
+    const w = world(on, [warm])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm'))
+    // The turn ends half a minute after the minute's redraw, so a redraw falls in the ping's last minute.
+    await w.clock.advance(30 * 1000)
+    await $.turn.complete(turn())
+    await w.clock.advance(49 * MIN + 30 * 1000)
+    expect(w.statuses.at(-1)).toMatch(/^5h 10m left · ping now · last turn read/)
+    await w.clock.advance(MIN)
+    expect(w.forks).toBe(1)
+    expect(w.statuses.some(t => t?.includes(' · pinging…'))).toBe(true)
+    expect(w.statuses.at(-1)).toMatch(/ · ping in 50m · last ping read 200k/)
   })
 
   test('stops with the status and kind of an API error, and scores no cold ping', async ($, on) => {
@@ -344,7 +356,29 @@ describe('keep warm', () => {
     await $.turn.complete(turn())
     await w.clock.advance(50 * MIN)
     expect(w.statuses.at(-1)).toBe('stopped: the ping failed, the API answered 529 (overloaded)')
+    expect(w.logs).toContain('ping failed: the ping failed, the API answered 529 (overloaded)')
     expect(w.logs.some(l => l.includes('cache was already gone'))).toBe(false)
+  })
+
+  test('a ping that found the cache gone writes its own stream entry before the stop', async ($, on) => {
+    const w = world(on, [{ read: 0, write: 180_000 }])
+    await $.session.start(session)
+    await $.command.run(run('cache-warm', '1h'))
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.logs).toContain('ping found the cache gone · read 0 · wrote 180k · $3.60')
+    expect(w.statuses.at(-1)).toMatch(/^stopped: the ping read 0 and wrote 180k tokens/)
+  })
+
+  test('a reload after pings alone takes the last ping as the last request, and the loop keeps its time', async ($, on) => {
+    // The last turn is two hours old; a ping 20 minutes ago kept the cache.
+    const kept = { kind: 'ping', read: 200_000, write: 0, usd: 0.05, at: START - 20 * MIN }
+    const w = world(on, [warm], { store: [['always', true], ['request:S1', START - 2 * HOUR], ['last:S1', kept]] })
+    w.live.tokens = 200_000
+    await $.session.start(session)
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 30m · last ping read 200k/)
+    await w.clock.advance(30 * MIN)
+    expect(w.forks).toBe(1)
   })
 
   test('stops when the ping was cut before its reply', async ($, on) => {
@@ -789,5 +823,60 @@ describe('store per session', () => {
     })
     await $.session.start(session)
     expect([...w.store.keys()]).toEqual(['deadline:live'])
+  })
+})
+
+/** The fields Claude Code computes for a resume, `seconds` after the last reply. */
+const resumed = (seconds: number, tokens = 300_000) =>
+  ({ session_id: 'S1', transcript_path: '/t', cwd: '/work', hook_event_name: 'SessionStart', source: 'resume', context_tokens: tokens, seconds_since_last_response: seconds, prompt_cache_likely_expired: seconds >= 3600 }) as never
+
+/** A world that also answers the send command the keep-warm message runs, and records each run. */
+function resumeWorld(on: On, store: [string, unknown][]): World & { sent: { command: string; args?: string }[] } {
+  // The world's hooks count into the object they made, so the send list is added to that object, not to a copy.
+  const w = Object.assign(world(on, [warm], { store: [['always', true], ...store] }), { sent: [] as { command: string; args?: string }[] })
+  on('command.run', (_, e) => {
+    w.sent.push({ command: e.command, args: e.args === undefined ? undefined : String(e.args) })
+    return { text: '' }
+  })
+  on('classic.SessionStart', () => ({}))
+  w.live.tokens = 300_000
+  return w
+}
+
+describe('keep warm after a resume', () => {
+  test('a resume with the cache still warm sends the keep-warm message, and its turn arms the ping', async ($, on) => {
+    const w = resumeWorld(on, [['request:S1', START - 30 * MIN]])
+    await $.session.start(session)
+    await $.classic.SessionStart(resumed(30 * 60))
+    await w.clock.advance(3000)
+    expect(w.sent).toEqual([{ command: 'cache-warm:send', args: KEEP_WARM_TEXT }])
+    expect(w.logs.at(-1)).toMatch(/^keep-warm message sent: the session was resumed and its cache holds until (?:\d+ \w{3} )?\d\d:\d\d; a resumed session pings only after a reply$/)
+    // The message is a turn; its end arms the ping as any turn does, and no fork was tried before it.
+    expect(w.forks).toBe(0)
+    await $.turn.complete(turn())
+    await w.clock.advance(50 * MIN)
+    expect(w.forks).toBe(1)
+    expect(w.statuses.at(-1)).toMatch(/^always · ping in 50m · last ping read 200k/)
+  })
+
+  test('no keep-warm message when the cache is already gone, the session is not interactive, or the person wrote first', async ($, on) => {
+    const w = resumeWorld(on, [])
+    await $.session.start(session)
+    await $.classic.SessionStart(resumed(2 * 3600))
+    await w.clock.advance(3000)
+    expect(w.sent).toEqual([])
+    // A request of the person's inside the wait: its reply is what the ping needs, so nothing is sent.
+    await $.classic.SessionStart(resumed(20 * 60))
+    await step($)
+    await w.clock.advance(3000)
+    expect(w.sent).toEqual([])
+  })
+
+  test('a headless resume sends nothing', async ($, on) => {
+    const w = resumeWorld(on, [['request:S1', START - 30 * MIN]])
+    await $.session.start({ ...session, isInteractive: false })
+    await $.classic.SessionStart(resumed(30 * 60))
+    await w.clock.advance(3000)
+    expect(w.sent).toEqual([])
   })
 })

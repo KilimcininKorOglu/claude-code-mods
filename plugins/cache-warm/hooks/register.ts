@@ -1,7 +1,8 @@
-import type { EngineInterface, Register, TurnUsage } from 'claude-code'
+import type { EngineInterface, ModelForkResult, Register, TurnUsage } from 'claude-code'
 import { responseUsd, writeUsd, type Usage } from './pricing.ts'
 import {
   AUTO_WARM_MS,
+  KEEP_WARM_TEXT,
   MIN_PING_MS,
   PING_AFTER_MS,
   card,
@@ -17,7 +18,10 @@ import {
   isColdWrite,
   isOver,
   isWarmPing,
+  keepWarmLine,
+  noReplyText,
   parseWarmArgs,
+  pingLine,
   pingRecordOf,
   priceNow,
   resetForClear,
@@ -26,6 +30,7 @@ import {
   transcriptPath,
   TTL_MS,
   unsentText,
+  wantsKeepWarm,
   windowLine,
   type Line,
   type PingRecord,
@@ -33,6 +38,10 @@ import {
 } from './warm.ts'
 
 const PING_PROMPT = 'Reply with the single word: warm'
+/** The mod's own markdown command, whose body is its arguments alone, so the model reads the text as it is written. */
+const SEND_COMMAND = 'cache-warm:send'
+/** How long after a resume the keep-warm message waits, so the session is idle and a quick prompt of the person's goes first. */
+const KEEP_WARM_AFTER_MS = 3000
 const KEY_ALWAYS = 'always'
 const DEADLINE = 'deadline:'
 const EVERY = 'every:'
@@ -85,6 +94,19 @@ const SECTION = { consumer: 'cache-warm', key: 'window' }
 function logEvent($: EngineInterface, s: State, text: string, short: Line): void {
   $.ui.log(text)
   s.event = short
+}
+
+/**
+ * One entry in the sidebar's stream, which the sidebar keeps in its log file, so every ping attempt can be
+ * read back later; the transcript line while the pane is closed or the sidebar mod is missing.
+ */
+async function toStream($: EngineInterface, line: Line): Promise<void> {
+  try {
+    if (await $.sidebar.set({ ...SECTION, key: 'ping', title: 'ping', lines: [line], until: 'stream' })) return
+  } catch {
+    // The sidebar mod is not installed; the log line carries the entry.
+  }
+  $.ui.log(line.text)
 }
 
 /**
@@ -241,6 +263,7 @@ async function settlePing($: EngineInterface, s: State, usage: Usage, now: numbe
   const price = priceNow(s)
   const usd = price ? responseUsd(usage, price) : null
   await keepLastRead($, s, { kind: 'ping', read: usage.cache_read_input_tokens, write: usage.cache_creation_input_tokens, usd, at: now })
+  await toStream($, pingLine({ kind: isWarmPing(usage) ? 'sent' : 'cold', usage, usd }))
   if (!isWarmPing(usage)) {
     if (!s.endless) return stop($, s, coldPingText(usage, usd))
     const write = usage.cache_creation_input_tokens
@@ -251,23 +274,53 @@ async function settlePing($: EngineInterface, s: State, usage: Usage, now: numbe
   await arm($, s)
 }
 
+/** Sends the ping's fork while the line reads `pinging…`; a throw comes back as its Error. */
+async function forkPing($: EngineInterface, s: State): Promise<ModelForkResult | Error> {
+  s.pinging = true
+  await showStatus($, s)
+  try {
+    return await $.model.fork({ prompt: PING_PROMPT })
+  } catch (err) {
+    return err instanceof Error ? err : new Error(String(err))
+  } finally {
+    s.pinging = false
+  }
+}
+
+/**
+ * A ping the engine could not send because this process has no reply to fork (a resume, or a module
+ * loaded into one): the window waits for the next reply, whose turn arms the ping again, and says until
+ * when the cache holds.
+ */
+async function waitForReply($: EngineInterface, s: State, now: number): Promise<void> {
+  s.waitingReply = true
+  await toStream($, pingLine({ kind: 'unsent', reason: noReplyText(s, now) }))
+  await showStatusAt($, s, now)
+}
+
+/** A ping that failed: one stream entry, and the window stops with the reason. */
+async function pingFailed($: EngineInterface, s: State, why: string): Promise<void> {
+  await toStream($, pingLine({ kind: 'failed', reason: why }))
+  await stop($, s, why)
+}
+
 async function ping($: EngineInterface, s: State): Promise<void> {
   s.pending = null
   if (!hasWindow(s) || (await endedElsewhere($, s))) return
   const now = await $.clock.now()
   // The window ended, or a request since the timer was set moved the ping later.
   if (isOver(s, now) || now - s.lastRequestAt < s.every - 1000) return arm($, s)
-  let reply
-  try {
-    reply = await $.model.fork({ prompt: PING_PROMPT })
-  } catch (err) {
-    return stop($, s, `the ping failed, ${errorText(err)}`)
-  }
-  // A resumed conversation has no reply of this process to fork until its first turn, whose end arms the
-  // ping again; the window waits instead of stopping.
-  if (!reply.isAnswered && reply.reason === 'nothing-to-fork') return
+  // Known before any fork: a resumed process has no reply to fork (measured: `nothing-to-fork`).
+  if (s.waitingReply) return showStatusAt($, s, now)
+  await settleReply($, s, await forkPing($, s), now)
+}
+
+/** What the fork answered, scored: a ping, a wait for the next reply, or a failure that stops the window. */
+async function settleReply($: EngineInterface, s: State, reply: ModelForkResult | Error, now: number): Promise<void> {
+  if (reply instanceof Error) return pingFailed($, s, `the ping failed, ${errorText(reply)}`)
+  if (!reply.isAnswered && reply.reason === 'nothing-to-fork') return waitForReply($, s, now)
   // A reply without text still read the cache, so it is scored as a ping; every other unanswered fork stops.
-  if (!reply.isAnswered && reply.reason !== 'empty-reply') return stop($, s, unsentText(reply))
+  if (!reply.isAnswered && reply.reason !== 'empty-reply') return pingFailed($, s, unsentText(reply))
   await settlePing($, s, reply.usage, now)
 }
 
@@ -410,6 +463,7 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
   if (now - s.lastRequestAt > durationMs) s.lastRequestAt = now
   await $.store.set(requestKey(s), s.lastRequestAt)
   s.compacted = false
+  s.waitingReply = false
   // The stop reason and the line under it belong to the window that ended: one turn later the pane
   // carries the idle line instead, and the reason stays in the transcript.
   if (s.stopped) {
@@ -435,6 +489,8 @@ async function afterTurn($: EngineInterface, s: State, durationMs: number, usage
 async function stampRequest($: EngineInterface, s: State): Promise<void> {
   s.lastRequestAt = await $.clock.now()
   s.compacted = false
+  // This request's reply is one the engine can fork, and the ping it arms comes long after it.
+  s.waitingReply = false
   if (s.pending === null && hasWindow(s)) await arm($, s)
 }
 
@@ -452,6 +508,26 @@ async function seedLastRequest($: EngineInterface, s: State, now: number): Promi
   const latest = Math.max(typeof kept === 'number' ? kept : 0, s.lastRead?.at ?? 0)
   if (latest === 0) return seedFromTranscript($, s, now)
   if (now - latest < TTL_MS) s.lastRequestAt = latest
+}
+
+/**
+ * Sends the keep-warm message after a resume. The resumed process has no reply to fork, so no ping can
+ * go before one comes, and the cache would lapse an hour after the last request while the person wrote
+ * nothing. The message is a real turn: it reads the cache, and its end arms the ping again. It runs from
+ * a timer through the mod's own markdown command; a run the engine refuses goes out as a plugin prompt.
+ */
+async function keepWarmAfterResume($: EngineInterface, s: State): Promise<void> {
+  await followAlways($, s)
+  const now = await $.clock.now()
+  if (!wantsKeepWarm(s, now)) return
+  await toStream($, keepWarmLine(s, now))
+  try {
+    await $.command.run({ command: SEND_COMMAND, args: KEEP_WARM_TEXT })
+  } catch (err) {
+    await toStream($, pingLine({ kind: 'unsent', reason: `the send command did not run, the keep-warm message goes out as a plugin prompt: ${errorText(err)}` }))
+    const res = await $.prompt.submit({ text: KEEP_WARM_TEXT })
+    if (res.drop !== undefined) await toStream($, pingLine({ kind: 'failed', reason: `the keep-warm message was dropped: ${res.drop}` }))
+  }
 }
 
 /**
@@ -479,6 +555,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     s.sid = await $.session.id()
+    s.interactive = e.isInteractive
     const now = await $.clock.now()
     await prune($, now)
     await pruneRequests($, s, now)
@@ -515,6 +592,8 @@ export const register: Register = on => {
     const line = seedFromResume(s, e, await $.clock.now())
     s.model ??= await $.session.model()
     if (line) logEvent($, s, line, eventShort(line))
+    // The conditions are read when the timer fires, once session.start has read the switch and the window.
+    if (e.source === 'resume') $.clock.after(KEEP_WARM_AFTER_MS, () => { void keepWarmAfterResume($, s) })
     return r
   })
 
