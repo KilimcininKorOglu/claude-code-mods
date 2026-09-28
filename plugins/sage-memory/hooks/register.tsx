@@ -22,8 +22,26 @@ import {
   usedBy,
   type ToolCall,
 } from './remind.ts'
+import {
+  additionsOf,
+  addedLine,
+  CONSOLIDATE_MS,
+  CONSOLIDATE_TOKENS,
+  CONSOLIDATOR_SYSTEM,
+  completedTasks,
+  consolidatorPrompt,
+  DEFAULT_MODEL,
+  digestOf,
+  emptyEvidence,
+  evidenceText,
+  MIN_ANSWER,
+  noted,
+  safeCommand,
+  topByImportance,
+  type TurnEvidence,
+} from './consolidate.ts'
 import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
-import type { Memory, Ranking, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
+import type { Memory, MemoryPage, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol.ts'
 
@@ -63,6 +81,10 @@ type State = {
   tasks?: string[]
   /** Whether this session declared the memory tools; a declared tool cannot be taken back. */
   declared: boolean
+  /** What the main loop's turn touched, for the consolidator. */
+  turn: TurnEvidence
+  /** Whether the person typed a prompt or a main-loop tool ran since the last consolidation (memory-save's rule). */
+  worth: boolean
 }
 
 type Loop = { visible: string; reminded: Memory[] }
@@ -214,7 +236,7 @@ async function setup($: EngineInterface, state: State): Promise<string> {
   return setupText(job)
 }
 
-async function turn($: EngineInterface, state: State, on: boolean): Promise<string> {
+async function setEnabled($: EngineInterface, state: State, on: boolean): Promise<string> {
   await $.store.set(ENABLED_KEY, on)
   state.enabled = on
   if (!on) {
@@ -240,7 +262,7 @@ async function follow($: EngineInterface, state: State): Promise<void> {
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   await follow($, state)
   const word = args.trim().toLowerCase()
-  if (word === 'on' || word === 'off') return turn($, state, word === 'on')
+  if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
   if (word === 'setup') return setup($, state)
   return word === '' ? statusText(state.enabled, state.link, state.project?.name ?? '') : USAGE
 }
@@ -435,6 +457,73 @@ async function serveTool($: EngineInterface, state: State, name: string, input: 
 
 const LISTED = new Set(TOOLS.filter(tool => tool.listed).map(tool => `mcp__sage-memory__${tool.name}`))
 
+/** The model the LLM jobs use: the one the person named, else haiku. */
+async function jobModel($: EngineInterface): Promise<string> {
+  const stored = await $.store.get('model')
+  return typeof stored === 'string' && stored !== '' ? stored : DEFAULT_MODEL
+}
+
+/** The subjects of the tasks completed, or none while the session has no task tools. */
+async function completedOf($: EngineInterface): Promise<string[]> {
+  const answer = await $.tool.call({ tool: 'TaskList' })
+  return 'deny' in answer && answer.deny !== undefined ? [] : completedTasks(answer.result)
+}
+
+/** The active memories of one store, most important first. */
+async function topOf($: EngineInterface, state: State, scope: 'project' | 'user', limit: number): Promise<Memory[]> {
+  const page = await ask<MemoryPage>($, state, '/memory/list', { scope, statuses: ['active'], limit: 200 })
+  return topByImportance(page.memories.filter(memory => memory.kind !== 'session_digest'), limit)
+}
+
+/** Writes one memory; a refusal (a progress note, a secret, a missing anchor) is a red line, and the rest still go. */
+async function writeOne($: EngineInterface, state: State, input: RememberInput): Promise<boolean> {
+  try {
+    const result = await ask<RememberResult>($, state, '/memory/remember', { input })
+    if (result.outcome === 'added') await toStream($, 'consolidator', { text: addedLine(result.memory), kind: 'ok' })
+    return true
+  } catch (err) {
+    await toStream($, 'error', { text: `the consolidator's memory was not written: ${errorText(err)}`, kind: 'error' })
+    return false
+  }
+}
+
+/** Asks the model what the turn taught, writes each addition and the turn's digest. */
+async function consolidate($: EngineInterface, state: State, answer: string, turn: TurnEvidence): Promise<void> {
+  if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
+  const root = state.project?.root ?? ''
+  const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
+  const prompt = consolidatorPrompt(answer, evidenceText(root, turn, await completedOf($)), existing)
+  const r = await $.model.complete({ model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
+  if (!r.isAnswered) {
+    await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
+    return
+  }
+  const sessionId = await $.session.id()
+  let added = 0
+  for (const input of additionsOf(r.text, sessionId)) if (await writeOne($, state, input)) added += 1
+  const digest = digestOf(answer, added, sessionId, await $.clock.now())
+  if (digest !== undefined) await ask($, state, '/memory/remember', { input: digest })
+}
+
+/** Starts a consolidation after a main-loop answer the person asked for or a tool worked on; the turn does not wait for it. */
+function afterAnswer($: EngineInterface, state: State, answer: string): void {
+  if (!state.worth || answer.trim().length < MIN_ANSWER) return
+  state.worth = false
+  const turn = state.turn
+  void guarded($, 'the consolidator', () => consolidate($, state, answer, turn))
+}
+
+/** Notes what a main-loop tool batch touched, for the consolidator. */
+function noteBatch(state: State, calls: readonly ToolCall[]): void {
+  state.worth = true
+  for (const call of calls) {
+    for (const path of pathsOf({ ...call, tool_response: undefined })) {
+      if (CHANGE_TOOLS.has(call.tool_name)) state.turn.written = noted(state.turn.written, path)
+      else if (call.tool_name === 'Read') state.turn.read = noted(state.turn.read, path)
+    }
+  }
+}
+
 /** A hook result with one more context text, or unchanged when there is none. */
 function withContext<R extends { additionalContext?: readonly string[] }>(r: R, text: string | undefined): R {
   return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
@@ -456,7 +545,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -517,10 +606,12 @@ export const register: Register = on => {
 
   on('classic.PostToolBatch', async ($, e, next) => {
     const r = await next(e)
+    if (e.agent_id === undefined) noteBatch(state, e.tool_calls)
     return withContext(r, await guarded($, 'the reminder after the tools', () => afterBatch($, state, e.tool_calls, e.agent_id ?? MAIN_LOOP)))
   })
 
   on('prompt.submit', async ($, e, next) => {
+    if (isTyped(e)) state.worth = true
     const text = isTyped(e) ? await guarded($, 'the reminder with the prompt', () => beforePrompt($, state, e.text)) : undefined
     return next(text === undefined ? e : { ...e, context: [...(e.context ?? []), text] })
   })
@@ -538,6 +629,7 @@ export const register: Register = on => {
     const r = await next(e)
     const loopKey = e.agentId ?? MAIN_LOOP
     if (e.reason === 'answer') await guarded($, 'counting the used memories', () => countUse($, state, loopKey, e.answer))
+    if (e.reason === 'answer' && e.agentId === undefined) afterAnswer($, state, e.answer)
     if (e.agentId !== undefined) state.loops.delete(e.agentId)
     return r
   })
@@ -553,6 +645,8 @@ export const register: Register = on => {
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const cwd = await $.session.cwd()
     const r = await next(e)
+    const command = safeCommand(e.command)
+    if (e.agentId === undefined && command !== undefined) state.turn.commands = noted(state.turn.commands, command, 10)
     if (succeeded(r)) await guarded($, 'moving anchors', () => remapMoved($, state, e.command, cwd))
     return r
   })
@@ -562,6 +656,7 @@ export const register: Register = on => {
   // Each turn follows an on or off another window stored, before it would recall anything.
   on('turn.start', async ($, e, next) => {
     state.tasks = undefined
+    state.turn = emptyEvidence()
     await follow($, state)
     await declareTools($, state)
     return next(e)

@@ -42,10 +42,12 @@ type World = {
   tasks: { id: string; status: string; subject: string }[]
   toolFails: boolean
   tools: string[]
+  asked: { system: string; prompt: string; model: string }[]
+  modelText?: string
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], asked: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -74,6 +76,10 @@ function world(on: On): World {
     return { value: { exitCode: 0, stdout, stderr: '' } }
   })
   on('session.id', () => ({ value: 'sess-1' }))
+  on('model.complete', (_, e) => {
+    w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model })
+    return { value: w.modelText === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text: w.modelText, usage: {} } } as never
+  })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
   on('tool.describe', (_, e) => ({ description: e.description }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { percent: w.percent }, rateLimits: [] } as never }))
@@ -188,6 +194,8 @@ function readyWorld(on: On): World {
   const w = world(on)
   for (const path of ['/memory/reminded', '/memory/used', '/context/new']) w.routes.set(path, { counted: 1, epoch: 2 })
   w.routes.set('/remind/always', [])
+  w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+  for (const path of ['/remind/prompt', '/remind/tools']) w.routes.set(path, { candidates: [], rejected: [] })
   return w
 }
 
@@ -340,5 +348,70 @@ describe('memory tools', () => {
     w.store.set('enabled', false)
     const r = await $.tool.call({ tool: TOOL('search'), query: 'pnpm' } as never)
     expect(r).toMatchObject({ isError: true, result: 'sage-memory is off; the person turns it on with /sage-memory on.' })
+  })
+})
+
+/** Lets a job the turn does not wait for run to its end. */
+async function settled(w: World): Promise<void> {
+  for (let i = 0; i < 20; i += 1) await w.clock.advance(1)
+}
+
+const answered = (answer: string) => ({ answer, reason: 'answer', durationMs: 1, isAborted: false, turnId: 't' }) as never
+
+describe('consolidator', () => {
+  withSidebar('after a worked turn the model reads the answer and evidence, and each add it proposes is written', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', { memories: [PNPM], nextCursor: null, total: 1, statusCounts: {} })
+    w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
+    w.tasks = [{ id: '1', status: 'completed', subject: 'Shorten the idle timeout' }]
+    w.modelText = JSON.stringify({
+      operations: [
+        { action: 'add', text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', priority: 'high', confidence: 0.9, tags: ['daemon'], anchors: [{ type: 'file', path: 'daemon/server.ts' }] },
+        { action: 'add', text: 'The user prefers short answers.', scope: 'user', kind: 'preference', anchors: [{ type: 'file', path: 'a.ts' }] },
+        { action: 'delete', text: 'anything' },
+      ],
+    })
+    await $.session.start(START)
+    await $.turn.start({ text: 'x', turnId: 't' } as never)
+    await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: '/src/my app/daemon/server.ts' }, tool_use_id: 't1', tool_response: '' }] } as never)
+    await $.tool.call({ tool: 'Bash', command: 'API_KEY=abc npm test' } as never)
+    await $.turn.complete(answered('The idle timeout is five minutes, set in the daemon server.'))
+    await settled(w)
+    const asked = w.asked[0]
+    expect(asked?.model).toBe('haiku')
+    expect(asked?.system).toContain('You are a memory consolidator.')
+    expect(asked?.prompt).toContain('"daemon/server.ts"')
+    expect(asked?.prompt).toContain('[redacted sensitive command]')
+    expect(asked?.prompt).toContain('Shorten the idle timeout')
+    expect(asked?.prompt).toContain('(project) Install packages with pnpm')
+    const inputs = bodiesOf(w, '/memory/remember').map(body => body.input as Record<string, unknown>)
+    expect(inputs.map(input => input.kind)).toEqual(['fact', 'preference', 'session_digest'])
+    expect(inputs[0]).toMatchObject({ scope: 'project', importance: 0.8, confidence: 0.9, anchors: [{ type: 'file', path: 'daemon/server.ts' }], sources: [{ type: 'session', sessionId: 'sess-1' }] })
+    expect(inputs[1]).toMatchObject({ scope: 'user', anchors: [] })
+    expect(inputs[2]).toMatchObject({ scope: 'session', ownerSessionId: 'sess-1', text: 'Session digest (2 facts added): The idle timeout is five minutes, set in the daemon server.' })
+    expect(w.lines).toContain('added (project): The daemon closes itself five minutes after its last request.')
+  })
+
+  withSidebar('a turn nobody asked for and nothing worked on is not consolidated, nor one while the consolidator is off', async ($, on) => {
+    const w = readyWorld(on)
+    w.modelText = '{"operations":[]}'
+    await $.session.start(START)
+    await $.turn.complete(answered('A plugin turn that only talked, long enough to count.'))
+    await settled(w)
+    w.store.set('consolidate', false)
+    await $.prompt.submit(typed('what changed?'))
+    await $.turn.complete(answered('Nothing changed in this project since the last turn.'))
+    await settled(w)
+    expect(w.asked).toEqual([])
+  })
+
+  withSidebar('a model that does not answer leaves a red line and writes nothing', async ($, on) => {
+    const w = readyWorld(on)
+    await $.session.start(START)
+    await $.prompt.submit(typed('what is the timeout?'))
+    await $.turn.complete(answered('The idle timeout is five minutes.'))
+    await settled(w)
+    expect(w.lines).toContain('the consolidator got no answer (empty-reply)')
+    expect(bodiesOf(w, '/memory/remember')).toEqual([])
   })
 })
