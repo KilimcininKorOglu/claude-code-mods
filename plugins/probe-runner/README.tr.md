@@ -81,11 +81,11 @@ Reach L3: probe session'ı Claude API ile konuşur.
 
 ```
 Threat model for probe-runner (reach L3)
-1. Okur:         session'ın dizinini ve depo kökünü, HOME'u, her plugin'in manifest'ini; probe'un pane'ini ve transcript'ini.
+1. Okur:         session'ın dizinini ve repository kökünü, HOME'u, her plugin'in manifest'ini; probe'un pane'ini ve transcript'ini.
 2. Çalıştırır:   git, tmux ve claude çalıştıran python3 scripts/probe.py'yi.
-3. Gönderir:     adımları, kendi Claude Code session'larına, sizin hesabınızla.
+3. Gönderir:     adımları, kendi Claude Code session'larına, senin hesabınla.
 4. Saklar:       hiçbir şey; probe'un dizini, transcript'leri ve inline store dosyaları silinir.
-5. Düşman girdi: adımlar ve plugin yolları sizden ya da modelden gelir ve claude ile tmux'a asla bir shell üzerinden değil, argv olarak gider; bir adım probe session'ına kendi geçici deposunda tool çalıştırtabilir.
+5. Düşman girdi: adımlar ve plugin path'leri senden ya da modelden gelir ve claude ile tmux'a hiçbir zaman bir shell üzerinden değil, argv olarak gider; bir adım, probe session'ının kendi geçici repository'sinde tool çalıştırmasına yol açabilir.
 ```
 
 ## Geliştirme
