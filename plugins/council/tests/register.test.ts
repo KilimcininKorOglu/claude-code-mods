@@ -172,7 +172,7 @@ describe('council', () => {
     answerSteps(on)
     await step($)
     const r = await convene($)
-    expect(w.completes.map(c => [c.model, c.effort])).toEqual([['claude-sonnet-5', 'high'], ['claude-fable-5-1', 'high'], ['claude-haiku-4-5-20251001', 'high']])
+    expect(w.completes.map(c => [c.model, c.effort])).toEqual([['claude-sonnet-5-5', 'high'], ['claude-fable-5-1', 'high'], ['claude-haiku-4-5-20251001', 'high']])
     expect(w.completes[0]?.system).toBe(MEMBER_SYSTEM)
     expect(w.completes[0]?.prompt).toContain('  [call] Bash {"command":"npm test"}\n  error: FAIL timeout after 5000 ms')
     expect(w.completes[0]?.prompt.endsWith(`The agent asks the council:\n\n${QUESTION}`)).toBe(true)
@@ -190,25 +190,25 @@ describe('council', () => {
     await convene($)
     const chair = w.forks[1] ?? ''
     expect(chair.startsWith('You chair a council of models')).toBe(true)
-    expect(chair).toContain('Member A:\nthe answer of the fork\n\nMember B:\nthe answer of claude-sonnet-5')
-    expect(chair).not.toMatch(/opus|sonnet 5|haiku 4\.5/)
+    expect(chair).toContain('Member A:\nthe answer of the fork\n\nMember B:\nthe answer of claude-sonnet-5-5')
+    expect(chair).not.toMatch(/opus|sonnet 5.5|haiku 4\.5/)
   })
 
   it('a member that fails is named with its reason, and the chair judges the rest', async ($, on) => {
     const w = world(on)
     answerSteps(on)
     await step($)
-    w.claude.set('claude-sonnet-5', null)
+    w.claude.set('claude-sonnet-5-5', null)
     const r = await convene($)
     expect(r.result).toContain('(4 of 5 members answered;')
-    expect(r.result).toContain('## sonnet 5 · no answer: api-error 529 overloaded')
+    expect(r.result).toContain('## sonnet 5.5 · no answer: api-error 529 overloaded')
     expect(w.forks[1]).toContain('4 members answered')
   })
 
   it('no answer from any member is a denial naming each reason, and no chair runs', async ($, on) => {
     const w = world(on, { key: null })
     answerSteps(on)
-    await step($, 'claude-sonnet-5')
+    await step($, 'claude-sonnet-5-5')
     for (const m of ['claude-opus-5-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001']) w.claude.set(m, null)
     w.forkFails = true
     const r = await convene($)
@@ -220,14 +220,14 @@ describe('council', () => {
   it('the model of the session forks, whichever member it is, and a subagent\'s call sends no conversation', async ($, on) => {
     const w = world(on)
     answerSteps(on)
-    await step($, 'claude-sonnet-5[1m]')
+    await step($, 'claude-sonnet-5-5[1m]')
     await convene($)
     expect(w.completes.map(c => c.model)).toEqual(['claude-opus-5-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001'])
     w.completes.length = 0
     w.forks.length = 0
     await convene($, QUESTION, 'agent-1')
     expect(w.forks).toEqual([])
-    expect(w.completes.map(c => c.model)).toEqual(['claude-opus-5-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5'])
+    expect(w.completes.map(c => c.model)).toEqual(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-sonnet-5-5'])
     expect(w.completes[0]?.prompt).toContain('The conversation is not available; only the question is.')
     expect(w.completes[4]?.prompt.startsWith('You chair a council of models')).toBe(true)
   })
@@ -241,7 +241,7 @@ describe('council', () => {
     w.nothingToFork = true
     w.completes.length = 0
     const r = await convene($)
-    expect(w.completes.map(c => c.model)).toEqual(['claude-sonnet-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-opus-5-5', 'claude-opus-5-5'])
+    expect(w.completes.map(c => c.model)).toEqual(['claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5-20251001', 'claude-opus-5-5', 'claude-opus-5-5'])
     expect(w.completes[3]?.system).toBe(MEMBER_SYSTEM)
     expect(r.result).toContain('the chair, opus 5.5, wrote it')
   })
@@ -291,11 +291,11 @@ describe('Gemini members', () => {
 describe('/council', () => {
   it('sets, shows and resets the members, and refuses a typo', async ($, on) => {
     const w = world(on)
-    expect((await $.command.run(run('members'))).text).toBe('members: opus 5.5, sonnet 5, fable 5.1, haiku 4.5, gemini-3.8-flash')
-    expect((await $.command.run(run('members sonnet gemini-3.1-pro-preview'))).text).toBe('members: sonnet 5, gemini-3.1-pro-preview')
+    expect((await $.command.run(run('members'))).text).toBe('members: opus 5.5, sonnet 5.5, fable 5.1, haiku 4.5, gemini-3.8-flash')
+    expect((await $.command.run(run('members sonnet gemini-3.1-pro-preview'))).text).toBe('members: sonnet 5.5, gemini-3.1-pro-preview')
     expect(w.store.get('members')).toEqual(['sonnet', 'gemini-3.1-pro-preview'])
     expect((await $.command.run(run('members opus sonet'))).text).toContain('sonet is not a model')
-    expect((await $.command.run(run('members reset'))).text).toBe('members: opus 5.5, sonnet 5, fable 5.1, haiku 4.5, gemini-3.8-flash')
+    expect((await $.command.run(run('members reset'))).text).toBe('members: opus 5.5, sonnet 5.5, fable 5.1, haiku 4.5, gemini-3.8-flash')
     expect(w.store.has('members')).toBe(false)
   })
 
@@ -306,7 +306,7 @@ describe('/council', () => {
     await convene($)
     expect((await $.command.run(run(''))).text).toBe([
       'on: the model can call the council when it is stuck',
-      'members: opus 5.5, sonnet 5, fable 5.1, haiku 4.5, gemini-3.8-flash (skipped: gemini-core has no key)',
+      'members: opus 5.5, sonnet 5.5, fable 5.1, haiku 4.5, gemini-3.8-flash (skipped: gemini-core has no key)',
       'chair: opus 5.5, the model of the session, forked',
       'last: 4 of 5 members answered in 0s; the chair wrote the verdict',
     ].join('\n'))
@@ -358,7 +358,7 @@ withSidebar('an open sidebar shows each member as it answers, the chair, and the
   expect(sections[0]?.lines.map(l => l.text)).toEqual([
     `${QUESTION.slice(0, 59)}… · running 0s`,
     'opus 5.5 · fork · running',
-    'sonnet 5 · complete · running',
+    'sonnet 5.5 · complete · running',
     'fable 5.1 · complete · running',
     'haiku 4.5 · complete · running',
     'gemini-3.8-flash · gemini · running',
@@ -367,7 +367,7 @@ withSidebar('an open sidebar shows each member as it answers, the chair, and the
   expect(sections.at(-1)?.lines.map(l => l.text)).toEqual([
     `${QUESTION.slice(0, 59)}… · done in 0s`,
     'opus 5.5 · fork · answered 0s · 2.1k in, 50 out',
-    'sonnet 5 · complete · answered 0s · 2.1k in, 50 out',
+    'sonnet 5.5 · complete · answered 0s · 2.1k in, 50 out',
     'fable 5.1 · complete · answered 0s · 2.1k in, 50 out',
     'haiku 4.5 · complete · failed: api-error 529 overloaded',
     'gemini-3.8-flash · gemini · answered 0s · 1.5k in, 40 out · free tier',

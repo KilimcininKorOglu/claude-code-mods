@@ -31,7 +31,7 @@ With the [sidebar](../sidebar) open, a standing section follows the run: the que
     council: run
     avg.js boş dizi için ne dönmeli: NaN, 0, yoksa hata mı fırl… · done in 44s
     opus 5.5 · fork · answered 11s · 89k in, 902 out
-    sonnet 5 · complete · answered 17s · 6.7k in, 1.1k out
+    sonnet 5.5 · complete · answered 17s · 6.7k in, 1.1k out
     fable 5.1 · complete · answered 24s · 6.7k in, 1.4k out
     haiku 4.5 · complete · answered 9s · 5.2k in, 634 out
     gemini-3.8-flash · gemini · answered 8s · 4.7k in, 1.3k out · free tier
@@ -59,7 +59,7 @@ Each run makes one request per member and one for the chair. Measured on Claude 
 - A run of the five default members took 25 to 44 seconds; the slowest member sets the pace. Forks took 4 to 11 seconds and read the conversation from the cache (83k tokens in a short session).
 - 400,000 characters of conversation, the default limit, are 163,828 input tokens on Opus 5.5, Sonnet 5 and Fable 5.1, 128,018 on Haiku 4.5 and 120,057 on gemini-3.8-flash.
 
-At list prices, one run at the full 400,000 characters costs about $2.20, estimated: Fable 5.1 about $1.70 ($10 per million input tokens), Sonnet 5 about $0.34, Haiku 4.5 about $0.13, and the two forks a few cents of cache reads. A shorter conversation costs proportionally less. On a Claude subscription the requests count toward your usage limits instead. To lower the cost, leave a member out with `/council members`, for example `/council members opus sonnet haiku gemini-3.8-flash`.
+At list prices, one run at the full 400,000 characters costs about $2.20, estimated: Fable 5.1 about $1.70 ($10 per million input tokens), Sonnet 5.5 about $0.34 (the same list price as Sonnet 5, whose token count the check measured), Haiku 4.5 about $0.13, and the two forks a few cents of cache reads. A shorter conversation costs proportionally less. On a Claude subscription the requests count toward your usage limits instead. To lower the cost, leave a member out with `/council members`, for example `/council members opus sonnet haiku gemini-3.8-flash`.
 
 `gemini-3.1-pro-preview` answered HTTP 429 on every free-tier key in the check, because the free tier has no quota for it. Add it to the members only with a paid key.
 

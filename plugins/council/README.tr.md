@@ -31,7 +31,7 @@ Not session başında ve `/clear`'da sabitlenir; yani `/council on` tool'u model
     council: run
     avg.js boş dizi için ne dönmeli: NaN, 0, yoksa hata mı fırl… · done in 44s
     opus 5.5 · fork · answered 11s · 89k in, 902 out
-    sonnet 5 · complete · answered 17s · 6.7k in, 1.1k out
+    sonnet 5.5 · complete · answered 17s · 6.7k in, 1.1k out
     fable 5.1 · complete · answered 24s · 6.7k in, 1.4k out
     haiku 4.5 · complete · answered 9s · 5.2k in, 634 out
     gemini-3.8-flash · gemini · answered 8s · 4.7k in, 1.3k out · free tier
@@ -59,7 +59,7 @@ Her koşu, üye başına bir ve başkan için bir request yapar. Claude Code 2.1
 - Beş varsayılan üyeli bir koşu 25 ile 44 saniye sürdü; süreyi en yavaş üye belirler. Fork'lar 4 ile 11 saniye sürdü ve konuşmayı cache'ten okudu (kısa bir session'da 83k token).
 - Varsayılan sınır olan 400.000 karakterlik konuşma Opus 5.5, Sonnet 5 ve Fable 5.1'de 163.828, Haiku 4.5'te 128.018, gemini-3.8-flash'ta 120.057 input token eder.
 
-Liste fiyatlarıyla tam 400.000 karakterlik bir koşu tahminen yaklaşık $2,20 tutar: Fable 5.1 yaklaşık $1,70 (milyon input token başına $10), Sonnet 5 yaklaşık $0,34, Haiku 4.5 yaklaşık $0,13, iki fork da birkaç sentlik cache okuması. Daha kısa bir konuşma orantılı olarak daha ucuzdur. Claude aboneliğinde bu request'ler bunun yerine kullanım limitlerinden düşer. Maliyeti azaltmak için `/council members` ile bir üyeyi çıkar, örneğin `/council members opus sonnet haiku gemini-3.8-flash`.
+Liste fiyatlarıyla tam 400.000 karakterlik bir koşu tahminen yaklaşık $2,20 tutar: Fable 5.1 yaklaşık $1,70 (milyon input token başına $10), Sonnet 5.5 yaklaşık $0,34 (Sonnet 5 ile aynı liste fiyatı; token sayısı ölçümde Sonnet 5'te ölçüldü), Haiku 4.5 yaklaşık $0,13, iki fork da birkaç sentlik cache okuması. Daha kısa bir konuşma orantılı olarak daha ucuzdur. Claude aboneliğinde bu request'ler bunun yerine kullanım limitlerinden düşer. Maliyeti azaltmak için `/council members` ile bir üyeyi çıkar, örneğin `/council members opus sonnet haiku gemini-3.8-flash`.
 
 `gemini-3.1-pro-preview` denemedeki her free tier key'de HTTP 429 döndü, çünkü free tier'da bu model için kota yok. Onu üyelere yalnız ücretli bir key'le ekle.
 

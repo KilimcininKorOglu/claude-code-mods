@@ -22,8 +22,8 @@ describe('members', () => {
   })
 
   test('the store gives the members, or the defaults when it holds none that name a model', () => {
-    expect(storedMembers(['sonnet', 42, 'nope']).map(m => m.label)).toEqual(['sonnet 5'])
-    expect(storedMembers(undefined).map(m => m.label)).toEqual(['opus 5.5', 'sonnet 5', 'fable 5.1', 'haiku 4.5', 'gemini-3.8-flash'])
+    expect(storedMembers(['sonnet', 42, 'nope']).map(m => m.label)).toEqual(['sonnet 5.5'])
+    expect(storedMembers(undefined).map(m => m.label)).toEqual(['opus 5.5', 'sonnet 5.5', 'fable 5.1', 'haiku 4.5', 'gemini-3.8-flash'])
   })
 
   test('the member on the model of the session is found with the window mark and with a dated id', () => {

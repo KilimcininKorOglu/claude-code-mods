@@ -5,13 +5,14 @@ export type Member = { kind: 'claude' | 'gemini'; id: string; label: string }
 
 const ALIASES = new Map([
   ['opus', 'claude-opus-5-5'],
-  ['sonnet', 'claude-sonnet-5'],
+  ['sonnet', 'claude-sonnet-5-5'],
   ['fable', 'claude-fable-5-1'],
   ['haiku', 'claude-haiku-4-5-20251001'],
 ])
 
 const LABELS = new Map([
   ['claude-opus-5-5', 'opus 5.5'],
+  ['claude-sonnet-5-5', 'sonnet 5.5'],
   ['claude-sonnet-5', 'sonnet 5'],
   ['claude-fable-5-1', 'fable 5.1'],
   ['claude-haiku-4-5-20251001', 'haiku 4.5'],
