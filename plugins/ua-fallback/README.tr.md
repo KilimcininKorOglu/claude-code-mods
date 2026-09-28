@@ -20,7 +20,7 @@ Bazı siteler `curl` ve `wget` isteklerini sırf bot gibi göründükleri için 
 
 ## Komut
 
-    /ua-fallback            açık mı kapalı mı, ve bu session'da reddeden host'lar
+    /ua-fallback            açık mı kapalı mı ve bu session'da reddeden host'lar
     /ua-fallback on | off   açar ya da kapatır; kurulumdan sonra açıktır
 
 ## Kurulum
