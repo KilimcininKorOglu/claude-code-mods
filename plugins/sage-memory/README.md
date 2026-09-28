@@ -16,7 +16,7 @@ It runs beside [memory-save](../memory-save): memory-save hands the model all of
    Each memory goes once per context. A compaction starts a new context, so it can go again. An answer that uses a reminded memory counts as a use.
 4. **Learning.** After a main-loop turn that had your prompt or a tool call, a consolidator (haiku by default) reads the answer, the files the turn read and wrote, its last 10 Bash commands and the completed tasks, and adds what is worth keeping, in English. After a turn that wrote files, a curator reviews the memories of those files: it supersedes, merges, recalibrates, marks a contradiction or archives. A permanent memory is never superseded, contradicted or archived.
 5. **Checking.** An edit checks the memories anchored to the changed file again (path, content hash, symbol, command, agent, git blob), and a memory whose anchor no longer holds goes stale. A `mv`, `git mv` or `Move-Item` moves the anchors with the file once the move is on disk. At a session's end the daemon runs hygiene in the background, at most once an hour per store: verification, duplicates, contradictions, review proposals and the removal of session memories whose transcripts are gone.
-6. **Search.** Full text search (FTS5) always. After `/sage-memory setup`, also a multilingual embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline, so a Turkish question finds an English memory.
+6. **Search.** Full text search (FTS5) always. After `/sage-memory setup`, also a multilingual embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline, so a question can find a memory in another language. A result from this channel alone needs a cosine of 0.46; a paraphrase below it is left to the full text search and the anchors (measured: `deploy.sh betiği nerede` found `Deploys go through the deploy.sh script...` at 0.55, `Uygulamayı sunucuya nasıl gönderiyoruz?` stayed under 0.46).
 
 ## The sidebar
 
@@ -75,7 +75,7 @@ Function hooks are early access. Nothing loads without the flag. To keep it on, 
 
 1. Restart Claude Code.
 2. Have Node.js 22.18 or later as `node` on the `PATH`. An older Node shows `daemon failed: needs Node.js 22.18 or later ...` and the mod does nothing else.
-3. Optional: run `/sage-memory setup` once for the embedding search. It runs `npm install` of `@huggingface/transformers` 4.3.0 into `~/.claude/sage-memory/runtime` (about 480 MB) and downloads the model (about 130 MB). The loaded model takes about 700 MB of memory in the daemon. Without it, search is full text only.
+3. Optional: run `/sage-memory setup` once for the embedding search. It runs `npm install` of `@huggingface/transformers` 4.3.0 into `~/.claude/sage-memory/runtime` and downloads the model: 615 MB on disk together, 145 MB of it the model (measured). With the model loaded the daemon held 648 MB of resident memory (measured). Without it, search is full text only.
 4. Optional: import the rules you want always in view (see Command).
 5. To remove every memory, delete `~/.claude/sage-memory` while no session runs.
 
@@ -93,6 +93,10 @@ Reach L3, starts a long-lived local process, sends turns to a model, and downloa
     3. Sends:    each consolidated turn, curated file set, triage and compact request to the model you set (haiku by default); on setup, requests to the npm registry and Hugging Face; the daemon itself listens only on a Unix socket in ~/.claude/sage-memory
     4. Persists: the memories, their graph, audit log and reminder ledger in SQLite under ~/.claude/sage-memory; the settings in the mod's $.store
     5. Hostile input: a memory is text a model or a tool wrote, handed back inside an escaped <memory> fence; a text that looks like a secret is refused at write; a memory changes only through the daemon, which checks each request's token
+
+## Measured
+
+On Claude Code 2.1.283, macOS, Node 24.18: a daemon request over the socket took 3 to 9 ms (`/status` 7.0 ms, `/memory/remember` 9.3 ms, `/remind/prompt` 2.9 to 3.7 ms, `/remind/tools` 3.5 ms); setup embedded 24 memories in 19 s after the install. One daemon served every probe session in a row. The consolidator's token cost per turn was not measured.
 
 ## Limits
 

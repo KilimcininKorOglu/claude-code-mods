@@ -16,7 +16,7 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
    Her kayıt bir context'te bir kez gider. Compaction yeni bir context başlatır, kayıt yeniden gidebilir. Hatırlatılan bir kaydı kullanan cevap bir kullanım sayılır.
 4. **Öğrenme.** Prompt'unuz ya da bir tool çağrısı olan her ana loop turn'ünden sonra bir consolidator (varsayılan haiku) cevabı, turn'ün okuduğu ve yazdığı dosyaları, son 10 Bash komutunu ve tamamlanan görevleri okur ve saklanmaya değeri İngilizce ekler. Dosya yazan bir turn'den sonra bir curator o dosyaların kayıtlarını gözden geçirir: supersede, merge, recalibrate, çelişki işareti ya da archive. Permanent bir kayıt asla supersede, contradict ya da archive edilmez.
 5. **Doğrulama.** Bir edit, değişen dosyaya bağlı kayıtları yeniden kontrol eder (yol, content hash, symbol, komut, agent, git blob); anchor'ı tutmayan kayıt stale olur. Bir `mv`, `git mv` ya da `Move-Item` taşıma diskte gerçekleşince anchor'ları dosyayla taşır. Oturum sonunda daemon hygiene'i arka planda, depo başına saatte en fazla bir kez çalıştırır: doğrulama, kopyalar, çelişkiler, inceleme önerileri ve transcript'i silinmiş oturumların session kayıtlarının silinmesi.
-6. **Arama.** Her zaman tam metin arama (FTS5). `/sage-memory setup`'tan sonra ayrıca çok dilli bir embedding modeli (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline; böylece Türkçe bir soru İngilizce bir kaydı bulur.
+6. **Arama.** Her zaman tam metin arama (FTS5). `/sage-memory setup`'tan sonra ayrıca çok dilli bir embedding modeli (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`), offline; böylece bir soru başka dildeki bir kaydı bulabilir. Yalnız bu kanaldan gelen bir sonuç 0.46 cosine ister; bunun altında kalan bir yeniden ifade tam metin aramasına ve anchor'lara kalır (ölçüldü: `deploy.sh betiği nerede` sorusu `Deploys go through the deploy.sh script...` kaydını 0.55 ile buldu, `Uygulamayı sunucuya nasıl gönderiyoruz?` 0.46'nın altında kaldı).
 
 ## Sidebar
 
@@ -75,7 +75,7 @@ Function hooks erken erişimdedir. Flag olmadan hiçbir şey yüklenmez. Açık 
 
 1. Claude Code'u yeniden başlatın.
 2. `PATH`'te `node` olarak Node.js 22.18 ya da üstü bulunsun. Daha eski bir Node `daemon failed: needs Node.js 22.18 or later ...` gösterir ve mod başka bir şey yapmaz.
-3. İsteğe bağlı: embedding araması için `/sage-memory setup`'ı bir kez çalıştırın. `@huggingface/transformers` 4.3.0'ı `~/.claude/sage-memory/runtime` altına `npm install` ile kurar (yaklaşık 480 MB) ve modeli indirir (yaklaşık 130 MB). Yüklü model daemon'da yaklaşık 700 MB bellek tutar. Kurulmadan arama yalnız tam metindir.
+3. İsteğe bağlı: embedding araması için `/sage-memory setup`'ı bir kez çalıştırın. `@huggingface/transformers` 4.3.0'ı `~/.claude/sage-memory/runtime` altına `npm install` ile kurar ve modeli indirir: diskte toplam 615 MB, bunun 145 MB'ı model (ölçüldü). Model yüklüyken daemon 648 MB resident bellek tuttu (ölçüldü). Kurulmadan arama yalnız tam metindir.
 4. İsteğe bağlı: her zaman görünmesini istediğiniz kuralları içe alın (Komut bölümüne bakın).
 5. Bütün kayıtları silmek için hiçbir oturum çalışmıyorken `~/.claude/sage-memory`'yi silin.
 
@@ -93,6 +93,10 @@ Reach L3: uzun yaşayan yerel bir süreç başlatır, turn'leri bir modele gönd
     3. Sends:    consolidate edilen her turn'ü, curate edilen dosya kümesini, triage ve compact isteklerini seçtiğiniz modele (varsayılan haiku); setup'ta npm registry'ye ve Hugging Face'e istekler; daemon yalnız ~/.claude/sage-memory içindeki bir Unix socket'i dinler
     4. Persists: kayıtlar, grafları, audit log ve reminder defteri ~/.claude/sage-memory altında SQLite'ta; ayarlar modun $.store'unda
     5. Hostile input: bir kayıt, bir modelin ya da tool'un yazdığı metindir ve escape edilmiş bir <memory> fence'i içinde geri verilir; secret'a benzeyen bir metin yazılırken reddedilir; bir kayıt yalnız her isteğin token'ını kontrol eden daemon üzerinden değişir
+
+## Ölçümler
+
+Claude Code 2.1.283, macOS, Node 24.18 üzerinde: socket üzerinden bir daemon isteği 3 ile 9 ms sürdü (`/status` 7.0 ms, `/memory/remember` 9.3 ms, `/remind/prompt` 2.9 ile 3.7 ms, `/remind/tools` 3.5 ms); setup kurulumdan sonra 24 kaydı 19 s'de embed etti. Art arda çalışan bütün probe oturumlarına tek daemon hizmet verdi. Consolidator'ın turn başına token maliyeti ölçülmedi.
 
 ## Sınırlar
 
