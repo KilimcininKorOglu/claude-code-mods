@@ -1,40 +1,40 @@
 # commit-cadence
 
-Her turn sonunda working tree'yi ölçen ve hâlâ commit edilmemiş olanı adlandıran bir Claude Code Mod'u. Böylece biten iş session'ın sonuna yığılmak yerine biter bitmez commit edilir.
+Uzun bir session kolayca yirmi değişmiş dosya ve tek bir dev commit ile biter; düzeltme, refactor ve deneme birbirine karışır. Bu mod her turn'ün sonunda working tree'ye bakar ve neyin hâlâ commit edilmediğini sana ve modele söyler. Böylece biten iş sona yığılmak yerine bittiği anda commit'lenir.
 
 ## Ne yapar
 
-1. Her main-loop turn sonunda mod, session'ın başladığı dizinde `git status --porcelain=v1 -z` komutunu çalıştırır ve adlandırdığı path'leri okur, stage'lenmiş olsun olmasın. Ignore edilen dosyalar ve üretilen `.claude/` dizini dışarıda kalır.
-2. Kirli bir tree, path kümesi başına bir kere raporlanır. Hiçbir şeyi değiştirmeyen sonraki bir turn hiçbir şey söylemez; yeni ya da kalkmış bir path tekrar raporlanır. Böylece uzun bir edit serisi aynı satırı tekrarlamaz.
-3. Kişi bulguyu [sidebar](../sidebar) stream'inde tek satır olarak okur, sidebar kapalıyken tek transcript satırı olarak:
+1. Her ana loop turn'ünün sonunda session'ın başladığı dizinde `git status --porcelain=v1 -z` çalıştırır ve adı geçen yolları okur; stage'lenmiş olsun olmasın. Ignore edilen dosyalar ve üretilen `.claude/` dizini altındaki untracked dosyalar dışarıda kalır.
+2. Kirli bir tree, aynı yol listesi için yalnız bir kez bildirilir. Hiçbir şeyi değiştirmeyen sonraki turn sessiz kalır; yeni eklenen ya da kaybolan bir yol yeniden bildirim yapar. Böylece uzun bir düzenleme sürecinde aynı satır tekrarlanmaz.
+3. Bulguyu [sidebar](../sidebar) stream'inde kırmızı tek bir satır olarak görürsün; sidebar kapalıysa transcript'te bir satır olarak:
 
        commit-cadence: 2 uncommitted file(s): src/app.ts, src/new.ts
 
-4. Bir sonraki prompt yalnız modelin okuduğu bir not taşır: neyin commit edilmediğini ve biten, doğrulanmış her parçanın şimdi kendi commit'ine ait olduğunu. Not rapor başına bir kere borçlanılır, yani bir prompt onu taşır, sonraki taşımaz.
-5. Temizlenen bir tree bulguyu yeşil bir satırla kapatır: `the working tree is clean again`. Tree'nin son temiz olduğu andan beri yazılan kırmızı entry'ler önce temizlenir, yani bir pane restore onları geri getirmez.
-6. Açık bulgu (path'leri ve kırmızı entry'lerinin key'leri) durduğu sürece repository başına `$.store` içinde tutulur. Yeniden yüklenen bir module (`/reload-plugins`, bir update, bir restart) onu session başında geri alır, yani kendinden önce yazılan kırmızı entry'leri yine kapatır, aynı path'leri yeniden raporlamadan ve notu yeniden göndermeden.
-7. `/commit-cadence` o anda ölçer ve ayarı ile tree'nin ne tuttuğunu yazar.
+4. Bir sonraki prompt'unla birlikte yalnız modelin okuduğu bir not gider: neyin commit edilmediği ve bitmiş, doğrulanmış her parçanın şimdi kendi commit'ine girmesi gerektiği. Not her bildirim için bir kez gider; bir prompt onu taşır, sonraki taşımaz.
+5. Tree yeniden temizlenince yeşil bir satır bulguyu kapatır: `the working tree is clean again`. Tree en son temiz olduğundan beri yazılan kırmızı kayıtlar önce silinir, böylece pane stream'ini geri yüklediğinde onlar geri gelmez.
+6. Bulgu açık kaldıkça repository başına `$.store`'da tutulur: yolları ve kırmızı kayıtlarının key'leri. Yeniden yüklenen bir modül (`/reload-plugins`, bir güncelleme, bir yeniden başlatma) session başında onu geri alır. Böylece kendisinden önce yazılan kırmızı kayıtları yine silebilir, aynı yolları yeniden bildirmez ve notu tekrar göndermez.
+7. `/commit-cadence` o anda ölçer; ayarı ve tree'de ne olduğunu yazar.
 
-Hiçbir şeyi durdurmaz. Neyin commit'e değer olduğuna kişi karar verir; model notu bir gate olarak değil, bir hatırlatma olarak okur.
+Hiçbir şeyi durdurmaz. Neyin commit'e değdiğine sen karar verirsin; model de notu bir kapı değil, hatırlatma olarak okur.
 
 ## Komut
 
-    /commit-cadence            ayar ve tree'nin şu an ne tuttuğu
-    /commit-cadence on | off   varsayılan on
+    /commit-cadence            ayar ve tree'de şu an ne olduğu (/commit-cadence status da olur)
+    /commit-cadence on | off   varsayılan açık
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install commit-cadence@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
-2. Bulgu satırları için [sidebar](../sidebar) mod'unu kurun. O olmadan mod satırları transcript'e yazar.
+1. Claude Code'u yeniden başlat.
+2. Bulguları sidebar'da görmek istersen [sidebar](../sidebar) mod'unu kur. O olmadan satırlar transcript'e düşer.
 
 ## Nereye uzanır
 
@@ -43,27 +43,27 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, command.run{command=commit-cadence}, turn.complete, prompt.submit
     ❯ ./register.ts calls: $.command.register, $.process.run (via readTree), $.session.cwd, $.sidebar.clear (via dropEntries), $.sidebar.set (via toPerson), $.store.delete (via saveOpen), $.store.get (via loadOpen, readSettings), $.store.set (via saveOpen, setEnabled), $.ui.log (via toPerson)
 
-Reach L2, bir process çalıştırır.
+Reach L2: bir process çalıştırır.
 
-    1. Okur:     session'ın kendi dizininde git status'ün adlandırdığı path'leri. Hiçbir dosya içeriğini, prompt'u ya da cevabı okumaz.
-    2. Çalıştırır: git status --porcelain=v1 -z, biten her turn'de bir kere ve her /commit-cadence komutunda bir kere
-    3. Gönderir: modele, commit edilmemiş dosyaların sayısını ve ilk altı path'ini, onları commit etmekle ilgili tek cümleyle
-    4. Saklar:   $.store içinde on/off ayarını, ve repository başına açık bulguyu (commit edilmemiş path'ler ve kırmızı entry'lerinin key'leri) tree temizlenene kadar
-    5. Düşman girdi: çizilen ve gönderilen tek metin git'in kendi yazdığı path'lerdir, altı adla ve bir sayıyla sınırlanmış
+    1. Okur:     session'ın kendi dizininde git status'un adını verdiği yolları. Dosya içeriği, prompt ya da cevap okumaz.
+    2. Çalıştırır: git status --porcelain=v1 -z; biten her turn'de ve her /commit-cadence'ta bir kez
+    3. Gönderir: modele, commit edilmemiş dosyaların sayısını ve ilk altı yolunu, bunları commit'lemekle ilgili tek bir cümleyle
+    4. Saklar:   $.store içinde açık/kapalı ayarını ve tree temizlenene kadar repository başına açık bulguyu (commit edilmemiş yollar ve kırmızı kayıtlarının key'leri)
+    5. Düşman girdi: çizilen ve gönderilen tek metin, git'in kendi yazdığı yollardır; altı ad ve bir sayıyla sınırlanır
 
 ## Sınırlar
 
-- Tree ölçülür, yazarlık değil. Sizin elle değiştirdiğiniz bir dosya, modelin değiştirdiğiyle aynı sayılır.
-- Ölçüm session'ın kendi dizinidir. Aynı session'da başka bir yerdeki repository okunmaz.
-- Bir subagent'ın turn'ü ölçülmez; yalnız main loop'un sonu ölçülür.
-- Sadece ignore edilen bir path dışarıda kalır, `.claude/` altındaki her şey de, çünkü o dizin üretilmiştir.
-- Dosyaları adlandırır, hunk'ları değil. İki alakasız değişiklik tutan bir dosya tek path olarak okunur.
-- Hiçbir şey commit edilmez ve hiçbir şey durdurulmaz.
+- Tree'yi ölçer, değişikliği kimin yaptığını değil. Elle düzenlediğin bir dosya da modelin düzenlediği gibi sayılır.
+- Session'ın kendi dizinini ölçer. Aynı session'da çalıştığın başka bir repository okunmaz.
+- Yalnız ana loop'un turn sonu ölçülür, subagent'larınki ölçülmez.
+- Ignore edilen yollar dışarıda kalır; `.claude/` altındaki untracked dosyalar da, çünkü o dizin üretilir.
+- Dosyaları adlandırır, hunk'ları değil. İki ilgisiz değişiklik taşıyan bir dosya tek yol olarak görünür.
+- Hiçbir şeyi commit'lemez, hiçbir şeyi durdurmaz.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
