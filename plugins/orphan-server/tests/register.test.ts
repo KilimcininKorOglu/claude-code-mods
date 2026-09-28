@@ -86,7 +86,7 @@ function world(on: On): { w: World; clock: ReturnType<typeof mock.clock> } {
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
-  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: answer(w, e.argv, clock.now()), stderr: '' } }))
+  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: answer(w, e.argv, clock.now()), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   return { w, clock }
 }
 
