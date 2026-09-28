@@ -87,6 +87,7 @@ import {
   type Score,
 } from './triage.ts'
 import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
+import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane.tsx'
 import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol.ts'
@@ -101,6 +102,7 @@ const USAGE = [
   '  audience remember --role <type> <text> | clear <id> | transfer <from> <to>',
   '  hygiene · verify [id] · candidates [list|accept|reject|resolve] · triage [apply] · compact [apply]',
   '  import <path> [--section <heading>] [--always] [--kind <kind>] [--scope project|user]',
+  '  pane (the memory manager)',
   '  model [name] · remind tools|prompt|subagent [on|off] · consolidate|curate [on|off] · daily [on|off] · capture outcomes|errors [on|off]',
   'flags: --kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
 ].join('\n')
@@ -147,6 +149,8 @@ type State = {
   captured: Map<string, number>
   /** The timer of the next daily triage dry run. */
   daily?: { cancel: () => void }
+  /** What the memory manager pane shows. */
+  pane: PaneState
 }
 
 type Loop = { visible: string; reminded: Memory[] }
@@ -177,7 +181,7 @@ async function within<T>($: EngineInterface, ms: number, what: string, work: Pro
 /** The sidebar section, or the status line while the sidebar does not take it. */
 async function toPerson($: EngineInterface, line: Line): Promise<void> {
   try {
-    if (await $.sidebar.set({ ...SECTION, title: 'memory', lines: [line], until: 'session', order: 23 })) {
+    if (await $.sidebar.set({ ...SECTION, title: 'memory', lines: [line], buttons: [{ label: 'manage', command: 'sage-memory', args: 'pane' }], until: 'session', order: 23 })) {
       $.ui.status(undefined)
       return
     }
@@ -587,6 +591,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   if (word === '') return statusText(state.enabled, state.link, state.project?.name ?? '')
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
   if (word === 'setup') return setup($, state)
+  if (word === 'pane') return openPane($, state)
   return jobCommand($, state, word, rest.join(' '))
 }
 
@@ -1119,6 +1124,112 @@ async function captureOutcome($: EngineInterface, state: State, command: string,
   await ask($, state, '/memory/remember', { input })
 }
 
+// ── Pane ───────────────────────────────────────────────────────────────
+
+/** Runs one pane request in the background: the pane shows it working, then its outcome or its failure. */
+function paneWork($: EngineInterface, state: State, work: () => Promise<string | undefined>): void {
+  state.pane.busy = true
+  $.ui.invalidate('ui.render')
+  work()
+    .then(
+      message => {
+        state.pane.message = message
+      },
+      (err: unknown) => {
+        state.pane.message = `failed: ${errorText(err)}`
+      },
+    )
+    .finally(() => {
+      state.pane.busy = false
+      $.ui.invalidate('ui.render')
+    })
+}
+
+async function loadPage($: EngineInterface, state: State): Promise<undefined> {
+  const page = await ask<MemoryPage>($, state, '/memory/list', listBody(state.pane))
+  state.pane.memories = page.memories
+  state.pane.next = page.nextCursor ?? undefined
+  state.pane.total = page.total
+  return undefined
+}
+
+async function loadCandidates($: EngineInterface, state: State): Promise<undefined> {
+  state.pane.candidates = await ask<Candidate[]>($, state, '/candidates/list', {})
+  return undefined
+}
+
+/** One button's change to a memory; the person's press is the authorization delete's `force` asks for. */
+async function writeAction($: EngineInterface, state: State, m: Memory, action: PaneAction): Promise<string> {
+  const patch = patchFor(m, action)
+  if (patch !== undefined) {
+    await ask($, state, '/memory/update', { id: m.id, patch })
+    return `${m.id}: ${action}`
+  }
+  if (action === 'recover') {
+    await ask($, state, '/memory/recover', { id: m.id, reason: 'recovered by the person in the pane' })
+    return `recovered ${m.id}`
+  }
+  await ask($, state, '/memory/delete', { id: m.id, force: true, reason: 'deleted by the person in the pane' })
+  return `deleted ${m.id}; the recover button brings it back`
+}
+
+/** A button under the chosen memory: delete asks for a second press, every change reads the page again. */
+async function paneAct($: EngineInterface, state: State, action: PaneAction): Promise<string | undefined> {
+  const pane = state.pane
+  const m = pane.memories.find(memory => memory.id === pane.selected)
+  if (m === undefined) return undefined
+  if (action === 'delete' && pane.armed !== m.id) {
+    pane.armed = m.id
+    return 'press delete again to delete it'
+  }
+  pane.armed = undefined
+  const text = await writeAction($, state, m, action)
+  await loadPage($, state)
+  return text
+}
+
+async function paneCandidate($: EngineInterface, state: State, id: string, action: CandidateAction): Promise<string> {
+  const text = action === 'accept' || action === 'reject' ? await candidateAction($, state, action, id, []) : await candidateAction($, state, 'resolve', id, [action])
+  state.pane.selected = undefined
+  await loadCandidates($, state)
+  return text
+}
+
+function paneHandlers($: EngineInterface, state: State): Handlers {
+  const reload = (): void => paneWork($, state, () => loadPage($, state))
+  return {
+    search: query => (refilter(state.pane, { query }), reload()),
+    scope: scope => (refilter(state.pane, { scope }), reload()),
+    status: status => (refilter(state.pane, { status }), reload()),
+    page: step => (turnPage(state.pane, step), reload()),
+    select: id => {
+      state.pane.selected = state.pane.selected === id ? undefined : id
+      state.pane.armed = undefined
+      $.ui.invalidate('ui.render')
+    },
+    act: action => paneWork($, state, () => paneAct($, state, action)),
+    view: view => {
+      Object.assign(state.pane, { view, selected: undefined, armed: undefined, message: undefined })
+      paneWork($, state, () => (view === 'candidates' ? loadCandidates($, state) : loadPage($, state)))
+    },
+    candidate: (id, action) => paneWork($, state, () => paneCandidate($, state, id, action)),
+  }
+}
+
+/** Opens the memory manager, or closes it when it is open. */
+async function openPane($: EngineInterface, state: State): Promise<string> {
+  if ((await $.ui.panes()).some(p => p.id === PANE_ID)) {
+    await $.ui.close({ id: PANE_ID })
+    return 'pane closed'
+  }
+  const down = await notReady(state)
+  if (down !== undefined) return down
+  state.pane = emptyPane()
+  paneWork($, state, () => loadPage($, state))
+  await $.ui.open({ id: PANE_ID, title: 'Memories', focus: true, closeOnEscape: true, holdToasts: true, rows: PAGE_SIZE + 12 })
+  return 'pane open: Enter on a row shows the memory and its buttons, delete asks twice, Esc closes'
+}
+
 /** A hook result with one more context text, or unchanged when there is none. */
 function withContext<R extends { additionalContext?: readonly string[] }>(r: R, text: string | undefined): R {
   return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
@@ -1140,7 +1251,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, captured: new Map() }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, captured: new Map(), pane: emptyPane() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1249,6 +1360,16 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'sage-memory' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
+
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId !== PANE_ID) return next(e)
+    return paneTree($.ui.resolve(e), state.pane, paneHandlers($, state), e.props.bodyColumns)
+  })
+
+  on('ui.close', async (_, e, next) => {
+    if (e.id === PANE_ID) state.pane.armed = undefined
+    return next(e)
+  })
 
   // Each turn follows an on or off another window stored, before it would recall anything.
   on('turn.start', async ($, e, next) => {

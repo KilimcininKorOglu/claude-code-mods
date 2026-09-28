@@ -1,5 +1,5 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On } from 'claude-code'
+import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 import type { Memory } from '../hooks/shared/model.ts'
 
 tier('user')
@@ -48,10 +48,12 @@ type World = {
   rateText?: string
   mergeText?: string
   files: Map<string, string>
+  panes: UiPane[]
+  buttons: unknown[]
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], asked: [], files: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, tools: [], asked: [], files: new Map(), panes: [], buttons: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -63,8 +65,12 @@ function world(on: On): World {
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('ui.status', () => ({ value: undefined }))
+  on('ui.panes', () => ({ value: w.panes }))
+  on('ui.open', (_, e) => { w.panes.push({ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: true, isPlaced: true }); return { value: { isPlaced: true as const } } })
+  on('ui.close', (_, e) => { w.panes = w.panes.filter(p => p.id !== e.id); return { value: undefined } })
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { lines: { text: string }[] }
+    const s = e as unknown as { lines: { text: string }[]; buttons?: unknown }
+    if (s.buttons !== undefined) w.buttons.push(s.buttons)
     w.lines.push(s.lines.map(l => l.text).join(' / '))
     return { value: true }
   })
@@ -620,5 +626,96 @@ describe('commands', () => {
     expect(bodiesOf(w, '/remind/prompt')).toEqual([])
     expect((await $.command.run(run('model sonnet'))).text).toBe('the LLM jobs use sonnet from now on')
     expect(w.store.get('model')).toBe('sonnet')
+  })
+})
+
+describe('pane', () => {
+  const PANE = { title: 'Memories', isFocused: true, bodyColumns: 100, placement: 'inline', scroll: { offset: 0 }, view: {} } as unknown as RenderPropsOf['Pane']
+  const STALE = memory('m3', 'The old build ran with make all.', { status: 'stale', staleReason: 'manual' })
+  const GONE = memory('m4', 'A deleted rule.', { status: 'deleted' })
+
+  function paneWorld(on: On): World {
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', (body: Record<string, unknown>) => (body.cursor === 'p2'
+      ? { memories: [GONE], nextCursor: null, total: 3, statusCounts: {} }
+      : { memories: [PNPM, STALE], nextCursor: 'p2', total: 3, statusCounts: {} }))
+    w.routes.set('/memory/update', { memory: PNPM, superseded: [] })
+    w.routes.set('/memory/delete', { deleted: true })
+    w.routes.set('/memory/recover', { memory: GONE })
+    w.routes.set('/candidates/list', [{ id: 'c1', status: 'pending', kind: 'memory_review', text: 'Review m3', targetMemoryId: 'm3', suggestedAction: 'archive' }])
+    w.routes.set('/candidates/resolve', { decision: 'archive', applied: true })
+    return w
+  }
+
+  async function opened($: Parameters<TestBody>[0], w: World) {
+    await $.session.start(START)
+    expect(String((await $.command.run(run('pane'))).text)).toMatch(/^pane open/)
+    await settled(w)
+    return $.ui.mount({ plugin: 'sage-memory', surface: 'terminal', component: 'Pane', requestId: 'sage-memory', props: PANE })
+  }
+
+  withSidebar('the sidebar section carries the manage button, and the command opens and closes the pane', async ($, on) => {
+    const w = paneWorld(on)
+    await $.session.start(START)
+    expect(w.buttons[0]).toEqual([{ label: 'manage', command: 'sage-memory', args: 'pane' }])
+    await $.command.run(run('pane'))
+    expect(w.panes.map(p => p.id)).toEqual(['sage-memory'])
+    expect((await $.command.run(run('pane'))).text).toBe('pane closed')
+    expect(w.panes).toEqual([])
+  })
+
+  withSidebar('lists 30 a page through the filters, and a search or a filter starts at the first page', async ($, on) => {
+    const w = paneWorld(on)
+    const ui = await opened($, w)
+    expect(bodiesOf(w, '/memory/list')[0]).toMatchObject({ statuses: ['active', 'stale'], limit: 30, allSessions: true })
+    expect((await ui.find({ type: 'Button', key: 'row:m3' }))?.props.label).toMatch(/^  s project The old build/)
+    await ui.press({ key: 'next' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/list').at(-1)).toMatchObject({ cursor: 'p2' })
+    expect(await ui.find({ type: 'Button', key: 'row:m4' })).toBeDefined()
+    await ui.input({ key: 'search', text: 'build' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/list').at(-1)).toMatchObject({ query: 'build' })
+    expect(bodiesOf(w, '/memory/list').at(-1)?.cursor).toBe(undefined)
+    await ui.select({ key: 'status', value: 'deleted' })
+    await ui.select({ key: 'scope', value: 'user' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/list').at(-1)).toMatchObject({ query: 'build', scope: 'user', statuses: ['deleted'] })
+  })
+
+  withSidebar('the buttons change the chosen memory, delete asks twice, and a deleted memory offers recover alone', async ($, on) => {
+    const w = paneWorld(on)
+    const ui = await opened($, w)
+    await ui.press({ key: 'row:m1' })
+    await ui.press({ key: 'act:always' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { contextPolicy: 'always' } })
+    await ui.press({ key: 'act:delete' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/delete')).toEqual([])
+    expect((await ui.find({ type: 'Button', key: 'act:delete' }))?.props.label).toBe('press again to delete')
+    await ui.press({ key: 'act:delete' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/delete')[0]).toMatchObject({ id: 'm1', force: true })
+    await ui.press({ key: 'next' })
+    await settled(w)
+    await ui.press({ key: 'row:m4' })
+    expect(await ui.find({ type: 'Button', key: 'act:delete' })).toBe(undefined)
+    await ui.press({ key: 'act:recover' })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/recover')[0]).toMatchObject({ id: 'm4' })
+  })
+
+  withSidebar('the candidates view resolves a review with its decision', async ($, on) => {
+    const w = paneWorld(on)
+    const ui = await opened($, w)
+    await ui.press({ key: 'candidates' })
+    await settled(w)
+    await ui.press({ key: 'cand:c1' })
+    expect(await ui.find({ type: 'Button', key: 'cact:accept' })).toBe(undefined)
+    await ui.press({ key: 'cact:archive' })
+    await settled(w)
+    expect(bodiesOf(w, '/candidates/resolve')[0]).toMatchObject({ id: 'c1', decision: 'archive' })
+    expect(await ui.find({ type: 'Text', text: /resolved c1: archive/ })).toBeDefined()
   })
 })
