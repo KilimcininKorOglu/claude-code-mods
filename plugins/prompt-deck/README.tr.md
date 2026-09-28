@@ -1,10 +1,10 @@
 # prompt-deck
 
-Bu projede sık gönderdiğiniz kısa prompt'ları öğrenen ve onları, elle sabitlediklerinizle birlikte, prompt'un üstündeki bantta çizen bir Claude Code Mod'u. Bir rakam tuşu birini anında gönderir.
+"devam et", "commitle", "testleri çalıştır" gibi kısa prompt'ları her gün onlarca kez yeniden yazarsın. Bu mod bu projede sık gönderdiğin kısa prompt'ları öğrenir ve onları, elle sabitlediklerinle birlikte, prompt'un üstündeki bantta çizer. Bir rakam tuşu birini anında gönderir.
 
 ## Ne yapar
 
-1. Yazdığınız ya da Remote Control üzerinden gönderdiğiniz her prompt sayılır: trim edilmiş, tek satır, 1 ile 80 karakter arası, bir slash komutu değil. Bir notification, bir peer mesajı, bir schedule ya da başka bir plugin'in prompt'u sayılmaz.
+1. Yazdığın ya da Remote Control üzerinden gönderdiğin her prompt sayılır: trim edilmiş, tek satır, 1 ile 80 karakter arası, bir slash komutu değil. Bir notification, bir peer mesajı, bir schedule ya da başka bir plugin'in prompt'u sayılmaz.
 2. `/prompt-deck add <text>` bir prompt'u elle sabitler. Sabitlenmiş bir prompt ilk sırada, eklendiği düzende çizilir ve sayımlar onu banttan itemez. Uzunluk limiti yoktur ve sayımlar gibi proje başına tutulur. En fazla 5 prompt sabitlenir, çünkü bant 5 tane tutar. `/prompt-deck remove <n>` birini çözer.
 3. Bir prompt 3 kullanımdan sonra banda ulaşır. Bant en çok kullanılan 5 tanesini çizer, eşitlikte en yenisi önce, `1: commitle  2: devam et ...` biçiminde, her etiket genişlikten payına kesilir.
 4. Prompt kutusu boşken bir rakam tuşu o prompt'u anında gönderir. Bir tıklama ya da ctrl+x tab ve Enter da gönderir. Bir basış bir kullanım daha sayılır.
@@ -34,13 +34,13 @@ Canlı kontrolde sabitlenmiş bir `Yalnız tamam kelimesini yaz.` `1: Yalnız ta
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-deck@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
+1. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
 
@@ -67,7 +67,7 @@ Reach L2, git çalıştırır ve Claude'u sürer: bir basış bir prompt gönder
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

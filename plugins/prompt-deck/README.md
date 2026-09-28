@@ -1,6 +1,6 @@
 # prompt-deck
 
-A Claude Code Mod that learns the short prompts you send often in this project, and draws them, with the ones you pin by hand, in the band above the prompt. A digit key sends one at once.
+You type the same short prompts again and again every day: "go on", "commit it", "run the tests". This mod learns the short prompts you send often in this project, and draws them, with the ones you pin by hand, in the band above the prompt. A digit key sends one at once.
 
 ## What it does
 
@@ -34,7 +34,7 @@ In the live check a pinned `YalnÄ±z tamam kelimesini yaz.` appeared as `1: YalnÄ
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-deck@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -67,7 +67,7 @@ Reach L2, runs git and drives Claude: a press submits a prompt.
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
