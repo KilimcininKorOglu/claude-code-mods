@@ -42,6 +42,32 @@ import {
   type TurnEvidence,
 } from './consolidate.ts'
 import { CURATE_MS, CURATE_TOKENS, CURATED_FILES, CURATOR_SYSTEM, curatorPrompt, emptyTally, MAX_TARGETS, PER_FILE, stepsOf, tallyLine, type Step, type Tally } from './curate.ts'
+import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture.ts'
+import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact.ts'
+import {
+  actionOf,
+  discardProposal,
+  MERGE_SYSTEM,
+  mergesOf,
+  mergeVerdictOf,
+  pairPrompt,
+  pairsOf,
+  patchOf,
+  preFilter,
+  proposalInput,
+  proposalOf,
+  proposalsToFile,
+  RATE_SYSTEM,
+  ratePrompt,
+  ratingOf,
+  reportText,
+  valueScore,
+  type Merge,
+  type Pair,
+  type Proposal,
+  type Report,
+  type Score,
+} from './triage.ts'
 import { callOf, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
 import type { Candidate, Memory, MemoryPage, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
@@ -49,7 +75,7 @@ import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protoco
 
 const ENABLED_KEY = 'enabled'
 const SECTION = { consumer: 'sage-memory', key: 'state' }
-const USAGE = 'expects nothing (the state), on, off or setup'
+const USAGE = 'expects nothing (the state), on, off, setup, triage [apply], compact [apply], daily [on|off] or capture outcomes|errors [on|off]'
 
 /** How long each kind of call may take before the mod names it late. */
 const NODE_MS = 10_000
@@ -87,6 +113,12 @@ type State = {
   turn: TurnEvidence
   /** Whether the person typed a prompt or a main-loop tool ran since the last consolidation (memory-save's rule). */
   worth: boolean
+  /** The last compact proposal, which `/sage-memory compact apply` writes. */
+  compactPlan?: Plan
+  /** The commands outcome capture wrote in the last hour, by key. */
+  captured: Map<string, number>
+  /** The timer of the next daily triage dry run. */
+  daily?: { cancel: () => void }
 }
 
 type Loop = { visible: string; reminded: Memory[] }
@@ -261,12 +293,46 @@ async function follow($: EngineInterface, state: State): Promise<void> {
   }
 }
 
+/** A setting the person turns on or off, stored under `key`; without on or off, its state. */
+async function toggle($: EngineInterface, key: string, what: string, word: string): Promise<string> {
+  if (word !== 'on' && word !== 'off') return `${what} is ${(await $.store.get(key)) === true ? 'on' : 'off'}`
+  await $.store.set(key, word === 'on')
+  return `${what} ${word}`
+}
+
+const CAPTURES: Record<string, { key: string; what: string }> = {
+  outcomes: { key: 'captureOutcomes', what: 'capturing successful commands' },
+  errors: { key: 'captureErrors', what: 'capturing failed commands' },
+}
+
+async function captureCommand($: EngineInterface, rest: string): Promise<string> {
+  const [which = '', word = ''] = rest.toLowerCase().split(/\s+/)
+  const capture = CAPTURES[which]
+  return capture === undefined ? 'expects capture outcomes|errors [on|off]' : toggle($, capture.key, capture.what, word)
+}
+
+async function dailyCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  const answer = await toggle($, 'daily', 'the daily triage dry run', rest.trim().toLowerCase())
+  await scheduleDaily($, state)
+  return answer
+}
+
+/** The subcommands that act on the memories or their settings. */
+async function jobCommand($: EngineInterface, state: State, word: string, rest: string): Promise<string> {
+  if (word === 'triage') return triageCommand($, state, rest)
+  if (word === 'compact') return compactCommand($, state, rest)
+  if (word === 'daily') return dailyCommand($, state, rest)
+  return word === 'capture' ? captureCommand($, rest) : USAGE
+}
+
 async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
   await follow($, state)
-  const word = args.trim().toLowerCase()
+  const [first = '', ...rest] = args.trim().split(/\s+/)
+  const word = first.toLowerCase()
+  if (word === '') return statusText(state.enabled, state.link, state.project?.name ?? '')
   if (word === 'on' || word === 'off') return setEnabled($, state, word === 'on')
   if (word === 'setup') return setup($, state)
-  return word === '' ? statusText(state.enabled, state.link, state.project?.name ?? '') : USAGE
+  return jobCommand($, state, word, rest.join(' '))
 }
 
 /** One stream entry: a reminder faint, a change of a memory green, a failure red; the log line while the pane is closed. */
@@ -577,6 +643,227 @@ function noteBatch(state: State, calls: readonly ToolCall[]): void {
   }
 }
 
+// ── Triage ─────────────────────────────────────────────────────────────
+
+/** How many model calls a triage may make: ratings, then compared pairs (SAGE's defaults, and the daily run's). */
+type Limits = { calls: number; pairs: number }
+const TRIAGE_LIMITS: Limits = { calls: 1000, pairs: 50 }
+const DAILY_LIMITS: Limits = { calls: 40, pairs: 15 }
+const TRIAGE_MS = 60_000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Every active and stale memory of both stores, every session's included, page by page. */
+async function allMemories($: EngineInterface, state: State): Promise<Memory[]> {
+  const memories: Memory[] = []
+  let cursor: string | null | undefined
+  do {
+    const page: MemoryPage = await ask($, state, '/memory/list', { statuses: ['active', 'stale'], limit: 500, cursor: cursor ?? undefined, allSessions: true })
+    memories.push(...page.memories)
+    cursor = page.nextCursor
+  } while (cursor !== null && cursor !== undefined && memories.length < 10_000)
+  return memories
+}
+
+/** One short model answer, or undefined when the model gave none: no answer is no verdict. */
+async function answerOf($: EngineInterface, system: string, prompt: string): Promise<string | undefined> {
+  const r = await $.model.complete({ model: await jobModel($), system, prompt, maxTokens: 512, timeoutMs: TRIAGE_MS })
+  return r.isAnswered && r.text.trim() !== '' ? r.text : undefined
+}
+
+type Gray = { memory: Memory; score: Score }
+
+/** Phases 1 and 2: the rule and score verdicts, with an archive proposal for each discard. */
+function classify(memories: readonly Memory[], now: number): { kept: number; discards: Proposal[]; gray: Gray[] } {
+  const result = { kept: 0, discards: [] as Proposal[], gray: [] as Gray[] }
+  for (const memory of memories) {
+    const verdict = preFilter(memory, now)
+    if (verdict.verdict === 'discard') result.discards.push(discardProposal(memory, verdict.reasons))
+    if (verdict.verdict !== 'uncertain') {
+      if (verdict.verdict === 'keep') result.kept += 1
+      continue
+    }
+    const score = valueScore(memory, now)
+    if (score.band === 'keep') result.kept += 1
+    else if (score.band === 'discard') result.discards.push(discardProposal(memory, [`value score ${score.total}/100`]))
+    else result.gray.push({ memory, score })
+  }
+  return result
+}
+
+/** Phase 3: the model rates each gray memory, and each rating becomes a patch and perhaps a proposal. */
+async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number, now: number, report: Report): Promise<void> {
+  for (const { memory, score } of gray.slice(0, limit)) {
+    const raw = await answerOf($, RATE_SYSTEM, ratePrompt(memory, score, now))
+    const rating = raw === undefined ? undefined : ratingOf(raw)
+    if (rating === undefined) {
+      report.unrated += 1
+      continue
+    }
+    report.rated += 1
+    const action = actionOf(memory, score, rating)
+    const patch = patchOf(memory, action, rating)
+    if (Object.keys(patch).length > 0) report.patches.push({ memory, patch })
+    const proposal = proposalOf(memory, action, rating)
+    if (proposal !== undefined) report.proposals.push(proposal)
+  }
+  report.unrated += Math.max(0, gray.length - limit)
+}
+
+/** Phase 4: the model compares each clustered pair. */
+async function comparePairs($: EngineInterface, memories: readonly Memory[], limit: number, report: Report): Promise<void> {
+  const pairs = pairsOf(memories, limit)
+  const yes: Pair[] = []
+  for (const pair of pairs) {
+    const raw = await answerOf($, MERGE_SYSTEM, pairPrompt(pair))
+    const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
+    if (verdict === undefined) report.unjudged += 1
+    if (verdict === 'YES') yes.push(pair)
+    if (verdict === 'OVERLAP') report.overlaps.push(pair)
+  }
+  report.pairs = pairs.length
+  report.merges = mergesOf(yes)
+}
+
+/** Runs phases 1 to 5 and writes nothing. */
+async function triageReport($: EngineInterface, state: State, limits: Limits): Promise<Report> {
+  const memories = await allMemories($, state)
+  const now = await $.clock.now()
+  const classified = classify(memories, now)
+  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], proposals: [...classified.discards], merges: [], overlaps: [], pairs: 0, unjudged: 0 }
+  await rateGray($, classified.gray, limits.calls, now, report)
+  await comparePairs($, memories, limits.pairs, report)
+  return report
+}
+
+/** Files each proposal a pending or recent review does not already cover. */
+async function fileProposals($: EngineInterface, state: State, proposals: readonly Proposal[]): Promise<{ filed: number; failed: string[] }> {
+  const candidates = await ask<Candidate[]>($, state, '/candidates/list', { includeResolved: true })
+  const result = { filed: 0, failed: [] as string[] }
+  for (const proposal of proposalsToFile(proposals, candidates, await $.clock.now())) {
+    try {
+      await ask($, state, '/candidates/propose', { input: proposalInput(proposal) })
+      result.filed += 1
+    } catch (err) {
+      result.failed.push(`${proposal.memory.id}: ${errorText(err)}`)
+    }
+  }
+  return result
+}
+
+/** One write that may fail on its own: its error joins the list, the rest still go. */
+async function attempt(failed: string[], what: string, work: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await work()
+    return true
+  } catch (err) {
+    failed.push(`${what}: ${errorText(err)}`)
+    return false
+  }
+}
+
+/** A merge: the keeper, read again and still live, supersedes the loser, which takes the keeper as its successor. */
+async function applyMerge($: EngineInterface, state: State, merge: Merge): Promise<void> {
+  const keeper = await ask<Memory | null>($, state, '/memory/get', { id: merge.keeper.id })
+  if (keeper === null || (keeper.status !== 'active' && keeper.status !== 'stale')) throw new Error(`keeper ${merge.keeper.id} is no longer live`)
+  await ask($, state, '/memory/update', { id: keeper.id, patch: { supersedes: [...new Set([...(keeper.supersedes ?? []), merge.loser.id])] } })
+}
+
+/** Applies the patches and merges and files the proposals; returns the lines that say what was written. */
+async function applyTriage($: EngineInterface, state: State, report: Report): Promise<string> {
+  const failed: string[] = []
+  let patched = 0
+  let merged = 0
+  for (const { memory, patch } of report.patches) if (await attempt(failed, `patch ${memory.id}`, () => ask($, state, '/memory/update', { id: memory.id, patch }))) patched += 1
+  for (const merge of report.merges) if (await attempt(failed, `merge ${merge.loser.id}`, () => applyMerge($, state, merge))) merged += 1
+  const proposals = await fileProposals($, state, report.proposals)
+  const lines = [`applied: ${patched} patch(es), ${merged} merge(s), ${proposals.filed} review proposal(s) filed`, ...[...failed, ...proposals.failed].map(line => `  failed: ${line}`)]
+  return lines.join('\n')
+}
+
+async function triageCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  if (!(await isReady(state))) return `the daemon is not ready: ${statusText(state.enabled, state.link, state.project?.name ?? '')}`
+  const report = await triageReport($, state, TRIAGE_LIMITS)
+  const applied = rest.trim().toLowerCase() === 'apply' ? await applyTriage($, state, report) : undefined
+  return reportText(report, applied)
+}
+
+/**
+ * The daily dry run: hygiene, then a triage bounded to 40 ratings and 15 pairs, whose proposals are
+ * filed and nothing else written. The time of the last run is kept in the store, so one window runs it.
+ */
+async function dailyRun($: EngineInterface, state: State): Promise<void> {
+  state.daily = undefined
+  if ((await $.store.get('daily')) !== true || !(await isReady(state))) return
+  const last = await $.store.get('dailyAt')
+  const now = await $.clock.now()
+  if (typeof last === 'number' && now - last < DAY_MS) return scheduleDaily($, state)
+  await $.store.set('dailyAt', now)
+  await ask($, state, '/memory/hygiene', { automatic: true })
+  const report = await triageReport($, state, DAILY_LIMITS)
+  const filed = await fileProposals($, state, report.proposals)
+  await toStream($, 'triage', { text: `daily triage: ${report.total} memories, ${filed.filed} review proposal(s) filed, ${report.merges.length} merge(s) suggested`, kind: 'ok' })
+  await scheduleDaily($, state)
+}
+
+/** Schedules the next daily run: an hour after the start when the last run is a day old, else a day after it. */
+async function scheduleDaily($: EngineInterface, state: State): Promise<void> {
+  state.daily?.cancel()
+  state.daily = undefined
+  if ((await $.store.get('daily')) !== true) return
+  const last = await $.store.get('dailyAt')
+  const now = await $.clock.now()
+  const wait = typeof last === 'number' && now - last < DAY_MS ? last + DAY_MS - now : HOUR_MS
+  state.daily = $.clock.after(Math.max(wait, HOUR_MS), () => void guarded($, 'the daily triage', () => dailyRun($, state)))
+}
+
+// ── Compact ────────────────────────────────────────────────────────────
+
+/** Asks the model for a compact proposal over the active and stale project memories, and keeps it. */
+async function proposeCompact($: EngineInterface, state: State): Promise<string> {
+  const memories = (await allMemories($, state)).filter(memory => memory.scope !== 'user').slice(0, COMPACT_MAX)
+  if (memories.length === 0) return 'no active or stale project memory to compact'
+  const r = await $.model.complete({ model: await jobModel($), system: compactSystem(memories), prompt: compactPrompt(memories.length), maxTokens: COMPACT_TOKENS, timeoutMs: COMPACT_MS })
+  if (!r.isAnswered) return `the model gave no answer (${r.reason}); nothing was proposed`
+  state.compactPlan = planOf(r.text, memories)
+  return planText(state.compactPlan)
+}
+
+/** Writes one change of the plan, unless the memory changed since the model saw it. */
+async function applyChange($: EngineInterface, state: State, change: Change): Promise<void> {
+  const current = await ask<Memory | null>($, state, '/memory/get', { id: change.id })
+  if (current === null || current.revision !== change.revision) throw new Error(`${change.id} changed since the proposal`)
+  if (change.kind === 'delete') await ask($, state, '/memory/delete', { id: change.id, reason: `compact: ${change.reason}`, force: true })
+  else if (change.kind === 'rewrite') await ask($, state, '/memory/update', { id: change.id, patch: { text: change.text } })
+  else await ask($, state, '/memory/update', { id: change.id, patch: { text: change.text, ...(change.others.length > 0 ? { supersedes: change.others } : {}) } })
+}
+
+async function applyCompact($: EngineInterface, state: State): Promise<string> {
+  const plan = state.compactPlan
+  if (plan === undefined) return 'no compact proposal in this window; /sage-memory compact makes one'
+  state.compactPlan = undefined
+  const failed: string[] = []
+  let applied = 0
+  for (const change of plan.changes) if (await attempt(failed, `${change.kind} ${change.id}`, () => applyChange($, state, change))) applied += 1
+  return [`compact applied: ${applied} of ${plan.changes.length} change(s)`, ...failed.map(line => `  failed: ${line}`)].join('\n')
+}
+
+async function compactCommand($: EngineInterface, state: State, rest: string): Promise<string> {
+  if (!(await isReady(state))) return `the daemon is not ready: ${statusText(state.enabled, state.link, state.project?.name ?? '')}`
+  return rest.trim().toLowerCase() === 'apply' ? applyCompact($, state) : proposeCompact($, state)
+}
+
+// ── Outcome capture ────────────────────────────────────────────────────
+
+/** Writes what a finished Bash command teaches, while the person turned that capture on. */
+async function captureOutcome($: EngineInterface, state: State, command: string, result: unknown, failed: boolean): Promise<void> {
+  if ((await $.store.get(failed ? 'captureErrors' : 'captureOutcomes')) !== true || !(await isReady(state))) return
+  const input = captureOf(command, outputOf(result), failed, await $.session.id())
+  const key = `${failed ? 'error' : 'outcome'}:${command.trim()}`
+  if (input === undefined || !mayCapture(state.captured, key, await $.clock.now())) return
+  state.captured.set(key, await $.clock.now())
+  await ask($, state, '/memory/remember', { input })
+}
+
 /** A hook result with one more context text, or unchanged when there is none. */
 function withContext<R extends { additionalContext?: readonly string[] }>(r: R, text: string | undefined): R {
   return text === undefined ? r : { ...r, additionalContext: [...(r.additionalContext ?? []), text] }
@@ -598,13 +885,14 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, captured: new Map() }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     await $.command.register({ name: 'sage-memory', description: 'Project memory recalled when it is relevant: state, on, off, setup (sage-memory)', argumentHint: '[on | off | setup]' })
     state.guidance = await readEnabled($, state)
     await declareTools($, state)
+    await scheduleDaily($, state)
     if (state.enabled) await connect($, state)
     else await show($, state)
     return r
@@ -701,6 +989,7 @@ export const register: Register = on => {
     const command = safeCommand(e.command)
     if (e.agentId === undefined && command !== undefined) state.turn.commands = noted(state.turn.commands, command, 10)
     if (succeeded(r)) await guarded($, 'moving anchors', () => remapMoved($, state, e.command, cwd))
+    if (!('deny' in r && r.deny !== undefined)) await guarded($, 'capturing the outcome', () => captureOutcome($, state, e.command, r.result, !succeeded(r)))
     return r
   })
 

@@ -45,6 +45,8 @@ type World = {
   asked: { system: string; prompt: string; model: string }[]
   modelText?: string
   curatorText?: string
+  rateText?: string
+  mergeText?: string
 }
 
 function world(on: On): World {
@@ -79,7 +81,8 @@ function world(on: On): World {
   on('session.id', () => ({ value: 'sess-1' }))
   on('model.complete', (_, e) => {
     w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model })
-    const text = (e.system ?? '').includes('memory curator') ? w.curatorText : w.modelText
+    const system = e.system ?? ''
+    const text = system.startsWith('Rate this') ? w.rateText : system.startsWith('Do these two') ? w.mergeText : system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
     return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
   })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
@@ -105,7 +108,8 @@ function world(on: On): World {
     const init = (e.init ?? {}) as { socketPath?: string; headers?: Record<string, string>; body?: string }
     const path = new URL(e.url).pathname
     w.fetches.push({ url: path, socketPath: init.socketPath, auth: init.headers?.authorization, body: JSON.parse(init.body ?? '{}') as Record<string, unknown> })
-    const value = w.routes.get(path)
+    const route = w.routes.get(path)
+    const value = typeof route === 'function' ? (route as (body: Record<string, unknown>) => unknown)(w.fetches.at(-1)?.body ?? {}) : route
     const reply = value === undefined ? { ok: false, error: 'no such route' } : { ok: true, value }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(reply) } }
   })
@@ -172,7 +176,7 @@ describe('sage-memory', () => {
   withSidebar('answers an unknown word with the usage', async ($, on) => {
     world(on)
     await $.session.start(START)
-    expect((await $.command.run(run('frobnicate'))).text).toBe('expects nothing (the state), on, off or setup')
+    expect((await $.command.run(run('frobnicate'))).text).toBe('expects nothing (the state), on, off, setup, triage [apply], compact [apply], daily [on|off] or capture outcomes|errors [on|off]')
   })
 })
 
@@ -449,5 +453,116 @@ describe('curator', () => {
       { project: expect.anything(), sessionId: 'sess-1', id: 'm4', patch: { importance: 1 } },
     ])
     expect(w.lines).toContain('curated: 1 merged, 1 recalibrated')
+  })
+})
+
+describe('triage, compact and capture', () => {
+  const GRAY = memory('g1', 'The build writes its bundle into the dist folder before the tests run.')
+  const WIP = memory('w1', 'wip: try the other parser', { importance: 0.3 })
+  const KEEPER = memory('k1', 'The server file holds the idle timer and the socket path.', { anchors: [{ type: 'file', path: 'a.ts' }], persistence: 'permanent' })
+  const TWIN = memory('t1', 'The server file holds the idle timer and the socket.', { anchors: [{ type: 'file', path: 'a.ts' }], kind: 'decision' })
+
+  function triageWorld(on: On): World {
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', { memories: [GRAY, WIP, KEEPER, TWIN], nextCursor: null, total: 4, statusCounts: {} })
+    w.routes.set('/candidates/list', [])
+    w.routes.set('/memory/get', KEEPER)
+    w.routes.set('/memory/update', { memory: KEEPER, superseded: [] })
+    w.routes.set('/candidates/propose', { id: 'c1' })
+    w.rateText = '2 | a build detail that changes often'
+    w.mergeText = 'YES'
+    return w
+  }
+
+  withSidebar('a triage dry run reports rule, score, rating and merge verdicts and writes nothing', async ($, on) => {
+    const w = triageWorld(on)
+    await $.session.start(START)
+    const text = String((await $.command.run(run('triage'))).text)
+    expect(text).toContain('triage of 4 memories: 2 kept by rule, 1 discarded by rule or score, 1 in the gray band (1 rated, 0 without a rating)')
+    expect(text).toContain('1 patch(es), 2 review proposal(s), 1 merge(s) and 0 overlap(s) from 1 compared pair(s)')
+    expect(text).toContain('merge: t1 into k1')
+    expect(text).toContain('dry run: nothing was written')
+    expect(bodiesOf(w, '/memory/list')[0]).toMatchObject({ statuses: ['active', 'stale'], allSessions: true })
+    expect(bodiesOf(w, '/memory/update').length + bodiesOf(w, '/candidates/propose').length).toBe(0)
+  })
+
+  withSidebar('triage apply writes the patches, lets the permanent keeper supersede its twin, and files the proposals', async ($, on) => {
+    const w = triageWorld(on)
+    await $.session.start(START)
+    const text = String((await $.command.run(run('triage apply'))).text)
+    expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([
+      { id: 'g1', patch: { confidence: 0.3 } },
+      { id: 'k1', patch: { supersedes: ['t1'] } },
+    ])
+    expect(bodiesOf(w, '/candidates/propose').map(b => (b.input as { targetMemoryId: string; suggestedAction: string }))).toMatchObject([
+      { targetMemoryId: 'w1', suggestedAction: 'archive' },
+      { targetMemoryId: 'g1', suggestedAction: 'archive' },
+    ])
+    expect(text).toContain('applied: 1 patch(es), 1 merge(s), 2 review proposal(s) filed')
+  })
+
+  withSidebar('a rating the model does not give changes nothing', async ($, on) => {
+    const w = triageWorld(on)
+    w.rateText = undefined
+    w.mergeText = undefined
+    await $.session.start(START)
+    const text = String((await $.command.run(run('triage apply'))).text)
+    expect(text).toContain('(0 rated, 1 without a rating)')
+    expect(text).toContain('1 pair(s) without a verdict')
+    expect(bodiesOf(w, '/memory/update')).toEqual([])
+  })
+
+  withSidebar('compact proposes, touches only shown ids, keeps a permanent memory, and applies the proposal', async ($, on) => {
+    const w = triageWorld(on)
+    w.routes.set('/memory/get', (body: Record<string, unknown>) => (body.id === 'g1' ? GRAY : { ...WIP, revision: 2 }))
+    w.routes.set('/memory/delete', { deleted: true })
+    w.modelText = JSON.stringify({
+      operations: [
+        { action: 'rewrite', targets: ['g1'], newText: 'The build writes its bundle into dist.', reason: 'shorter' },
+        { action: 'delete', targets: ['k1', 'w1', 'nope'], reason: 'noise' },
+      ],
+    })
+    await $.session.start(START)
+    const proposal = String((await $.command.run(run('compact'))).text)
+    expect(proposal).toContain('compact proposal over 4 memories: 3 would stay (2 untouched), 1 would leave')
+    expect(proposal).toContain('skipped: nope was not in the list')
+    expect(proposal).toContain('skipped: k1 is permanent and is not deleted')
+    expect(bodiesOf(w, '/memory/update')).toEqual([])
+    const applied = String((await $.command.run(run('compact apply'))).text)
+    expect(bodiesOf(w, '/memory/update').map(b => b.patch)).toEqual([{ text: 'The build writes its bundle into dist.' }])
+    expect(applied).toContain('compact applied: 1 of 2 change(s)')
+    expect(applied).toContain('failed: delete w1: w1 changed since the proposal')
+  })
+
+  withSidebar('the daily dry run runs an hour after a start once a day, files proposals, and patches nothing', async ($, on) => {
+    const w = triageWorld(on)
+    w.routes.set('/memory/hygiene', { project: { state: 'started' } })
+    w.store.set('daily', true)
+    w.store.set('dailyAt', Date.parse('2026-09-26T12:00:00Z'))
+    await $.session.start(START)
+    await w.clock.advance(59 * 60 * 1000)
+    expect(bodiesOf(w, '/memory/hygiene')).toEqual([])
+    await w.clock.advance(60 * 1000)
+    await settled(w)
+    expect(bodiesOf(w, '/memory/hygiene')).toHaveLength(1)
+    expect(bodiesOf(w, '/candidates/propose')).toHaveLength(2)
+    expect(bodiesOf(w, '/memory/update')).toEqual([])
+    expect(w.store.get('dailyAt')).toBe(Date.parse('2026-09-28T13:00:00Z'))
+    expect(w.lines.at(-1)).toBe('daily triage: 4 memories, 2 review proposal(s) filed, 1 merge(s) suggested')
+  })
+
+  withSidebar('outcome capture writes a failed command once an hour while the person turned it on', async ($, on) => {
+    const w = triageWorld(on)
+    w.routes.set('/memory/remember', { memory: GRAY, outcome: 'added' })
+    await $.session.start(START)
+    w.toolFails = true
+    await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+    expect(bodiesOf(w, '/memory/remember')).toEqual([])
+    expect((await $.command.run(run('capture errors on'))).text).toBe('capturing failed commands on')
+    await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+    const inputs = bodiesOf(w, '/memory/remember').map(b => b.input as Record<string, unknown>)
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]).toMatchObject({ kind: 'error_pattern', anchors: [{ type: 'command', command: 'npm test' }] })
   })
 })
