@@ -30,6 +30,7 @@ import {
   completedTasks,
   consolidatorPrompt,
   DEFAULT_MODEL,
+  MAX_ASKED,
   emptyEvidence,
   evidenceText,
   MIN_ANSWER,
@@ -145,6 +146,8 @@ type State = {
   turn: TurnEvidence
   /** Whether the person typed a prompt or a main-loop tool ran since the last consolidation (memory-save's rule). */
   worth: boolean
+  /** The prompts the person typed since the last consolidation, which the consolidator reads with the answer. */
+  asked: string[]
   /** The last compact proposal, which `/sage-memory compact apply` writes. */
   compactPlan?: Plan
   /** The commands outcome capture wrote in the last hour, by key. */
@@ -884,11 +887,11 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
 }
 
 /** Asks the model what the turn taught and writes each memory it kept. */
-async function consolidate($: EngineInterface, state: State, answer: string, turn: TurnEvidence): Promise<void> {
+async function consolidate($: EngineInterface, state: State, asked: readonly string[], answer: string, turn: TurnEvidence): Promise<void> {
   if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
   const root = state.project?.root ?? ''
   const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
-  const prompt = consolidatorPrompt(answer, evidenceText(root, turn, await completedOf($)), existing)
+  const prompt = consolidatorPrompt(asked, answer, evidenceText(root, turn, await completedOf($)), existing)
   const r = await $.model.complete({ model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
   if (!r.isAnswered) {
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
@@ -954,7 +957,9 @@ function afterAnswer($: EngineInterface, state: State, answer: string): void {
   if (!state.worth || answer.trim().length < MIN_ANSWER) return
   state.worth = false
   const turn = state.turn
-  void guarded($, 'the consolidator', () => consolidate($, state, answer, turn)).then(() => guarded($, 'the curator', () => curate($, state, answer, turn.written)))
+  const asked = state.asked
+  state.asked = []
+  void guarded($, 'the consolidator', () => consolidate($, state, asked, answer, turn)).then(() => guarded($, 'the curator', () => curate($, state, answer, turn.written)))
 }
 
 /** Notes what a main-loop tool batch touched, for the consolidator. */
@@ -1327,7 +1332,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, captured: new Map(), pane: emptyPane(), counts: { reminded: 0, used: 0, added: 0 } }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, used: 0, added: 0 } }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1408,7 +1413,10 @@ export const register: Register = on => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (isTyped(e)) state.worth = true
+    if (isTyped(e)) {
+      state.worth = true
+      state.asked = noted(state.asked, e.text, MAX_ASKED)
+    }
     const text = isTyped(e) ? await guarded($, 'the reminder with the prompt', () => beforePrompt($, state, e.text)) : undefined
     return next(text === undefined ? e : { ...e, context: [...(e.context ?? []), text] })
   })

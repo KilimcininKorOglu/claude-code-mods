@@ -486,6 +486,22 @@ describe('consolidator', () => {
     expect(w.lines).toContain('added (project): The daemon closes itself five minutes after its last request.')
   })
 
+  withSidebar('the consolidator reads what the person wrote, so a reason the answer does not repeat is not lost, and each prompt once', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+    w.modelText = '{"candidates":[]}'
+    await $.session.start(START)
+    await $.prompt.submit(typed('Cache for 300 s, because the upstream API refreshes every 5 minutes.'))
+    await $.turn.complete(answered('Created cache.ts with the constant.'))
+    await settled(w)
+    await $.prompt.submit(typed('now delete the file'))
+    await $.turn.complete(answered('Deleted cache.ts from the project.'))
+    await settled(w)
+    expect(w.asked[0]?.prompt).toContain('What the person wrote in this turn:\n- Cache for 300 s, because the upstream API refreshes every 5 minutes.')
+    expect(w.asked[1]?.prompt).toContain('- now delete the file')
+    expect(w.asked[1]?.prompt).not.toContain('upstream API')
+  })
+
   withSidebar('a turn nobody asked for and nothing worked on is not consolidated, nor one while the consolidator is off', async ($, on) => {
     const w = readyWorld(on)
     w.modelText = '{"candidates":[]}'
