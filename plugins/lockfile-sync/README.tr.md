@@ -1,12 +1,12 @@
 # lockfile-sync
 
-Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değiştirmediğini modele söyleyen bir Claude Code Mod'u. Modelin çalıştırdığı her `git commit` sonrasında mod, commit'in lockfile'ını dışarıda bıraktığı manifest'leri commit'in sonucuna ekler. Commit hiçbir zaman durdurulmaz.
+Model `package.json`'a bir dependency ekler, yalnız o dosyayı commit'ler ve lockfile geride kalır. Sonraki `npm ci` CI'da düşer, ya da bir takım arkadaşın senin denediğinden farklı bir sürüm kurar. Bu mod, bir commit bir manifest'in dependency'lerini değiştirip lockfile'ını değiştirmediğinde bunu modele söyler. Modelin çalıştırdığı her `git commit`'ten sonra, commit'in lockfile'ını dışarıda bıraktığı manifest'leri commit'in sonucuna ekler. Commit'in kendisi hiçbir zaman durdurulmaz.
 
 ## Ne yapar
 
-1. Mod Bash tool'unu hook'lar. `git commit` çalıştıran bir komut (`git -C <dir> commit` de dahil, `--dry-run` ya da `--help` değil) kontrol edilir.
-2. Komut çalışmadan önce repository kökünü session'ın dizininden, commit'ten önceki son `cd`'den ve commit'in `git -C` değerinden bulur ve `HEAD`'i kaydeder.
-3. `HEAD`'i ilerleten başarılı bir komuttan sonra commit'in eklenen ve değiştirilen dosyalarını `git show --name-status HEAD` ile listeler ve her manifest'i lockfile'ı ile eşleştirir:
+1. Mod Bash tool'unu izler. `git commit` çalıştıran bir komut kontrol edilir; `git -C <dizin> commit` ya da önünde git'in global flag'leri olan biçimleri de. `--dry-run`, `--help` ya da `-h` taşıyanlar kontrol edilmez.
+2. Komut çalışmadan önce repository kökünü session'ın dizininden, commit'ten önceki son `cd`'den ve commit'in `git -C`'sinden bulur ve `HEAD`'i kaydeder.
+3. `HEAD`'i ilerleten başarılı bir komuttan sonra commit'in eklediği ve değiştirdiği dosyaları `git show --name-status HEAD` ile listeler ve her manifest'i lockfile'ıyla eşleştirir:
 
    | Manifest | Lockfile |
    |---|---|
@@ -20,8 +20,8 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    | `pubspec.yaml` | `pubspec.lock` |
    | `mix.exs` | `mix.lock` |
 
-   Lockfile, manifest'in dizininden repository köküne doğru diskte bulunan ilkidir, yani bir workspace package'i kökteki lockfile ile eşleşir. Diskte lockfile'ı olmayan bir manifest'e dokunulmaz: proje bir tane tutmuyordur.
-4. Commit o lockfile'ı dışarıda bıraktığında mod önce lockfile'ın kendi package manager'ına lockfile'ın manifest'e hâlâ uyup uymadığını sorar. Kontrolü argv ile, lockfile'ın dizininde, 60 sn limitle çalıştırır:
+   Lockfile, manifest'in dizininden repository köküne doğru diskte bulunan ilk lockfile'dır; yani bir workspace package'i kökteki lockfile ile eşleşir. Diskte lockfile'ı olmayan bir manifest'e dokunulmaz: proje bir tane tutmuyordur.
+4. Commit o lockfile'ı dışarıda bıraktıysa mod önce lockfile'ın kendi package manager'ına, lockfile'ın manifest'e hâlâ uyup uymadığını sorar. Kontrolü argv ile, lockfile'ın dizininde, 60 sn sınırla çalıştırır:
 
    | Lockfile | Kontrol | Geride sayıldığı durum |
    |---|---|---|
@@ -31,7 +31,7 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    | `bun.lock`, `bun.lockb` | `bun install --frozen-lockfile --dry-run --ignore-scripts` | `lockfile had changes` |
    | `yarn.lock` (v1) | `yarn check` | `Lockfile does not contain pattern` |
    | `composer.lock` | `composer validate --no-check-all --no-check-publish --check-lock --no-plugins` | `lock file is not up to date` |
-   | `go.sum` | `go mod tidy -diff` | diff bir `go.sum` hunk'ı taşıyor |
+   | `go.sum` | `go mod tidy -diff` | diff'te bir `go.sum` hunk'ı var |
    | `uv.lock` | `uv lock --check` | `needs to be updated` |
    | `poetry.lock` | `poetry check --lock` | `changed significantly` |
    | `pdm.lock` | `pdm lock --check` | `satisfy the project requirements` |
@@ -40,11 +40,11 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    | `pubspec.lock` | `dart pub get --enforce-lockfile --dry-run` | `Unable to satisfy` |
    | `mix.lock` | `mix deps.get --check-locked`, `MIX_DEPS_PATH` `$TMPDIR/lockfile-sync` altında | `mix.lock is out of date` |
 
-   Her kontrolün repository'ye hiçbir dosya yazmadığı ölçüldü. Geçen bir kontrol lockfile'ın uyduğunu söyler ve bulgu açılmaz: `Cargo.toml`'da yeni bir crate getirmeyen bir `features` değişikliği bir şey açmaz, `serde_derive`'ı getiren bir `features = ["derive"]` açar. Lockfile'ın geride olduğunu söyleyen bir hata bulguyu açar. Diğer her cevap bir şey kanıtlamaz: araç kurulu değildir, limiti aşmıştır, başka bir sebeple hata vermiştir, lockfile bir Yarn 2+ `yarn.lock` dosyasıdır, ya da manifest veya lockfile working tree'de `HEAD`'den farklıdır. Kontrol working tree'yi okur, bulgu ise commit'i konu alır; yazılıp commit dışında bırakılmış bir lockfile uyumlu okunurdu. Başlayamayan bir araç bir kere log'lanır:
+   Her kontrolün repository'ye hiçbir şey yazmadığı ölçüldü. Geçen bir kontrol lockfile'ın uyduğunu söyler ve bulgu açılmaz: `Cargo.toml`'da yeni bir crate getirmeyen bir `features` değişikliği bir şey açmaz, `serde_derive`'ı getiren bir `features = ["derive"]` açar. Lockfile'ın geride olduğunu söyleyen bir hata bulguyu açar. Diğer her cevap hiçbir şey kanıtlamaz: araç kurulu değildir, sınırı aşmıştır, başka bir nedenle başarısız olmuştur, lockfile bir Yarn 2+ `yarn.lock`'udur, ya da manifest veya lockfile working tree'de `HEAD`'den farklıdır. Kontrol working tree'yi okur, bulgu ise commit'ten söz eder; yazılmış ama commit'e girmemiş bir lockfile uyumlu okunurdu. Başlayamayan bir araç bir kez yazılır:
 
        lockfile-sync: cargo did not run: <reason>; the manifest's diff decides
 
-   Ardından mod manifest'in diff'ini okur (`git show --unified=20 HEAD -- <manifest>`) ve değişen satırların nerede olduğunu kontrol eder. Yalnız lockfile'ı değiştirebilecek bir değişiklik sayılır:
+   Ardından mod manifest'in diff'ini okur (`git show --unified=20 HEAD -- <manifest>`) ve değişen satırların nerede durduğuna bakar. Yalnız lockfile'ı değiştirebilecek bir değişiklik sayılır:
 
    | Manifest | Sayılır | Sayılmaz |
    |---|---|---|
@@ -55,65 +55,65 @@ Bir commit'in bir manifest'in dependency'lerini değiştirip lockfile'ını değ
    | `pubspec.yaml` | `dependencies`, `dev_dependencies`, `dependency_overrides` | diğer key'ler |
    | `mix.exs` | her değişiklik | |
 
-   Değişen bir satırın section'ı manifest'in tamamından okunur (`git show HEAD:<manifest>`), diff'in kendi 20 satırlık context'inden değil: bir `package.json` içinde 40 satır derindeki bir değişiklik hunk içinde kök `{` işaretine hiç ulaşmaz ve her kök seviyesindeki key dependency olarak okunurdu. Manifest'in kendisinin yerleştirmediği bir key ya da table sayılır, yani okunamayan bir dosya yine de notu alır.
-5. Model bu notu commit'in sonucundan sonra okur:
+   Değişen bir satırın section'ı diff'in kendi 20 satırlık context'inden değil, manifest'in tamamından (`git show HEAD:<manifest>`) okunur: bir `package.json`'ın 40. satırındaki bir değişiklik hunk içinde kök `{`'a hiç ulaşmaz ve kök seviyesindeki her key dependency gibi okunurdu. Manifest'in kendisinin bir yere koymadığı bir key ya da table sayılır; yani okunamayan bir dosya da notu alır.
+5. Model commit'in sonucundan sonra şu notu okur:
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum. Run the package manager's install so the lockfile matches, and commit it.
 
-6. Aynı anda transcript'e bir satır yazılır, böylece modele ne söylendiğini görürsünüz. Bu satır yalnız çiftleri taşır, talimat cümlesi olmadan:
+6. Aynı anda transcript'e tek bir satır düşer, böylece modele ne söylendiğini görürsün. Satırda talimat yoktur, yalnız çiftler vardır:
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum
 
-   Not ve satır ayrı iki kanaldır: model satırı hiç okumaz, siz notu hiç okumazsınız.
-6. [sidebar](../sidebar) açıkken bu çiftler oraya gider, çift başına bir satır olarak, stream'inde bir entry halinde, ve transcript temiz kalır. Entry, yenileri pane'den itene kadar durur. Sidebar kapalıyken ya da o mod kurulu değilken transcript satırı yukarıdaki gibi yazılır.
+   Not ile satır ayrı kanallardır: model satırı, sen de notu hiç okumazsın.
+7. [sidebar](../sidebar) açıksa bu çiftler transcript yerine onun stream'ine bir kayıt olarak gider, her çift bir satırda (lockfile kırmızı, `but not` soluk); transcript temiz kalır. Kayıt, yenileri onu pane'den itene kadar durur. Sidebar kapalıysa ya da kurulu değilse satır yukarıdaki gibi transcript'e düşer.
 
-7. Bir lockfile'ı dışarıda bırakan her commit, manifest'lerine göre key'lenmiş kendi sidebar entry'siyle kendi bulgusunu açar. Sonraki bir commit bulgusunu açık olanların yanına ekler ve hiçbirinin üstüne yazmaz; açık bir bulgunun zaten adlandırdığı bir çift ikinci kez açılmaz. Her bulgu kendi ölçümüyle kapanır.
+8. Bir lockfile'ı dışarıda bırakan her commit, manifest'lerine göre key'lenmiş kendi sidebar kaydıyla kendi bulgusunu açar. Sonraki bir commit bulgusunu açık olanların yanına ekler ve hiçbirinin üstüne yazmaz; açık bir bulgunun zaten saydığı bir çift ikinci kez açılmaz. Her bulgu kendi ölçümüyle kapanır.
 
-   Bir bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra ve guarded bir git komutundan önce git'e ve package manager'a yeniden sorar, yani üç yoldan kapanır:
+   Bulgu hiçbir zaman hatırlanmış bir cevap değildir. Her ölçüm, sonraki her commit'ten sonra, her ana loop turn'ünün sonunda ve `deny` modunda korunan bir git komutundan önce git'e ve package manager'a yeniden sorar; bu yüzden bulgu üç yoldan kapanır:
 
-   - lockfile yazıldı: sonraki bir commit onu değiştirdi ya da `git status --porcelain` working tree'de değiştiğini gösteriyor;
-   - package manager lockfile'ı manifest ile uyumlu okuyor (4. adımdaki kontrol);
-   - kontrol bir şey kanıtlamıyor ve manifest artık bir lockfile değişikliği istemiyor: `git log -1 -- <lockfile>` lockfile'ı en son yazan commit'i adlandırır ve manifest'in o commit'e karşı diff'i hiçbir dependency'ye dokunmaz. Geri alınmış bir değişiklik böyle okunur. Package manager'ın geride okuduğu bir lockfile, diff ne derse desin açık kalır.
+   - lockfile yazılmıştır: sonraki bir commit onu değiştirmiştir, ya da `git status --porcelain` onu working tree'de değişmiş gösterir;
+   - package manager lockfile'ı manifest'le uyumlu okur (4. adımdaki kontrol);
+   - kontrol hiçbir şey kanıtlamaz ve manifest artık lockfile değişikliği istemez: `git log -1 -- <lockfile>` lockfile'ı en son yazan commit'i bulur, manifest'in o commit'e göre diff'i hiçbir dependency'ye dokunmaz. Geri alınan bir değişiklik böyle okunur. Package manager'ın geride okuduğu bir lockfile, diff ne derse desin açık kalır.
 
-   Entry temizlenir ve yeni bir satır hangisi olduğunu söyler:
+   Kayıt silinir ve yeşil yeni bir kayıt bunlardan hangisi olduğunu söyler:
 
        lockfile-sync: a later change brought the lockfiles along: package-lock.json
        lockfile-sync: cargo reads Cargo.lock as in step with Cargo.toml
        lockfile-sync: the dependencies match the lockfile again: package.json
 
-   Sidebar kapalıyken aynı metin tek bir transcript satırıdır. Model bunun hiçbirini okumaz: bulgu kendi işiyle kapandı, bir not yalnız az önce yaptığını tekrar ederdi.
+   Sidebar kapalıysa aynı metin tek bir transcript satırıdır. Model bunların hiçbirini okumaz: bulgu kendi yaptığı işle kapandı, bir not ancak az önce yaptığını tekrarlardı.
 
-8. Modelin kapatmadığı bir bulgu her ana döngü turunun sonunda yeniden ölçülür ve kalan, bir sonraki prompt'la modele tek bir not olarak ulaşır:
+9. Modelin kapatmadığı bir bulgu her ana loop turn'ünün sonunda yeniden ölçülür; geriye kalan, bir sonraki prompt'unla birlikte modele tek bir not olarak gider:
 
        lockfile-sync: 1 lockfile(s) are still behind their manifest: package-lock.json behind package.json. Run the package manager's install so the lockfile is written, or take the dependency change back.
 
-   Tur başına bir not, prompt başına değil. Bu olmasa bulgu bir kere, commit anında söylenir ve sonra model onu unutmuşken pane'de dururdu. Siz yeni bir şey okumazsınız: pane zaten aynı bulguyu taşıyor.
+   Not her prompt'ta değil, her turn'de bir kez gelir. Bu olmasa bulgu yalnız commit anında bir kez söylenir, model onu unuturken pane'de öylece dururdu. Sen yeni bir şey okumazsın, çünkü pane aynı bulguyu zaten gösteriyor.
 
-9. `deny` modunda mod ayrıca, bir lockfile geride kaldığı sürece `git commit`, `git push` ve `git merge` komutlarını durdurur. Bir komutu durdurmadan önce iki ölçümü de çalıştırır, yani package manager'ın az önce yazdığı bir lockfile ve geri alınmış bir dependency değişikliği gate'i kendileri açar. Bir `git commit` yalnız kendi dosyaları için cevap verir: mod index'i okur (`git diff --cached --name-only`) ve index açık manifest'lerin hiçbirini tutmuyorsa commit'in çalışmasına izin verir, size kaçının hâlâ durduğunu söyleyen bir satırla. Bir `push` ve bir `merge` okunacak index tutmaz, yani orada her çift durur. Kaçış yolu yok; gate'i yalnız kişi `/lockfile-sync mode note` ile kapatır. `note` modu varsayılandır ve hiçbir şeyi durdurmaz.
+10. `deny` modunda bir lockfile geride kaldıkça mod `git commit`, `git push` ve `git merge`'ü de durdurur. Durdurmadan önce iki ölçümü de çalıştırır; böylece package manager'ın az önce yazdığı bir lockfile da, geri alınmış bir dependency değişikliği de gate'i kendiliğinden açar. `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`), commit açık manifest'lerin hiçbirini içermiyorsa geçmesine izin verir ve kaç tanesinin hâlâ durduğunu tek satırla söyler. `push` ve `merge` için okunacak bir index yoktur, orada bütün çiftler geçerlidir. Gate'i aşmanın yolu yoktur; kapatmak yalnız sana kalır, `/lockfile-sync mode note` ile. Varsayılan `note` modudur ve hiçbir şeyi durdurmaz.
 
-Bir git hatası bir kere log'lanır ve commit'in sonucu olduğu gibi kalır.
+Bir git hatası sarı bir kayıt olarak yazılır (sidebar kapalıysa transcript'e), farklı bir hata gelene kadar bir kez; commit'in sonucu da olduğu gibi kalır.
 
-Canlı kontrolde model bir `package.json` dependency'sini yükseltti, yalnız o dosyayı commit etti ve notu kelimesi kelimesine alıntıladı.
+Canlı denemede model bir `package.json` dependency'sini yükseltti, yalnız o dosyayı commit'ledi ve notu kelimesi kelimesine aktardı.
 
 ## Komut
 
-    /lockfile-sync                 on ya da off, mod ve hâlâ geride olan lockfile'lar
-    /lockfile-sync on | off        varsayılan on
-    /lockfile-sync mode note       yalnız not; varsayılan
-    /lockfile-sync mode deny       bir lockfile geride kalmışken commit, push ve merge de durur
+    /lockfile-sync                 açık mı kapalı mı, mod ve hâlâ geride olan lockfile'lar
+    /lockfile-sync on | off        varsayılan açık
+    /lockfile-sync mode note       yalnız not verir; varsayılan budur
+    /lockfile-sync mode deny       bir lockfile geride kaldıkça commit, push ve merge de durur
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install lockfile-sync@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlatın.
+1. Claude Code'u yeniden başlat.
 
 ## Nereye uzanır
 
@@ -122,32 +122,33 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, command.run{command=lockfile-sync}, turn.complete, prompt.submit, tool.call{tool=Bash}
     ❯ ./register.ts calls: $.command.register, $.env.get (via tmpDir), $.fs.exists (via lockOnDisk), $.fs.read (via treeText), $.process.run (via git, lockVerdict), $.session.cwd (via beforeCommit), $.sidebar.clear (via dropEntry), $.sidebar.set (via toPerson), $.store.get (via readSettings), $.store.set (via runCommand, setMode), $.ui.log (via denyFor, toPerson, toolFailed)
 
-Reach L3, network'e çıkan process'ler çalıştırır.
+Reach L3: network'e çıkan process'ler çalıştırır.
 
-    1. Okur:     Bash komut metnini; repository'de lockfile'ların var olup olmadığını; her açık bulgunun manifest'ini ve lockfile'ını working tree'de; git üzerinden commit'in dosya listesini, manifest diff'lerini ve her manifest'in HEAD'deki hâlini; TMPDIR
-    2. Çalıştırır: git rev-parse, git show, git status, git log ve git diff komutlarını salt okuma olarak argv ile; ve 4. adımdaki package manager kontrolünü, bir commit'te lockfile'ı olmayan manifest başına bir kere ve her ölçümde açık çift başına bir kere, turun sonunda da
-    3. Gönderir: commit'in sonucundan sonra modele bir not, bulgu dururken sonraki prompt'la bir tane daha ve transcript'e bir satır; package manager çözümlediği paketlerin metadata'sını registry'sinden isteyebilir
-    4. Saklar:   $.store içinde on/off ayarını ve modu; package manager'lar kendi cache'lerini tutar, mix $TMPDIR/lockfile-sync/mix-deps altına fetch eder
-    5. Düşman girdi: dizin komut metninden gelir ve git'e ve package manager'a yalnız working directory olarak ulaşır, hiçbir zaman bir shell üzerinden geçmez; manifest path'leri onlara tek bir argv girdisi olarak ulaşır. Kontrol projenin tuttuğu kodu çalıştırır: Gemfile Ruby, mix.exs Elixir kodudur ve ikisi de evaluate edilir. npm, pnpm ve bun --ignore-scripts ile, pnpm --ignore-pnpmfile ile, composer --no-plugins ile çalışır, yani proje script'leri ve plugin'leri çalışmaz
+    1. Okur:     Bash komut metnini; repository'de lockfile'ların olup olmadığını; açık her bulgunun manifest'ini ve lockfile'ını working tree'de; git üzerinden commit'in dosya listesini, manifest diff'lerini ve HEAD'deki her manifest'i; TMPDIR'i
+    2. Çalıştırır: salt okunur git rev-parse, git show, git status, git log ve git diff; argv ile; ve 4. adımdaki lockfile package manager kontrolünü, commit anında lockfile'ı olmayan her manifest için bir kez ve her ölçümde açık her çift için bir kez, turn sonunda da
+    3. Gönderir: commit'in sonucundan sonra modele bir not, bulgu durdukça sonraki prompt'la bir not daha ve transcript'e bir satır; package manager çözümlediği paket metadata'sı için registry'sine sorabilir
+    4. Saklar:   $.store içinde açık/kapalı ayarını ve modu; package manager'lar kendi cache'lerini tutar, mix de $TMPDIR/lockfile-sync/mix-deps altına indirir
+    5. Düşman girdi: dizin komut metninden gelir ve git'e ve package manager'a yalnız çalışma dizini olarak ulaşır, hiçbir zaman shell üzerinden değil; manifest path'leri onlara tek bir argv girdisi olarak ulaşır. Kontrol projenin tuttuğu kodu çalıştırır: Gemfile Ruby'dir, mix.exs Elixir'dir ve ikisi de değerlendirilir. npm, pnpm ve bun --ignore-scripts ile, pnpm --ignore-pnpmfile ile, composer --no-plugins ile çalışır; böylece projenin script'leri ve plugin'leri çalışmaz
 
 ## Sınırlar
 
-- Package manager kontrolünün bir şey kanıtlamadığı yerde mod yalnız dosya adlarını ve diff section'larını karşılaştırır ve lockfile'ın içeriğinin manifest ile eşleştiğini kontrol etmez.
-- Karar package manager'ın kendi kararıdır: `npm ci` kök package'in `version` değerini karşılaştırmaz, `yarn check` kaldırılmış bir dependency'yi hâlâ listeleyen bir lockfile'ı uyumlu okur.
-- Yarn 2+ `yarn.lock` için burada bir kontrol yok: `yarn install --immutable` projeye `node_modules` link'ler, `--mode=update-lockfile` ise `--immutable` ile birleşmez.
-- Bir bulgu dururken kontrolü her ana döngü turunun sonunda yeniden çalışır, çift başına en fazla 60 sn.
-- Hiçbir commit'in yazmadığı bir lockfile, manifest'i karşılaştıracak bir şey tutmaz, yani bulgusunu yalnız ilk ölçüm kapatabilir.
-- Bir dizinde bir manager'ın iki lockfile'ı (bir `package-lock.json` yanındaki bir `yarn.lock`) tablodaki ilkiyle eşleşir.
-- `git commit`'i gizleyen bir script ya da alias üzerinden atılan commit görülmez. `cd ~/x` genişletilmez.
+- Package manager kontrolünün hiçbir şey kanıtlamadığı yerde mod yalnız dosya adlarını ve diff section'larını karşılaştırır; lockfile'ın içeriğinin manifest'e uyduğunu kontrol etmez.
+- Karar package manager'ın kendisinindir: `npm ci` kök paketin `version`'ını karşılaştırmaz, `yarn check` de kaldırılmış bir dependency'yi hâlâ listeleyen bir lockfile'ı uyumlu okur.
+- Yarn 2+ `yarn.lock`'un burada kontrolü yoktur: `yarn install --immutable` `node_modules`'ı projeye bağlar, `--mode=update-lockfile` de `--immutable` ile birlikte kullanılamaz.
+- Bir bulgu durdukça kontrolü her ana loop turn'ünün sonunda yeniden çalışır, çift başına 60 sn'ye kadar.
+- Hiçbir commit'in yazmadığı bir lockfile'da manifest'i karşılaştıracak bir şey yoktur; bulgusunu yalnız ilk ölçüm kapatabilir.
+- Aynı dizinde aynı manager'a ait iki lockfile (bir `package-lock.json`'ın yanında bir `yarn.lock`) tablodaki ilkiyle eşleşir.
+- `git commit`'i gizleyen bir script ya da alias üzerinden yapılan commit görülmez.
+- Dizinini shell'in önce genişlettiği bir `cd` ya da `git -C` (`cd $D`, `cd ~/x`, bir backquote), mod'un bilebileceği bir dizin söylemez. O commit kontrol edilmez; sarı satır da kelimeyi söyler, örneğin `the commit's directory is not known: cd $D`. Tek tırnak içindeki bir kelime olduğu gibi kalır.
 - Bir merge commit'inin birleşik diff'i okunmaz.
-- `deny` modunun kaçış yolu yoktur. Bir bulgu düzeltilemediğinde kişi gate'i `/lockfile-sync mode note` ile kapatır.
-- Gate, working tree'deki lockfile'a yapılan her değişikliği düzeltme olarak okur; o değişikliğin ne taşıdığını kontrol etmez.
-- Bir `git commit -a`, bir `-am` ve `--` sonrası pathspec taşıyan bir commit index'e göre daraltılmaz, çünkü bunlar index'in henüz tutmadığı dosyaları commit eder. Onlar için her açık çift durur.
+- `deny` modunu aşmanın yolu yoktur. Bir bulgu düzeltilemiyorsa gate'i `/lockfile-sync mode note` ile sen kapatırsın.
+- Gate, lockfile'daki working tree değişikliğini düzeltme sayar; değişikliğin içeriğine bakmaz.
+- `git commit -a`, `-am` ve `--` sonrasında pathspec verilen commit index'e göre daraltılmaz, çünkü index'te henüz olmayan dosyaları da commit'ler. Bunlarda açık çiftlerin hepsi geçerlidir.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

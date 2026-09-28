@@ -1,10 +1,10 @@
 # lockfile-sync
 
-A Claude Code Mod that tells the model when a commit changes the dependencies of a manifest but not its lockfile. After each `git commit` the model runs, the mod adds the manifests whose lockfile the commit left out to the commit's result. The commit is never stopped.
+The model adds a dependency to `package.json`, commits that file alone, and the lockfile stays behind. The next `npm ci` fails in CI, or a teammate installs a different version than the one you tested. This mod tells the model when a commit changes the dependencies of a manifest but not its lockfile. After each `git commit` the model runs, the mod adds the manifests whose lockfile the commit left out to the commit's result. The commit itself is never stopped.
 
 ## What it does
 
-1. The mod hooks the Bash tool. A command that runs `git commit` (also `git -C <dir> commit`, not `--dry-run` or `--help`) is checked.
+1. The mod hooks the Bash tool. A command that runs `git commit` (also `git -C <dir> commit` and the forms with git's global flags in front, not `--dry-run`, `--help` or `-h`) is checked.
 2. Before the command runs, it finds the repository root from the session's directory, the last `cd` before the commit and the commit's `git -C`, and records `HEAD`.
 3. After a successful command that moved `HEAD`, it lists the commit's added and modified files with `git show --name-status HEAD`, and pairs each manifest with its lockfile:
 
@@ -60,22 +60,22 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum. Run the package manager's install so the lockfile matches, and commit it.
 
-6. The same moment writes one line to the transcript, so you see what the model was told. The line holds the pairs alone, without the instruction:
+6. At the same moment one line reaches the transcript, so you see what the model was told. The line holds the pairs alone, without the instruction:
 
        lockfile-sync: this commit changes package.json but not package-lock.json · go.mod but not go.sum
 
    The note and the line are separate channels: the model never reads the line, and you never read the note.
-6. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair, as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
+7. While the [sidebar](../sidebar) is open, those pairs go there instead, one line per pair (the lockfile red, `but not` faint), as an entry in its stream, and the transcript stays clean. The entry stays until newer ones push it off the pane. With the sidebar closed, or without that mod installed, the transcript line is written as above.
 
-7. Each commit that leaves a lockfile out opens its own finding, with its own sidebar entry keyed by its manifests. A later commit adds its finding beside the open ones and never writes over one; a pair an open finding already names is not opened twice. Every finding closes on its own measure.
+8. Each commit that leaves a lockfile out opens its own finding, with its own sidebar entry keyed by its manifests. A later commit adds its finding beside the open ones and never writes over one; a pair an open finding already names is not opened twice. Every finding closes on its own measure.
 
-   A finding is never a remembered answer. Each measure, after every later commit and before a guarded git command, asks git and the package manager again, so it closes three ways:
+   A finding is never a remembered answer. Each measure, after every later commit, at the end of each main-loop turn and before a guarded git command in `deny` mode, asks git and the package manager again, so a finding closes three ways:
 
    - the lockfile was written: a later commit changed it, or `git status --porcelain` shows it changed in the working tree;
    - the package manager reads the lockfile as in step with the manifest (the check of step 4);
    - the check proves nothing and the manifest asks for no lockfile change any more: `git log -1 -- <lockfile>` names the commit that last wrote the lockfile, and the manifest's diff against that commit touches no dependency. A change that was reverted reads this way. A lockfile the package manager reads as behind stays open whatever the diff says.
 
-   The entry is cleared and a new one says which of the three it was:
+   The entry is cleared and a green one says which of the three it was:
 
        lockfile-sync: a later change brought the lockfiles along: package-lock.json
        lockfile-sync: cargo reads Cargo.lock as in step with Cargo.toml
@@ -83,15 +83,15 @@ A Claude Code Mod that tells the model when a commit changes the dependencies of
 
    With the sidebar closed the same text is one transcript line. The model reads nothing of this: the finding closed by its own work, so a note would only repeat what it just did.
 
-8. A finding the model did not close is measured again at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt:
+9. A finding the model did not close is measured again at the end of each main-loop turn, and what is left reaches the model as one note with its next prompt:
 
        lockfile-sync: 1 lockfile(s) are still behind their manifest: package-lock.json behind package.json. Run the package manager's install so the lockfile is written, or take the dependency change back.
 
    One note per turn, not one per prompt. Without this the finding would be said once, at the commit, and then stand in the pane while the model forgot it. You read nothing new: the pane already carries the same finding.
 
-9. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs both measures, so a lockfile the package manager just wrote, and a dependency change that was taken back, each open the gate themselves. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only`) and lets the commit run when it holds none of the open manifests, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every pair stands there. There is no bypass; only the person turns the gate off with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
+10. In `deny` mode the mod also stops `git commit`, `git push` and `git merge` while a lockfile is behind. Before it stops one it runs both measures, so a lockfile the package manager just wrote, and a dependency change that was taken back, each open the gate themselves. A `git commit` answers for its own files alone: the mod reads the index (`git diff --cached --name-only -z`) and lets the commit run when it holds none of the open manifests, with one line to you naming how many still stand. A `push` and a `merge` hold no index to read, so every pair stands there. There is no bypass; only you turn the gate off, with `/lockfile-sync mode note`. `note` mode is the default and stops nothing.
 
-A git error is logged once, and the commit's result stays as it was.
+A git error is written as a yellow entry (the transcript line with the sidebar closed), once until a different one comes, and the commit's result stays as it was.
 
 In the live check the model raised a `package.json` dependency, committed only that file, and quoted the note word for word.
 
@@ -107,7 +107,7 @@ In the live check the model raised a `package.json` dependency, committed only t
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install lockfile-sync@kilimcininkoroglu-mods
 
-Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -138,16 +138,17 @@ Reach L3, runs processes that reach the network.
 - While a finding stands, its check runs again at every main-loop turn's end, up to 60 s per pair.
 - A lockfile no commit ever wrote has nothing to compare the manifest against, so only the first measure can close its finding.
 - Two lockfiles of one manager in one directory (a `yarn.lock` beside a `package-lock.json`) pair with the first in the table.
-- A commit through a script or an alias that hides `git commit` is not seen. `cd ~/x` is not expanded.
+- A commit through a script or an alias that hides `git commit` is not seen.
+- A `cd` or `git -C` whose directory the shell expands first (`cd $D`, `cd ~/x`, a backquote) names no directory the mod can tell. That commit is not checked, and the yellow line names the word, for example `the commit's directory is not known: cd $D`. A word in single quotes stays as written.
 - A merge commit's combined diff is not read.
-- The `deny` mode has no bypass. When a finding cannot be fixed, the person turns the gate off with `/lockfile-sync mode note`.
+- The `deny` mode has no bypass. When a finding cannot be fixed, you turn the gate off with `/lockfile-sync mode note`.
 - The gate reads any change to the lockfile in the working tree as the fix; it does not check what that change holds.
 - A `git commit -a`, a `-am` and a commit with a pathspec after `--` are not narrowed to the index, because they commit files the index does not hold yet. Every open pair stands for those.
 
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
