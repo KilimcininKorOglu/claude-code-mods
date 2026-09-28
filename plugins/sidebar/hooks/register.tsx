@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropTurn, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropConsumers, dropTurn, offConsumers, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -168,6 +168,18 @@ async function restoreLog($: EngineInterface, state: State): Promise<void> {
     state.stream = pushed(state.stream, { ...kept, id: `${kept.id}#${++state.written}`, at: one.at })
   }
   if (found.length > 0) $.ui.invalidate('ui.render')
+}
+
+/**
+ * Drops the standing sections of the plugins turned off since they wrote them. `/reload-plugins` keeps
+ * this module and its board when the module did not change, and a plugin that is no longer loaded never
+ * clears its own section. The stream keeps their entries as history.
+ */
+async function dropOff($: EngineInterface, state: State): Promise<void> {
+  if (state.board.size === 0) return
+  const { enabledPlugins } = await $.settings.read()
+  const plugins = (await $.command.list()).flatMap(c => (c.plugin === undefined ? [] : [c.plugin]))
+  if (dropConsumers(state.board, offConsumers(state.board, enabledPlugins, plugins))) $.ui.invalidate('ui.render')
 }
 
 /** What the pane holds now, as plain text; a closed sidebar holds nothing. */
@@ -360,6 +372,11 @@ export const register: Register = on => {
     forget(state)
     if (e.origin.kind === 'person') await $.store.set(OPEN_KEY, false)
     return r
+  })
+
+  on('turn.start', async ($, e, next) => {
+    await dropOff($, state)
+    return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {

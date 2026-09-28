@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropTurn, headText, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropConsumers, dropTurn, headText, offConsumers, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -96,6 +96,35 @@ describe('board', () => {
     expect(dropTurn(board)).toBe(true)
     expect([...board.keys()]).toEqual(['edit-loop:b'])
     expect(dropTurn(board)).toBe(false)
+  })
+
+  test('the sections of a plugin turned off go; a folder copy, an enabled plugin and a name the settings lack stay', () => {
+    const board = boardOf(
+      section({ consumer: 'memory-save', key: 'state', until: 'session' }),
+      section({ consumer: 'memory-save', key: 'note' }),
+      section({ consumer: 'cache-warm', key: 'state', until: 'session' }),
+      section({ consumer: 'env-sync', key: 'note', until: 'session' }),
+      section({ consumer: 'other-mod', key: 'state', until: 'session' }),
+      section({ consumer: 'twin', key: 'state', until: 'session' }),
+    )
+    const enabled = {
+      'memory-save@kilimcininkoroglu-mods': false,
+      // Disabled, but its checkout is loaded with --plugin-dir and lists its own command.
+      'cache-warm@kilimcininkoroglu-mods': false,
+      'env-sync@kilimcininkoroglu-mods': true,
+      // One marketplace's copy is off, the other's is on.
+      'twin@a': false,
+      'twin@b': true,
+    }
+    const commands = ['cache-warm', 'env-sync@kilimcininkoroglu-mods']
+    const off = offConsumers(board, enabled, commands)
+    expect([...off]).toEqual(['memory-save'])
+    expect(dropConsumers(board, off)).toBe(true)
+    expect([...board.keys()]).toEqual(['cache-warm:state', 'env-sync:note', 'other-mod:state', 'twin:state'])
+    expect(dropConsumers(board, offConsumers(board, enabled, commands))).toBe(false)
+    // Once the folder copy is gone too, its sections go.
+    expect([...offConsumers(board, enabled, [])]).toEqual(['cache-warm'])
+    expect(offConsumers(board, undefined, [])).toEqual(new Set())
   })
 
   test('cuts a line to the width', () => {

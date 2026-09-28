@@ -147,13 +147,43 @@ export function ordered(board: Board): Kept[] {
   return [...board.values()].sort((a, b) => rank(a) - rank(b) || a.order - b.order || a.consumer.localeCompare(b.consumer) || a.key.localeCompare(b.key))
 }
 
-/** Drops every section of a turn; answers whether the board changed. */
-export function dropTurn(board: Board): boolean {
+/** Drops every section `goes` picks; answers whether the board changed. */
+function dropWhere(board: Board, goes: (section: Kept) => boolean): boolean {
   let dropped = false
   for (const [id, section] of board) {
-    if (section.until === 'turn' && board.delete(id)) dropped = true
+    if (goes(section) && board.delete(id)) dropped = true
   }
   return dropped
+}
+
+/** Drops every section of a turn; answers whether the board changed. */
+export function dropTurn(board: Board): boolean {
+  return dropWhere(board, section => section.until === 'turn')
+}
+
+/** A plugin's name from an `enabledPlugins` key or a command's plugin: `<name>@<marketplace>`, or the name alone. */
+const pluginName = (id: string): string => id.split('@')[0] ?? id
+
+/**
+ * The consumers whose plugin is off: every `enabledPlugins` key of their name is false, and no command
+ * of the session comes from them. A consumer no key names, such as a plugin loaded with `--plugin-dir`
+ * or a name that is not a plugin's, is never off, and neither is a folder copy of a disabled plugin,
+ * because its own command is listed.
+ */
+export function offConsumers(board: Board, enabledPlugins: unknown, commandPlugins: readonly string[]): Set<string> {
+  const keys = typeof enabledPlugins === 'object' && enabledPlugins !== null ? Object.entries(enabledPlugins) : []
+  const live = new Set(commandPlugins.map(pluginName))
+  const off = new Set<string>()
+  for (const { consumer } of board.values()) {
+    const own = keys.filter(([key]) => pluginName(key) === consumer)
+    if (own.length > 0 && own.every(([, on]) => on === false) && !live.has(consumer)) off.add(consumer)
+  }
+  return off
+}
+
+/** Drops every section of the consumers named; answers whether the board changed. */
+export function dropConsumers(board: Board, consumers: ReadonlySet<string>): boolean {
+  return dropWhere(board, section => consumers.has(section.consumer))
 }
 
 /** `[ stop ] sleep 600` cut to the body's width, so a long line does not wrap the pane. */
