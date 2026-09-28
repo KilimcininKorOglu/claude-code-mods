@@ -1,6 +1,6 @@
 # gemini-core
 
-A Claude Code Mod that keeps the Gemini settings of every Gemini mod in one place: the key and the tier for all of them, and the model and the thinking level for each. It adds `$.gemini` to the engine interface; `gemini-compact`, `gemini-advisor`, `gemini-review` and `gemini-plan-review` depend on it and build their Gemini requests through it. `council` uses it when it is installed, without depending on it.
+Several mods ask Gemini. When each keeps its own key, tier and model, a new key means one change per mod. This mod keeps the Gemini settings of every Gemini mod in one place: the key and the tier for all of them, and the model and the thinking level for each. It adds `$.gemini` to the engine interface; `gemini-compact`, `gemini-advisor`, `gemini-review` and `gemini-plan-review` depend on it and build their Gemini requests through it. `council` uses it when it is installed, without depending on it.
 
 ## What it does
 
@@ -37,7 +37,7 @@ A mod that enrolls with `ownModels` names the model of each request itself, as `
 
 ## Model list
 
-The list comes from Google's `models.list` (`GET /v1beta/models`, the key in the `x-goog-api-key` header), asked once per session, again with `models refresh`. When a key fails, the next key is asked. It keeps the models that take `generateContent` and whose id starts with `gemini-`, and leaves out ids with `tts` or `image`, which answer with speech or pictures. On the checked key Google listed 58 models and 21 stayed (measured on 2.1.278). The filter reads names only, so a new model of another kind whose name does not say so stays in the list; Gemini's own error then reaches the mod that asks.
+The list comes from Google's `models.list` (`GET /v1beta/models`, the key in the `x-goog-api-key` header), asked the first time a command needs it and kept in memory for the session, again with `models refresh`. When a key fails, the next key is asked. It keeps the models that take `generateContent` and whose id starts with `gemini-`, and leaves out ids with `tts` or `image`, which answer with speech or pictures. On the checked key Google listed 58 models and 21 stayed (measured on 2.1.278). The filter reads names only, so a new model of another kind whose name does not say so stays in the list; Gemini's own error then reaches the mod that asks.
 
 `/gemini-core model <mod>` opens a pane with a `Select` of the list, the mod's current model selected; Enter sets the pick, shows it in a toast and closes the pane, and Esc closes it with no change. In the terminal the Select draws a scrolling list of ten rows. A surface without a `Select` (mobile) shows the list and the command that sets one. An id given with the command is refused when the list lacks it, with the three closest ids:
 
@@ -45,9 +45,9 @@ The list comes from Google's `models.list` (`GET /v1beta/models`, the key in the
 
 ## Several keys
 
-The `apiKey` option and `GEMINI_API_KEY` take a comma-separated list; the option wins when it is set. The keys are tried in order:
+The `apiKey` option and `GEMINI_API_KEY` take a comma-separated list; the option wins when it is set. Blanks and repeated keys are dropped. The keys are tried in order:
 
-- An HTTP 429 (quota), 401, 403, or 400 "API key not valid" sends the same request with the next key at once. The last key wraps to the first, and each key is tried once per request. No key is tried once the mod's deadline has passed (60 s for review and compact, 40 s for the advisor).
+- An HTTP 429 (quota), 401, 403, or 400 "API key not valid" or "API key expired" sends the same request with the next key at once. The last key wraps to the first, and each key is tried once per request. No key is tried once the mod's deadline has passed (60 s for review and compact, 50 s for plan-review, 40 s for the advisor). With one key, the error is that key's failure alone.
 - When no key is left, the error names each distinct failure once with the places of the keys that got it, never a key: `all 34 keys failed: Gemini HTTP 429: quota (keys 1-4, 6-34); Gemini HTTP 400: API key not valid. (key 5)`.
 - The next request starts at the key the last one succeeded or moved on with, so a key whose daily quota is used up is not asked first every time. This place is kept in memory and starts over when the module reloads.
 - An HTTP 503 is the model's load, the same for every key, so it stays on the same key and waits as above.
@@ -65,7 +65,7 @@ The Gemini mods send the conversation, tool outputs and diffs. The Gemini API Ad
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-core@kilimcininkoroglu-mods
 
-A Gemini mod lists `gemini-core` in its `dependencies`, so installing one installs this one. Function hooks are early access. Nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
+A Gemini mod lists `gemini-core` in its `dependencies`, so installing one installs this one. Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
@@ -142,7 +142,7 @@ Reach L3, reaches the network: `/gemini-core models` and a model change ask Goog
 ## Development
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limit 10, fails the build above it
+    make lint        # complexity limit 10, the build fails above it
     make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
