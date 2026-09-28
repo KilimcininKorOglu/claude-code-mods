@@ -22,6 +22,18 @@ describe('a reminder after a tool batch', () => {
     w.close()
   })
 
+  test('a memory anchored to a directory above the touched file is a candidate, a top-level directory too', async () => {
+    const w = world()
+    const top = (await w.remember({ text: 'Every module under src exports named bindings only', anchors: [{ type: 'directory', path: 'src' }] })).memory
+    const other = (await w.remember({ text: 'Every script under tools runs with the repository root as its directory', anchors: [{ type: 'directory', path: 'tools' }] })).memory
+    const ranking = rankForTools(w.readers('s1', 'main'), READ_APP)
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [top.id])
+    assert.deepEqual(ranking.candidates[0]?.reasons.slice(0, 1), ['anchor:ancestor:src+1'])
+    assert.ok(!ranking.rejected.some(r => r.id === top.id))
+    assert.ok(!ranking.candidates.some(c => c.memory.id === other.id), 'a directory the path is not under relates to nothing')
+    w.close()
+  })
+
   test('the gates hold back a low importance, a never policy, and a repeated text', async () => {
     const w = world()
     const anchors = [{ type: 'file' as const, path: 'src/app.ts' }]

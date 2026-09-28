@@ -222,9 +222,14 @@ export function memoryStructuralRelevance(memory: Memory, seeds: readonly Memory
   return NONE
 }
 
-/** A top-level directory anchor is too broad to relate to a path below it. */
-const MIN_ANCESTOR_SEGMENTS = 2
-const ANCESTOR_DECAY_PER_SEGMENT = 0.11
+/**
+ * A directory anchor relates to every path below it, a top-level one included: a file right under it
+ * at 0.94, less for each level deeper, and never below 0.86, so every path below it passes the
+ * reminder's relation floor (0.85) while the closer directory still ranks first.
+ */
+const ANCESTOR_START = 0.96
+const ANCESTOR_DECAY_PER_LEVEL = 0.02
+const ANCESTOR_MIN = RELATION_FLOOR + 0.01
 
 function anchorPathRelation(anchor: Anchor, relPath: string, depth: number): Relevance | undefined {
   const path = anchor.path
@@ -232,10 +237,9 @@ function anchorPathRelation(anchor: Anchor, relPath: string, depth: number): Rel
   if (path === relPath) {
     return { strength: anchor.type === 'symbol' || anchor.type === 'command' ? 0.98 : 0.95, reasons: [`anchor:exact-${anchor.type}:${path}`] }
   }
-  const segments = path.split('/').filter(Boolean).length
-  if (!relPath.startsWith(`${path}/`) || segments < MIN_ANCESTOR_SEGMENTS) return undefined
-  const distance = depth - segments
-  return { strength: Math.max(0.35, 0.95 - distance * ANCESTOR_DECAY_PER_SEGMENT), reasons: [`anchor:ancestor:${path}+${distance}`] }
+  if (!relPath.startsWith(`${path}/`)) return undefined
+  const distance = depth - path.split('/').filter(Boolean).length
+  return { strength: Math.max(ANCESTOR_MIN, ANCESTOR_START - distance * ANCESTOR_DECAY_PER_LEVEL), reasons: [`anchor:ancestor:${path}+${distance}`] }
 }
 
 /**

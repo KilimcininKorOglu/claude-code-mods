@@ -69,11 +69,13 @@ describe('how an anchor relates to a touched path', () => {
     }
   })
 
-  test('a directory above the path is weaker with each level, and a top-level one is too broad', () => {
+  test('a directory above the path relates to every path below it, weaker with each level but above the reminder floor', () => {
     const memory = memoryOf({ anchors: [{ type: 'directory', path: 'packages/api' }] })
-    assert.equal(pathAnchorRelation(memory, 'packages/api/db.ts')?.strength, 0.84)
-    assert.equal(pathAnchorRelation(memory, 'packages/api/src/lib/db.ts')?.strength.toFixed(2), '0.62')
-    assert.equal(pathAnchorRelation(memoryOf({ anchors: [{ type: 'directory', path: 'src' }] }), 'src/db.ts'), undefined)
+    assert.equal(pathAnchorRelation(memory, 'packages/api/db.ts')?.strength.toFixed(2), '0.94')
+    assert.equal(pathAnchorRelation(memory, 'packages/api/src/lib/db.ts')?.strength.toFixed(2), '0.90')
+    assert.equal(pathAnchorRelation(memory, 'packages/api/a/b/c/d/e/f/db.ts')?.strength.toFixed(2), '0.86')
+    assert.equal(pathAnchorRelation(memoryOf({ anchors: [{ type: 'directory', path: 'src' }] }), 'src/db.ts')?.strength.toFixed(2), '0.94')
+    assert.equal(pathAnchorRelation(memory, 'packages/apiserver/db.ts'), undefined)
     assert.equal(pathAnchorRelation(memory, '.'), undefined)
   })
 })
