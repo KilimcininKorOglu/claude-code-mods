@@ -9,7 +9,7 @@ Modele baştan "her push'tan önce sor" dersin; bir compaction'dan sonra özet b
        pin-note: pinned note 1, kept for this session and sent to you again after each compaction and /clear:
        ask before every push
 
-2. Bir compaction'dan ve `/clear`'dan sonra notlar bir `SessionStart` hook'u ile modelin yeni context'ine numaralı tek bir liste olarak girer; her not yazdığın gibidir. Listenin üstündeki üç satır modele notların nereden geldiğini söyler: notları sen `/pin-note` ile kendin sabitledin, sonra konuşma compact edildi ya da `/clear` çalıştırdın, açtığın pin-note plugin'i de onları geri veriyor. Bu satırlar olmadığında model bazen bir notu enjekte edilmiş bir talimat sanıp uygulamadı. Sana tek bir satır bunu bildirir:
+2. Bir compaction'dan ve `/clear`'dan sonra notlar bir `SessionStart` hook'u ile modelin yeni context'ine numaralı tek bir liste olarak girer; her not yazdığın gibidir. Listenin üstündeki üç satır modele notların nereden geldiğini söyler: notları sen `/pin-note` ile kendin sabitledin, sonra konuşma compact edildi ya da `/clear` çalıştırdın, açtığın pin-note plugin'i de onları geri veriyor. Bu satırlar yokken model bazen bir notu enjekte edilmiş bir talimat sanıp uygulamadı. Sana tek bir satır bunu bildirir:
 
        pin-note: sent 1 pinned note(s) again after the compaction
 
@@ -20,7 +20,7 @@ Claude Code 2.1.283 üzerinde `sonnet` modeliyle canlı session'larda ölçüld�
 
 ## Komut
 
-    /pin-note                  açık ya da kapalı, ve sabitlenmiş notlar, numaralı
+    /pin-note                  açık mı kapalı mı ve sabitlenmiş notlar, numaralı
     /pin-note on | off         varsayılan kapalı; kapalıyken notlar saklanır, hiçbiri gönderilmez
     /pin-note <not>            bir notu sabitler; metin yazıldığı gibi saklanır, birkaç satır da olabilir
     /pin-note drop <n>         n numaralı notu çıkarır
@@ -48,13 +48,13 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, command.run{command=pin-note}, classic.SessionStart
     ❯ ./register.ts calls: $.command.register, $.session.id, $.store.get (via loadPins, readSettings), $.store.set (via runCommand, savePins), $.ui.log
 
-Reach L0; ağ yok, dosya yok, süreç yok.
+Reach L0: network yok, dosya yok, process yok.
 
-    1. Okur:        sabitlediğiniz notları ve session'ın id'sini
+    1. Okur:        sabitlediğin notları ve session'ın id'sini
     2. Çalıştırır:  hiçbir şey
-    3. Gönderir:    makineden dışarı hiçbir şey; notlar modelin context'ine yazdığınız gibi girer
+    3. Gönderir:    makineden dışarı hiçbir şey; notlar modelin context'ine yazdığın gibi girer
     4. Saklar:      $.store içinde açık/kapalı ayarını ve her session'ın notlarını
-    5. Düşman girdi: bir not sizin kendi metninizdir ve model onu sizin talimatınız olarak okur; başka hiçbir şey okunmaz
+    5. Düşman girdi: bir not senin kendi metnindir ve model onu senin talimatın olarak okur; başka hiçbir şey okunmaz
 
 ## Sınırlar
 
