@@ -25,10 +25,11 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
 
     sage-memory: memory
     daemon ready · my-app · embeddings off · /sage-memory setup
-    this session: reminded 4 · used 1 · added 2 · this project: 2031 active
+    this project: 2031 active · global: 12 active
+    this session: reminded 4 · used 1 · added 2
     [ manage ]
 
-Son kısım bu projenin store'undaki aktif kayıtları sayar; bölüm her çizildiğinde daemon'dan okunur.
+İkinci satır bu projenin deposundaki ve global depodaki aktif kayıtları sayar; bölüm her çizildiğinde sayılar daemon'dan okunur. Global depo `user` kayıtlarını tutar ve bu kayıtlar her projede hatırlatılır. Üçüncü satır bu oturumun yaptıklarını sayar: hatırlatılan kayıtlar, bir cevabın kullandıkları ve modelin ya da consolidator'ın ekledikleri.
 
 Altındaki akış her reminder'ı soluk gösterir. Bir kayıttaki her değişiklik de bir satırdır; değişikliği model, consolidator, curator ya da bir kontrol yapmış olabilir. Satırda yalnız ne olduğunu söyleyen kelime renklidir: eklenen yeşil, değişen sarı (güncellenen, birleştirilen, stale olan, taşınan), silinen kırmızı. Bir hata kırmızı bir satırdır. Sidebar kapalıyken ilk satır status line'a, akış satırları transcript'e gider.
 

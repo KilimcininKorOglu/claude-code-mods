@@ -25,10 +25,11 @@ While the [sidebar](../sidebar) is open, the mod keeps one `memory` section ther
 
     sage-memory: memory
     daemon ready · my-app · embeddings off · /sage-memory setup
-    this session: reminded 4 · used 1 · added 2 · this project: 2031 active
+    this project: 2031 active · global: 12 active
+    this session: reminded 4 · used 1 · added 2
     [ manage ]
 
-The last part counts the active memories of this project's store, read from the daemon at each draw of the section.
+The second line counts the active memories of this project's store and of the global store, read from the daemon at each draw of the section. The global store holds the `user` memories, which every project is reminded of. The third line counts what this session did: the memories it was reminded of, the ones an answer used, and the ones the model or the consolidator added.
 
 Under it, the stream shows each reminder faint. Each change to a memory, made by the model, the consolidator, the curator or a check, is a line in which only the word that says what happened is coloured: added green, changed yellow (updated, merged, gone stale, moved), deleted red. A failure is a red line. With the sidebar closed, the first line goes to the status line and the stream lines to the transcript.
 

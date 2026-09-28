@@ -10,6 +10,7 @@ import {
   setupText,
   stateLine,
   statusText,
+  storedLine,
   tokenOf,
   valueOf,
   wordLine,
@@ -17,6 +18,7 @@ import {
   type LinkView,
   type Part,
   type SessionCounts,
+  type StoredCounts,
 } from './link.ts'
 import { hexOf, keySource, projectKey, projectNameFrom } from './project.ts'
 import {
@@ -168,8 +170,8 @@ type State = {
   worth: boolean
   /** The prompts the person typed since the last consolidation, which the consolidator reads with the answer. */
   asked: string[]
-  /** The project store's active memories at the last draw; unset until the daemon answered. */
-  stored?: number
+  /** The active memories of the project's store and the global one at the last draw; unset until the daemon answered. */
+  stored?: StoredCounts
   /** The last compact proposal, which `/sage-memory compact apply` writes. */
   compactPlan?: Plan
   /** The commands outcome capture wrote in the last hour, by key. */
@@ -224,19 +226,22 @@ async function toPerson($: EngineInterface, lines: Line[]): Promise<void> {
   $.ui.status(lines[0]?.text)
 }
 
-/** The project store's active memories, read again at each draw; a failed read keeps the last count. */
+/** The active memories of the project's store and the global one, read again at each draw; a failed read keeps the last counts. */
 async function readStored($: EngineInterface, state: State): Promise<void> {
   try {
-    state.stored = (await ask<{ project: StoreStats }>($, state, '/memory/stats', {})).project.byStatus.active
+    const stats = await ask<{ project: StoreStats; user: StoreStats }>($, state, '/memory/stats', {})
+    state.stored = { project: stats.project.byStatus.active, global: stats.user.byStatus.active }
   } catch (err) {
     await toStream($, 'error', { text: `the store count was not read: ${errorText(err)}`, kind: 'error' })
   }
 }
 
+/** The section: the daemon's state; once it answers, what the stores hold and what this session did. */
 async function show($: EngineInterface, state: State): Promise<void> {
   const first = stateLine(state.link, state.project?.name ?? '')
-  if (state.link.state === 'ready') await readStored($, state)
-  await toPerson($, state.link.state === 'ready' ? [first, countsLine(state.counts, state.stored)] : [first])
+  if (state.link.state !== 'ready') return toPerson($, [first])
+  await readStored($, state)
+  await toPerson($, [first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts)])
 }
 
 async function git($: EngineInterface, args: string[]): Promise<string> {

@@ -154,17 +154,18 @@ describe('sage-memory', () => {
     expect(project).toMatchObject({ name: 'my app', root: '/src/my app', commonDir: '/src/my app/.git' })
   })
 
-  withSidebar('the section counts the project store\'s active memories, and a failed count read says so', async ($, on) => {
+  withSidebar("the section counts the active memories of the project's store and the global one, and a failed count read says so", async ($, on) => {
     const w = world(on)
     const stats = (active: number) => ({ total: active + 3, byStatus: { active, stale: 3 }, byKind: {}, edges: 0 })
     w.routes.set('/memory/stats', { project: stats(2031), user: stats(12) })
     await $.session.start(START)
-    expect(w.lines.at(-1)).toBe('daemon ready · my app · embeddings off · /sage-memory setup / this session: reminded 0 · used 0 · added 0 · this project: 2031 active')
+    const section = 'daemon ready · my app · embeddings off · /sage-memory setup / this project: 2031 active · global: 12 active / this session: reminded 0 · used 0 · added 0'
+    expect(w.lines.at(-1)).toBe(section)
     w.routes.delete('/memory/stats')
     await $.command.run(run('on'))
     expect(w.lines).toContain('the store count was not read: /memory/stats answered HTTP 200: no such route')
-    // The last count stays on the line.
-    expect(w.lines.at(-1)).toMatch(/ · this project: 2031 active$/)
+    // The last counts stay in the section.
+    expect(w.lines.at(-1)).toBe(section)
   })
 
   withSidebar('a Node without type stripping or node:sqlite fails before any launch', async ($, on) => {

@@ -119,11 +119,15 @@ export function setupText(job: SetupJob): string {
 /** What this session did with the memories: reminded, used in an answer, added. */
 export type SessionCounts = { reminded: number; used: number; added: number }
 
-/**
- * The sidebar's second line, while the daemon answers: this session's counts, and how many active
- * memories the project's store holds, once the daemon has answered that.
- */
-export function countsLine(counts: SessionCounts, stored?: number): Line {
-  const store = stored === undefined ? '' : ` · this project: ${stored} active`
-  return { text: `this session: reminded ${counts.reminded} · used ${counts.used} · added ${counts.added}${store}`, kind: 'dim' }
+/** The active memories of this project's store and of the global store, whose `user` memories every project is reminded of. */
+export type StoredCounts = { project: number; global: number }
+
+/** The sidebar's line of what the stores hold, once the daemon has answered it. */
+export function storedLine(stored: StoredCounts): Line {
+  return { text: `this project: ${stored.project} active · global: ${stored.global} active`, kind: 'dim' }
+}
+
+/** The sidebar's last line while the daemon answers: this session's counts. */
+export function countsLine(counts: SessionCounts): Line {
+  return { text: `this session: reminded ${counts.reminded} · used ${counts.used} · added ${counts.added}`, kind: 'dim' }
 }
