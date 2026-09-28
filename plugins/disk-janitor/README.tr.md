@@ -1,35 +1,35 @@
 # disk-janitor
 
-Session'ın repository'sindeki build artifact'lerini ölçen, 5 GB'ı geçtiklerinde status line'da gösteren ve `/disk-janitor` pane'inde seçtiklerinizi silen bir Claude Code Mod'u. Bir veri dizini hiç listelenmez ve hiç silinmez.
+Build araçları arkalarını hiç toplamaz: `node_modules`, Rust'ın `target`'ı ve Python'ın `.venv`'i disk dolana kadar sessizce büyür. Bu mod session'ın repository'sindeki build artifact'larını ölçer, toplam 5 GB'ı geçince gösterir ve `/disk-janitor` pane'inde seçtiğin dizinleri siler. Bir veri dizini hiçbir zaman listelenmez, hiçbir zaman silinmez.
 
 ## Ne yapar
 
-1. Session başlangıcında ve son ölçümün üzerinden 10 dakika geçtiyse bir turn sonunda, session'ın dizinindeki repository'de `git ls-files --others --ignored --exclude-standard --directory` komutunu çalıştırır. Session'ın dizini, başlangıçta bir kere okunan, başladığı dizindir; çünkü bir Bash `cd` session'ın kendi dizinini kaydırır ve ölçümü başka bir repository'ye yöneltirdi. git repository'si dışında hiçbir şey yapmaz.
-2. Her git-ignore edilmiş dizini adına ve içeriğine göre sınıflar:
-   - **kesin**: `node_modules` (içinde `.package-lock.json`, `.modules.yaml`, `.yarn-integrity` ya da `.yarn-state.yml` varsa), `target` (`CACHEDIR.TAG` ya da `.rustc_info.json` varsa), `.venv` ve `venv` (`pyvenv.cfg` varsa), `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.phpunit.cache`, `.next`, `.nuxt`, `.turbo`, `.parcel-cache`, `.gradle`, `DerivedData`, `Pods`. İşaret dosyası olmayan kesin bir ad, şüpheli sayılır.
-   - **şüpheli**: `dist`, `build`, `out`, `bin`, `obj`, `vendor`, `.cache`, `coverage`. `(unsure)` ile listelenir, önceden hiç seçili gelmez.
-   - **veri**: `docker-data`, `data`, `training`, `dataset`, `datasets`, `models`, `uploads`, `media`, `storage`, `db`, `database`, `pgdata`, `volumes`, `backup`, `backups`, `dump`, `dumps`, `logs`, `git-clone`, `release`, `releases`, `artifacts`, `cache`. Hiç listelenmez. Mod bir seviye içine bakar ve oradaki bir artifact'i listeler (`training/.venv`), veri dizininin kendisini asla.
-   - Diğer her ad listelenmez.
-3. Listelenen dizinleri tek bir `du -sk` çağrısıyla, argv ile, arka planda ölçer; yani hiçbir prompt onu beklemez.
-4. Status line toplamı 5 GB'dan itibaren gösterir ve 20 GB'dan itibaren daha yüksek sesle söyler:
+1. Session başında ve son ölçüm 10 dakikadan eskiyse bir turn'den sonra, session dizininin repository'sinde `git ls-files --others --ignored --exclude-standard --directory -z` çalıştırır. Bu dizin session'ın başladığı dizindir ve başlangıçta bir kez okunur, çünkü Bash'teki bir `cd` session'ın kendi dizinini değiştirir ve ölçümü başka bir repository'ye yöneltirdi. Git repository'si dışında hiçbir şey yapmaz.
+2. Git'in ignore ettiği her dizini adına ve içeriğine göre ayırır:
+   - **kesin**: `node_modules` (içinde `.package-lock.json`, `.modules.yaml`, `.yarn-integrity` ya da `.yarn-state.yml` varsa), `target` (`CACHEDIR.TAG` ya da `.rustc_info.json` ile), `.venv` ve `venv` (`pyvenv.cfg` ile), `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`, `.phpunit.cache`, `.next`, `.nuxt`, `.turbo`, `.parcel-cache`, `.gradle`, `DerivedData`, `Pods`. İşaret dosyası olmayan kesin bir ad belirsiz sayılır.
+   - **belirsiz**: `dist`, `build`, `out`, `bin`, `obj`, `vendor`, `.cache`, `coverage`. `(unsure)` ile listelenir, hiçbir zaman önceden seçilmez.
+   - **veri**: `docker-data`, `data`, `training`, `dataset`, `datasets`, `models`, `uploads`, `media`, `storage`, `db`, `database`, `pgdata`, `volumes`, `backup`, `backups`, `dump`, `dumps`, `logs`, `git-clone`, `release`, `releases`, `artifacts`, `cache`. Hiçbir zaman listelenmez. Mod bir seviye içine bakar ve oradaki bir artifact'ı (`training/.venv`) listeler, veri dizininin kendisini asla.
+   - Başka her ad listelenmez.
+3. Listelenen dizinleri argv ile tek bir `du -sk` çağrısıyla, arka planda ölçer; böylece hiçbir prompt onu beklemez.
+4. Status line toplamı 5 GB'tan itibaren gösterir, 20 GB'tan itibaren daha belirgin söyler:
 
        disk-janitor: artifacts 7.4 GB · /disk-janitor
        disk-janitor: over 20 GB: artifacts 23.1 GB · /disk-janitor
 
-   [sidebar](../sidebar) açıkken bu satır oraya gider, session boyunca duran bir `build artifacts` section'ı olarak; status line temiz kalır. Yalnızca boyut renklidir: 5 GB'dan itibaren sarı, 20 GB'dan itibaren kırmızı; `· /disk-janitor` soluktur ve section 5 GB'ın altında kalkar. Altındaki ikinci, soluk satır son silmeyi tutar: silinen kısım yeşil, `N skipped` sarı, `N failed` kırmızıdır; bir `clean up` tuşu pane'i açar:
+   [sidebar](../sidebar) açıksa bu satır oraya, session boyunca duran bir `build artifacts` section'ı olarak gider ve status line boş kalır. Yalnız boyut renklidir: 5 GB'tan itibaren sarı, 20 GB'tan itibaren kırmızı; `· /disk-janitor` soluktur. 5 GB'ın altında section kaldırılır. İkinci, soluk bir satır son silmeyi gösterir: silinen kısım yeşil, `N skipped` sarı, `N failed` kırmızı. Bir `clean up` butonu pane'i açar:
 
        disk-janitor: build artifacts
        artifacts 7.4 GB · /disk-janitor
        deleted 2 dir(s), 2.5 GB
        [ clean up ]
 
-   Tuş `/disk-janitor` komutunu çalıştırır; komut pane'i açar (açıksa kapatır). Tuş kendi başına hiçbir şey silmez: seçim ve iki basış pane'de kalır.
+   Buton `/disk-janitor` çalıştırır; o da pane'i açar (açıksa kapatır). Buton kendi başına hiçbir şey silmez: seçimler ve iki basış pane'de kalır.
 
-   Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi çizilir.
+   Sidebar yoksa status line yukarıdaki gibi çizilir.
 
 ## Pane
 
-`/disk-janitor` pane'i açar, tekrar yazınca kapatır. Tuşları alır; Esc kapatır.
+`/disk-janitor` pane'i açar, yeniden çalıştırmak kapatır. Pane tuşları alır, Esc onu kapatır.
 
     /Users/you/app · 6.5 GB
     [x] node_modules  2.0 GB
@@ -39,63 +39,64 @@ Session'ın repository'sindeki build artifact'lerini ölçen, 5 GB'ı geçtikler
     [ Delete selected (6.5 GB) ]
     kept, data: data
 
-Bir satırda Enter onu seçer ya da seçimi kaldırır. Silme butonundaki ilk Enter onu `Press again to delete 3 dir(s), 6.5 GB` haline getirir; ikincisi siler. Seçim sonraki ölçümlerde korunur.
+Bir satırda Enter onu seçer ya da seçimden çıkarır. Sil butonundaki ilk Enter onu `Press again to delete 3 dir(s), 6.5 GB`'a çevirir; ikincisi siler. Seçimlerin sonraki ölçümlerde de korunur.
 
-Her silmeden hemen önce mod dizini tekrar kontrol eder: hâlâ bir dizin olmalı ve link olmamalı, (çözülmüş path'i ile) repository'nin içinde kalmalı, hâlâ git-ignore edilmiş olmalı (`git check-ignore`) ve hâlâ listelendiği sınıfta olmalı. Başarısız olan dizin atlanır ve adlandırılır. Silme, shell olmadan, argv ile `rm -rf -- <mutlak path>` şeklindedir.
+Mod her silmeden hemen önce dizini yeniden kontrol eder: hâlâ bir dizin olmalı ve bir link olmamalı, (çözülmüş yoluyla) repository'nin içinde bulunmalı, hâlâ git tarafından ignore ediliyor olmalı (`git check-ignore`) ve listelendiği sınıfta kalmalıdır. Bir kontrolü geçemeyen dizin atlanır ve adıyla bildirilir. Silme, shell olmadan argv ile `rm -rf -- <mutlak yol>` olarak yapılır.
 
-Sonra tek bir transcript satırı neyin gittiğini ve neyin kaldığını söyler, veri dizinlerini adıyla:
+Ardından tek bir transcript satırı neyin gittiğini ve neyin kaldığını söyler; veri dizinlerini de adlarıyla sayar:
 
     disk-janitor: deleted 1 dir(s), 3 MB: node_modules (3 MB) · kept, data: data
 
 ## Komut
 
-    /disk-janitor                  pane'i aç ya da kapat
-    /disk-janitor list             listelenen dizinleri metin olarak yazar, pane'i olmayan bir surface için
-    /disk-janitor rescan           şimdi tekrar ölç
-    /disk-janitor delete <path>    listelenen bir dizini siler, pane ile aynı kontrollerle
+    /disk-janitor                  pane'i açar ya da kapatır
+    /disk-janitor list             listelenen dizinleri metin olarak verir; pane'i olmayan bir yüzey için
+    /disk-janitor rescan           şimdi yeniden ölçer
+    /disk-janitor delete <yol>     listelenen tek bir dizini, pane'deki kontrollerin aynısıyla siler
 
-`delete` yalnız prompt'ta yazdığınız ya da bridge üzerinden gelen bir komut için çalışır. Bir plugin'in çalıştırdığı komut reddedilir, yani model silemez.
+`delete` yalnız senin prompt'tan ya da bridge üzerinden yazdığın bir komutta çalışır. Bir plugin'in çalıştırdığı komut reddedilir, yani model hiçbir şey silemez.
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install disk-janitor@kilimcininkoroglu-mods
 
-Function hook'lar early access. Flag olmadan hiçbir şey yüklenmez. Flag'i kalıcı yapmak için `~/.claude/settings.json` dosyasına ekleyin:
+Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
 
     { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
 
 ## Kurulumdan sonra
 
-Claude Code'u yeniden başlatın. Mod'un key'e ve ayara ihtiyacı yoktur. Claude Code'u bir git repository'si içinde başlatın; ilk ölçüm session başlangıcında çalışır.
+1. Claude Code'u yeniden başlat. Mod'un bir key'e ya da ayara ihtiyacı yoktur.
+2. Claude Code'u bir git repository'sinin içinde başlat; ilk ölçüm session başında çalışır.
 
 ## Nereye uzanır
 
-Claude Code 2.1.280 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane}, ui.close
     ❯ ./register.tsx calls: $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
-Reach L2, process çalıştırır ve dizin siler.
+Reach L2: process çalıştırır ve dizin siler.
 
-    1. Okur:     repository'nin git-ignore edilmiş dizin adlarını; listelenen bir dizinin işaret dosyalarını; bir veri dizininin bir seviye içindeki girdileri; silinmeden önce bir dizinin çözülmüş path'ini
-    2. Çalıştırır: git rev-parse, git ls-files ve git check-ignore, salt okuma; du -sk; pane'de iki kere seçtiğiniz ya da /disk-janitor delete ile adlandırdığınız bir dizin üzerinde rm -rf --; hepsi argv ile, shell yok
-    3. Gönderir: hiçbir şey; /disk-janitor çıktı satırı, her komut çıktısı gibi model tarafından okunur
-    4. Saklar:   hiçbir şey; son ölçüm ve seçimleriniz bellekte yaşar
-    5. Düşman girdi: bir dizin adı git'ten ve diskten gelir, modelden asla; bir silme sizin tuşunuzu ya da yazdığınız komutu ister ve bir path hemen öncesinde her kontrolü tekrar geçmek zorundadır
+    1. Okur:     repository'nin git tarafından ignore edilen dizin adlarını; listelenen bir dizinin işaret dosyalarını; bir veri dizininin bir seviye içindeki girdileri; silmeden önce bir dizinin çözülmüş yolunu
+    2. Çalıştırır: salt okunur git rev-parse, git ls-files ve git check-ignore; du -sk; pane'de iki kez seçtiğin ya da /disk-janitor delete ile adını verdiğin bir dizin için rm -rf --; hepsi argv ile, shell yok
+    3. Gönderir: hiçbir şey; /disk-janitor çıktı satırını model her komut çıktısı gibi okur
+    4. Saklar:   hiçbir şey; son ölçüm ve seçimlerin bellekte durur
+    5. Düşman girdi: dizin adı git'ten ve diskten gelir, hiçbir zaman modelden gelmez; bir silme senin tuşuna ya da yazdığın komuta ihtiyaç duyar ve yol, hemen öncesinde bütün kontrolleri yeniden geçmek zorundadır
 
 ## Sınırlar
 
-- Yalnız git'in ignore ettiği bir dizin listelenir. Commit edilmiş ya da hiçbir yerde ignore edilmeyen bir build çıktısı listelenmez.
+- Yalnız git'in ignore ettiği dizinler listelenir. Commit'lenmiş ya da hiçbir yerde ignore edilmeyen bir build çıktısı listelenmez.
 - Üç listenin dışındaki bir ad, build çıktısı olsa bile listelenmez.
-- Ignore edilmiş bir dizinin içindeki ignore edilmiş dizin listelenmez, dıştaki bir veri dizini olmadıkça (yalnız bir seviye).
-- Çok büyük bir ağaçta `du` uzun sürebilir. Ölçüm arka planda 60 saniye sınırıyla çalışır; ilk ölçüm bitene kadar pane `measuring…` gösterir.
+- Ignore edilen bir dizinin içindeki başka bir ignore edilen dizin listelenmez; dıştaki bir veri dizini olduğunda bu kural esner (yalnız bir seviye).
+- Çok büyük bir ağaçta `du` uzun sürebilir. Ölçüm arka planda, 60 saniyelik bir sınırla çalışır; ilki bitene kadar pane `measuring…` gösterir.
 - En fazla 500 dizin listelenir.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity limiti 10, üstünde build'i düşürür
-    make typecheck   # /plugin-types ile üretilen .claude/types/ gerekir
+    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
