@@ -18,7 +18,7 @@
 
    Her satırda kurulu sürüm soluk, sunulan sürüm ise atlamanın büyüklüğüne göre renklidir: yeni bir major sürüm kırmızı, yeni bir minor sarı, yeni bir patch yeşil. Sekizinciden sonraki satırlar soluk tek bir satırda sayılır; altlarındaki soluk update komutu ilk sekiz satırın plugin'lerini sayar. Sidebar kapalıysa ya da kurulu değilse aynı bulgu tek bir transcript satırıdır.
 4. Kurulu her plugin clone'unun sürümündeyken hiçbir şey çizilmez; bu durum oluşur oluşmaz section kalkar.
-5. Her turn sonundaki ölçüm, session başının yakalayamadıklarını yakalar: bu session açıkken başka bir pencerede güncellediğin bir plugin'i ya da marketplace'i, ve bu mod ilk ölçtüğünde henüz pane'ini açmamış bir sidebar'ı. Bulgu transcript'e bir kez düşer; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
+5. Her turn sonundaki ölçüm, session başının yakalayamadıklarını yakalar: bu session açıkken başka bir pencerede güncellediğin bir plugin'i ya da marketplace'i ve bu mod ilk ölçtüğünde henüz pane'ini açmamış bir sidebar'ı. Bulgu transcript'e bir kez düşer; aynı bulgunun sonraki ölçümü hiçbir şey söylemez.
 6. `/mod-doctor` hemen yeniden ölçer ve ayarı, kapsamı, kaç plugin tuttuğunu ve hangilerinin geride olduğunu yazar. `/mod-doctor marketplace <ad>` kapsamı tek bir marketplace'e daraltır, `marketplace all` yeniden genişletir.
 
 Clone ancak son `claude plugin marketplace update` kadar yenidir; yani bu mod "marketplace'i güncelledim, plugin'leri güncelledim mi?" sorusunu cevaplar, "GitHub'da daha yeni bir sürüm var mı?" sorusunu değil.
