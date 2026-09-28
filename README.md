@@ -42,6 +42,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 99 times in a row. | L2 |
 | [limit-watch](plugins/limit-watch) | Shows the 5-hour and 7-day usage limits under the prompt with a reset countdown and a forecast, opens a `/limit-watch` pane, and warns at 80% and 95%. | L0 |
 | [memory-save](plugins/memory-save) | Loads `MEMORY.md` into the session and saves project learnings to it after every turn through a tool-less fork in the background, without blocking the stop. | L2 |
+| [sage-memory](plugins/sage-memory) | Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn. | L3 |
 | [cache-warm](plugins/cache-warm) | Keeps the 1-hour prompt cache warm for a window you set, or with no end in every session under `always`, with one fork per idle stretch, and shows the cache state, the cold price and this session's cold writes. | L2 |
 | [prompt-time](plugins/prompt-time) | Draws the time under each of your messages and each text block of the model's replies, also for a resumed session whose transcript is under 4 MiB. | L1 |
 | [gemini-compact](plugins/gemini-compact) | Moves compaction from Claude to Gemini: a Gemini summary with the newest messages verbatim, or Gemini decisions that keep, cut or drop older tool calls. | L3 |
