@@ -3,7 +3,8 @@
  * body each call becomes. Descriptions are SAGE's, with the tool names of this plugin and the
  * sentences the code does not keep corrected. Pure code; `register.tsx` makes every call.
  */
-import { ANCHOR_TYPES, KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS } from './shared/model.ts'
+import { openingOf, wordLine, type Line } from './link.ts'
+import { ANCHOR_TYPES, KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model.ts'
 
 type Schema = Record<string, unknown>
 
@@ -375,12 +376,42 @@ export function callOf(name: string, input: Input, sessionId: string): Call {
   return call(input, sessionId)
 }
 
-/** The line the person reads after the model deleted or rewrote a memory, or undefined for any other tool. */
-export function editLine(name: string, input: Input): string | undefined {
-  const reason = typeof input.reason === 'string' && input.reason.trim() !== '' ? `: ${input.reason.trim()}` : ''
-  if (name === 'delete') return `the model deleted ${String(input.id)}${reason}`
-  if (name === 'update') return `the model updated ${String(input.id)}${typeof input.text === 'string' ? `: "${input.text.slice(0, 80)}"` : ''}`
-  return undefined
+/** A line about a change the model made; only the verb is coloured: an addition green, a change yellow, a deletion red. */
+const modelLine = (verb: string, kind: 'ok' | 'warn' | 'error', after: string): Line => wordLine('the model ', verb, kind, after)
+
+/** Whether a call wrote a new memory, which the session counts as added. */
+export function addedBy(name: string, value: unknown): boolean {
+  return name === 'remember' && (value as Partial<RememberResult>).outcome === 'added'
+}
+
+function rememberedLine(value: unknown): Line | undefined {
+  const memory = (value as Partial<RememberResult>).memory
+  if (memory === undefined) return undefined
+  const opening = openingOf(memory.text)
+  return addedBy('remember', value) ? modelLine('added', 'ok', ` (${memory.scope}): ${opening}`) : modelLine('merged', 'warn', ` into ${memory.id}: ${opening}`)
+}
+
+/** `: <reason>` when the model gave one. */
+function reasonOf(input: Input): string {
+  const reason = String(input.reason ?? '').trim()
+  return reason === '' ? '' : `: ${reason}`
+}
+
+function forgotLine(input: Input, value: unknown): Line | undefined {
+  const removed = (value as { removed?: unknown }).removed
+  return Array.isArray(removed) && removed.length > 0 ? modelLine('forgot', 'error', ` ${removed.length} memory(ies) matching "${String(input.query).trim()}"`) : undefined
+}
+
+const EDIT_LINES: Record<string, (input: Input, value: unknown) => Line | undefined> = {
+  remember: (_input, value) => rememberedLine(value),
+  update: input => modelLine('updated', 'warn', ` ${String(input.id)}${typeof input.text === 'string' ? `: "${input.text.slice(0, 80)}"` : ''}`),
+  delete: input => modelLine('deleted', 'error', ` ${String(input.id)}${reasonOf(input)}`),
+  forget: forgotLine,
+}
+
+/** The line the person reads after the model added, merged, rewrote, deleted or forgot memories, or undefined for any other call. */
+export function editLine(name: string, input: Input, value: unknown): Line | undefined {
+  return EDIT_LINES[name]?.(input, value)
 }
 
 /** The tool's short name from the name the engine lists, or undefined for another plugin's tool. */

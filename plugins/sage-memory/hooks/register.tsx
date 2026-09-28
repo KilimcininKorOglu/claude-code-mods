@@ -1,5 +1,23 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { countsLine, launchOf, NODE_PROBE, nodeProblem, setupText, stateLine, statusText, tokenOf, valueOf, type Line, type LinkView, type SessionCounts } from './link.ts'
+import {
+  countsLine,
+  faint,
+  launchOf,
+  listed,
+  NODE_PROBE,
+  nodeProblem,
+  partsLine,
+  setupText,
+  stateLine,
+  statusText,
+  tokenOf,
+  valueOf,
+  wordLine,
+  type Line,
+  type LinkView,
+  type Part,
+  type SessionCounts,
+} from './link.ts'
 import { hexOf, keySource, projectKey, projectNameFrom } from './project.ts'
 import {
   CHANGE_TOOLS,
@@ -89,7 +107,7 @@ import {
   type Report,
   type Score,
 } from './triage.ts'
-import { callOf, editLine, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
+import { addedBy, callOf, editLine, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane.tsx'
 import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
@@ -673,7 +691,10 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   return jobCommand($, state, word, rest.join(' '))
 }
 
-/** One stream entry: a reminder faint, a change of a memory green, a failure red; the log line while the pane is closed. */
+/**
+ * One stream entry: a reminder faint; a memory added, changed or deleted with only its verb coloured
+ * green, yellow or red; a failure red. The log line while the pane is closed.
+ */
 async function toStream($: EngineInterface, key: string, line: Line): Promise<void> {
   try {
     if (await $.sidebar.set({ consumer: 'sage-memory', key, title: key, lines: [line], until: 'stream' })) return
@@ -819,10 +840,12 @@ async function newContext($: EngineInterface, state: State, loopKey: string): Pr
   if (await isReady(state)) await ask($, state, '/context/new', { sessionId: await $.session.id(), loop: loopKey })
 }
 
+/** The line of a check that changed memories: the ones gone stale yellow, the ones back green. */
 function verifiedLine(what: string, report: { staled: string[]; reactivated: string[] }): Line | undefined {
-  const parts = [report.staled.length > 0 ? `${report.staled.length} memory(ies) went stale` : '', report.reactivated.length > 0 ? `${report.reactivated.length} came back` : '']
-  const text = parts.filter(part => part !== '').join(', ')
-  return text === '' ? undefined : { text: `${what}: ${text}`, kind: report.staled.length > 0 ? 'warn' : 'ok' }
+  const staled: Part[] = report.staled.length > 0 ? [{ text: `${report.staled.length} memory(ies) went stale`, kind: 'warn' }] : []
+  const back: Part[] = report.reactivated.length > 0 ? [{ text: `${report.reactivated.length} came back`, kind: 'ok' }] : []
+  const counts = listed([...staled, ...back])
+  return counts.length === 0 ? undefined : partsLine([faint(`${what}: `), ...counts], staled.length > 0 ? 'warn' : 'ok')
 }
 
 /** Checks the memories anchored to files a tool just changed. */
@@ -841,7 +864,7 @@ async function remapMoved($: EngineInterface, state: State, command: string, cwd
   if (!MOVES.test(command) || !(await isReady(state))) return
   const report = await ask<RemapReport>($, state, '/memory/remap', { sessionId: await $.session.id(), command, cwd })
   const moved = report.moves.reduce((sum, move) => sum + move.memories.length, 0)
-  if (moved > 0) await toStream($, 'verify', { text: `anchors of ${moved} memory(ies) moved with ${report.moves.length} file(s)`, kind: 'ok' })
+  if (moved > 0) await toStream($, 'verify', wordLine(`anchors of ${moved} memory(ies) `, 'moved', 'warn', ` with ${report.moves.length} file(s)`))
   const line = verifiedLine('after the move', report)
   if (line !== undefined) await toStream($, 'verify', line)
 }
@@ -870,12 +893,21 @@ async function serveTool($: EngineInterface, state: State, name: string, input: 
   try {
     const call = callOf(name, input, await $.session.id())
     const value = await ask<unknown>($, state, call.path, { ...call.body, sessionId: await $.session.id() })
-    const edit = editLine(name, input)
-    if (edit !== undefined) await toStream($, 'model', { text: edit, kind: 'warn' })
+    await noteEdit($, state, name, input, value)
     return { result: resultText(value) }
   } catch (err) {
     return { result: errorText(err), isError: true }
   }
+}
+
+/** Counts a memory the model added, and writes the stream line of any change it made to the store. */
+async function noteEdit($: EngineInterface, state: State, name: string, input: Input, value: unknown): Promise<void> {
+  if (addedBy(name, value)) {
+    state.counts.added += 1
+    await show($, state)
+  }
+  const line = editLine(name, input, value)
+  if (line !== undefined) await toStream($, 'model', line)
 }
 
 const LISTED = new Set(TOOLS.filter(tool => tool.listed).map(tool => `mcp__sage-memory__${tool.name}`))
@@ -904,7 +936,7 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
     if (result.outcome === 'added') {
       state.counts.added += 1
       await show($, state)
-      await toStream($, 'consolidator', { text: addedLine(result.memory), kind: 'ok' })
+      await toStream($, 'consolidator', addedLine(result.memory))
     }
     return true
   } catch (err) {
@@ -976,7 +1008,7 @@ async function curate($: EngineInterface, state: State, answer: string, written:
   const tally = emptyTally()
   for (const step of stepsOf(r.text, targets, { sessionId: await $.session.id(), root: state.project?.root ?? '' })) await applyStep($, state, step, tally)
   const line = tallyLine(tally)
-  if (line !== undefined) await toStream($, 'curator', { text: line, kind: 'ok' })
+  if (line !== undefined) await toStream($, 'curator', line)
 }
 
 /** Starts a consolidation after a main-loop answer the person asked for or a tool worked on; the turn does not wait for it. */

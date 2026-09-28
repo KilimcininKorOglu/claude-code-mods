@@ -30,7 +30,7 @@ Proje ve global kayıtları paylaşılan yerel bir daemon üzerinden SQLite'ta t
 
 Son kısım bu projenin store'undaki aktif kayıtları sayar; bölüm her çizildiğinde daemon'dan okunur.
 
-Altındaki akış her reminder'ı (soluk), her eklenen kaydı (yeşil), her kontrolü ve her hatayı (kırmızı) gösterir. Sidebar kapalıyken ilk satır status line'a, akış satırları transcript'e gider.
+Altındaki akış her reminder'ı soluk gösterir. Bir kayıttaki her değişiklik de bir satırdır; değişikliği model, consolidator, curator ya da bir kontrol yapmış olabilir. Satırda yalnız ne olduğunu söyleyen kelime renklidir: eklenen yeşil, değişen sarı (güncellenen, birleştirilen, stale olan, taşınan), silinen kırmızı. Bir hata kırmızı bir satırdır. Sidebar kapalıyken ilk satır status line'a, akış satırları transcript'e gider.
 
 ## Pane
 

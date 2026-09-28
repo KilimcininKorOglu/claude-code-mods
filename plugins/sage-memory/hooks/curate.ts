@@ -6,6 +6,7 @@
  * touched, and a permanent memory is never rewritten or deleted. Pure code; `register.tsx` makes every call.
  */
 import { anchorsOf, confidenceOf, importanceOf, kindOf, operationsOf } from './consolidate.ts'
+import { faint, listed, partsLine, type Line } from './link.ts'
 import type { Memory, RememberInput, UpdatePatch } from './shared/model.ts'
 
 export const CURATE_MS = 30_000
@@ -167,10 +168,13 @@ export function emptyTally(): Tally {
   return { rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0 }
 }
 
-/** The line the person reads after a curation that changed something, or nothing when it changed nothing. */
-export function tallyLine(tally: Tally): string | undefined {
-  const parts = Object.entries(tally)
-    .filter(([, count]) => count > 0)
-    .map(([what, count]) => `${count} ${what}`)
-  return parts.length === 0 ? undefined : `curated: ${parts.join(', ')}`
+/** How the stream colours each count: a deletion red, every other change yellow. */
+const COUNT_KIND: Record<keyof Tally, 'warn' | 'error'> = { rewritten: 'warn', deleted: 'error', merged: 'warn', split: 'warn', recalibrated: 'warn' }
+
+/** The line the person reads after a curation that changed something, or nothing when it changed nothing; only the counts are coloured. */
+export function tallyLine(tally: Tally): Line | undefined {
+  const moved = (Object.keys(tally) as (keyof Tally)[]).filter(what => tally[what] > 0)
+  if (moved.length === 0) return undefined
+  const counts = listed(moved.map(what => ({ text: `${tally[what]} ${what}`, kind: COUNT_KIND[what] })))
+  return partsLine([faint('curated: '), ...counts], tally.deleted > 0 ? 'error' : 'warn')
 }

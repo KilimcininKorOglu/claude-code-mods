@@ -30,7 +30,7 @@ While the [sidebar](../sidebar) is open, the mod keeps one `memory` section ther
 
 The last part counts the active memories of this project's store, read from the daemon at each draw of the section.
 
-Under it, the stream shows each reminder (faint), each added memory (green), each check and each failure (red). With the sidebar closed, the first line goes to the status line and the stream lines to the transcript.
+Under it, the stream shows each reminder faint. Each change to a memory, made by the model, the consolidator, the curator or a check, is a line in which only the word that says what happened is coloured: added green, changed yellow (updated, merged, gone stale, moved), deleted red. A failure is a red line. With the sidebar closed, the first line goes to the status line and the stream lines to the transcript.
 
 ## The pane
 

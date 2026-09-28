@@ -61,7 +61,32 @@ export function valueOf<T>(path: string, status: number, text: string): T {
 export type LinkView = { state: 'off' } | { state: 'starting' } | { state: 'ready'; pid: number; embedding: EmbedState; setup?: SetupJob } | { state: 'failed'; error: string }
 
 type Tone = 'ok' | 'warn' | 'error' | 'dim'
-export type Line = { text: string; kind?: Tone }
+/** A piece of a line in its own colour. */
+export type Part = { text: string; kind?: Tone }
+/** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */
+export type Line = { text: string; kind?: Tone; parts?: Part[] }
+
+export const faint = (text: string): Part => ({ text, kind: 'dim' })
+
+/** A line made of parts, its `text` their texts joined; `kind` colours the whole line in a sidebar older than 0.11.0, which draws no parts. */
+export function partsLine(parts: Part[], kind: Tone): Line {
+  return { text: parts.map(part => part.text).join(''), kind, parts }
+}
+
+/** A line whose one word says what happened, in that word's colour, the text around it faint. */
+export function wordLine(before: string, word: string, kind: Tone, after: string): Line {
+  return partsLine([faint(before), { text: word, kind }, faint(after)].filter(part => part.text !== ''), kind)
+}
+
+/** Coloured pieces separated by faint commas, the way a line lists several counts. */
+export function listed(pieces: Part[]): Part[] {
+  return pieces.flatMap((piece, i) => (i === 0 ? [piece] : [faint(', '), piece]))
+}
+
+/** The opening words of a memory, which a stream line shows of it. */
+export function openingOf(text: string): string {
+  return text.split(/\s+/).slice(0, 10).join(' ')
+}
 
 function embeddingText(e: EmbedState, setup: SetupJob | undefined): string {
   if (setup?.state === 'running') return `setup: ${setup.step} ${setup.detail}`.trim()

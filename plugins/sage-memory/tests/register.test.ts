@@ -54,10 +54,14 @@ type World = {
   files: Map<string, string>
   panes: UiPane[]
   buttons: unknown[]
+  /** The lines the sidebar was given under each key, in order, as written. */
+  byKey: Map<string, Drawn[]>
 }
 
+type Drawn = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], files: new Map(), panes: [], buttons: [], clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -73,9 +77,10 @@ function world(on: On): World {
   on('ui.open', (_, e) => { w.panes.push({ id: e.id, title: e.title ?? e.id, isShown: true, isFocused: true, isPlaced: true }); return { value: { isPlaced: true as const } } })
   on('ui.close', (_, e) => { w.panes = w.panes.filter(p => p.id !== e.id); return { value: undefined } })
   on('sidebar.set', (_, e) => {
-    const s = e as unknown as { lines: { text: string }[]; buttons?: unknown }
+    const s = e as unknown as { key: string; lines: Drawn[]; buttons?: unknown }
     if (s.buttons !== undefined) w.buttons.push(s.buttons)
     w.lines.push(s.lines.map(l => l.text).join(' / '))
+    w.byKey.set(s.key, [...(w.byKey.get(s.key) ?? []), ...s.lines])
     return { value: true }
   })
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/k' : undefined }))
@@ -256,6 +261,13 @@ function bodiesOf(w: World, path: string): Record<string, unknown>[] {
   return w.fetches.filter(f => f.url === path).map(f => f.body)
 }
 
+/** The texts of the stream entries one key wrote, in order. */
+const streamOf = (w: World, key: string): string[] => (w.byKey.get(key) ?? []).map(line => line.text)
+
+/** The coloured pieces of each stream entry one key wrote, as `kind:text`; faint text is left out. */
+const painted = (w: World, key: string): string[] =>
+  (w.byKey.get(key) ?? []).map(line => (line.parts ?? []).filter(p => p.kind !== 'dim').map(p => `${p.kind}:${p.text}`).join(' '))
+
 function readyWorld(on: On): World {
   const w = world(on)
   for (const path of ['/memory/reminded', '/memory/used', '/context/new']) w.routes.set(path, { counted: 1, epoch: 2 })
@@ -383,9 +395,11 @@ describe('memory reminders', () => {
     await $.session.start(START)
     await $.tool.call({ tool: 'Edit', file_path: '/src/my app/daemon/server.ts', old_string: 'a', new_string: 'b' } as never)
     expect(bodiesOf(w, '/memory/verify-paths')[0]).toMatchObject({ paths: ['/src/my app/daemon/server.ts'] })
-    expect(w.lines).toContain('after the edit: 1 memory(ies) went stale')
     await $.tool.call({ tool: 'Bash', command: 'git mv a.ts b.ts' } as never)
     expect(bodiesOf(w, '/memory/remap')[0]).toMatchObject({ command: 'git mv a.ts b.ts', cwd: '/src/my app/sub' })
+    // A stale memory and a moved anchor are changes: yellow, and only the words that say so.
+    expect(streamOf(w, 'verify')).toEqual(['after the edit: 1 memory(ies) went stale', 'anchors of 1 memory(ies) moved with 1 file(s)'])
+    expect(painted(w, 'verify')).toEqual(['warn:1 memory(ies) went stale', 'warn:moved'])
     w.toolFails = true
     await $.tool.call({ tool: 'Edit', file_path: '/src/my app/x.ts', old_string: 'a', new_string: 'b' } as never)
     expect(bodiesOf(w, '/memory/verify-paths')).toHaveLength(1)
@@ -415,14 +429,28 @@ describe('memory tools', () => {
     expect((await $.tool.check({ tool: TOOL('delete'), input: {} } as never)).decision).toBe('allow')
   })
 
-  withSidebar('a memory the model deletes or rewrites is named to the person', async ($, on) => {
+  withSidebar('what the model adds, merges, rewrites, deletes or forgets is named with only its verb coloured, and an addition counts', async ($, on) => {
     const w = readyWorld(on)
-    w.routes.set('/memory/delete', { deleted: true })
+    w.routes.set('/memory/remember', (body: Record<string, unknown>) => ({ memory: PNPM, outcome: (body.input as { text: string }).text === 'again' ? 'merged' : 'added' }))
     w.routes.set('/memory/update', { memory: PNPM })
+    w.routes.set('/memory/delete', { deleted: true })
+    w.routes.set('/memory/forget', { removed: ['m3', 'm4'], skippedPermanent: [] })
     await $.session.start(START)
-    await $.tool.call({ tool: TOOL('delete'), id: 'm1', force: true, reason: 'the daemon reconnects by itself since 5a9c2c4' } as never)
+    await $.tool.call({ tool: TOOL('remember'), text: PNPM.text } as never)
+    await $.tool.call({ tool: TOOL('remember'), text: 'again' } as never)
     await $.tool.call({ tool: TOOL('update'), id: 'm2', text: 'The limit is 20.' } as never)
-    expect(w.lines.slice(-2)).toEqual(['the model deleted m1: the daemon reconnects by itself since 5a9c2c4', 'the model updated m2: "The limit is 20."'])
+    await $.tool.call({ tool: TOOL('delete'), id: 'm1', force: true, reason: 'the daemon reconnects by itself since 5a9c2c4' } as never)
+    await $.tool.call({ tool: TOOL('forget'), query: ' old parser ', force: true } as never)
+    expect(streamOf(w, 'model')).toEqual([
+      'the model added (project): Install packages with pnpm, never with npm, in this repository.',
+      'the model merged into m1: Install packages with pnpm, never with npm, in this repository.',
+      'the model updated m2: "The limit is 20."',
+      'the model deleted m1: the daemon reconnects by itself since 5a9c2c4',
+      'the model forgot 2 memory(ies) matching "old parser"',
+    ])
+    expect(painted(w, 'model')).toEqual(['ok:added', 'warn:merged', 'warn:updated', 'error:deleted', 'error:forgot'])
+    // The merge wrote no new memory, so the session counts one addition.
+    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/ · added 1$/)
   })
 
   withSidebar('remember writes through the daemon with this session as its source, a session memory owned by it', async ($, on) => {
@@ -496,7 +524,8 @@ describe('consolidator', () => {
     expect(inputs.map(input => input.kind)).toEqual(['fact', 'preference'])
     expect(inputs[0]).toMatchObject({ scope: 'project', importance: 0.8, confidence: 0.9, anchors: [{ type: 'file', path: 'daemon/server.ts' }], sources: [{ type: 'session', sessionId: 'sess-1' }] })
     expect(inputs[1]).toMatchObject({ scope: 'user', anchors: [] })
-    expect(w.lines).toContain('added (project): The daemon closes itself five minutes after its last request.')
+    expect(streamOf(w, 'consolidator')).toEqual(Array(2).fill('added (project): The daemon closes itself five minutes after its last request.'))
+    expect(painted(w, 'consolidator')).toEqual(['ok:added', 'ok:added'])
   })
 
   withSidebar('the consolidator reads what the person wrote, so a reason the answer does not repeat is not lost, and each prompt once', async ($, on) => {
@@ -569,7 +598,8 @@ describe('curator', () => {
     // The merged memory is deleted, not kept as superseded; the permanent one keeps its place and only its score moves.
     expect(bodiesOf(w, '/memory/delete').map(b => ({ id: b.id, reason: b.reason }))).toEqual([{ id: 'm3', reason: 'curator: merged into m2' }])
     expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([{ id: 'm4', patch: { importance: 1 } }])
-    expect(w.lines).toContain('curated: 1 merged, 1 recalibrated')
+    expect(streamOf(w, 'curator')).toEqual(['curated: 1 merged, 1 recalibrated'])
+    expect(painted(w, 'curator')).toEqual(['warn:1 merged warn:1 recalibrated'])
   })
 })
 

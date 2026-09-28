@@ -69,8 +69,13 @@ describe('curate', () => {
     ])
   })
 
-  test('the line names only the counts that moved', () => {
-    expect(tallyLine({ rewritten: 0, deleted: 1, merged: 0, split: 2, recalibrated: 0 })).toBe('curated: 1 deleted, 2 split')
+  test('the line names only the counts that moved, a deletion red and any other change yellow', () => {
+    expect(tallyLine({ rewritten: 0, deleted: 1, merged: 0, split: 2, recalibrated: 0 })).toEqual({
+      text: 'curated: 1 deleted, 2 split',
+      kind: 'error',
+      parts: [{ text: 'curated: ', kind: 'dim' }, { text: '1 deleted', kind: 'error' }, { text: ', ', kind: 'dim' }, { text: '2 split', kind: 'warn' }],
+    })
+    expect(tallyLine({ rewritten: 3, deleted: 0, merged: 0, split: 0, recalibrated: 0 })?.kind).toBe('warn')
     expect(tallyLine({ rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0 })).toBe(undefined)
   })
 })
