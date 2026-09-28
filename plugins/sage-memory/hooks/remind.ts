@@ -3,6 +3,7 @@
  * give the daemon, the budget the context leaves, the pick that fits it, the text the model reads,
  * and whether an answer used what it was reminded of. Pure code; `register.tsx` makes every call.
  */
+import { wordLine, type Line } from './link.ts'
 import type { Memory, Ranked } from './shared/model.ts'
 import { collapseSpace, textKey, tokenize } from './shared/text.ts'
 
@@ -243,8 +244,8 @@ export function seen(visible: string, text: string): string {
   return joined.length > VISIBLE_MAX ? joined.slice(joined.length - VISIBLE_MAX) : joined
 }
 
-/** The first words of each memory, the line the person reads for a reminder. */
-export function reminderLine(trigger: string, memories: readonly Memory[]): string {
+/** The first words of each memory, the line the person reads for a reminder; only `reminded` is coloured, blue. */
+export function reminderLine(trigger: string, memories: readonly Memory[]): Line {
   const heads = memories.map(memory => memory.text.split(/\s+/).slice(0, 6).join(' '))
-  return `reminded (${trigger}): ${heads.join(' · ')}`
+  return wordLine('', 'reminded', 'info', ` (${trigger}): ${heads.join(' · ')}`)
 }

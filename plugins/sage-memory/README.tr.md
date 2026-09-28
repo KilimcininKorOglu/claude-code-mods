@@ -31,7 +31,7 @@ Her başlangıçta bütünüyle yüklenen bir memory dosyası context'i doldurac
 
 İkinci satır bu projenin deposundaki ve global depodaki aktif kayıtları sayar; section her çizildiğinde sayılar daemon'dan okunur. Etkileşimli bir session section'ı 60 sn'de bir yeniden çizer; böylece başka bir session'ın ya da projenin kaydettiği kayıt, bu session boştayken de görünür. Bu okuma bir istektir, bu yüzden etkileşimli bir session açık kaldıkça daemon kapanmaz. Global depo `user` kayıtlarını tutar ve bu kayıtlar her projede hatırlatılır. Üçüncü satır bu session'ın yaptıklarını sayar: hatırlatılan kayıtlar, bir cevabın kullandıkları ve modelin ya da consolidator'ın ekledikleri.
 
-Altındaki stream her reminder'ı soluk gösterir. Bir kayıttaki her değişiklik de bir satırdır; değişikliği model, consolidator, curator ya da bir kontrol yapmış olabilir. Satırda yalnız ne olduğunu söyleyen kelime renklidir: eklenen yeşil, değişen sarı (güncellenen, birleştirilen, stale olan, taşınan), silinen kırmızı. Bir hata kırmızı bir satırdır. Sidebar kapalıyken ilk satır status line'a, stream satırları transcript'e gider.
+Altındaki stream her reminder'ı soluk gösterir; yalnız `reminded` kelimesi mavidir. Bir kayıttaki her değişiklik de bir satırdır; değişikliği model, consolidator, curator ya da bir kontrol yapmış olabilir. Satırda yalnız ne olduğunu söyleyen kelime renklidir: eklenen yeşil, değişen sarı (güncellenen, birleştirilen, stale olan, taşınan), silinen kırmızı. Bir hata kırmızı bir satırdır. Sidebar kapalıyken ilk satır status line'a, stream satırları transcript'e gider.
 
 ## Pane
 

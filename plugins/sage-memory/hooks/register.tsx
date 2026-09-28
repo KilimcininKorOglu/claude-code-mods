@@ -758,7 +758,7 @@ async function record($: EngineInterface, state: State, loopKey: string, trigger
   state.counts.reminded += block.sent.length
   await ask($, state, '/memory/reminded', { sessionId: await $.session.id(), loop: loopKey, trigger, ids: block.sent.map(memory => memory.id) })
   await show($, state)
-  await toStream($, 'reminder', { text: reminderLine(trigger, block.sent), kind: 'dim' })
+  await toStream($, 'reminder', reminderLine(trigger, block.sent))
 }
 
 /** The block's text once recorded, or nothing when the block carries no memory. */

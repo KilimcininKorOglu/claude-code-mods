@@ -60,7 +60,7 @@ export function valueOf<T>(path: string, status: number, text: string): T {
 /** The link as the person sees it. */
 export type LinkView = { state: 'off' } | { state: 'starting' } | { state: 'ready'; pid: number; embedding: EmbedState; setup?: SetupJob } | { state: 'failed'; error: string }
 
-type Tone = 'ok' | 'warn' | 'error' | 'dim'
+type Tone = 'ok' | 'warn' | 'error' | 'dim' | 'info'
 /** A piece of a line in its own colour. */
 export type Part = { text: string; kind?: Tone }
 /** A line; `parts` colour pieces of it, and `text` holds the whole line for a sidebar that draws no parts. */

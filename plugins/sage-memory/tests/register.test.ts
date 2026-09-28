@@ -302,6 +302,8 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/remind/prompt')[0]).toMatchObject({ sessionId: 'sess-1', loop: 'main', query: 'which package manager do we use here?' })
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'main', trigger: 'prompt', ids: ['m1'] })
     expect(w.lines.at(-1)).toBe('reminded (prompt): Install packages with pnpm, never with')
+    // Only the word is coloured, blue, so a reminder stands apart from an addition, a change and a deletion.
+    expect(painted(w, 'reminder').at(-1)).toBe('info:reminded')
     expect(w.lines.at(-2)).toBe('daemon ready · my app · embeddings off · /sage-memory setup / this session: reminded 1 · used 0 · added 0')
   })
 
