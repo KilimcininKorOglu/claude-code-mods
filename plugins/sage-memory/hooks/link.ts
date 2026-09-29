@@ -135,8 +135,11 @@ export function setupText(job: SetupJob): string {
   return 'setup has not run'
 }
 
-/** What this session did with the memories: reminded, used in an answer, added. */
-export type SessionCounts = { reminded: number; used: number; added: number }
+/**
+ * What this session did with the memories: reminded by relevance, sent as global rules to every
+ * context whatever it asked, used, added.
+ */
+export type SessionCounts = { reminded: number; rules: number; used: number; added: number }
 
 /** The active memories of this project's store and of the global store, whose `user` memories every project is reminded of. */
 export type StoredCounts = { project: number; global: number }
@@ -156,7 +159,7 @@ export function countsLine(counts: SessionCounts): Line {
   return partsLine([
     faint('this session: '),
     { text: `reminded ${counts.reminded}`, kind: 'info' },
-    faint(' · '),
+    faint(` · rules ${counts.rules} · `),
     { text: `used ${counts.used}`, kind: 'warn' },
     faint(' · '),
     { text: `added ${counts.added}`, kind: 'ok' },

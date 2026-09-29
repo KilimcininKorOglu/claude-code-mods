@@ -772,7 +772,8 @@ async function record($: EngineInterface, state: State, loopKey: string, trigger
   const loop = loopOf(state, loopKey)
   loop.visible = seen(loop.visible, block.text)
   loop.reminded.push(...block.sent)
-  state.counts.reminded += block.sent.length
+  if (trigger === 'global') state.counts.rules += block.sent.length
+  else state.counts.reminded += block.sent.length
   await ask($, state, '/memory/reminded', { sessionId: await $.session.id(), loop: loopKey, trigger, ids: block.sent.map(memory => memory.id) })
   await show($, state)
   await toStream($, 'reminder', reminderLine(trigger, block.sent))
@@ -1488,7 +1489,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, used: 0, added: 0 }, redrawing: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
