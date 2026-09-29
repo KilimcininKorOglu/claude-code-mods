@@ -33,6 +33,8 @@ Operation formats:
 - merge: { "action": "merge", "targetIds": ["<id1>", "<id2>"], "text": "<one crisp sentence, in English>", "type": "<fact|decision|convention|preference|warning|anti_pattern|workflow|file_note|symbol_note>", "priority": "<critical|high|medium|low>", "confidence": 0.9, "tags": ["tag"], "anchors": [{"type":"file","path":"path"}], "reason": "<why>" }
 - split: { "action": "split", "targetId": "<id>", "items": [{"text":"<atomic rule, in English>","type":"<type>","priority":"<p>","confidence":0.85,"tags":["t"],"anchors":[{"type":"file","path":"p"}]}], "reason": "<why>" }
 - recalibrate: { "action": "recalibrate", "targetId": "<id>", "importance": 0.8, "confidence": 0.95, "freshness": 1.0, "status": "<active|stale>", "reason": "<why>" }
+- link: { "action": "link", "targetId": "<id>", "relatedTo": "<id of another candidate>", "reason": "<why>" }
+- unlink: { "action": "unlink", "targetId": "<id>", "relatedTo": "<id it is linked to>", "reason": "<why>" }
 - keep: { "action": "keep", "targetId": "<id>", "reason": "<why>" }
 
 Strict Rules & Semantic Evaluation:
@@ -41,15 +43,17 @@ Strict Rules & Semantic Evaluation:
 3. Accurate Merging: Only merge entries if they genuinely state the exact same fact in different words. Do NOT merge distinct architectural rules just because they touch the same file.
 4. Hard Invalidation Only: Only change a memory if this session's code changes explicitly made its text obsolete, false, or contradictory. When the session shows the current value (a limit changed from 15 to 20), update the memory's text; when nothing replaces it, delete it.
 5. Zero drift: Do NOT generate general advice, commentary, or new unrelated memories.
-6. Target only provided candidate IDs. If nothing needs changes, return {"operations":[]}.
-7. Output raw JSON only. No markdown fences, no explanations.
+6. Linking: link two candidates only when a later session must read them together: the same decision, the same bug, or the same rule seen from another side. Touching the same file is not enough. When one makes the other wrong, that is a contradict, not a link. Unlink a pair whose "related" list names the other but whose subjects differ.
+7. Target only provided candidate IDs. If nothing needs changes, return {"operations":[]}.
+8. Output raw JSON only. No markdown fences, no explanations.
 
 {"operations":[]}`
 
 function candidateLine(memory: Memory): string {
   const anchors = memory.anchors.length > 0 ? ` [anchors: ${memory.anchors.map(a => (a.path !== undefined ? `${a.type}:${a.path}` : a.type)).join(', ')}]` : ''
   const tags = memory.tags.length > 0 ? ` [tags: ${memory.tags.join(', ')}]` : ''
-  return `- ID: ${memory.id} (status: ${memory.status}) [${memory.kind}]: "${memory.text}"${tags}${anchors} (importance: ${memory.importance}, confidence: ${memory.confidence})`
+  const related = (memory.related ?? []).length > 0 ? ` [related: ${(memory.related ?? []).join(', ')}]` : ''
+  return `- ID: ${memory.id} (status: ${memory.status}) [${memory.kind}]: "${memory.text}"${tags}${anchors}${related} (importance: ${memory.importance}, confidence: ${memory.confidence})`
 }
 
 export function curatorPrompt(written: readonly string[], summary: string, targets: readonly Memory[]): string {
@@ -61,14 +65,23 @@ export function curatorPrompt(written: readonly string[], summary: string, targe
  * place of the ones they replace, which are deleted. `count` names the tally each step adds to.
  */
 export type Step =
-  | { kind: 'update'; id: string; patch: UpdatePatch; count: 'rewritten' | 'recalibrated' }
+  | { kind: 'update'; id: string; patch: UpdatePatch; count: 'rewritten' | 'recalibrated' | 'linked' | 'unlinked' }
   | { kind: 'delete'; id: string; reason: string; count: 'deleted' }
   | { kind: 'replace'; replaced: string[]; inputs: RememberInput[]; count: 'merged' | 'split' }
 
 type Op = Record<string, unknown>
 
-/** The shown memories an operation may touch: any of them to keep or strengthen, and only a non-permanent one to retire. */
-type Shown = { all: ReadonlyMap<string, Memory>; retirable: (id: unknown) => id is string }
+/**
+ * The shown memories an operation may touch: any of them to keep or strengthen, and only a non-permanent
+ * one to retire. A link step writes its new `related` list back, so a second link on the same memory adds to it.
+ */
+type Shown = { all: Map<string, Memory>; retirable: (id: unknown) => id is string }
+
+/** A step that sets a memory's `related` list, recorded in `shown` for the steps after it. */
+function relatedStep(shown: Shown, memory: Memory, related: string[], count: 'linked' | 'unlinked'): Step {
+  shown.all.set(memory.id, { ...memory, related })
+  return { kind: 'update', id: memory.id, patch: { related }, count }
+}
 
 function shownOf(targets: readonly Memory[]): Shown {
   const all = new Map(targets.map(memory => [memory.id, memory]))
@@ -143,6 +156,34 @@ function recalibrateStep(op: Op, shown: Shown): Step | undefined {
   return Object.keys(patch).length > 0 ? { kind: 'update', id, patch, count: 'recalibrated' } : undefined
 }
 
+/** The two shown memories a link names, of one scope, or nothing: the daemon keeps a link inside one store. */
+function pairOf(op: Op, shown: Shown): [Memory, Memory] | undefined {
+  const target = typeof op.targetId === 'string' ? shown.all.get(op.targetId) : undefined
+  const other = typeof op.relatedTo === 'string' ? shown.all.get(op.relatedTo) : undefined
+  if (target === undefined || other === undefined || target.id === other.id || target.scope !== other.scope) return undefined
+  return [target, other]
+}
+
+/** A link adds the other id to the target's `related` list; a permanent memory may be linked, since its text stays. */
+function linkStep(op: Op, shown: Shown): Step | undefined {
+  const pair = pairOf(op, shown)
+  if (pair === undefined) return undefined
+  const [target, other] = pair
+  const related = target.related ?? []
+  if (related.includes(other.id) || (other.related ?? []).includes(target.id)) return undefined
+  return relatedStep(shown, target, [...related, other.id], 'linked')
+}
+
+/** An unlink takes the other id out of whichever of the two lists holds it. */
+function unlinkStep(op: Op, shown: Shown): Step | undefined {
+  const pair = pairOf(op, shown)
+  if (pair === undefined) return undefined
+  const holder = pair.find((memory, i) => (memory.related ?? []).includes(pair[1 - i]?.id ?? ''))
+  if (holder === undefined) return undefined
+  const dropped = holder === pair[0] ? pair[1].id : pair[0].id
+  return relatedStep(shown, holder, (holder.related ?? []).filter(id => id !== dropped), 'unlinked')
+}
+
 const STEPS: Record<string, (op: Op, shown: Shown, writer: Writer) => Step | undefined> = {
   update: rewriteStep,
   delete: deleteStep,
@@ -152,6 +193,8 @@ const STEPS: Record<string, (op: Op, shown: Shown, writer: Writer) => Step | und
   merge: mergeStep,
   split: splitStep,
   recalibrate: recalibrateStep,
+  link: linkStep,
+  unlink: unlinkStep,
 }
 
 /** The steps of a curator answer, at most fifteen operations; `keep` and anything unknown do nothing. */
@@ -166,11 +209,11 @@ export function stepsOf(text: string, targets: readonly Memory[], writer: Writer
 export type Tally = Record<Step['count'], number>
 
 export function emptyTally(): Tally {
-  return { rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0 }
+  return { rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0, linked: 0, unlinked: 0 }
 }
 
 /** How the stream colours each count: a deletion red, every other change yellow. */
-const COUNT_KIND: Record<keyof Tally, 'warn' | 'error'> = { rewritten: 'warn', deleted: 'error', merged: 'warn', split: 'warn', recalibrated: 'warn' }
+const COUNT_KIND: Record<keyof Tally, 'warn' | 'error'> = { rewritten: 'warn', deleted: 'error', merged: 'warn', split: 'warn', recalibrated: 'warn', linked: 'warn', unlinked: 'warn' }
 
 /** The line the person reads after a curation that changed something, or nothing when it changed nothing; only the counts are coloured. */
 export function tallyLine(tally: Tally): Line | undefined {

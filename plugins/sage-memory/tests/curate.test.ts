@@ -36,6 +36,27 @@ describe('curate', () => {
     ])
   })
 
+  test('a link adds to one side of two shown memories of one scope, a permanent one too, and an unlink takes it out again', () => {
+    const user = { ...memory('u'), scope: 'user' as const }
+    const shown = [memory('a'), memory('b'), memory('p', true), { ...memory('l'), related: ['a'] }, user]
+    const run = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), shown, { sessionId: 's1', root: '/repo' })
+    expect(run([
+      { action: 'link', targetId: 'a', relatedTo: 'a' },
+      { action: 'link', targetId: 'a', relatedTo: 'x' },
+      { action: 'link', targetId: 'a', relatedTo: 'u' },
+      { action: 'link', targetId: 'a', relatedTo: 'l' },
+      { action: 'link', targetId: 'p', relatedTo: 'a' },
+      { action: 'link', targetId: 'p', relatedTo: 'b' },
+    ])).toEqual([
+      { kind: 'update', id: 'p', patch: { related: ['a'] }, count: 'linked' },
+      { kind: 'update', id: 'p', patch: { related: ['a', 'b'] }, count: 'linked' },
+    ])
+    // The link from l to a is taken out of l's list, whichever side the curator names first.
+    expect(run([{ action: 'unlink', targetId: 'a', relatedTo: 'l' }, { action: 'unlink', targetId: 'a', relatedTo: 'b' }])).toEqual([
+      { kind: 'update', id: 'l', patch: { related: [] }, count: 'unlinked' },
+    ])
+  })
+
   test('a merge replaces only the retirable shown ids, and a split its target with at most four items', () => {
     const [merge, split] = steps([
       { action: 'merge', targetIds: ['a', 'p', 'zz', 'a'], text: 'One fact.' },
@@ -81,12 +102,13 @@ describe('curate', () => {
   })
 
   test('the line names only the counts that moved, a deletion red and any other change yellow', () => {
-    expect(tallyLine({ rewritten: 0, deleted: 1, merged: 0, split: 2, recalibrated: 0 })).toEqual({
+    expect(tallyLine({ rewritten: 0, deleted: 1, merged: 0, split: 2, recalibrated: 0, linked: 0, unlinked: 0 })).toEqual({
       text: 'curated: 1 deleted, 2 split',
       kind: 'error',
       parts: [{ text: 'curated: ', kind: 'dim' }, { text: '1 deleted', kind: 'error' }, { text: ', ', kind: 'dim' }, { text: '2 split', kind: 'warn' }],
     })
-    expect(tallyLine({ rewritten: 3, deleted: 0, merged: 0, split: 0, recalibrated: 0 })?.kind).toBe('warn')
-    expect(tallyLine({ rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0 })).toBe(undefined)
+    expect(tallyLine({ rewritten: 3, deleted: 0, merged: 0, split: 0, recalibrated: 0, linked: 0, unlinked: 0 })?.kind).toBe('warn')
+    expect(tallyLine({ rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0, linked: 2, unlinked: 1 })?.text).toBe('curated: 2 linked, 1 unlinked')
+    expect(tallyLine({ rewritten: 0, deleted: 0, merged: 0, split: 0, recalibrated: 0, linked: 0, unlinked: 0 })).toBe(undefined)
   })
 })
