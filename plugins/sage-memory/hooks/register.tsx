@@ -1063,7 +1063,7 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   }
   const sessionId = await $.session.id()
   if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant) })
-  for (const input of additionsOf(r.text, sessionId, root)) await writeOne($, state, input)
+  for (const input of additionsOf(r.text, sessionId, root, existing)) await writeOne($, state, input)
 }
 
 /** The memories the curator audits: those anchored to the turn's written files, then the targets of pending candidates. */

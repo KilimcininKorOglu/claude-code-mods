@@ -627,8 +627,8 @@ describe('consolidator', () => {
     w.tasks = [{ id: '1', status: 'completed', subject: 'Shorten the idle timeout' }]
     w.modelText = JSON.stringify({
       candidates: [
-        { text: 'The daemon closes after five idle minutes', is: 'keep', memory: { text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', priority: 'high', confidence: 0.9, tags: ['daemon'], anchors: [{ type: 'file', path: 'daemon/server.ts' }] } },
-        { text: 'The user prefers short answers', is: 'keep', memory: { text: 'The user prefers short answers.', scope: 'user', kind: 'preference', anchors: [{ type: 'file', path: 'a.ts' }] } },
+        { text: 'The daemon closes after five idle minutes', is: 'keep', memory: { text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', priority: 'high', confidence: 0.9, tags: ['daemon'], anchors: [{ type: 'file', path: 'daemon/server.ts' }], related: ['m1', 'zz'] } },
+        { text: 'The user prefers short answers', is: 'keep', memory: { text: 'The user prefers short answers.', scope: 'user', kind: 'preference', anchors: [{ type: 'file', path: 'a.ts' }], related: ['m1'] } },
         { text: 'The turn read the daemon server', is: 'done', memory: { text: 'The turn read daemon/server.ts.', kind: 'fact' } },
         { text: 'Next the timer gets a test', is: 'next' },
       ],
@@ -645,12 +645,15 @@ describe('consolidator', () => {
     expect(asked?.prompt).toContain('"daemon/server.ts"')
     expect(asked?.prompt).toContain('[redacted sensitive command]')
     expect(asked?.prompt).toContain('Shorten the idle timeout')
+    expect(asked?.prompt).toContain('m1 [')
     expect(asked?.prompt).toContain('(project) Install packages with pnpm')
     const inputs = bodiesOf(w, '/memory/remember').map(body => body.input as Record<string, unknown>)
     // Only the kept memories are written; no session digest of the answer follows them.
     expect(inputs.map(input => input.kind)).toEqual(['fact', 'preference'])
     expect(inputs[0]).toMatchObject({ scope: 'project', importance: 0.8, confidence: 0.9, anchors: [{ type: 'file', path: 'daemon/server.ts' }], sources: [{ type: 'session', sessionId: 'sess-1' }] })
     expect(inputs[1]).toMatchObject({ scope: 'user', anchors: [] })
+    // A related id must be an entry the model was shown, of the memory's own scope: the daemon refuses a link into the other store.
+    expect(inputs.map(input => input.related)).toEqual([['m1'], undefined])
     expect(streamOf(w, 'consolidator')).toEqual(Array(2).fill('added (project): The daemon closes itself five minutes after its last request.'))
     expect(painted(w, 'consolidator')).toEqual(['ok:added', 'ok:added'])
   })

@@ -140,9 +140,15 @@ the code already shows, and keep durable knowledge. Only a candidate marked
     "priority": "<priority>",
     "confidence": 0.5,
     "tags": ["tag"],
-    "anchors": [{"type":"file","path":"path/from/evidence"}]
+    "anchors": [{"type":"file","path":"path/from/evidence"}],
+    "related": ["<id of an existing entry>"]
   }
 }
+
+"related" names at most three existing entries of the same scope that a later
+session must read together with the new one: the same decision, the same bug,
+or the same rule seen from another side. Touching the same file is not enough.
+Use only ids from the existing entries, and leave the list out when none fits.
 
 Memory kinds:
 - "fact": verified objective project fact
@@ -212,7 +218,7 @@ function listBlock(title: string, items: readonly string[], before: string, afte
 }
 
 function existingBlock(existing: readonly Memory[]): string {
-  return listBlock('Existing memory entries', existing.map(memory => `[${memory.updatedAt.slice(0, 10)}] (${memory.scope}) ${memory.text}`), '\n\n')
+  return listBlock('Existing memory entries', existing.map(memory => `${memory.id} [${memory.updatedAt.slice(0, 10)}] (${memory.scope}) ${memory.text}`), '\n\n')
 }
 
 /** The person's prompts the consolidator reads: the newest few, each cut, so a fact the person stated is not lost when the answer does not repeat it. */
@@ -373,13 +379,27 @@ export function keptKind(kind: Kind, anchors: readonly Anchor[]): Kind {
   return anchors.length === 0 && STRUCTURAL_KINDS.includes(kind) ? 'fact' : kind
 }
 
+const MAX_RELATED = 3
+
+/**
+ * The existing entries a kept memory names as related: only ids the model was shown, of the memory's
+ * own scope, because the daemon refuses a link into the other store and would drop the memory with it.
+ */
+function relatedOf(value: unknown, scope: 'project' | 'user', existing: readonly Memory[]): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const allowed = new Set(existing.filter(memory => memory.scope === scope).map(memory => memory.id))
+  const related = [...new Set(value.filter((id): id is string => typeof id === 'string' && allowed.has(id)))].slice(0, MAX_RELATED)
+  return related.length > 0 ? related : undefined
+}
+
 /** One memory the model kept, as the input `remember` takes, or nothing without a text. */
-export function additionOf(op: Op, sessionId: string, root: string): RememberInput | undefined {
+export function additionOf(op: Op, sessionId: string, root: string, existing: readonly Memory[] = []): RememberInput | undefined {
   const text = trimmed(op.text, 2000)
   if (text === undefined) return undefined
   const scope = op.scope === 'user' ? 'user' : 'project'
   const anchors = anchorsOf(op.anchors, scope, root)
   return {
+    related: relatedOf(op.related, scope, existing),
     text,
     scope,
     kind: keptKind(kindOf(op.kind ?? op.type), anchors),
@@ -392,11 +412,14 @@ export function additionOf(op: Op, sessionId: string, root: string): RememberInp
   }
 }
 
-/** The memories an answer kept, at most five; `root` is the project's, which each path anchor must lie under. */
-export function additionsOf(text: string, sessionId: string, root: string): RememberInput[] {
+/**
+ * The memories an answer kept, at most five; `root` is the project's, which each path anchor must lie
+ * under, and `existing` the entries the model was shown, the only ones a memory may name as related.
+ */
+export function additionsOf(text: string, sessionId: string, root: string, existing: readonly Memory[] = []): RememberInput[] {
   return keptOf(text)
     .slice(0, MAX_ADDS)
-    .map(op => additionOf(op, sessionId, root))
+    .map(op => additionOf(op, sessionId, root, existing))
     .filter((input): input is RememberInput => input !== undefined)
 }
 
