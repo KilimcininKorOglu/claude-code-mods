@@ -60,6 +60,12 @@ const REMEMBER_DESCRIPTION = [
   '- Anti-patterns / warnings identified (never do X, avoid pattern Y)',
   '- Bug root-causes and file/symbol notes useful across sessions',
   '',
+  'PREFER DURABLE PROJECT REFERENCES:',
+  '- Package ownership and boundaries, and the files that implement them',
+  '- Symbol contracts, invariants, callers, and canonical entry points',
+  '- Canonical build/test/debug commands and when to use them',
+  '- Use several anchors when one fact connects a package, file, symbol, or command',
+  '',
   'WHEN NOT TO USE:',
   '- Temporary task state or progress: use the task list (WIP and todo chatter is rejected)',
   '- One-off debugging notes and "fixed the bug" summaries',
@@ -153,7 +159,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'update',
     listed: true,
     description:
-      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships, or move it between the project and the user scope with `scope`. When a memory you were reminded of states an old value and you confirmed the current one (a limit changed from 15 to 20), rewrite its `text` here instead of deleting it. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`.',
+      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships, or move it between the project and the user scope with `scope`. When a memory you were reminded of states an old value and you confirmed the current one (a limit changed from 15 to 20), rewrite its `text` here instead of deleting it. To retire a memory that no longer applies but is worth keeping as history, set `status` to "stale" or "archived" instead of deleting it. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`.',
     inputSchema: object(
       {
         id: text('The memory id to update.'),

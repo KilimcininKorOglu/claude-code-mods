@@ -140,9 +140,44 @@ function escaped(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
-/** One memory as the model reads it, inside its own fence. */
+/** An attribute value, escaped so it cannot close the attribute or the element. */
+function attribute(name: string, value: string): string {
+  return ` ${name}="${escaped(value).replace(/"/g, '&quot;')}"`
+}
+
+/** How much a memory weighs, by its importance (SAGE's labels); none below high. */
+function priorityOf(memory: Memory): string | undefined {
+  if (memory.importance >= 0.9) return 'critical'
+  return memory.importance >= 0.75 ? 'high' : undefined
+}
+
+/** What the first anchor names: a path with its symbol, a path, a symbol, a command or an agent role. */
+function aboutOf(memory: Memory): string | undefined {
+  const anchor = memory.anchors.find(a => a.path ?? a.symbol ?? a.command ?? a.role)
+  if (!anchor) return undefined
+  const target = anchor.path && anchor.symbol ? `${anchor.path}#${anchor.symbol}` : (anchor.path ?? anchor.symbol ?? anchor.command ?? anchor.role)
+  return `${anchor.type} ${target}`
+}
+
+/** The optional attributes: priority, a permanent persistence, the first anchor and up to three tags. */
+function detailAttributes(memory: Memory): string {
+  const priority = priorityOf(memory)
+  const about = aboutOf(memory)
+  const tags = memory.tags.slice(0, 3)
+  return [
+    priority ? attribute('priority', priority) : '',
+    memory.persistence === 'permanent' ? attribute('persistence', 'permanent') : '',
+    about ? attribute('about', about) : '',
+    tags.length > 0 ? attribute('tags', tags.join(',')) : '',
+  ].join('')
+}
+
+/**
+ * One memory as the model reads it, inside its own fence. The anchor tells the model which file or
+ * symbol to check the note against, and the priority tells a critical warning from an ordinary note.
+ */
 export function memoryEntry(memory: Memory): string {
-  return `<memory id="${memory.id}" kind="${memory.kind}" scope="${memory.scope}" status="${memory.status}">\n${escaped(memory.text)}\n</memory>`
+  return `<memory id="${memory.id}" kind="${memory.kind}" scope="${memory.scope}" status="${memory.status}"${detailAttributes(memory)}>\n${escaped(memory.text)}\n</memory>`
 }
 
 /**

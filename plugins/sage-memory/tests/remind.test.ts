@@ -59,6 +59,15 @@ describe('remind', () => {
     expect(block.sent.map(m => m.id)).toEqual(['m1'])
   })
 
+  test('an entry names its priority, a permanent persistence, its first anchor and its first three tags', () => {
+    const critical = { ...memory('m1', 'x'), importance: 0.95, persistence: 'permanent' as const, tags: ['build', 'ci', 'make', 'extra'], anchors: [{ type: 'symbol' as const, path: 'src/a.ts', symbol: 'run' }, { type: 'file' as const, path: 'b.ts' }] }
+    expect(memoryEntry(critical)).toMatch(/^<memory id="m1" kind="convention" scope="project" status="active" priority="critical" persistence="permanent" about="symbol src\/a.ts#run" tags="build,ci,make">\n/)
+    const command = { ...memory('m2', 'x'), anchors: [{ type: 'command' as const, command: 'make "test"' }] }
+    expect(memoryEntry(command)).toMatch(/^<memory id="m2" kind="convention" scope="project" status="active" priority="high" about="command make &quot;test&quot;">\n/)
+    const plain = { ...memory('m3', 'x'), importance: 0.5 }
+    expect(memoryEntry(plain)).toMatch(/^<memory id="m3" kind="convention" scope="project" status="active">\n/)
+  })
+
   test('an answer uses a memory by its id, its opening text, or enough shared terms', () => {
     const idle = memory('m1', 'The daemon closes itself five minutes after its last request.')
     const pnpm = memory('m2', 'Install packages with pnpm, never with npm, in this repository.')

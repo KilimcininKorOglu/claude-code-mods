@@ -328,7 +328,7 @@ describe('memory reminders', () => {
     w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })
     await $.session.start(START)
     const r = await $.prompt.submit(typed('which package manager do we use here?'))
-    expect(r.context?.[0]).toContain('<memory id="m1" kind="convention" scope="project" status="active">\nInstall packages with pnpm')
+    expect(r.context?.[0]).toContain('<memory id="m1" kind="convention" scope="project" status="active" priority="high">\nInstall packages with pnpm')
     expect(bodiesOf(w, '/remind/prompt')[0]).toMatchObject({ sessionId: 'sess-1', loop: 'main', query: 'which package manager do we use here?' })
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'main', trigger: 'prompt', ids: ['m1'] })
     expect(w.lines.at(-1)).toBe('reminded (prompt): Install packages with pnpm, never with')
