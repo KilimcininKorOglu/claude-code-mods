@@ -606,6 +606,19 @@
         "git",
         "skill"
       ]
+    },
+    {
+      "name": "bughunt",
+      "source": "./plugins/bughunt",
+      "description": "Runs proof-driven bug hunt rounds with /bughunt: each round proves one bug with a failing command the mod runs itself, fixes it, and proves the fix, and the loop stops on a blocked or unverified round. /bughunt collab runs a read-only scanner, planner and critic in sequence.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module",
+        "bugs",
+        "skill"
+      ]
     }
   ]
 }
