@@ -9,14 +9,14 @@ A bug hunt prompt tells the model to prove a bug before it fixes it, and the mod
 ### Rounds
 
 1. `/bughunt [--rounds N] [target]` starts a hunt of 1 to 25 rounds over the target, or over the whole project. `--rounds` may stand anywhere among the arguments. The hunt starts at any point of the session.
-2. The mod sends each round as a prompt: the round number, the scope, the round's proof directory (`.temp_files/bughunt/<round>/`), the fingerprints of the earlier rounds and the protocol. The model first opens the `bughunt:bughunt` skill, which holds the full rules; while a round runs, the mod appends the round's block to the skill's text.
+2. The mod sends each round as a prompt: the round number, the scope, the round's proof directory (`.temp_files/bughunt/<round>/`), the fingerprints of the earlier rounds and the protocol. The model first opens the `bughunt:hunt` skill, which holds the full rules; while a round runs, the mod appends the round's block to the skill's text.
 3. While a round runs:
    - Edit, Write and NotebookEdit stop until the skill is open in the round.
    - An edit outside the proof directory stops until the mod recorded a `FAIL`.
    - With a target, an edit outside it stops after the `FAIL` too. A test file (`tests/`, `__tests__/`, `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`) passes, so the regression test can go into the suite.
    - Every subagent spawn stops: a round runs in one conversation.
 4. The model calls `mcp__bughunt__proof` with `phase: "before"` and the proof command's `argv`. The mod runs the command (5 minutes at most) and records `FAIL` only when it exits non-zero and prints a line that starts with `FAIL`. A setup or import error that prints no such line is rejected. After the fix, `phase: "after"` with the same `argv` records `PASS` only on exit 0 and a line that starts with `PASS`. The model reads the exit code, the last 20 lines of output and the reason.
-5. When the round's turn ends, the mod reads the first line of the answer:
+5. When the round's turn ends, the mod reads the answer's outcome line: the first line that begins with an outcome label, so a sentence before it does not hide it:
    - `fixed-and-verified` goes on only when the mod recorded `FAIL` then `PASS` in the round; otherwise the hunt stops.
    - `no-proven-bug` goes on.
    - `blocked`, `fixed-verification-incomplete`, no outcome line, an interrupt or an API error stop the hunt.
@@ -32,7 +32,7 @@ A bug hunt prompt tells the model to prove a bug before it fixes it, and the mod
 3. The planner receives the findings and the scanner's report, and writes a fix plan. The critic receives the findings and the plan, and begins its answer with `verdict: approve`, `revise` or `reject`.
 4. Each step has a time limit (scanner 10, planner 8, critic 6 minutes). A step that runs out is named in the report as `timed-out`, and the findings the scanner sent before that stay in the report.
 5. When the critic gives no verdict line, the verdict is `no-verdict`, never `approve`.
-6. A step's hand-back message is taken by the mod, so it does not start a turn of its own; the report reaches the model once, as the tool's result or, after `/bughunt collab`, as a message.
+6. The command and the tool return once the scanner started; the report arrives later as one message, and the model reads it as a read-only review. A step's hand-back message is taken by the mod and dropped, so it does not start a turn of its own.
 7. A collab does not start while a round runs.
 
 ### What you see
@@ -65,8 +65,8 @@ Function hooks are early access, and nothing loads without the flag. To keep it 
 
 Validated with `claude plugin validate` on Claude Code 2.1.284:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=bughunt}, agent.offer{agent=/"^bughunt:(scanner|planner|critic)$"/}, tool.describe{tool=/"^mcp__bughunt__(proof|found|collab)$"/}, tool.call{tool=/"^mcp__bughunt__proof$"/}, tool.call{tool=/"^mcp__bughunt__found$"/}, tool.call{tool=/"^mcp__bughunt__collab$"/}, prompt.submit, skill.prompt{skill=bughunt:bughunt}, tool.call{tool=Skill}, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}, agent.spawn, session.receive, turn.complete
-    ❯ ./register.ts calls: $.agent.register (via declare), $.agent.spawn (via runStep), $.clock.after (via answerOf, send, startCollabCommand), $.command.register (via declare), $.command.run (via send), $.process.run (via runProof), $.prompt.submit (via send), $.sidebar.clear (via show), $.sidebar.set (via show, toPerson), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register (via declare), $.ui.log (via send, startCollabCommand, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=bughunt}, agent.offer{agent=/"^bughunt:(scanner|planner|critic)$"/}, tool.describe{tool=/"^mcp__bughunt__(proof|found|collab)$"/}, tool.call{tool=/"^mcp__bughunt__proof$"/}, tool.call{tool=/"^mcp__bughunt__found$"/}, tool.call{tool=/"^mcp__bughunt__collab$"/}, prompt.submit, skill.prompt{skill=bughunt:hunt}, tool.call{tool=Skill}, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}, agent.spawn, turn.complete
+    ❯ ./register.ts calls: $.agent.register (via declare), $.agent.spawn (via runStep), $.clock.after (via answerOf, send), $.command.register (via declare), $.command.run (via send), $.process.run (via runProof), $.prompt.submit (via send), $.sidebar.clear (via show), $.sidebar.set (via show, toPerson), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register (via declare), $.ui.log (via launchCollab, send, toPerson)
 
 Reach L2, it runs the proof command the model names.
 
@@ -82,7 +82,7 @@ Reach L2, it runs the proof command the model names.
 - The mod measures the proof's exit code and its `FAIL` and `PASS` lines. It cannot tell whether the proof runs the real code path or asserts the right behaviour.
 - The mod measures that the skill was delivered, not that the model read it.
 - A collab step that runs out of time keeps running in the background until it ends; the mod no longer waits for it.
-- The collab steps wait for a started subagent's answer, which the test engine cannot start; that path is checked live, not by the tests.
+- The collab steps wait for a started subagent's answer, which the test engine cannot start; that path is checked live, not by the tests. Live on 2.1.284: a two-round hunt recorded FAIL then PASS, carried the fingerprint into round 2 and ended there; a collab kept the scanner's finding, read the critic's verdict, and its three hand-backs started no turn.
 - There is no bypass of a round's gates. `/bughunt stop` ends the hunt, and `/bughunt off` turns the mod off.
 
 ## Development

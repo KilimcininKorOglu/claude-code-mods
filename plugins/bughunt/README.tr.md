@@ -9,14 +9,14 @@ Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini 
 ### Turlar
 
 1. `/bughunt [--rounds N] [hedef]` hedef üzerinde, hedef yoksa bütün projede 1 ile 25 tur arası bir av başlatır. `--rounds` argümanların herhangi bir yerinde olabilir. Av session'ın herhangi bir anında başlar.
-2. Mod her turu bir prompt olarak gönderir: tur numarası, kapsam, turun kanıt dizini (`.temp_files/bughunt/<tur>/`), önceki turların parmak izleri ve protokol. Model önce bütün kuralları taşıyan `bughunt:bughunt` skill'ini açar. Tur sürerken mod skill metninin sonuna turun bloğunu ekler.
+2. Mod her turu bir prompt olarak gönderir: tur numarası, kapsam, turun kanıt dizini (`.temp_files/bughunt/<tur>/`), önceki turların parmak izleri ve protokol. Model önce bütün kuralları taşıyan `bughunt:hunt` skill'ini açar. Tur sürerken mod skill metninin sonuna turun bloğunu ekler.
 3. Tur sürerken:
    - Skill bu turda açılmadıysa Edit, Write ve NotebookEdit durur.
    - Mod bir `FAIL` kaydedene kadar kanıt dizini dışındaki bir edit durur.
    - Hedef verildiyse, `FAIL`'den sonra hedef dışındaki bir edit de durur. Regression test'i suite'e girebilsin diye test dosyaları (`tests/`, `__tests__/`, `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`) geçer.
    - Her subagent spawn'ı durur: bir tur tek bir konuşmada çalışır.
 4. Model `mcp__bughunt__proof` tool'unu `phase: "before"` ve kanıt komutunun `argv`'si ile çağırır. Mod komutu çalıştırır (en fazla 5 dakika). `FAIL`'i yalnız komut sıfır olmayan bir kodla çıkar ve `FAIL` ile başlayan bir satır yazarsa kaydeder. Böyle bir satır yazmayan bir kurulum ya da import hatası reddedilir. Düzeltmeden sonra aynı `argv` ile `phase: "after"` yalnız 0 çıkış kodu ve `PASS` ile başlayan bir satırla `PASS` kaydeder. Model çıkış kodunu, çıktının son 20 satırını ve nedeni okur.
-5. Turun turn'ü bitince mod cevabın ilk satırını okur:
+5. Turun turn'ü bitince mod cevabın sonuç satırını okur: bir sonuç etiketiyle başlayan ilk satır. Böylece önündeki bir cümle etiketi gizlemez:
    - `fixed-and-verified` ancak mod bu turda önce `FAIL` sonra `PASS` kaydettiyse devam eder. Kayıt yoksa av durur.
    - `no-proven-bug` devam eder.
    - `blocked`, `fixed-verification-incomplete`, sonuç satırının olmaması, bir kesinti ya da bir API hatası avı durdurur.
@@ -32,7 +32,7 @@ Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini 
 3. Planner bulguları ve scanner'ın raporunu alır, bir düzeltme planı yazar. Critic bulguları ve planı alır, cevabına `verdict: approve`, `revise` ya da `reject` ile başlar.
 4. Her adımın bir süre sınırı vardır (scanner 10, planner 8, critic 6 dakika). Süresi dolan adım raporda `timed-out` olarak adlandırılır. Scanner'ın o ana kadar gönderdiği bulgular raporda kalır.
 5. Critic bir karar satırı yazmazsa karar `no-verdict` olur, hiçbir zaman `approve` olmaz.
-6. Bir adımın hand-back mesajını mod alır, böylece mesaj kendi turn'ünü başlatmaz. Rapor modele bir kez ulaşır: tool'un sonucu olarak ya da `/bughunt collab` sonrası bir mesaj olarak.
+6. Komut ve tool scanner başlayınca döner. Rapor sonra tek bir mesaj olarak gelir ve model onu salt okunur bir inceleme olarak okur. Bir adımın hand-back mesajını mod alır ve düşürür, böylece mesaj kendi turn'ünü başlatmaz.
 7. Bir tur sürerken collab başlamaz.
 
 ### Ne görürsün
@@ -65,8 +65,8 @@ Function hook'lar erken erişimdedir ve flag olmadan hiçbir şey yüklenmez. A�
 
 Claude Code 2.1.284 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, command.run{command=bughunt}, agent.offer{agent=/"^bughunt:(scanner|planner|critic)$"/}, tool.describe{tool=/"^mcp__bughunt__(proof|found|collab)$"/}, tool.call{tool=/"^mcp__bughunt__proof$"/}, tool.call{tool=/"^mcp__bughunt__found$"/}, tool.call{tool=/"^mcp__bughunt__collab$"/}, prompt.submit, skill.prompt{skill=bughunt:bughunt}, tool.call{tool=Skill}, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}, agent.spawn, session.receive, turn.complete
-    ❯ ./register.ts calls: $.agent.register (via declare), $.agent.spawn (via runStep), $.clock.after (via answerOf, send, startCollabCommand), $.command.register (via declare), $.command.run (via send), $.process.run (via runProof), $.prompt.submit (via send), $.sidebar.clear (via show), $.sidebar.set (via show, toPerson), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register (via declare), $.ui.log (via send, startCollabCommand, toPerson)
+    ❯ ./register.ts hooks: session.start, command.run{command=bughunt}, agent.offer{agent=/"^bughunt:(scanner|planner|critic)$"/}, tool.describe{tool=/"^mcp__bughunt__(proof|found|collab)$"/}, tool.call{tool=/"^mcp__bughunt__proof$"/}, tool.call{tool=/"^mcp__bughunt__found$"/}, tool.call{tool=/"^mcp__bughunt__collab$"/}, prompt.submit, skill.prompt{skill=bughunt:hunt}, tool.call{tool=Skill}, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}, agent.spawn, turn.complete
+    ❯ ./register.ts calls: $.agent.register (via declare), $.agent.spawn (via runStep), $.clock.after (via answerOf, send), $.command.register (via declare), $.command.run (via send), $.process.run (via runProof), $.prompt.submit (via send), $.sidebar.clear (via show), $.sidebar.set (via show, toPerson), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register (via declare), $.ui.log (via launchCollab, send, toPerson)
 
 Reach L2: modelin adlandırdığı kanıt komutunu çalıştırır.
 
@@ -82,7 +82,7 @@ Reach L2: modelin adlandırdığı kanıt komutunu çalıştırır.
 - Mod kanıtın çıkış kodunu ve `FAIL` ile `PASS` satırlarını ölçer. Kanıtın gerçek kod yolunu çalıştırıp çalıştırmadığını ya da doğru davranışı assert edip etmediğini ölçemez.
 - Mod skill'in teslim edildiğini ölçer, modelin onu okuduğunu değil.
 - Süresi dolan bir collab adımı bitene kadar arka planda çalışmaya devam eder. Mod artık onu beklemez.
-- Collab adımları başlatılan bir subagent'ın cevabını bekler. Test engine subagent başlatamaz, bu yol test'lerle değil canlı kontrolle doğrulanır.
+- Collab adımları başlatılan bir subagent'ın cevabını bekler. Test engine subagent başlatamaz, bu yol test'lerle değil canlı kontrolle doğrulanır. 2.1.284 üzerinde canlı kontrol: iki turluk bir av önce FAIL sonra PASS kaydetti, parmak izini 2. tura taşıdı ve orada bitti. Bir collab scanner'ın bulgusunu sakladı, critic'in kararını okudu ve üç hand-back hiçbir turn başlatmadı.
 - Bir turun gate'lerini aşmanın yolu yoktur. `/bughunt stop` avı bitirir, `/bughunt off` modu kapatır.
 
 ## Geliştirme
