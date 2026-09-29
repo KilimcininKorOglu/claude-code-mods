@@ -263,7 +263,9 @@ describe('collab', () => {
   test('a scanner that did not start ends the run with no verdict, never an approval', async ($, on) => {
     const w = world(on)
     await started($)
-    const text = String((await collab($, ['src'])).result)
+    expect(String((await collab($, ['src'])).result)).toBe('collab started over src; the report arrives as a message')
+    await w.clock.advance(0)
+    const text = w.sent.at(-1) ?? ''
     expect(w.spawned).toEqual(['bughunt:scanner'])
     expect(text).toContain('- scanner: failed (no agent started)')
     expect(text).toContain('- planner: skipped')
@@ -291,7 +293,7 @@ describe('collab', () => {
     expect((await collab($, ['src'])).deny).toBe('a hunt round is running; collab waits until it ends')
     await hunt($, w, 'stop')
     expect(await hunt($, w, 'collab src')).toBe('collab started over src; the report arrives as a message')
-    await w.clock.advance(0)
     expect(w.sent.at(-1)).toContain('# bughunt collab report')
+    expect(w.sent.at(-1)).toContain('This is a read-only review.')
   })
 })

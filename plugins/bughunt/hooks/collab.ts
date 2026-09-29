@@ -127,5 +127,7 @@ export function reportText(paths: readonly string[], findings: readonly Finding[
     '',
     '## Critique',
     answer('critic'),
+    '',
+    'This is a read-only review. Do not edit files unless the person asks for the fix.',
   ].join('\n')
 }

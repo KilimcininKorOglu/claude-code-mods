@@ -21,7 +21,7 @@ type Waiter = (end: RoundEnd) => void
 type Line = { text: string; kind: 'ok' | 'warn' | 'error' | 'info' | 'dim' }
 
 /** A running collab: its paths, the step running, the agents it started, the scanner and what it found. */
-type CollabRun = { paths: string[]; step: Step; agents: Set<string>; scanner?: string; findings: Finding[] }
+type CollabRun = { paths: string[]; step: Step; agents: Set<string>; scanner?: string; findings: Finding[]; launched: () => void }
 
 /**
  * The on/off setting as the store held it at the last read; the running hunt; the working directory;
@@ -208,6 +208,7 @@ async function runStep($: EngineInterface, state: State, run: CollabRun, step: S
   if (spawned.deny !== undefined || spawned.agentId === undefined) return { step, status: 'failed', answer: '', reason: spawned.deny ?? 'no agent started' }
   run.agents.add(spawned.agentId)
   if (step === 'scanner') run.scanner = spawned.agentId
+  run.launched()
   const end = await answerOf($, state, spawned.agentId, STEP_MS[step])
   if (end === undefined) return { step, status: 'timed-out', answer: '', reason: `no answer within ${STEP_MS[step] / 60_000} min` }
   if (end.reason !== 'answer') return { step, status: 'failed', answer: end.answer, reason: `ended with ${end.reason}` }
@@ -215,8 +216,8 @@ async function runStep($: EngineInterface, state: State, run: CollabRun, step: S
 }
 
 /** Scanner, planner and critic in turn; each reads what the ones before it produced. */
-async function runCollab($: EngineInterface, state: State, paths: string[]): Promise<string> {
-  const run: CollabRun = { paths, step: 'scanner', agents: new Set(), findings: [] }
+async function runCollab($: EngineInterface, state: State, paths: string[], launched: () => void): Promise<string> {
+  const run: CollabRun = { paths, step: 'scanner', agents: new Set(), findings: [], launched }
   state.collab = run
   try {
     const scan = await runStep($, state, run, 'scanner', scannerTask(paths))
@@ -243,12 +244,26 @@ function collabRefusal(state: State): string | undefined {
   return undefined
 }
 
+/**
+ * Starts collab and returns once the scanner started. A hook has a 10 s budget, so the run goes on after it
+ * and its report arrives through the send command. The scanner is spawned inside the calling hook's dispatch,
+ * because a subagent spawned outside one skips this mod's own tool.call hooks and its found calls would go
+ * unanswered (measured on 2.1.284).
+ */
+async function launchCollab($: EngineInterface, state: State, paths: string[]): Promise<void> {
+  let launched = () => {}
+  const started = new Promise<void>(resolve => { launched = resolve })
+  runCollab($, state, paths, launched)
+    .then(report => send($, report))
+    .catch((err: unknown) => $.ui.log(`collab failed: ${err instanceof Error ? err.message : String(err)}`))
+    .finally(launched)
+  await started
+}
+
 async function startCollabCommand($: EngineInterface, state: State, paths: string[]): Promise<string> {
   const refused = collabRefusal(state)
   if (refused !== undefined) return refused
-  $.clock.after(0, () => {
-    runCollab($, state, paths).then(report => send($, report)).catch((err: unknown) => $.ui.log(`collab failed: ${err instanceof Error ? err.message : String(err)}`))
-  })
+  await launchCollab($, state, paths)
   return `collab started over ${paths.join(', ')}; the report arrives as a message`
 }
 
@@ -258,7 +273,8 @@ async function onCollabTool($: EngineInterface, state: State, e: Record<string, 
   if (refused !== undefined) return { deny: refused }
   const paths = Array.isArray(e.paths) ? e.paths.filter((p): p is string => typeof p === 'string' && p !== '') : []
   if (paths.length === 0) return { deny: 'paths must name at least one file or directory' }
-  return { result: await runCollab($, state, paths) }
+  await launchCollab($, state, paths)
+  return { result: `collab started over ${paths.join(', ')}; the report arrives as a message` }
 }
 
 async function onFound($: EngineInterface, state: State, e: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
