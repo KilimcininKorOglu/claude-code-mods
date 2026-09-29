@@ -60,7 +60,6 @@ function world(on: On): World {
     w.spawned.push(type)
     return { model: 'claude-sonnet-5-5', agentId: `a-${type}` }
   })
-  on('session.receive', (_, e) => ({ text: e.text }))
   return w
 }
 
@@ -278,11 +277,11 @@ describe('collab', () => {
     expect((await collab($, [])).deny).toBe('paths must name at least one file or directory')
   })
 
-  test('a message that is no collab step\'s hand-back reaches the model', async ($, on) => {
+  test('a peer message that is no collab step\'s hand-back reaches the model', async ($, on) => {
     world(on)
     await started($)
-    const other = await $.session.receive({ origin: { kind: 'peer' }, text: '<agent-message from="a-Explore">done</agent-message>' })
-    expect(other.text).toContain('a-Explore')
+    const r = await $.prompt.submit({ text: '<agent-message from="a-Explore">\nThe report follows:\n  done\n</agent-message>', origin: { kind: 'peer' }, wait: false })
+    expect(r).toMatchObject({ text: expect.stringContaining('a-Explore') })
   })
 
   test('collab waits while a round runs, and /bughunt collab sends its report as a message', async ($, on) => {

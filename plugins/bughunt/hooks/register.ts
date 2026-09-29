@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { parseArgs } from './args.ts'
-import { COLLAB_SCHEMA, CRITIC_PROMPT, criticTask, findingOf, FOUND_SCHEMA, PLANNER_PROMPT, plannerTask, reportText, SCANNER_PROMPT, scannerTask, verdictOf, type Finding, type Step, type StepResult } from './collab.ts'
+import { COLLAB_SCHEMA, CRITIC_PROMPT, criticTask, findingOf, FOUND_SCHEMA, handBackOf, PLANNER_PROMPT, plannerTask, reportText, SCANNER_PROMPT, scannerTask, verdictOf, type Finding, type Step, type StepResult } from './collab.ts'
 import { editRule, proofDir, relativeTo } from './paths.ts'
 import { judgeProof, proofInput, tailOf, type ProofRun } from './proof.ts'
 import { advance, decide, newHunt, outcomeOf, roundId, type Hunt, type RoundEnd } from './round.ts'
@@ -280,6 +280,14 @@ function settleAgent(state: State, agentId: string, end: RoundEnd): void {
   } else if (state.collab !== undefined) state.early.set(agentId, end)
 }
 
+/** Settles the collab step whose hand-back `text` is; false when it is no collab step's hand-back. */
+function takeHandBack(state: State, text: string): boolean {
+  const back = handBackOf(text)
+  if (back === undefined || state.collab?.agents.has(back.from) !== true) return false
+  settleAgent(state, back.from, { reason: 'answer', isAborted: false, answer: back.report })
+  return true
+}
+
 async function declare($: EngineInterface): Promise<void> {
   await $.command.register({ name: 'bughunt', description: 'Proof-driven bug hunt rounds, and a read-only collab review (bughunt)', argumentHint: '[--rounds N] [target] | collab <paths> | stop | status | on | off' })
   await $.tool.register({ name: 'proof', description: 'Runs the round\'s proof command and records FAIL (phase before: non-zero exit and a line starting with FAIL) or PASS (phase after: same argv, exit 0 and a line starting with PASS). Only inside a /bughunt round.', inputSchema: { type: 'object', properties: { phase: { type: 'string', enum: ['before', 'after'] }, argv: { type: 'array', items: { type: 'string' }, minItems: 1 }, cwd: { type: 'string' } }, required: ['phase', 'argv'] } })
@@ -312,8 +320,10 @@ export const register: Register = on => {
   on('tool.call', { tool: /^mcp__bughunt__found$/ }, async ($, e) => onFound($, state, e as Record<string, unknown>))
   on('tool.call', { tool: /^mcp__bughunt__collab$/ }, async ($, e) => onCollabTool($, state, e as Record<string, unknown>))
 
-  // A person's own prompt ends the hunt: the loop runs only on the mod's own round prompts.
+  // A person's own prompt ends the hunt: the loop runs only on the mod's own round prompts. A collab step's
+  // hand-back arrives here as a peer prompt: the mod takes its report, and the model reads it in the report.
   on('prompt.submit', async ($, e, next) => {
+    if (e.origin?.kind === 'peer' && takeHandBack(state, e.text)) return { drop: 'bughunt collab step' }
     if (state.hunt !== undefined && PERSON.has(e.origin?.kind ?? '') && !e.text.trimStart().startsWith('/bughunt')) {
       await endHunt($, state, `hunt stopped: you wrote a prompt in round ${state.hunt.round}/${state.hunt.rounds}`, 'warn')
     }
@@ -355,19 +365,14 @@ export const register: Register = on => {
     return { deny: SPAWN_DENY }
   })
 
-  // A collab step's hand-back is read by the mod and reaches the model in the report, not as a message of its own.
-  on('session.receive', async (_, e, next) => {
-    const run = state.collab
-    const from = /<agent-message from="([^"]+)"/.exec(e.text)?.[1]
-    if (e.agentId === undefined && from !== undefined && run?.agents.has(from) === true) return { consumed: 'bughunt collab step' }
-    return next(e)
-  })
-
+  // A subagent's answered turn does not carry its report (measured: the hand-back does), so only a failed
+  // end settles a collab step here.
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     const end: RoundEnd = { reason: e.reason, isAborted: e.isAborted, answer: e.answer }
-    if (e.agentId !== undefined) settleAgent(state, e.agentId, end)
-    else if (state.hunt !== undefined) await onRoundEnd($, state, state.hunt, end)
+    if (e.agentId !== undefined) {
+      if (e.reason !== 'answer') settleAgent(state, e.agentId, end)
+    } else if (state.hunt !== undefined) await onRoundEnd($, state, state.hunt, end)
     return r
   })
 }

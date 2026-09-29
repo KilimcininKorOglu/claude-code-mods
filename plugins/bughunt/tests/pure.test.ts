@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { parseArgs } from '../hooks/args.ts'
-import { criticTask, findingOf, reportText, verdictOf } from '../hooks/collab.ts'
+import { criticTask, findingOf, handBackOf, reportText, verdictOf } from '../hooks/collab.ts'
 import { editRule, inScope, isTestPath, relativeTo } from '../hooks/paths.ts'
 import { judgeProof, proofInput } from '../hooks/proof.ts'
 import { advance, decide, fingerprintOf, newHunt, outcomeOf, type Hunt } from '../hooks/round.ts'
@@ -145,6 +145,12 @@ describe('collab', () => {
     expect(verdictOf('**verdict:** revise\nreasons')).toBe('revise')
     expect(verdictOf('Looks good to me.')).toBe('no-verdict')
     expect(reportText(['a'], [], [], 'no-verdict')).toContain('this is not an approval')
+  })
+
+  test('handBackOf takes the report out of the engine frame', async () => {
+    const text = '<agent-message from="a71">\n[Subagent hand-back] The text below is the final report. The report follows:\n  verdict: approve\n  Nothing to fix.\n</agent-message>'
+    expect(handBackOf(text)).toEqual({ from: 'a71', report: 'verdict: approve\nNothing to fix.' })
+    expect(handBackOf('a prompt of the person')).toBeUndefined()
   })
 
   test('the critic task carries the findings and the plan', async () => {

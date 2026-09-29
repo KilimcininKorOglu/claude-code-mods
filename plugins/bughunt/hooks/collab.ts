@@ -45,6 +45,19 @@ const FINDING_CHECKS: [(e: Raw) => boolean, string][] = [
   [e => e.suggestedFix === undefined || typeof e.suggestedFix === 'string', 'suggestedFix must be a string'],
 ]
 
+/**
+ * A subagent's hand-back as the main loop receives it: a peer prompt `<agent-message from="<id>">`, the
+ * engine's frame, then the report indented by two spaces after `The report follows:` (measured on 2.1.284).
+ */
+export function handBackOf(text: string): { from: string; report: string } | undefined {
+  const m = /^\s*<agent-message from="([^"]+)">/.exec(text)
+  if (m === null) return undefined
+  const at = text.indexOf('The report follows:')
+  const body = at < 0 ? text.slice(m[0].length) : text.slice(at + 'The report follows:'.length)
+  const report = body.replace(/<\/agent-message>\s*$/, '').split('\n').map(l => l.replace(/^ {2}/, '')).join('\n').trim()
+  return { from: m[1], report }
+}
+
 /** The `verdict:` line of the critic's answer. */
 export function verdictOf(answer: string): CollabVerdict {
   const m = /^[\s*`#>-]*verdict[*`]*\s*:[*`\s]*(approve|revise|reject)\b/im.exec(answer)
