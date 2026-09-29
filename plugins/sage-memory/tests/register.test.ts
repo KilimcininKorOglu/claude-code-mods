@@ -316,6 +316,7 @@ function readyWorld(on: On): World {
   for (const path of ['/memory/reminded', '/memory/used', '/context/new']) w.routes.set(path, { counted: 1, epoch: 2 })
   w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
   for (const path of ['/remind/prompt', '/remind/tools']) w.routes.set(path, { candidates: [], rejected: [] })
+  w.routes.set('/remind/global', [])
   return w
 }
 
@@ -413,6 +414,32 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'agent-7', trigger: 'subagent', ids: ['m1', 'm2'] })
   })
 
+  withSidebar('every global rule comes with the first prompt of a context, whatever it asks, and again after a compaction and in a subagent', async ($, on) => {
+    const w = readyWorld(on)
+    const TURKISH = memory('g1', 'All text the user reads must be in Turkish.', { scope: 'user', kind: 'preference' })
+    const LONG = memory('g2', `Keep technical terms in their original form. ${'x'.repeat(5000)}`, { scope: 'user', kind: 'convention' })
+    w.routes.set('/remind/global', [TURKISH, LONG])
+    w.routes.set('/remind/subagent', { audience: [TURKISH], task: [ranked(DAEMON)] })
+    await $.session.start(START)
+    const first = await $.prompt.submit(typed('what is 2 + 2?'))
+    expect(first.context?.[0]).toMatch(/^\[sage-memory\] the user's global rules, which hold in every project and every task\n<memory id="g1"/)
+    expect(first.context?.[0]).toContain('<memory id="g2"')
+    expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'main', trigger: 'global', ids: ['g1', 'g2'] })
+    expect((await $.prompt.submit(typed('and 3 + 3?'))).context).toBe(undefined)
+    // A compaction in the middle of a turn: the next file tool brings the rules back, before the next prompt.
+    await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
+    const read = await $.tool.call({ tool: 'Read', file_path: '/a.ts' } as never)
+    expect(('context' in read ? read.context ?? [] : []).join('\n')).toContain('<memory id="g1"')
+    expect((await $.prompt.submit(typed('and 4 + 4?'))).context).toBe(undefined)
+    await $.agent.spawn({ tool_use_id: 't9', prompt: 'Find the idle timeout.', description: 'find', subagentType: 'Explore', permissionMode: 'default' } as never)
+    const prompt = w.spawned[0] ?? ''
+    expect(prompt.startsWith("[sage-memory] the user's global rules, which hold in every project and every task\nThis is saved project memory")).toBe(true)
+    expect(prompt).toContain('<memory id="g2"')
+    expect(prompt.match(/<memory id="g1"/g)).toHaveLength(1)
+    expect(prompt).toContain('[sage-memory] project memory for this agent and its task\n<memory id="m2"')
+    expect(bodiesOf(w, '/memory/reminded').at(-1)).toMatchObject({ trigger: 'subagent', ids: ['g1', 'g2', 'm2'] })
+  })
+
   withSidebar('an answer that names a reminded memory counts one use, once', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })
@@ -429,6 +456,7 @@ describe('memory reminders', () => {
     await $.session.start(START)
     const note = (await $.prompt.section({ name: 'env_info_simple', text: 'env' })).text
     expect(note).toContain('The user installed the sage-memory plugin.')
+    expect(note).toContain('Every note of the user scope is a global rule of the user: all of them come with the first prompt of a context')
     for (const tool of ['search', 'for_file', 'update', 'delete', 'remember']) expect(note).toContain(TOOL(tool))
     expect(note).toContain('scope project for a fact about this repository')
     expect(note).toContain('scope user for a preference of the user that holds in every project, with no anchor')

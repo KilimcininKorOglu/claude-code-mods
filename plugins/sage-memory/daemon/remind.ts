@@ -7,6 +7,7 @@ import { descending } from './order.ts'
 import { findRelated } from './related.ts'
 import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
 import { memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
+import { selectMemories } from './rows.ts'
 import { REMINDED_POLICY, type Visibility } from './search.ts'
 import type { SemanticQuery } from './vectors.ts'
 
@@ -206,7 +207,22 @@ function byImportance(left: Memory, right: Memory): number {
   return right.importance - left.importance || descending(left.updatedAt, right.updatedAt)
 }
 
-export type SubagentRequest = { role?: string; mode?: string; task: string; audienceLimit: number; taskLimit: number }
+/** Every active user memory for every context, most important first; a memory written for one audience, or set to `never`, takes its own path. */
+const GLOBAL_RULES = `
+  SELECT id, data FROM memories
+  WHERE scope = 'user' AND status = 'active' AND context_policy = 'auto' AND audience IS NULL
+  ORDER BY importance DESC, updated_at DESC`
+
+/**
+ * The user's global rules: every active user memory, whatever the prompt or the task, with no count
+ * or size limit. The user chose that a rule of the user scope reaches every context on its own
+ * instead of waiting for a relevant prompt or file.
+ */
+export function globalRules(user: Op): Memory[] {
+  return selectMemories(user.store.db, GLOBAL_RULES)
+}
+
+export type SubagentRequest ={ role?: string; mode?: string; task: string; audienceLimit: number; taskLimit: number }
 
 /**
  * What a subagent starts with: the active memories written for its role or mode (a stale one

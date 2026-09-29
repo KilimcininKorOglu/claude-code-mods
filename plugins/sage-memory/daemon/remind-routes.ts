@@ -1,7 +1,7 @@
 import { nextEpoch } from './contexts.ts'
 import type { Embeddings } from './embeddings.ts'
 import { opFor, placesOf } from './places.ts'
-import { rankForPrompt, rankForSubagent, rankForTools, type Readers } from './remind.ts'
+import { globalRules, rankForPrompt, rankForSubagent, rankForTools, type Readers } from './remind.ts'
 import { flag, optionalCount, optionalString, optionalText, requiredString, stringList, type Body } from './request.ts'
 import type { Route, Routes } from './routes.ts'
 import { transaction, type Stores } from './stores.ts'
@@ -47,6 +47,10 @@ export function remindRoutes(stores: Stores, embeddings: Embeddings): Routes {
         taskLimit: optionalCount(body, 'taskLimit', MAX_REMINDER) ?? 8,
       }
       return rankForSubagent(await readers(body, request.task), request)
+    }),
+    '/remind/global': post(body => {
+      const places = placesOf(stores, body)
+      return globalRules(opFor(places, places.global))
     }),
     '/context/new': post(async body => {
       const places = placesOf(stores, body)

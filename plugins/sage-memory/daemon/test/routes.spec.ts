@@ -242,6 +242,21 @@ describe('read and reminder routes', () => {
       assert.deepEqual(explained.map(hit => [hit.memory.id, hit.lexicalScore, hit.source]), [[user.id, 1, 'lexical']], 'another project finds the user memory alone')
     }))
 
+  test('the global rules are every active user memory, with no limit, and leave out the rest', () =>
+    withDaemon(async d => {
+      const texts = Array.from({ length: 60 }, (_, i) => `Global rule number ${i} holds in every project the user opens`)
+      const rules = []
+      for (const [i, text] of texts.entries()) rules.push(await d.remember(d.alpha, { text, scope: 'user', importance: i === 59 ? 0.99 : 0.5 }))
+      await d.remember(d.alpha, { text: MIGRATIONS })
+      await d.remember(d.alpha, { text: 'Answer the reviewer agent in short bullet lines', scope: 'user', audience: { roles: ['reviewer'] } })
+      await d.remember(d.alpha, { text: 'Never remind this rule without a reason to', scope: 'user' }).then(m => d.value('/memory/update', { project: d.alpha, id: m.id, patch: { contextPolicy: 'never' } }))
+      await d.remember(d.alpha, { text: 'An old rule the user no longer holds anywhere', scope: 'user' }).then(m => d.value('/memory/update', { project: d.alpha, id: m.id, patch: { status: 'stale' } }))
+      const got = await d.value<Memory[]>('/remind/global', { project: d.beta })
+      assert.equal(got.length, 60, 'every active user memory, from any project, with no count limit')
+      assert.equal(got[0]?.id, rules[59]?.id, 'most important first')
+      assert.ok(got.every(memory => memory.scope === 'user' && memory.status === 'active' && memory.audience === undefined))
+    }))
+
   test('what a context was reminded of is held back until the context starts over', () =>
     withDaemon(async d => {
       mkdirSync(join(d.alpha.root, 'src'), { recursive: true })

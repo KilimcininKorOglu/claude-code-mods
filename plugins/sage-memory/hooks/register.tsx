@@ -27,6 +27,7 @@ import {
   isReminding,
   isTracked,
   MAIN_LOOP,
+  globalReminder,
   pathsOf,
   promptReminder,
   queryOf,
@@ -190,10 +191,11 @@ type State = {
 }
 
 /**
- * What one loop's context holds: the text it shows, the reminded memories it has not used yet, and the
- * ids a tool reminder picked, marked at the pick so a parallel call does not pick them again.
+ * What one loop's context holds: the text it shows, the reminded memories it has not used yet, the
+ * ids a tool reminder picked, marked at the pick so a parallel call does not pick them again, and
+ * whether the user's global rules went to it.
  */
-type Loop = { visible: string; reminded: Memory[]; claimed: Set<string> }
+type Loop = { visible: string; reminded: Memory[]; claimed: Set<string>; global: boolean }
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
@@ -748,7 +750,7 @@ async function isReady(state: State): Promise<boolean> {
 function loopOf(state: State, key: string): Loop {
   const found = state.loops.get(key)
   if (found !== undefined) return found
-  const loop: Loop = { visible: '', reminded: [], claimed: new Set() }
+  const loop: Loop = { visible: '', reminded: [], claimed: new Set(), global: false }
   state.loops.set(key, loop)
   return loop
 }
@@ -828,6 +830,27 @@ async function afterCall($: EngineInterface, state: State, call: ToolCall, loopK
   return deliver($, state, loopKey, 'tools', block)
 }
 
+/** Two reminder texts as one context text, or nothing when neither went. */
+function joined(first: string | undefined, second: string | undefined): string | undefined {
+  const texts = [first, second].filter((text): text is string => text !== undefined)
+  return texts.length === 0 ? undefined : texts.join('\n\n')
+}
+
+/**
+ * The user's global rules, once per main-loop context: with its first prompt, or with the first
+ * file tool after a compaction started it over in the middle of a turn. A subagent's loop gets them
+ * in its spawn prompt instead. A failed read leaves the context without them, so the next prompt or
+ * tool tries again.
+ */
+async function globalRules($: EngineInterface, state: State, loopKey: string = MAIN_LOOP): Promise<string | undefined> {
+  if (loopKey !== MAIN_LOOP) return undefined
+  const loop = loopOf(state, MAIN_LOOP)
+  if (loop.global || !(await isReady(state))) return undefined
+  const rules = await ask<Memory[]>($, state, '/remind/global', {}, REMIND_MS)
+  loop.global = true
+  return deliver($, state, MAIN_LOOP, 'global', globalReminder(rules, false))
+}
+
 /** A tool call as the reminder reads it: its name, its input, and its result as the model reads it. */
 function callOfTool(e: { tool: string }, r: { text?: string; result?: unknown }): ToolCall {
   return { tool_name: e.tool, tool_input: e, tool_response: r.text ?? r.result }
@@ -836,9 +859,20 @@ function callOfTool(e: { tool: string }, r: { text?: string; result?: unknown })
 /** The file tools a reminder rides on, and every MCP tool but this mod's own; `isReminding` narrows an MCP tool to one that names a file. */
 const REMINDING_TOOLS = /^(Read|Grep|Glob|LSP|Edit|Write|NotebookEdit|MultiEdit|mcp__(?!sage-memory__).+)$/
 
-/** The reminder with a prompt the person typed, or nothing. */
+/**
+ * What goes with a prompt the person typed: the user's global rules when the context has not had
+ * them, then the reminder of the prompt, or nothing. The global rules are recorded first, so the
+ * prompt's ranking leaves them out.
+ */
 async function beforePrompt($: EngineInterface, state: State, text: string): Promise<string | undefined> {
   await follow($, state)
+  const rules = await guarded($, 'the global rules', () => globalRules($, state))
+  const related = await guarded($, 'the reminder with the prompt', () => promptRelated($, state, text))
+  return joined(rules, related)
+}
+
+/** The reminder of the memories a prompt's text finds, or nothing. */
+async function promptRelated($: EngineInterface, state: State, text: string): Promise<string | undefined> {
   if (!(await isReady(state)) || (await $.store.get('remindPrompt')) === false) return undefined
   const body = { sessionId: await $.session.id(), loop: MAIN_LOOP, query: text.slice(0, 4000), limit: CANDIDATES }
   const ranking = await ask<Ranking>($, state, '/remind/prompt', body, REMIND_MS)
@@ -847,14 +881,21 @@ async function beforePrompt($: EngineInterface, state: State, text: string): Pro
 
 type Spawn = { prompt: string; subagentType: string; permissionMode?: string }
 
-/** What a subagent starts with, or nothing. */
+/** What a subagent starts with: the user's global rules, then its own memories unless the person turned them off; or nothing. */
 async function forSubagent($: EngineInterface, state: State, e: Spawn): Promise<Block | undefined> {
   await follow($, state)
-  if (!(await isReady(state)) || (await $.store.get('remindSubagent')) === false) return undefined
-  const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt.slice(0, 4000) }
-  const ranking = await ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
-  const block = subagentReminder(ranking.audience, ranking.task)
+  if (!(await isReady(state))) return undefined
+  const rules = await ask<Memory[]>($, state, '/remind/global', {}, REMIND_MS)
+  const ranking = await subagentRanking($, state, e)
+  const block = subagentReminder(rules, ranking.audience, ranking.task)
   return block.sent.length > 0 ? block : undefined
+}
+
+/** The memories written for a subagent and the ones about its task; none while the person turned them off. */
+async function subagentRanking($: EngineInterface, state: State, e: Spawn): Promise<SubagentRanking> {
+  if ((await $.store.get('remindSubagent')) === false) return { audience: [], task: [] }
+  const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt.slice(0, 4000) }
+  return ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
 }
 
 /** Counts the reminded memories an answer used, each reminder once. */
@@ -1510,7 +1551,9 @@ export const register: Register = on => {
     const r = await next(e)
     const call = callOfTool(e, r)
     if (!succeeded(r) || !isReminding(call)) return r
-    return withToolContext(r, await guarded($, 'the reminder after the tool', () => afterCall($, state, call, e.agentId ?? MAIN_LOOP)))
+    // A compaction in the middle of a turn started the main loop over: its first file tool brings the global rules back.
+    const rules = await guarded($, 'the global rules', () => globalRules($, state, e.agentId ?? MAIN_LOOP))
+    return withToolContext(r, joined(rules, await guarded($, 'the reminder after the tool', () => afterCall($, state, call, e.agentId ?? MAIN_LOOP))))
   })
 
   on('prompt.submit', async ($, e, next) => {

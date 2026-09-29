@@ -164,7 +164,7 @@ const SAVE =
   'After each turn the plugin saves new notes itself. You need not wait for that: when you learn a durable convention, decision, warning or bug root cause that the next session needs, save it at once, in the middle of the turn, with mcp__sage-memory__remember: scope project for a fact about this repository, anchored to its file or symbol; scope user for a preference of the user that holds in every project, with no anchor. Pick the scope from the reason behind the rule, not from how strongly the user said it: a reason that names this project\'s structure, files or tools makes it project. To move a note to the other scope, call mcp__sage-memory__update with scope; it keeps its id.'
 
 /** The main system prompt's note about the plugin, set once per session in the environment section. */
-export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. ${LOOKUP} Use the notes as background; a note may be out of date, so check it against the files before relying on it. ${FIX} ${SAVE}`
+export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Every note of the user scope is a global rule of the user: all of them come with the first prompt of a context and again after a compaction, and they hold in every task. ${LOOKUP} Use the notes as background; a note may be out of date, so check it against the files before relying on it. ${FIX} ${SAVE}`
 
 /**
  * The block a reminder sends: a header, then as many entries as fit `chars`, best first. Returns the
@@ -200,11 +200,25 @@ export function promptReminder(ranked: readonly Ranked[], visible: string): { te
   return reminderBlock('project memory related to this prompt', fresh.map(item => item.memory), PROMPT_BUDGET.chars, false)
 }
 
-/** What a subagent starts with: the memories written for its role or mode, then the ones about its task, each once. */
-export function subagentReminder(audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
-  const all = [...audience, ...task.map(item => item.memory)]
+/**
+ * The user's global rules, every active user memory, with no count or size limit: the user chose
+ * that they reach each context on their own, not only when a prompt or a file makes them relevant.
+ */
+export function globalReminder(rules: readonly Memory[], framed: boolean): { text: string; sent: Memory[] } {
+  return reminderBlock("the user's global rules, which hold in every project and every task", rules, Number.POSITIVE_INFINITY, framed)
+}
+
+/**
+ * What a subagent starts with: the user's global rules in full, then the memories written for its
+ * role or mode and the ones about its task, each once and within the subagent budget.
+ */
+export function subagentReminder(rules: readonly Memory[], audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
+  const global = globalReminder(rules, true)
+  const all = [...audience, ...task.map(item => item.memory)].filter(memory => !rules.some(rule => rule.id === memory.id))
   const memories = all.filter((memory, i) => all.findIndex(other => other.id === memory.id) === i)
-  return reminderBlock('project memory for this agent and its task', memories, SUBAGENT_CHARS, true)
+  const own = reminderBlock('project memory for this agent and its task', memories, SUBAGENT_CHARS, global.sent.length === 0)
+  const blocks = [global, own].filter(block => block.sent.length > 0)
+  return { text: blocks.map(block => block.text).join('\n\n'), sent: blocks.flatMap(block => block.sent) }
 }
 
 /** The prompt that goes to a subagent: the reminder block first, then the task as it was written. */
