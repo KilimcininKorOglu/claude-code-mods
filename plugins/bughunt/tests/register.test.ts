@@ -358,7 +358,7 @@ describe('settings', () => {
 /**
  * The test engine has no core to start a subagent: a plugin's own `$.agent.spawn` resolves there without an
  * agent id, whatever the hooks beneath answer (measured). The steps that wait for a started subagent are
- * covered by the pure tests of `collab.ts` and by the live check; these tests cover the paths around them.
+ * covered in `pipeline.test.ts` with fake engine calls; these tests cover the paths around them.
  */
 describe('collab', () => {
   const collab = ($: Engine, paths: string[]) => call($, { tool: 'mcp__bughunt__collab', paths })

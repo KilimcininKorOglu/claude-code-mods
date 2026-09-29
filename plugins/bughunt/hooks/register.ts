@@ -1,6 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import { parseArgs } from './args.ts'
-import { COLLAB_SCHEMA, CRITIC_PROMPT, criticTask, findingOf, FOUND_SCHEMA, handBackOf, PLANNER_PROMPT, plannerTask, reportText, SCANNER_PROMPT, scannerTask, verdictOf, type Finding, type Step, type StepResult } from './collab.ts'
+import { COLLAB_SCHEMA, CRITIC_PROMPT, findingOf, FOUND_SCHEMA, PLANNER_PROMPT, SCANNER_PROMPT, type Step } from './collab.ts'
+import { runCollab, settleAgent, takeHandBack, type Ports, type Waits } from './pipeline.ts'
 import { editRule, proofDir, relativeTo } from './paths.ts'
 import { judgeProof, judgeReverted, proofInput, revertTargets, savedFix, tailOf, type Phase, type ProofJudgement, type ProofRun, type SavedFix } from './proof.ts'
 import { advance, decide, newHunt, outcomeOf, roundId, type Hunt, type RoundEnd } from './round.ts'
@@ -12,30 +13,19 @@ const FOUND_TOOL = 'mcp__bughunt__found'
 const PROOF_MS = 300_000
 const GIT_MS = 30_000
 const RESTORE_KEY = 'restore'
-const STEP_MS: Record<Step, number> = { scanner: 600_000, planner: 480_000, critic: 360_000 }
 const MAX_TURNS: Record<Step, number> = { scanner: 200, planner: 120, critic: 80 }
 const SECTION = { consumer: 'bughunt', key: 'hunt', order: 22 } as const
 
 /** Prompt origins that are the person's own words. */
 const PERSON = new Set(['composer', 'bridge', 'sdk'])
 
-type Waiter = (end: RoundEnd) => void
 type Line = { text: string; kind: 'ok' | 'warn' | 'error' | 'info' | 'dim' }
 
-/** A running collab: its paths, the step running, the agents it started, the scanner and what it found. */
-type CollabRun = { paths: string[]; step: Step; agents: Set<string>; scanner?: string; findings: Finding[]; launched: () => void }
-
-/**
- * The on/off setting as the store held it at the last read; the running hunt; the working directory;
- * the collab run; the subagent answers a collab step waits for, and those that came before the wait.
- */
-type State = {
+/** The on/off setting as the store held it at the last read; the running hunt; the working directory; the collab waits. */
+type State = Waits & {
   enabled: boolean
   hunt: Hunt | undefined
   cwd: string
-  collab: CollabRun | undefined
-  waiters: Map<string, Waiter>
-  early: Map<string, RoundEnd>
   lastHunt: string[]
 }
 
@@ -276,61 +266,6 @@ async function onProof($: EngineInterface, state: State, e: Record<string, unkno
   return { result: `${j.accepted ? 'accepted' : 'rejected'}: ${j.reason}\nexit code ${run.exitCode}\n--- last lines ---\n${tailOf(run)}` }
 }
 
-/** Waits for a subagent's answer, or its step's time limit. */
-function answerOf($: EngineInterface, state: State, agentId: string, ms: number): Promise<RoundEnd | undefined> {
-  const early = state.early.get(agentId)
-  if (early !== undefined) {
-    state.early.delete(agentId)
-    return Promise.resolve(early)
-  }
-  return new Promise(resolve => {
-    const timer = $.clock.after(ms, () => {
-      state.waiters.delete(agentId)
-      resolve(undefined)
-    })
-    state.waiters.set(agentId, end => {
-      timer.cancel()
-      resolve(end)
-    })
-  })
-}
-
-async function runStep($: EngineInterface, state: State, run: CollabRun, step: Step, prompt: string): Promise<StepResult> {
-  run.step = step
-  await show($, state)
-  const spawned = await $.agent.spawn({ subagentType: `bughunt:${step}`, description: `bughunt ${step}`, prompt })
-  if (spawned.deny !== undefined || spawned.agentId === undefined) return { step, status: 'failed', answer: '', reason: spawned.deny ?? 'no agent started' }
-  run.agents.add(spawned.agentId)
-  if (step === 'scanner') run.scanner = spawned.agentId
-  run.launched()
-  const end = await answerOf($, state, spawned.agentId, STEP_MS[step])
-  if (end === undefined) return { step, status: 'timed-out', answer: '', reason: `no answer within ${STEP_MS[step] / 60_000} min` }
-  if (end.reason !== 'answer') return { step, status: 'failed', answer: end.answer, reason: `ended with ${end.reason}` }
-  return { step, status: 'done', answer: end.answer }
-}
-
-/** Scanner, planner and critic in turn; each reads what the ones before it produced. */
-async function runCollab($: EngineInterface, state: State, paths: string[], launched: () => void): Promise<string> {
-  const run: CollabRun = { paths, step: 'scanner', agents: new Set(), findings: [], launched }
-  state.collab = run
-  try {
-    const scan = await runStep($, state, run, 'scanner', scannerTask(paths))
-    if (scan.status !== 'done' && run.findings.length === 0) {
-      return reportText(paths, run.findings, [scan, skipped('planner'), skipped('critic')], 'no-verdict')
-    }
-    const plan = await runStep($, state, run, 'planner', plannerTask(paths, run.findings, scan.answer))
-    const critique = await runStep($, state, run, 'critic', criticTask(paths, run.findings, plan.answer))
-    const verdict = critique.status === 'done' ? verdictOf(critique.answer) : 'no-verdict'
-    await toPerson($, `collab finished: ${run.findings.length} finding(s), verdict ${verdict}`, verdict === 'approve' ? 'ok' : 'warn')
-    return reportText(paths, run.findings, [scan, plan, critique], verdict)
-  } finally {
-    state.collab = undefined
-    await show($, state)
-  }
-}
-
-const skipped = (step: Step): StepResult => ({ step, status: 'skipped', answer: '', reason: 'the scanner produced nothing' })
-
 function collabRefusal(state: State): string | undefined {
   if (!state.enabled) return 'bughunt is off; /bughunt on turns it on'
   if (state.hunt !== undefined) return 'a hunt round is running; collab waits until it ends'
@@ -347,11 +282,21 @@ function collabRefusal(state: State): string | undefined {
 async function launchCollab($: EngineInterface, state: State, paths: string[]): Promise<void> {
   let launched = () => {}
   const started = new Promise<void>(resolve => { launched = resolve })
-  runCollab($, state, paths, launched)
+  runCollab(state, portsOf($, state), paths, launched)
     .then(report => send($, report))
     .catch((err: unknown) => $.ui.log(`collab failed: ${err instanceof Error ? err.message : String(err)}`))
     .finally(launched)
   await started
+}
+
+/** The engine calls the collab pipeline makes. */
+function portsOf($: EngineInterface, state: State): Ports {
+  return {
+    spawn: (step, prompt) => $.agent.spawn({ subagentType: `bughunt:${step}`, description: `bughunt ${step}`, prompt }),
+    after: (ms, fn) => $.clock.after(ms, fn),
+    show: () => show($, state),
+    tell: (text, kind) => toPerson($, text, kind),
+  }
 }
 
 async function startCollabCommand($: EngineInterface, state: State, paths: string[]): Promise<string> {
@@ -379,23 +324,6 @@ async function onFound($: EngineInterface, state: State, e: Record<string, unkno
   run.findings.push(f)
   await show($, state)
   return { result: `recorded (${run.findings.length})` }
-}
-
-/** A subagent's turn end: a collab step waits for it, or it came before the wait began. */
-function settleAgent(state: State, agentId: string, end: RoundEnd): void {
-  const waiter = state.waiters.get(agentId)
-  if (waiter !== undefined) {
-    state.waiters.delete(agentId)
-    waiter(end)
-  } else if (state.collab !== undefined) state.early.set(agentId, end)
-}
-
-/** Settles the collab step whose hand-back `text` is; false when it is no collab step's hand-back. */
-function takeHandBack(state: State, text: string): boolean {
-  const back = handBackOf(text)
-  if (back === undefined || state.collab?.agents.has(back.from) !== true) return false
-  settleAgent(state, back.from, { reason: 'answer', isAborted: false, answer: back.report })
-  return true
 }
 
 async function declare($: EngineInterface): Promise<void> {
