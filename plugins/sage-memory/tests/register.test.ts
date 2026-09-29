@@ -684,6 +684,33 @@ describe('consolidator', () => {
     expect(w.asked).toEqual([])
   })
 
+  withSidebar('the consolidator judges the memories relevance reminded, not the global rules, and its verdict is only audited', async ($, on) => {
+    const w = readyWorld(on)
+    const RULE = memory('g1', 'All text the user reads must be in Turkish.', { scope: 'user', kind: 'preference' })
+    w.routes.set('/remind/global', [RULE])
+    w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })
+    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+    w.routes.set('/memory/judged', {})
+    // The model also names the global rule and an id it was never shown; neither is kept.
+    w.modelText = JSON.stringify({ candidates: [], followed: ['m1', 'g1', 'zz'] })
+    await $.session.start(START)
+    await $.prompt.submit(typed('how do I install a package?'))
+    await $.turn.complete(answered('Run pnpm add lodash in the repository root.'))
+    await settled(w)
+    const prompt = w.asked[0]?.prompt ?? ''
+    expect(prompt).toContain('Memories the assistant was reminded of in this turn:\n- m1: Install packages with pnpm')
+    expect(prompt).not.toContain('g1')
+    expect(prompt).toContain('return the candidates and the followed ids as JSON')
+    expect(bodiesOf(w, '/memory/judged')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', judged: ['m1'], followed: ['m1'] }])
+    expect(bodiesOf(w, '/memory/used')).toEqual([])
+    // The next consolidation judges only what was reminded after the last one: nothing, so no verdict is sent.
+    await $.prompt.submit(typed('and what else?'))
+    await $.turn.complete(answered('Nothing else is needed for the install.'))
+    await settled(w)
+    expect(w.asked[1]?.prompt).not.toContain('reminded of in this turn')
+    expect(bodiesOf(w, '/memory/judged')).toHaveLength(1)
+  })
+
   withSidebar('a model that does not answer leaves a red line and writes nothing', async ($, on) => {
     const w = readyWorld(on)
     await $.session.start(START)

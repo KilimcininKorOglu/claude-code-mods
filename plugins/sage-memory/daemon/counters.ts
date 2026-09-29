@@ -32,6 +32,14 @@ export function recordReminder(op: Op, ids: readonly string[], trigger: string, 
   audit(op.store, op.now, 'memory.reminded', { sessionId, detail: { memoryIds: distinct, trigger } })
 }
 
+/**
+ * Logs the consolidator's verdict on the memories relevance reminded a turn of: which it followed.
+ * No counter changes: the verdict is audited alone until it is measured against real turns.
+ */
+export function recordJudged(op: Op, judged: readonly string[], followed: readonly string[], sessionId: string | undefined): void {
+  audit(op.store, op.now, 'memory.judged', { sessionId, detail: { memoryIds: [...new Set(judged)], followed: [...new Set(followed)] } })
+}
+
 /** Counts one use for each reminded memory the model's answer drew on. */
 export function recordUse(op: Op, ids: readonly string[], source: string, sessionId: string | undefined): void {
   const distinct = [...new Set(ids)]

@@ -55,6 +55,8 @@ import {
   MAX_ASKED,
   emptyEvidence,
   evidenceText,
+  followedOf,
+  judgedNext,
   MIN_ANSWER,
   noted,
   relativeTo,
@@ -174,6 +176,8 @@ type State = {
   worth: boolean
   /** The prompts the person typed since the last consolidation, which the consolidator reads with the answer. */
   asked: string[]
+  /** The memories relevance reminded the main loop of since the last consolidation, whose use the consolidator judges. */
+  relevant: Memory[]
   /** The active memories of the project's store and the global one at the last draw; unset until the daemon answered. */
   stored?: StoredCounts
   /** The last compact proposal, which `/sage-memory compact apply` writes. */
@@ -774,6 +778,7 @@ async function record($: EngineInterface, state: State, loopKey: string, trigger
   loop.reminded.push(...block.sent)
   if (trigger === 'global') state.counts.rules += block.sent.length
   else state.counts.reminded += block.sent.length
+  if (trigger !== 'global' && loopKey === MAIN_LOOP) state.relevant = judgedNext(state.relevant, block.sent)
   await ask($, state, '/memory/reminded', { sessionId: await $.session.id(), loop: loopKey, trigger, ids: block.sent.map(memory => memory.id) })
   await show($, state)
   await toStream($, 'reminder', reminderLine(trigger, block.sent))
@@ -1038,18 +1043,27 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
   }
 }
 
-/** Asks the model what the turn taught and writes each memory it kept. */
-async function consolidate($: EngineInterface, state: State, asked: readonly string[], answer: string, turn: TurnEvidence): Promise<void> {
+/** What a consolidation reads besides the answer: the person's prompts, the turn's evidence, and the memories relevance reminded. */
+type Since = { asked: readonly string[]; turn: TurnEvidence; relevant: readonly Memory[] }
+
+/**
+ * Asks the model what the turn taught and writes each memory it kept. It also judges which of the
+ * memories relevance reminded the turn followed; the verdict goes to the audit log alone, until it is
+ * measured against real turns.
+ */
+async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
   if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
   const root = state.project?.root ?? ''
   const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
-  const prompt = consolidatorPrompt(asked, answer, evidenceText(root, turn, await completedOf($)), existing)
+  const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant)
   const r = await $.model.complete({ model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
   if (!r.isAnswered) {
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
     return
   }
-  for (const input of additionsOf(r.text, await $.session.id(), root)) await writeOne($, state, input)
+  const sessionId = await $.session.id()
+  if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant) })
+  for (const input of additionsOf(r.text, sessionId, root)) await writeOne($, state, input)
 }
 
 /** The memories the curator audits: those anchored to the turn's written files, then the targets of pending candidates. */
@@ -1108,10 +1122,10 @@ async function curate($: EngineInterface, state: State, answer: string, written:
 function afterAnswer($: EngineInterface, state: State, answer: string): void {
   if (!state.worth || answer.trim().length < MIN_ANSWER) return
   state.worth = false
-  const turn = state.turn
-  const asked = state.asked
+  const since: Since = { asked: state.asked, turn: state.turn, relevant: state.relevant }
   state.asked = []
-  void guarded($, 'the consolidator', () => consolidate($, state, asked, answer, turn)).then(() => guarded($, 'the curator', () => curate($, state, answer, turn.written)))
+  state.relevant = []
+  void guarded($, 'the consolidator', () => consolidate($, state, answer, since)).then(() => guarded($, 'the curator', () => curate($, state, answer, since.turn.written)))
 }
 
 /** Notes what a main-loop tool batch touched, for the consolidator. */
@@ -1489,7 +1503,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], relevant: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

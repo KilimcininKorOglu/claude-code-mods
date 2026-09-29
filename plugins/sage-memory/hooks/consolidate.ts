@@ -179,14 +179,29 @@ Rules:
    command arguments.
 5. Mark at most five candidates "keep"; prefer none over weak memory.
 
+When the record lists memories the assistant was reminded of, also return
+"followed": the ids of those this turn acted on. A memory is followed when the
+answer or the evidence shows that the assistant applied it: it ran the command
+the memory names, changed the code the way it says, answered with its fact, or
+avoided what it warns against. A memory the turn only mentions, contradicts or
+calls wrong, or one that has nothing to do with what the turn did, is not
+followed. Name only ids from that list, and [] when none was followed. Judge
+by what the assistant did, whatever the language of the memory or the answer.
+
 Return ONLY valid JSON, no markdown, code fences, commentary, summary field, or
 unsupported field:
-{"candidates":[]}`
+{"candidates":[]}
+or, when the record lists reminded memories:
+{"candidates":[],"followed":[]}`
 
+
+/** A titled list of the prompt, one `- ` line per item, between the given separators; nothing for no item. */
+function listBlock(title: string, items: readonly string[], before: string, after = ''): string {
+  return items.length === 0 ? '' : `${before}${title}:\n${items.map(item => `- ${item}`).join('\n')}${after}`
+}
 
 function existingBlock(existing: readonly Memory[]): string {
-  if (existing.length === 0) return ''
-  return `\n\nExisting memory entries:\n${existing.map(memory => `- [${memory.updatedAt.slice(0, 10)}] (${memory.scope}) ${memory.text}`).join('\n')}`
+  return listBlock('Existing memory entries', existing.map(memory => `[${memory.updatedAt.slice(0, 10)}] (${memory.scope}) ${memory.text}`), '\n\n')
 }
 
 /** The person's prompts the consolidator reads: the newest few, each cut, so a fact the person stated is not lost when the answer does not repeat it. */
@@ -194,13 +209,39 @@ export const MAX_ASKED = 3
 const ASKED_CHARS = 1500
 
 function askedBlock(asked: readonly string[]): string {
-  if (asked.length === 0) return ''
-  return `What the person wrote in this turn:\n${asked.map(text => `- ${text.slice(0, ASKED_CHARS)}`).join('\n')}\n\n`
+  return listBlock('What the person wrote in this turn', asked.map(text => text.slice(0, ASKED_CHARS)), '', '\n\n')
 }
 
-/** The prompt: the person's prompts, the answer, the evidence, and the entries the model must not repeat. */
-export function consolidatorPrompt(asked: readonly string[], answer: string, evidence: string, existing: readonly Memory[]): string {
-  return `${askedBlock(asked)}Answer that ended the turn:\n${answer.slice(0, SUMMARY_CHARS)}\n\nGrounding evidence from this turn:\n${evidence}${existingBlock(existing)}\n\nReview the turn and return the candidates as JSON.`
+/** How many memories reminded by relevance the consolidator judges at most, the newest kept. */
+export const MAX_JUDGED = 20
+const JUDGED_CHARS = 400
+
+/** Adds the memories of one reminder to those the next consolidation judges: each once, the newest `MAX_JUDGED` kept. */
+export function judgedNext(judged: readonly Memory[], sent: readonly Memory[]): Memory[] {
+  const ids = new Set(sent.map(memory => memory.id))
+  return [...judged.filter(memory => !ids.has(memory.id)), ...sent].slice(-MAX_JUDGED)
+}
+
+function remindedBlock(reminded: readonly Memory[]): string {
+  return listBlock('Memories the assistant was reminded of in this turn', reminded.map(memory => `${memory.id}: ${memory.text.slice(0, JUDGED_CHARS)}`), '\n\n')
+}
+
+/**
+ * The prompt: the person's prompts, the answer, the evidence, the entries the model must not repeat,
+ * and the memories reminded by relevance, whose use the model judges. The global rules are not among
+ * them: they go to every context whatever it asks, so following one says nothing about its relevance.
+ */
+export function consolidatorPrompt(asked: readonly string[], answer: string, evidence: string, existing: readonly Memory[], reminded: readonly Memory[] = []): string {
+  const task = reminded.length === 0 ? 'the candidates' : 'the candidates and the followed ids'
+  return `${askedBlock(asked)}Answer that ended the turn:\n${answer.slice(0, SUMMARY_CHARS)}\n\nGrounding evidence from this turn:\n${evidence}${existingBlock(existing)}${remindedBlock(reminded)}\n\nReview the turn and return ${task} as JSON.`
+}
+
+/** The reminded memories a consolidator answer says the turn followed: ids from the list it was shown, each once. */
+export function followedOf(text: string, reminded: readonly Memory[]): string[] {
+  const followed = objectOf(text)?.followed
+  if (!Array.isArray(followed)) return []
+  const shown = new Set(reminded.map(memory => memory.id))
+  return [...new Set(followed.filter((id): id is string => typeof id === 'string' && shown.has(id)))]
 }
 
 /** The most important entries first: the model sees what the stores hold already. */

@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http'
 import type { AuditEntry, BackfillFilter, Candidate, Decision, Memory, ProposeInput, RememberInput, UpdatePatch, UpdateResult } from '../hooks/shared/model.ts'
 import { accept, listCandidates, propose, reject, resolve } from './candidates.ts'
 import { markReminded } from './contexts.ts'
-import { recordReminder, recordUse } from './counters.ts'
+import { recordJudged, recordReminder, recordUse } from './counters.ts'
 import type { Embeddings } from './embeddings.ts'
 import { dropMemory, insertMoved, movedMemory, removeMoved } from './move.ts'
 import { storeLabel, type Op } from './op.ts'
@@ -142,6 +142,8 @@ function counterRoutes(stores: Stores, post: Post): Routes {
   return {
     '/memory/reminded': post(reminded),
     '/memory/used': post(async body => ({ counted: (await count(body, (op, ids) => recordUse(op, ids, requiredString(body, 'source'), sessionOf(body)))).counted })),
+    // The verdict of one turn lands in the project's log, whichever store holds each memory.
+    '/memory/judged': post(body => run(stores, body, places => places.project, op => recordJudged(op, stringList(body, 'judged'), stringList(body, 'followed'), sessionOf(body)))),
   }
 }
 

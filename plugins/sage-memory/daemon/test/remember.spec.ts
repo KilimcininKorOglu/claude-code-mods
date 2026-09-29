@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
-import { recordReminder, recordUse } from '../counters.ts'
+import { recordJudged, recordReminder, recordUse } from '../counters.ts'
 import { updateMemory } from '../update.ts'
 import { cleanUp, tempDir } from './support.ts'
 import { world } from './world.ts'
@@ -247,6 +247,17 @@ describe('usage counters', () => {
     assert.equal(stored.lastAccessedAt, undefined)
     const audited = w.run(op => op.store.db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'memory.reminded'").get() as { n: number })
     assert.equal((await audited).n, 1)
+    w.close()
+  })
+
+  test("the consolidator's verdict is audited and moves no counter", async () => {
+    const w = world()
+    const { memory } = await w.remember({ text: MIGRATIONS })
+    await w.run(op => recordJudged(op, [memory.id, 'other', memory.id], [memory.id], 's1'))
+    const stored = w.read(memory.id)
+    assert.deepEqual([stored.useCount, stored.reminderCount], [undefined, undefined])
+    const row = await w.run(op => op.store.db.prepare("SELECT detail FROM audit_log WHERE action = 'memory.judged'").get() as { detail: string })
+    assert.deepEqual(JSON.parse(row.detail), { memoryIds: [memory.id, 'other'], followed: [memory.id] })
     w.close()
   })
 })
