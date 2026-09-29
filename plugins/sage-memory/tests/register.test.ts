@@ -691,8 +691,16 @@ describe('consolidator', () => {
     w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })
     w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
     w.routes.set('/memory/judged', {})
-    // The model also names the global rule and an id it was never shown; neither is kept.
-    w.modelText = JSON.stringify({ candidates: [], followed: ['m1', 'g1', 'zz'] })
+    // Only an applied entry with evidence on an id the model was shown counts: the global rule and an
+    // unknown id are dropped.
+    w.modelText = JSON.stringify({
+      candidates: [],
+      judged: [
+        { id: 'm1', is: 'applied', evidence: 'Run pnpm add lodash' },
+        { id: 'g1', is: 'applied', evidence: 'Turkish' },
+        { id: 'zz', is: 'applied', evidence: 'x' },
+      ],
+    })
     await $.session.start(START)
     await $.prompt.submit(typed('how do I install a package?'))
     await $.turn.complete(answered('Run pnpm add lodash in the repository root.'))
@@ -700,7 +708,7 @@ describe('consolidator', () => {
     const prompt = w.asked[0]?.prompt ?? ''
     expect(prompt).toContain('Memories the assistant was reminded of in this turn:\n- m1: Install packages with pnpm')
     expect(prompt).not.toContain('g1')
-    expect(prompt).toContain('return the candidates and the followed ids as JSON')
+    expect(prompt).toContain('return the candidates and the judged memories as JSON')
     expect(bodiesOf(w, '/memory/judged')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', judged: ['m1'], followed: ['m1'] }])
     expect(bodiesOf(w, '/memory/used')).toEqual([])
     // The next consolidation judges only what was reminded after the last one: nothing, so no verdict is sent.

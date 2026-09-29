@@ -180,19 +180,30 @@ Rules:
 5. Mark at most five candidates "keep"; prefer none over weak memory.
 
 When the record lists memories the assistant was reminded of, also return
-"followed": the ids of those this turn acted on. A memory is followed when the
-answer or the evidence shows that the assistant applied it: it ran the command
-the memory names, changed the code the way it says, answered with its fact, or
-avoided what it warns against. A memory the turn only mentions, contradicts or
-calls wrong, or one that has nothing to do with what the turn did, is not
-followed. Name only ids from that list, and [] when none was followed. Judge
-by what the assistant did, whatever the language of the memory or the answer.
+"judged": one entry for every listed memory, in the listed order:
+
+{"id": "<id from the list>", "is": "<applied|wrong|mentioned|unrelated>", "evidence": "<proof>"}
+
+Pick exactly one label:
+- applied: the turn did what the memory says, and the memory is still true:
+  it ran the command the memory names, changed the code the way it says,
+  answered with its fact, or avoided what it warns against. The evidence is
+  the command, the file, or the words of the answer that show it, copied
+  from the record.
+- wrong: the answer or the evidence says the memory is wrong, stale, fixed,
+  outdated, or no longer true, or the assistant deleted, updated, or offered
+  to correct it. This label wins over applied.
+- mentioned: the turn names the memory's subject but did not act on it.
+- unrelated: the turn has nothing to do with the memory.
+Leave "evidence" empty for every label but applied. An applied entry without
+evidence copied from the record is not applied. Judge by what the assistant
+did, whatever the language of the memory or the answer.
 
 Return ONLY valid JSON, no markdown, code fences, commentary, summary field, or
 unsupported field:
 {"candidates":[]}
 or, when the record lists reminded memories:
-{"candidates":[],"followed":[]}`
+{"candidates":[],"judged":[]}`
 
 
 /** A titled list of the prompt, one `- ` line per item, between the given separators; nothing for no item. */
@@ -232,16 +243,26 @@ function remindedBlock(reminded: readonly Memory[]): string {
  * them: they go to every context whatever it asks, so following one says nothing about its relevance.
  */
 export function consolidatorPrompt(asked: readonly string[], answer: string, evidence: string, existing: readonly Memory[], reminded: readonly Memory[] = []): string {
-  const task = reminded.length === 0 ? 'the candidates' : 'the candidates and the followed ids'
+  const task = reminded.length === 0 ? 'the candidates' : 'the candidates and the judged memories'
   return `${askedBlock(asked)}Answer that ended the turn:\n${answer.slice(0, SUMMARY_CHARS)}\n\nGrounding evidence from this turn:\n${evidence}${existingBlock(existing)}${remindedBlock(reminded)}\n\nReview the turn and return ${task} as JSON.`
 }
 
-/** The reminded memories a consolidator answer says the turn followed: ids from the list it was shown, each once. */
+/** An entry the model labelled applied with evidence, on an id it was shown. */
+function isApplied(entry: unknown, shown: ReadonlySet<string>): entry is { id: string } {
+  if (typeof entry !== 'object' || entry === null) return false
+  const { id, is, evidence } = entry as { id?: unknown; is?: unknown; evidence?: unknown }
+  return typeof id === 'string' && shown.has(id) && is === 'applied' && typeof evidence === 'string' && evidence.trim() !== ''
+}
+
+/**
+ * The reminded memories a consolidator answer says the turn followed: those it labelled applied and
+ * backed with evidence, on ids from the list it was shown, each once. Any other label is no use.
+ */
 export function followedOf(text: string, reminded: readonly Memory[]): string[] {
-  const followed = objectOf(text)?.followed
-  if (!Array.isArray(followed)) return []
+  const judged = objectOf(text)?.judged
+  if (!Array.isArray(judged)) return []
   const shown = new Set(reminded.map(memory => memory.id))
-  return [...new Set(followed.filter((id): id is string => typeof id === 'string' && shown.has(id)))]
+  return [...new Set(judged.filter(entry => isApplied(entry, shown)).map(entry => entry.id))]
 }
 
 /** The most important entries first: the model sees what the stores hold already. */
