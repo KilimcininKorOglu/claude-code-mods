@@ -859,6 +859,19 @@ describe('keep warm after a resume', () => {
     expect(w.statuses.at(-1)).toMatch(/^always · ping in 50m · last ping read 200k/)
   })
 
+  test('a session.start that settles after the resume\'s wait still sends the keep-warm message, once', async ($, on) => {
+    // With many plugins loaded, session.start settled four seconds after classic.SessionStart (2.1.285).
+    const w = resumeWorld(on, [['request:S1', START - 30 * MIN]])
+    await $.classic.SessionStart(resumed(30 * 60))
+    await w.clock.advance(5000)
+    expect(w.sent).toEqual([])
+    await $.session.start(session)
+    await w.clock.advance(3000)
+    expect(w.sent).toEqual([{ command: 'cache-warm:send', args: KEEP_WARM_TEXT }])
+    await w.clock.advance(3000)
+    expect(w.sent).toHaveLength(1)
+  })
+
   test('no keep-warm message when the cache is already gone, the session is not interactive, or the person wrote first', async ($, on) => {
     const w = resumeWorld(on, [])
     await $.session.start(session)

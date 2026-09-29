@@ -531,6 +531,19 @@ async function keepWarmAfterResume($: EngineInterface, s: State): Promise<void> 
 }
 
 /**
+ * Starts the keep-warm wait once both start hooks ran: classic.SessionStart names the resume, and
+ * session.start reads the switch, the window and whether the session is interactive. The two settle in no
+ * fixed order: with every mod of the marketplace loaded, session.start settled four seconds after
+ * classic.SessionStart (measured on 2.1.285), so a wait started by classic.SessionStart alone read a session
+ * that had not started and sent nothing.
+ */
+function scheduleKeepWarm($: EngineInterface, s: State): void {
+  if (!s.started || !s.keepWarmDue) return
+  s.keepWarmDue = false
+  $.clock.after(KEEP_WARM_AFTER_MS, () => { void keepWarmAfterResume($, s) })
+}
+
+/**
  * The transcript lies under the directory the session started in, which a shell `cd` does not move
  * (measured: a module reloaded after `cd sub` looked under `sub` and found nothing).
  */
@@ -574,6 +587,8 @@ export const register: Register = on => {
     // A -p run draws nothing, so only an interactive session redraws on a timer, and only while a window runs.
     if (e.isInteractive) $.clock.every(REDRAW_MS, () => { if (hasWindow(s)) void redraw($, s) })
     await showStatus($, s)
+    s.started = true
+    scheduleKeepWarm($, s)
     return r
   })
 
@@ -592,8 +607,11 @@ export const register: Register = on => {
     const line = seedFromResume(s, e, await $.clock.now())
     s.model ??= await $.session.model()
     if (line) logEvent($, s, line, eventShort(line))
-    // The conditions are read when the timer fires, once session.start has read the switch and the window.
-    if (e.source === 'resume') $.clock.after(KEEP_WARM_AFTER_MS, () => { void keepWarmAfterResume($, s) })
+    // The conditions are read when the timer fires, which scheduleKeepWarm starts after session.start too.
+    if (e.source === 'resume') {
+      s.keepWarmDue = true
+      scheduleKeepWarm($, s)
+    }
     return r
   })
 

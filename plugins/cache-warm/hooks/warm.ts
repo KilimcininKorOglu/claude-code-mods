@@ -82,6 +82,10 @@ export interface State {
   interactive: boolean
   /** When this process resumed the conversation; 0 when it did not. */
   resumedAt: number
+  /** session.start has read the switch, the window and whether the session is interactive. */
+  started: boolean
+  /** A resume waits to send the keep-warm message until session.start has run too. */
+  keepWarmDue: boolean
 }
 
 /** The rates the session bills now: its model, at fast mode rates while the setting says so. */
@@ -93,6 +97,7 @@ export function freshState(): State {
   return {
     sid: '', deadline: 0, endless: false, window: 0, renew: null, every: PING_AFTER_MS, always: false, lastRequestAt: 0, model: null, fast: false, ctx: 0,
     compacted: false, coldWrites: [], pending: null, lastRead: null, stopped: null, pinging: false, waitingReply: false, interactive: false, resumedAt: 0,
+    started: false, keepWarmDue: false,
   }
 }
 
