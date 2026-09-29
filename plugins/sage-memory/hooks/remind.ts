@@ -66,9 +66,19 @@ function patternOf(call: ToolCall): string | undefined {
   return stringField(call.tool_input, 'pattern') ?? stringField(call.tool_input, 'query')
 }
 
+/**
+ * The part of a path that says which file it is: the path under the project root, or the file name
+ * of a path outside it. The root's own words (home directory, repository name) are the same for every
+ * file, so as query terms they matched every memory that names the project.
+ */
+function ownPath(path: string, root: string): string {
+  if (root !== '' && path.startsWith(`${root}/`)) return path.slice(root.length + 1)
+  return path.startsWith('/') ? (path.split('/').pop() ?? '') : path
+}
+
 /** The query of a tool reminder: the paths spelled out as terms, the patterns, and the tasks in progress. */
-export function queryOf(calls: readonly ToolCall[], paths: readonly string[], tasks: readonly string[]): string {
-  const pathTerms = paths.map(path => path.split(/[/\\._-]+/).join(' '))
+export function queryOf(calls: readonly ToolCall[], paths: readonly string[], tasks: readonly string[], root: string): string {
+  const pathTerms = paths.map(path => ownPath(path, root).split(/[/\\._-]+/).join(' '))
   const patterns = calls.map(patternOf).filter((pattern): pattern is string => pattern !== undefined)
   return collapseSpace([...pathTerms, ...patterns, ...tasks].join(' ')).slice(0, 2000)
 }

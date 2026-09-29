@@ -827,7 +827,7 @@ async function afterCall($: EngineInterface, state: State, call: ToolCall, loopK
   if (budget.count === 0) return undefined
   const paths = pathsOf(call)
   const tasks = loopKey === MAIN_LOOP ? await tasksOf($, state) : []
-  const body = { sessionId: await $.session.id(), loop: loopKey, paths, query: queryOf([call], paths, tasks), mutation: CHANGE_TOOLS.has(call.tool_name), limit: CANDIDATES }
+  const body = { sessionId: await $.session.id(), loop: loopKey, paths, query: queryOf([call], paths, tasks, state.project?.root ?? ''), mutation: CHANGE_TOOLS.has(call.tool_name), limit: CANDIDATES }
   const ranking = await ask<Ranking>($, state, '/remind/tools', body, REMIND_MS)
   // The pick and its claim run in one synchronous step: a parallel call's pick comes after it and skips these ids.
   const fresh = ranking.candidates.filter(item => !loop.claimed.has(item.memory.id))

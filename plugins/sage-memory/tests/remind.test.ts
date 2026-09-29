@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, reminderBlock, toolBudget, usedBy } from '../hooks/remind.ts'
+import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, queryOf, reminderBlock, toolBudget, usedBy } from '../hooks/remind.ts'
 import type { Kind, Memory } from '../hooks/shared/model.ts'
 
 tier('user')
@@ -14,6 +14,14 @@ function memory(id: string, text: string, kind: Kind = 'convention', anchored = 
 const item = (m: Memory, reason: string) => ({ memory: m, relationStrength: 0.9, score: 0.8, reasons: [reason] })
 
 describe('remind', () => {
+  test("a tool reminder's query names the file, never the project root or the home directory every file shares", () => {
+    const root = '/Users/kerem/Desktop/GIT-X/claude-code-mods'
+    const read = { tool_name: 'Read', tool_input: {} }
+    expect(queryOf([read], [`${root}/plugins/sage-memory/daemon/test/world.ts`], [], root)).toBe('plugins sage memory daemon test world ts')
+    expect(queryOf([read], ['/Users/kerem/.claude/settings.json'], [], root)).toBe('settings json')
+    expect(queryOf([read], ['src/app.ts'], ['Fix the router'], root)).toBe('src app ts Fix the router')
+  })
+
   test('file tools and MCP tools that name a file remind; Bash does not', () => {
     expect(isReminding({ tool_name: 'Read', tool_input: {} })).toBe(true)
     expect(isReminding({ tool_name: 'Bash', tool_input: { command: 'ls' } })).toBe(false)
