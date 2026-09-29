@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { isReminding, memoryEntry, pathsOf, pickDiverse, reminderBlock, toolBudget, usedBy } from '../hooks/remind.ts'
+import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, reminderBlock, toolBudget, usedBy } from '../hooks/remind.ts'
 import type { Kind, Memory } from '../hooks/shared/model.ts'
 
 tier('user')
@@ -66,6 +66,21 @@ describe('remind', () => {
     expect(memoryEntry(command)).toMatch(/^<memory id="m2" kind="convention" scope="project" status="active" priority="high" about="command make &quot;test&quot;">\n/)
     const plain = { ...memory('m3', 'x'), importance: 0.5 }
     expect(memoryEntry(plain)).toMatch(/^<memory id="m3" kind="convention" scope="project" status="active">\n/)
+  })
+
+  test('a call acts on a memory by editing its file or a file under its directory, or by running its command', () => {
+    const file = { ...memory('f', 'x'), anchors: [{ type: 'file' as const, path: 'src/a.ts' }] }
+    const dir = { ...memory('d', 'x'), anchors: [{ type: 'directory' as const, path: 'daemon/' }] }
+    const make = { ...memory('c', 'x'), anchors: [{ type: 'command' as const, command: 'make test' }] }
+    const short = { ...memory('s', 'x'), anchors: [{ type: 'command' as const, command: 'ls' }] }
+    const all = [file, dir, make, short]
+    const ids = (call: { tool_name: string; tool_input: unknown }) => actedOn(call, all).map(m => m.id)
+    expect(ids({ tool_name: 'Edit', tool_input: { file_path: '/r/src/a.ts' } })).toEqual(['f'])
+    expect(ids({ tool_name: 'Edit', tool_input: { file_path: '/r/xsrc/a.ts' } })).toEqual([])
+    expect(ids({ tool_name: 'Write', tool_input: { file_path: '/r/daemon/server.ts' } })).toEqual(['d'])
+    expect(ids({ tool_name: 'Read', tool_input: { file_path: '/r/src/a.ts' } })).toEqual([])
+    expect(ids({ tool_name: 'Bash', tool_input: { command: 'make test && ls' } })).toEqual(['c'])
+    expect(ids({ tool_name: 'Bash', tool_input: { command: 'ls -la' } })).toEqual([])
   })
 
   test('an answer uses a memory by its id, its opening text, or enough shared terms', () => {

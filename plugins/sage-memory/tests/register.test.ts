@@ -451,6 +451,27 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/memory/used')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', source: 'assistant_reference', ids: ['m1'] }])
   })
 
+  withSidebar('an edit of a reminded memory\'s file and a run of its command count one use each, and a read does not', async ($, on) => {
+    const w = readyWorld(on)
+    const MAKE = memory('m3', 'Run the whole suite with make test before a push.', { anchors: [{ type: 'command', command: 'make test' }] })
+    w.routes.set('/remind/tools', { candidates: [ranked(DAEMON, ['anchor:file'])], rejected: [] })
+    w.routes.set('/remind/prompt', { candidates: [ranked(MAKE)], rejected: [] })
+    w.routes.set('/memory/verify-paths', { results: [], staled: [], reactivated: [] })
+    await $.session.start(START)
+    await $.prompt.submit(typed('how do I test this?'))
+    await $.tool.call({ tool: 'Read', file_path: '/src/my app/daemon/server.ts' } as never)
+    await $.tool.call({ tool: 'Read', file_path: '/src/my app/daemon/server.ts' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'ls daemon' } as never)
+    expect(bodiesOf(w, '/memory/used')).toEqual([])
+    await $.tool.call({ tool: 'Edit', file_path: '/src/my app/daemon/server.ts', old_string: 'a', new_string: 'b' } as never)
+    await $.tool.call({ tool: 'Edit', file_path: '/src/my app/daemon/server.ts', old_string: 'b', new_string: 'c' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'cd daemon && make test -j4' } as never)
+    expect(bodiesOf(w, '/memory/used')).toEqual([
+      { project: expect.anything(), sessionId: 'sess-1', source: 'tool_anchor', ids: ['m2'] },
+      { project: expect.anything(), sessionId: 'sess-1', source: 'tool_anchor', ids: ['m3'] },
+    ])
+  })
+
   withSidebar('the system prompt notes the plugin and how to look up and save notes, a start adds no block of its own, and a compaction starts the context over', async ($, on) => {
     const w = readyWorld(on)
     await $.session.start(START)

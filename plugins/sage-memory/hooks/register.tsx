@@ -23,6 +23,7 @@ import {
 } from './link.ts'
 import { hexOf, keySource, projectKey, projectNameFrom } from './project.ts'
 import {
+  actedOn,
   CHANGE_TOOLS,
   isReminding,
   isTracked,
@@ -898,16 +899,20 @@ async function subagentRanking($: EngineInterface, state: State, e: Spawn): Prom
   return ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
 }
 
-/** Counts the reminded memories an answer used, each reminder once. */
-async function countUse($: EngineInterface, state: State, loopKey: string, answer: string): Promise<void> {
+/**
+ * Counts the reminded memories a loop used, each reminder once: `pick` names them among the loop's
+ * reminded ones, the loop drops them, and the daemon records the source. An answer uses a memory by
+ * quoting it (`usedBy`), a successful tool call by acting on its anchor (`actedOn`).
+ */
+async function countUse($: EngineInterface, state: State, loopKey: string, source: string, pick: (reminded: readonly Memory[]) => Memory[]): Promise<void> {
   const loop = state.loops.get(loopKey)
   if (loop === undefined || loop.reminded.length === 0 || !(await isReady(state))) return
-  const used = usedBy(answer, loop.reminded)
+  const used = pick(loop.reminded)
   if (used.length === 0) return
   loop.reminded = loop.reminded.filter(memory => !used.includes(memory))
   state.counts.used += used.length
   await show($, state)
-  await ask($, state, '/memory/used', { sessionId: await $.session.id(), source: 'assistant_reference', ids: used.map(memory => memory.id) })
+  await ask($, state, '/memory/used', { sessionId: await $.session.id(), source, ids: used.map(memory => memory.id) })
 }
 
 /** Starts a loop's context over after a compaction: the daemon opens a new epoch, and the loop forgets what it showed. */
@@ -1551,6 +1556,8 @@ export const register: Register = on => {
     const r = await next(e)
     const call = callOfTool(e, r)
     if (!succeeded(r) || !isReminding(call)) return r
+    // Counted before this call's own reminder joins the loop, so a memory is not used by the call that brought it.
+    await guarded($, 'counting the used memories', () => countUse($, state, e.agentId ?? MAIN_LOOP, 'tool_anchor', reminded => actedOn(call, reminded)))
     // A compaction in the middle of a turn started the main loop over: its first file tool brings the global rules back.
     const rules = await guarded($, 'the global rules', () => globalRules($, state, e.agentId ?? MAIN_LOOP))
     return withToolContext(r, joined(rules, await guarded($, 'the reminder after the tool', () => afterCall($, state, call, e.agentId ?? MAIN_LOOP))))
@@ -1577,7 +1584,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
     const loopKey = e.agentId ?? MAIN_LOOP
-    if (e.reason === 'answer') await guarded($, 'counting the used memories', () => countUse($, state, loopKey, e.answer))
+    if (e.reason === 'answer') await guarded($, 'counting the used memories', () => countUse($, state, loopKey, 'assistant_reference', reminded => usedBy(e.answer, reminded)))
     if (e.reason === 'answer' && e.agentId === undefined) afterAnswer($, state, e.answer)
     if (e.agentId !== undefined) state.loops.delete(e.agentId)
     return r
@@ -1596,7 +1603,11 @@ export const register: Register = on => {
     const r = await next(e)
     const command = safeCommand(e.command)
     if (e.agentId === undefined && command !== undefined) state.turn.commands = noted(state.turn.commands, command, 10)
-    if (succeeded(r)) await guarded($, 'moving anchors', () => remapMoved($, state, e.command, cwd))
+    if (succeeded(r)) {
+      const call = { tool_name: 'Bash', tool_input: e }
+      await guarded($, 'counting the used memories', () => countUse($, state, e.agentId ?? MAIN_LOOP, 'tool_anchor', reminded => actedOn(call, reminded)))
+      await guarded($, 'moving anchors', () => remapMoved($, state, e.command, cwd))
+    }
     if (!('deny' in r && r.deny !== undefined)) await guarded($, 'capturing the outcome', () => captureOutcome($, state, e.command, r.result, !succeeded(r)))
     return r
   })

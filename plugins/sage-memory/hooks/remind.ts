@@ -4,7 +4,7 @@
  * and whether an answer used what it was reminded of. Pure code; `register.tsx` makes every call.
  */
 import { wordLine, type Line } from './link.ts'
-import type { Memory, Ranked } from './shared/model.ts'
+import type { Anchor, Memory, Ranked } from './shared/model.ts'
 import { collapseSpace, textKey, tokenize } from './shared/text.ts'
 
 /** Tools that read a file; each one's result carries the active memories about it. */
@@ -290,6 +290,40 @@ export function usedBy(answer: string, reminded: readonly Memory[]): Memory[] {
     if (text.length >= VISIBLE_MIN && key.includes(text.slice(0, PREFIX_CHARS))) return true
     return overlaps(memory, answerTerms)
   })
+}
+
+/** The shortest anchored command a Bash command must hold to act on it, so `ls` does not match every listing. */
+const COMMAND_MIN = 4
+
+/** A path without its trailing slashes and a leading `./`. */
+function trimmedPath(path: string): string {
+  return path.replace(/\/+$/, '').replace(/^\.\//, '')
+}
+
+/** Whether a changed path is the anchored file (a project-relative path the absolute one ends with) or lies under the anchored directory. */
+function changes(path: string, anchor: Anchor): boolean {
+  const target = trimmedPath(anchor.path ?? '')
+  if (target === '' || target === '.') return false
+  if (anchor.type === 'directory') return path.startsWith(`${target}/`) || path.includes(`/${target}/`)
+  return path === target || path.endsWith(`/${target}`)
+}
+
+/** Whether a Bash command runs the anchored command. */
+function runs(command: string, anchor: Anchor): boolean {
+  const target = anchor.command?.trim() ?? ''
+  return anchor.type === 'command' && target.length >= COMMAND_MIN && command.includes(target)
+}
+
+/**
+ * The reminded memories a tool call acted on: an edit of a file a memory is anchored to (or of a file
+ * under its directory), or a Bash command that runs its anchored command. A read is not counted,
+ * because reading the file is what brings its memories.
+ */
+export function actedOn(call: ToolCall, reminded: readonly Memory[]): Memory[] {
+  const paths = CHANGE_TOOLS.has(call.tool_name) ? pathsOf(call).map(trimmedPath) : []
+  const command = call.tool_name === 'Bash' ? (stringField(call.tool_input, 'command') ?? '') : ''
+  if (paths.length === 0 && command === '') return []
+  return reminded.filter(memory => memory.anchors.some(anchor => paths.some(path => changes(path, anchor)) || (command !== '' && runs(command, anchor))))
 }
 
 /** The most text of the context a loop keeps to tell what it already shows. */
