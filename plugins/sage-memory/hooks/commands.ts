@@ -166,8 +166,10 @@ export function rememberInputOf(flags: Flags, sessionId: string): RememberInput 
   return defined(input) as RememberInput
 }
 
+/** The patch of `update`; a scope other than project or user reaches the daemon, which refuses it with the reason. */
 export function patchOf(flags: Flags): UpdatePatch {
   const patch = {
+    scope: flags.scope,
     text: flags.text === '' ? undefined : flags.text,
     kind: flags.kind,
     status: flags.status,

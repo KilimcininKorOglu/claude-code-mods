@@ -135,6 +135,44 @@ describe('where a memory is kept', () => {
       assert.equal((await d.value<AuditEntry[]>('/audit', { project: d.alpha, limit: 1 })).length, 1)
     }))
 
+  test('an update with the other scope moves the memory under its own id, and the store it left keeps no copy', () =>
+    withDaemon(async d => {
+      const anchors = [{ type: 'command', command: 'pnpm install' }, { type: 'file', path: 'package.json' }]
+      const memory = await d.remember(d.alpha, { text: PREFERENCE, kind: 'preference', anchors })
+      const moved = await d.value<UpdateResult>('/memory/update', { project: d.alpha, id: memory.id, patch: { scope: 'user', importance: 0.9 } })
+      assert.deepEqual([moved.memory.id, moved.memory.scope, moved.memory.importance, moved.memory.revision], [memory.id, 'user', 0.9, memory.revision + 1])
+      assert.deepEqual(moved.memory.anchors, [{ type: 'command', command: 'pnpm install' }], 'the user store keeps no path anchor')
+      assert.equal((await d.value<Memory>('/memory/get', { project: d.beta, id: memory.id })).scope, 'user', 'every project reads it now')
+      assert.equal((await d.value<Memory>('/memory/get', { project: d.alpha, id: memory.id })).scope, 'user', 'no project copy shadows it')
+      const back = await d.value<UpdateResult>('/memory/update', { project: d.beta, id: memory.id, patch: { scope: 'project' } })
+      assert.equal(back.memory.scope, 'project')
+      assert.equal((await d.ask('/memory/get', { project: d.alpha, id: memory.id })).status, 404, 'it moved into the project that asked')
+      const actions = (await d.value<AuditEntry[]>('/audit', { project: d.alpha, limit: 10 })).filter(entry => entry.memoryId === memory.id).map(entry => entry.action)
+      assert.deepEqual(actions.filter(action => action.startsWith('memory.moved')).sort(), ['memory.moved_in', 'memory.moved_out', 'memory.moved_out'], "alpha's store and the user store, not beta's")
+    }))
+
+  test('a move refuses a session memory, a tombstone, and a file note the user store would leave without an anchor', () =>
+    withDaemon(async d => {
+      const note = await d.remember(d.alpha, { text: 'The app entry registers the router first', kind: 'file_note', anchors: [{ type: 'file', path: 'src/app.ts' }] })
+      const session = await d.remember(d.alpha, { text: 'The websocket reconnect test fails on the CI runner', scope: 'session', ownerSessionId: 's1' })
+      const gone = await d.remember(d.alpha, { text: MIGRATIONS })
+      await d.value('/memory/delete', { project: d.alpha, id: gone.id, force: true })
+      const cases: Array<[id: string, status: number, error: string]> = [
+        [note.id, 400, "a file_note needs at least one anchor, and the user store keeps none of this one's; pass another kind with the scope"],
+        [session.id, 400, `${session.id} is a session memory; a scope change moves only a project memory to user or back`],
+        [gone.id, 409, `${gone.id} is deleted; only a live memory moves to another scope`],
+      ]
+      for (const [id, status, error] of cases) {
+        const reply = await d.ask('/memory/update', { project: d.alpha, id, patch: { scope: 'user' } })
+        assert.deepEqual([reply.status, reply.error], [status, error])
+      }
+      const unknown = await d.ask('/memory/update', { project: d.alpha, id: note.id, patch: { scope: 'session' } })
+      assert.deepEqual([unknown.status, unknown.error], [400, 'scope must be one of: project, user'])
+      assert.equal((await d.value<Memory>('/memory/get', { project: d.alpha, id: note.id })).scope, 'project', 'a refused move wrote nothing')
+      const fact = await d.value<UpdateResult>('/memory/update', { project: d.alpha, id: note.id, patch: { scope: 'user', kind: 'fact' } })
+      assert.deepEqual([fact.memory.scope, fact.memory.kind, fact.memory.anchors], ['user', 'fact', []])
+    }))
+
   test('backfill reports each store on its own', () =>
     withDaemon(async d => {
       const project = await d.remember(d.alpha, { text: MIGRATIONS })

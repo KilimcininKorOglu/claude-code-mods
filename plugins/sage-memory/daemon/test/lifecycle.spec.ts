@@ -57,10 +57,12 @@ describe('update', () => {
     w.close()
   })
 
-  test('scope and session never change, and an empty patch is refused', async () => {
+  test('an update in place keeps the scope and the session, and an empty patch is refused', async () => {
     const w = world()
     const [a] = await three(w)
-    await assert.rejects(w.run(op => updateMemory(op, { id: a, patch: { scope: 'user' } as never })), /takes no scope/)
+    await assert.rejects(w.run(op => updateMemory(op, { id: a, patch: { scope: 'user' } })), /a scope change moves only a project memory to user or back/)
+    await assert.rejects(w.run(op => updateMemory(op, { id: a, patch: { ownerSessionId: 's2' } as never })), /takes no ownerSessionId; a memory keeps the session it was written in/)
+    assert.equal((await w.run(op => updateMemory(op, { id: a, patch: { scope: 'project', importance: 0.9 } }))).memory.importance, 0.9, 'its own scope is no change')
     await assert.rejects(w.run(op => updateMemory(op, { id: a, patch: {} })), /changes nothing/)
     w.close()
   })

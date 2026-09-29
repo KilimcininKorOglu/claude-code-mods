@@ -144,6 +144,8 @@ export type RememberResult = {
 }
 
 export type UpdatePatch = {
+  /** Moves a project memory to the user store or back, keeping its id; no other scope moves. */
+  scope?: 'project' | 'user'
   text?: string
   tags?: string[]
   persistence?: Persistence

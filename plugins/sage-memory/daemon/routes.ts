@@ -1,18 +1,19 @@
 import type { ServerResponse } from 'node:http'
-import type { AuditEntry, BackfillFilter, Candidate, Decision, Memory, ProposeInput, RememberInput, UpdatePatch } from '../hooks/shared/model.ts'
+import type { AuditEntry, BackfillFilter, Candidate, Decision, Memory, ProposeInput, RememberInput, UpdatePatch, UpdateResult } from '../hooks/shared/model.ts'
 import { accept, listCandidates, propose, reject, resolve } from './candidates.ts'
 import { markReminded } from './contexts.ts'
 import { recordReminder, recordUse } from './counters.ts'
 import type { Embeddings } from './embeddings.ts'
-import type { Op } from './op.ts'
+import { dropMemory, insertMoved, movedMemory, removeMoved } from './move.ts'
+import { storeLabel, type Op } from './op.ts'
 import { candidateStore, memoryStore, opFor, placesOf, storeForScope, type Places } from './places.ts'
 import { backfill, recoverMemory } from './recover.ts'
-import { remember } from './remember.ts'
+import { remember, supersede } from './remember.ts'
 import { clear, deleteMemory, forget } from './remove.ts'
 import { flag, optionalCount, optionalObject, optionalScope, optionalString, requiredObject, requiredString, stringList, type Body } from './request.ts'
 import { readAudit, readMemory } from './rows.ts'
 import { transaction, type Store, type Stores } from './stores.ts'
-import { updateMemory } from './update.ts'
+import { updateMemory, type UpdateRequest } from './update.ts'
 
 export type RouteInput = { body: Body; res: ServerResponse }
 export type Route = { method: 'GET' | 'POST'; auth: boolean; handle: (input: RouteInput) => unknown }
@@ -48,6 +49,38 @@ function sessionOf(body: Body): string | undefined {
   return optionalString(body, 'sessionId')
 }
 
+/**
+ * Moves a memory to the store of the scope its patch names; `move.ts` holds the steps. A failed
+ * removal from the source takes the copy out of the target again. Replacing memories in the target
+ * waits until the source is clear, so a failed move leaves the target as it was.
+ */
+async function moveMemory(places: Places, from: Store, to: Store, request: UpdateRequest, embeddings: Embeddings): Promise<UpdateResult> {
+  const source = opFor(places, from)
+  const target = opFor(places, to)
+  const memory = await transaction(from, () => movedMemory(source, target, request))
+  await transaction(to, () => insertMoved(target, memory, storeLabel(from), request.sessionId))
+  try {
+    await transaction(from, () => removeMoved(source, memory, storeLabel(to), request.sessionId))
+  } catch (error) {
+    await transaction(to, () => dropMemory(target, memory.id))
+    throw error
+  }
+  const superseded = await transaction(to, () => supersede(target, memory, memory.supersedes ?? []))
+  await embeddings.afterWrite(to, [memory])
+  return { memory, superseded }
+}
+
+/** Updates a memory in its store, or moves it when the patch names the other store's scope. */
+function updateOrMove(stores: Stores, embeddings: Embeddings, body: Body): Promise<UpdateResult> {
+  const request: UpdateRequest = { id: requiredString(body, 'id'), patch: requiredObject<UpdatePatch>(body, 'patch'), sessionId: sessionOf(body) }
+  const places = placesOf(stores, body)
+  const from = memoryStore(places, request.id)
+  const scope = request.patch.scope
+  const to = scope === 'project' || scope === 'user' ? storeForScope(places, scope) : from
+  if (to !== from) return moveMemory(places, from, to, request, embeddings)
+  return write(stores, embeddings, body, () => from, op => updateMemory(op, request))
+}
+
 export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
   const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
   const input = <T>(body: Body): T => requiredObject<T>(body, 'input')
@@ -55,9 +88,7 @@ export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
   return {
     '/memory/remember': post(body => write(stores, embeddings, body, places => storeForScope(places, input<RememberInput>(body).scope), op => remember(op, input<RememberInput>(body)))),
     '/memory/get': post(body => run(stores, body, byId(body), op => readMemory(op.store.db, requiredString(body, 'id')))),
-    '/memory/update': post(body =>
-      write(stores, embeddings, body, byId(body), op => updateMemory(op, { id: requiredString(body, 'id'), patch: requiredObject<UpdatePatch>(body, 'patch'), sessionId: sessionOf(body) })),
-    ),
+    '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
     '/memory/delete': post(body =>
       run(stores, body, places => memoryStore(places, requiredString(body, 'id')), op => ({
         deleted: deleteMemory(op, { id: requiredString(body, 'id'), reason: optionalString(body, 'reason') ?? 'deleted', force: flag(body, 'force'), neverRemind: flag(body, 'neverRemind'), sessionId: sessionOf(body) }),

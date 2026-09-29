@@ -46,7 +46,7 @@ Under it, the stream shows each reminder faint, with only the word `reminded` in
     /sage-memory pane                     the memory manager
     /sage-memory show <id> | search <query> | file <path> | graph <id|query> | audit [n] | stats
     /sage-memory remember [flags] <text>  write a memory; `--scope session` belongs to this session
-    /sage-memory update <id> [flags] [text]
+    /sage-memory update <id> [flags] [text]  `--scope project|user` moves the memory to that store
     /sage-memory delete <id> | forget <query> | recover <id>
     /sage-memory audience remember --role <type> <text> | clear <id> | transfer <from> <to>
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
@@ -75,7 +75,7 @@ Each file costs one turn, so a project with 20 topic files takes 20 turns. The d
 
 ## Tools the model can call
 
-Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` and `delete` are listed at once, the rest wait behind ToolSearch. The system prompt's note about the plugin tells the model to look further with `search` and `for_file`, to fix a wrong note with `update` or `delete`, and to save a durable rule, decision, warning or root cause at once with `remember`, without waiting for the turn to end: with scope `project` and an anchor for a fact about the repository, with scope `user` and no anchor for a preference that holds in every project. None asks for approval: each writes only to the mod's own stores. A session memory belongs to the session that wrote it.
+Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` and `delete` are listed at once, the rest wait behind ToolSearch. The system prompt's note about the plugin tells the model to look further with `search` and `for_file`, to fix a wrong note with `update` or `delete`, and to save a durable rule, decision, warning or root cause at once with `remember`, without waiting for the turn to end: with scope `project` and an anchor for a fact about the repository, with scope `user` and no anchor for a preference that holds in every project. The note also tells it to pick the scope from the reason behind a rule, not from how strongly you said it. `update` with `scope` moves a project memory to the user store or back under the same id, and the store it left keeps no copy; a move to `user` drops the path anchors, and a `file_note` or `symbol_note` left without an anchor needs another kind in the same call. A session memory does not move. A tool call with a field its schema does not name is refused with the list of its fields, so a wrong call does not answer as a success. None asks for approval: each writes only to the mod's own stores. A session memory belongs to the session that wrote it.
 
 ## Install
 

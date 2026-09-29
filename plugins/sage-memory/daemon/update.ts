@@ -11,11 +11,13 @@ import { checkAnchors, checkedText, checkIds, checkScore, checkTags, clamp01, EP
 
 /**
  * Changing one memory: only the fields the patch names change, the revision moves on, and the
- * scope and session a memory was written in never change. Ported from SAGE's `updateSage`; the
- * context policy can be patched too, and new `supersedes` entries become superseded.
+ * session a memory was written in never changes. Ported from SAGE's `updateSage`; the context
+ * policy can be patched too, and new `supersedes` entries become superseded. A new scope moves the
+ * memory to the other store (`move.ts`); here a scope may only name the one the memory has.
  */
 
 const PATCH_KEYS = new Set([
+  'scope',
   'text',
   'tags',
   'persistence',
@@ -44,7 +46,7 @@ function checkKeys(patch: UpdatePatch): void {
     .filter(([, value]) => value !== undefined)
     .map(([key]) => key)
   const unknown = keys.find(key => !PATCH_KEYS.has(key))
-  if (unknown) throw refused(`the patch takes no ${unknown}; a memory keeps the scope and session it was written in`)
+  if (unknown) throw refused(`the patch takes no ${unknown}; a memory keeps the session it was written in`)
   if (keys.filter(key => key !== 'force').length === 0) throw refused('the patch changes nothing')
 }
 
@@ -59,8 +61,9 @@ function checkLists(patch: UpdatePatch): void {
   checkIds(patch.contradicts, 'contradicts')
 }
 
-function checkPatch(patch: UpdatePatch): void {
+export function checkPatch(patch: UpdatePatch): void {
   checkKeys(patch)
+  oneOf(['project', 'user'], patch.scope, 'scope')
   if (patch.text !== undefined) checkedText(patch.text)
   oneOf(PERSISTENCES, patch.persistence, 'persistence')
   oneOf(CONTEXT_POLICIES, patch.contextPolicy, 'contextPolicy')
@@ -92,11 +95,15 @@ function checkEditable(existing: Memory, patch: UpdatePatch): void {
   if (STRUCTURAL_KINDS.includes(kind) && (patch.anchors ?? existing.anchors).length === 0) throw refused(`a ${kind} needs at least one anchor`)
 }
 
-/** Every relationship the patch names points at another live memory of this store. */
-function checkLinks(op: Op, existing: Memory, patch: UpdatePatch): void {
-  const self = [...(patch.supersedes ?? []), ...(patch.contradicts ?? [])].some(id => id.trim() === existing.id)
+/** Every relationship the patch names points at another live memory of the store `op` writes. */
+export function checkPatchRelations(op: Op, id: string, patch: UpdatePatch): void {
+  const self = [...(patch.supersedes ?? []), ...(patch.contradicts ?? [])].some(other => other.trim() === id)
   if (self) throw refused('a memory cannot supersede or contradict itself')
   checkRelations(op, { supersedes: patch.supersedes, contradicts: patch.contradicts })
+}
+
+function checkLinks(op: Op, existing: Memory, patch: UpdatePatch): void {
+  checkPatchRelations(op, existing.id, patch)
   checkSuccessor(op, existing, patch)
 }
 
@@ -112,7 +119,7 @@ function describingFields(op: Op, existing: Memory, patch: UpdatePatch): Partial
 }
 
 /** Persistence, context policy and scores, where the patch names them. */
-function weighingFields(patch: UpdatePatch): Partial<Memory> {
+export function weighingFields(patch: UpdatePatch): Partial<Memory> {
   const fields: Partial<Memory> = {}
   if (patch.persistence !== undefined) fields.persistence = patch.persistence
   if (patch.contextPolicy !== undefined) fields.contextPolicy = patch.contextPolicy
@@ -127,14 +134,14 @@ function weighingFields(patch: UpdatePatch): Partial<Memory> {
  * A status set through a patch is a decision: `stale` is marked `manual` (or `review`) so no
  * automatic pass revives it, and leaving `superseded` drops the pointer to the successor.
  */
-function statusFields(patch: UpdatePatch): Partial<Memory> {
+export function statusFields(patch: UpdatePatch): Partial<Memory> {
   if (patch.status === undefined) return {}
   const fields: Partial<Memory> = { status: patch.status, staleReason: patch.status === 'stale' ? (patch.staleReason ?? 'manual') : undefined }
   if (patch.status !== 'superseded') fields.supersededBy = undefined
   return fields
 }
 
-function relationFields(patch: UpdatePatch): Partial<Memory> {
+export function relationFields(patch: UpdatePatch): Partial<Memory> {
   const fields: Partial<Memory> = {}
   const listOf = (list: readonly string[]): string[] | undefined => {
     const distinct = [...new Set(list.map(id => id.trim()))]
@@ -166,6 +173,7 @@ export function updateMemory(op: Op, request: UpdateRequest): UpdateResult {
   checkPatch(patch)
   const existing = mustRead(op, request.id)
   checkOwner(existing, request.sessionId)
+  if (patch.scope !== undefined && patch.scope !== existing.scope) throw refused(`${existing.id} is a ${existing.scope} memory; a scope change moves only a project memory to user or back`)
   if (patch.status === 'deleted') return deleteByPatch(op, existing, patch, request.sessionId)
   checkEditable(existing, patch)
   checkLinks(op, existing, patch)

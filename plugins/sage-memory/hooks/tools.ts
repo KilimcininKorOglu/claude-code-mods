@@ -153,10 +153,11 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'update',
     listed: true,
     description:
-      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships. When a memory you were reminded of states an old value and you confirmed the current one (a limit changed from 15 to 20), rewrite its `text` here instead of deleting it. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`.',
+      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships, or move it between the project and the user scope with `scope`. When a memory you were reminded of states an old value and you confirmed the current one (a limit changed from 15 to 20), rewrite its `text` here instead of deleting it. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`.',
     inputSchema: object(
       {
         id: text('The memory id to update.'),
+        scope: choice(['project', 'user'], 'Move the memory to this scope, keeping its id: project (this repository) or user (every project). A move to user drops path anchors (file, directory, package, test, git); a file_note or symbol_note left without an anchor needs a new kind in the same call.'),
         text: text('Replacement text.'),
         tags: texts('Replacement tags (omit the #).'),
         kind: choice(KINDS, 'New kind.'),
@@ -295,7 +296,7 @@ function picked(input: Input, keys: readonly string[]): Record<string, unknown> 
 }
 
 const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'supersedes', 'contradicts']
-const PATCH_KEYS = ['text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
+const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
 const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'unusedReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 
 /** A memory the model writes: a session memory belongs to this session, and each carries this session as its source. */
@@ -369,10 +370,24 @@ const CALLS: Record<string, (input: Input, sessionId: string) => Call> = {
   candidates: candidatesCall,
 }
 
+/** The keys the engine carries beside a tool's own arguments. */
+const RESERVED = new Set(['tool', 'tool_use_id', 'agentId'])
+
+/**
+ * Refuses a field the tool's schema does not name. The engine does not hold a call to the schema, and a
+ * dropped field made a wrong call answer as a success (an update with a scope it then took no field for).
+ */
+function checkFields(name: string, input: Input): void {
+  const properties = (TOOLS.find(tool => tool.name === name)?.inputSchema.properties ?? {}) as Record<string, unknown>
+  const unknown = Object.keys(input).filter(key => !RESERVED.has(key) && input[key] !== undefined && !(key in properties))
+  if (unknown.length > 0) throw new Error(`${name} takes no ${unknown.join(', ')}; its fields are ${Object.keys(properties).join(', ')}`)
+}
+
 /** The daemon call a tool call becomes; a call the tool's own rules refuse throws with the reason. */
 export function callOf(name: string, input: Input, sessionId: string): Call {
   const call = CALLS[name]
   if (call === undefined) throw new Error(`sage-memory has no tool ${name}`)
+  checkFields(name, input)
   return call(input, sessionId)
 }
 

@@ -46,7 +46,7 @@ Altındaki stream her reminder'ı soluk gösterir; yalnız `reminded` kelimesi m
     /sage-memory pane                     memory yöneticisi
     /sage-memory show <id> | search <sorgu> | file <yol> | graph <id|sorgu> | audit [n] | stats
     /sage-memory remember [flag'ler] <metin>  bir kayıt yazar; `--scope session` bu session'a aittir
-    /sage-memory update <id> [flag'ler] [metin]
+    /sage-memory update <id> [flag'ler] [metin]  `--scope project|user` kaydı o depoya taşır
     /sage-memory delete <id> | forget <sorgu> | recover <id>
     /sage-memory audience remember --role <tip> <metin> | clear <id> | transfer <eski> <yeni>
     /sage-memory hygiene | verify [id] | candidates [list|accept|reject|resolve]
@@ -75,7 +75,7 @@ Her dosya bir turn sürer; 20 topic dosyalı bir proje 20 turn alır. Dizin adı
 
 ## Modelin çağırabildiği tool'lar
 
-On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` ve `delete` hemen listelenir, diğerleri ToolSearch arkasında bekler. System prompt'taki plugin notu modele şunları söyler: daha fazlasına `search` ve `for_file` ile baksın, yanlış bir notu `update` ya da `delete` ile düzeltsin, kalıcı bir kuralı, kararı, uyarıyı ya da kök nedeni turn'ün bitmesini beklemeden `remember` ile hemen kaydetsin: repository ile ilgili bir bilgiyi `project` scope ve bir anchor ile, her projede geçerli bir tercihi `user` scope ile ve anchor olmadan. Hiçbiri onay sormaz: her biri yalnız mod'un kendi depolarına yazar. Bir session kaydı onu yazan session'a aittir.
+On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` ve `delete` hemen listelenir, diğerleri ToolSearch arkasında bekler. System prompt'taki plugin notu modele şunları söyler: daha fazlasına `search` ve `for_file` ile baksın, yanlış bir notu `update` ya da `delete` ile düzeltsin, kalıcı bir kuralı, kararı, uyarıyı ya da kök nedeni turn'ün bitmesini beklemeden `remember` ile hemen kaydetsin: repository ile ilgili bir bilgiyi `project` scope ve bir anchor ile, her projede geçerli bir tercihi `user` scope ile ve anchor olmadan. Not ayrıca scope'u kuralın gerekçesine göre seçmesini söyler, senin ne kadar sert söylediğine göre değil. `scope` verilen `update` bir project kaydını aynı id ile user deposuna taşır ya da geri getirir; ayrıldığı depoda kopya kalmaz. `user`'a taşıma path anchor'larını düşürür; anchor'suz kalan bir `file_note` ya da `symbol_note` aynı çağrıda başka bir kind ister. Session kaydı taşınmaz. Şemasında olmayan bir alan taşıyan tool çağrısı, tool'un alanlarının listesiyle reddedilir; böylece yanlış bir çağrı başarılı görünmez. Hiçbiri onay sormaz: her biri yalnız mod'un kendi depolarına yazar. Bir session kaydı onu yazan session'a aittir.
 
 ## Kurulum
 

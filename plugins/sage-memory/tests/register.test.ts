@@ -432,6 +432,8 @@ describe('memory reminders', () => {
     for (const tool of ['search', 'for_file', 'update', 'delete', 'remember']) expect(note).toContain(TOOL(tool))
     expect(note).toContain('scope project for a fact about this repository')
     expect(note).toContain('scope user for a preference of the user that holds in every project, with no anchor')
+    expect(note).toContain('Pick the scope from the reason behind the rule, not from how strongly the user said it')
+    expect(note).toContain(`To move a note to the other scope, call ${TOOL('update')} with scope`)
     const r = await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
     expect(r.additionalContext).toBe(undefined)
     expect(bodiesOf(w, '/context/new')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', loop: 'main' }])
@@ -530,6 +532,20 @@ describe('memory tools', () => {
     const forgot = await $.tool.call({ tool: TOOL('forget'), query: 'ab', force: true } as never)
     expect(String(forgot.result)).toMatch(/^query must be at least 3 characters/)
     expect(bodiesOf(w, '/memory/delete').length + bodiesOf(w, '/memory/forget').length).toBe(0)
+  })
+
+  withSidebar('update carries a scope to the daemon, and a field no schema names is refused instead of dropped', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/update', { memory: PNPM })
+    await $.session.start(START)
+    await $.tool.call({ tool: TOOL('update'), id: 'm1', scope: 'project' } as never)
+    expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { scope: 'project' } })
+    const wrong = await $.tool.call({ tool: TOOL('update'), id: 'm1', owner: 'me' } as never)
+    expect(wrong).toMatchObject({ isError: true })
+    expect(String(wrong.result)).toMatch(/^update takes no owner; its fields are id, scope, text, /)
+    const search = await $.tool.call({ tool: TOOL('search'), query: 'pnpm', scope: 'user' } as never)
+    expect(String(search.result)).toMatch(/^search takes no scope; /)
+    expect(bodiesOf(w, '/memory/update')).toHaveLength(1)
   })
 
   withSidebar('a tool called after another window turned the mod off says so', async ($, on) => {
@@ -804,6 +820,8 @@ describe('commands', () => {
     await $.session.start(START)
     await $.command.run(run('update m1 --policy never --freshness 0.5'))
     expect(bodiesOf(w, '/memory/update')[0]).toMatchObject({ id: 'm1', patch: { contextPolicy: 'never', freshness: 0.5 } })
+    await $.command.run(run('update m1 --scope user'))
+    expect(bodiesOf(w, '/memory/update')[1]).toMatchObject({ id: 'm1', patch: { scope: 'user' } })
     expect((await $.command.run(run('delete m1 obsolete rule'))).text).toBe('deleted m1; /sage-memory recover m1 brings it back')
     expect(bodiesOf(w, '/memory/delete')[0]).toMatchObject({ id: 'm1', force: true, reason: 'obsolete rule' })
     expect((await $.command.run(run('forget ab'))).text).toBe('expects forget <query of at least 3 characters> [--scope project|user|session]')
