@@ -430,6 +430,8 @@ describe('memory reminders', () => {
     const note = (await $.prompt.section({ name: 'env_info_simple', text: 'env' })).text
     expect(note).toContain('The user installed the sage-memory plugin.')
     for (const tool of ['search', 'for_file', 'update', 'delete', 'remember']) expect(note).toContain(TOOL(tool))
+    expect(note).toContain('scope project for a fact about this repository')
+    expect(note).toContain('scope user for a preference of the user that holds in every project, with no anchor')
     const r = await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
     expect(r.additionalContext).toBe(undefined)
     expect(bodiesOf(w, '/context/new')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', loop: 'main' }])

@@ -75,7 +75,7 @@ Each file costs one turn, so a project with 20 topic files takes 20 turns. The d
 
 ## Tools the model can call
 
-Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` and `delete` are listed at once, the rest wait behind ToolSearch. The system prompt's note about the plugin tells the model to look further with `search` and `for_file`, to fix a wrong note with `update` or `delete`, and to save a durable rule, decision, warning or root cause at once with `remember`. None asks for approval: each writes only to the mod's own stores. A session memory belongs to the session that wrote it.
+Fifteen tools, `mcp__sage-memory__<name>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` and `delete` are listed at once, the rest wait behind ToolSearch. The system prompt's note about the plugin tells the model to look further with `search` and `for_file`, to fix a wrong note with `update` or `delete`, and to save a durable rule, decision, warning or root cause at once with `remember`, without waiting for the turn to end: with scope `project` and an anchor for a fact about the repository, with scope `user` and no anchor for a preference that holds in every project. None asks for approval: each writes only to the mod's own stores. A session memory belongs to the session that wrote it.
 
 ## Install
 

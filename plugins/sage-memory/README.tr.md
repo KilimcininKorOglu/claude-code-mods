@@ -75,7 +75,7 @@ Her dosya bir turn sürer; 20 topic dosyalı bir proje 20 turn alır. Dizin adı
 
 ## Modelin çağırabildiği tool'lar
 
-On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` ve `delete` hemen listelenir, diğerleri ToolSearch arkasında bekler. System prompt'taki plugin notu modele şunları söyler: daha fazlasına `search` ve `for_file` ile baksın, yanlış bir notu `update` ya da `delete` ile düzeltsin, kalıcı bir kuralı, kararı, uyarıyı ya da kök nedeni `remember` ile hemen kaydetsin. Hiçbiri onay sormaz: her biri yalnız mod'un kendi depolarına yazar. Bir session kaydı onu yazan session'a aittir.
+On beş tool, `mcp__sage-memory__<ad>`: `remember`, `search`, `search_explain`, `for_file`, `for_path`, `graph`, `gather`, `update`, `delete`, `forget`, `recover`, `backfill_recoverable`, `verify`, `hygiene`, `candidates`. `remember`, `search`, `for_file`, `update` ve `delete` hemen listelenir, diğerleri ToolSearch arkasında bekler. System prompt'taki plugin notu modele şunları söyler: daha fazlasına `search` ve `for_file` ile baksın, yanlış bir notu `update` ya da `delete` ile düzeltsin, kalıcı bir kuralı, kararı, uyarıyı ya da kök nedeni turn'ün bitmesini beklemeden `remember` ile hemen kaydetsin: repository ile ilgili bir bilgiyi `project` scope ve bir anchor ile, her projede geçerli bir tercihi `user` scope ile ve anchor olmadan. Hiçbiri onay sormaz: her biri yalnız mod'un kendi depolarına yazar. Bir session kaydı onu yazan session'a aittir.
 
 ## Kurulum
 
