@@ -7,7 +7,7 @@
  * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, KINDS, PATH_ANCHOR_TYPES, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
+import { ANCHOR_TYPES, KINDS, PATH_ANCHOR_TYPES, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
 export const DEFAULT_MODEL = 'haiku'
@@ -302,20 +302,30 @@ export function keptOf(text: string): Op[] {
   return Array.isArray(candidates) ? candidates.filter(isKept).map(candidate => candidate.memory) : []
 }
 
+/**
+ * The kind a memory is written as: a file, symbol or command note left without an anchor becomes a fact,
+ * because the daemon refuses such a note whole, and the model named one with no anchor, or only anchors
+ * `anchorsOf` dropped (a path outside the project), in measured runs.
+ */
+export function keptKind(kind: Kind, anchors: readonly Anchor[]): Kind {
+  return anchors.length === 0 && STRUCTURAL_KINDS.includes(kind) ? 'fact' : kind
+}
+
 /** One memory the model kept, as the input `remember` takes, or nothing without a text. */
 export function additionOf(op: Op, sessionId: string, root: string): RememberInput | undefined {
   const text = trimmed(op.text, 2000)
   if (text === undefined) return undefined
   const scope = op.scope === 'user' ? 'user' : 'project'
+  const anchors = anchorsOf(op.anchors, scope, root)
   return {
     text,
     scope,
-    kind: kindOf(op.kind ?? op.type),
+    kind: keptKind(kindOf(op.kind ?? op.type), anchors),
     tags: tagsOf(op.tags),
     importance: importanceOf(op.priority),
     confidence: confidenceOf(op.confidence),
     persistence: 'long_lived',
-    anchors: anchorsOf(op.anchors, scope, root),
+    anchors,
     sources: [{ type: 'session', sessionId }],
   }
 }

@@ -5,7 +5,7 @@
  * value is known, else deleted, never kept as superseded or archived. Only the ids it was shown are
  * touched, and a permanent memory is never rewritten or deleted. Pure code; `register.tsx` makes every call.
  */
-import { anchorsOf, confidenceOf, importanceOf, kindOf, operationsOf } from './consolidate.ts'
+import { anchorsOf, confidenceOf, importanceOf, keptKind, kindOf, operationsOf } from './consolidate.ts'
 import { faint, listed, partsLine, type Line } from './link.ts'
 import type { Memory, RememberInput, UpdatePatch } from './shared/model.ts'
 
@@ -81,14 +81,15 @@ export type Writer = { sessionId: string; root: string }
 
 function inputOf(raw: Op, writer: Writer): RememberInput | undefined {
   if (typeof raw.text !== 'string' || raw.text.trim() === '') return undefined
+  const anchors = anchorsOf(raw.anchors, 'project', writer.root)
   return {
     text: raw.text.trim(),
     scope: 'project',
-    kind: kindOf(raw.type),
+    kind: keptKind(kindOf(raw.type), anchors),
     importance: importanceOf(raw.priority),
     confidence: typeof raw.confidence === 'number' ? confidenceOf(raw.confidence) : 0.85,
     tags: Array.isArray(raw.tags) ? raw.tags.filter((tag): tag is string => typeof tag === 'string').slice(0, 3) : undefined,
-    anchors: anchorsOf(raw.anchors, 'project', writer.root),
+    anchors,
     persistence: 'long_lived',
     sources: [{ type: 'session', sessionId: writer.sessionId }],
   }

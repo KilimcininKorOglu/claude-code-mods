@@ -1,4 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
+import { additionsOf } from '../hooks/consolidate.ts'
 import { stepsOf, tallyLine } from '../hooks/curate.ts'
 import type { Memory } from '../hooks/shared/model.ts'
 
@@ -67,6 +68,16 @@ describe('curate', () => {
       { type: 'command', command: 'make test' },
       { type: 'symbol', path: 'src/a.ts', symbol: 'run' },
     ])
+  })
+
+  test('a file or symbol note left with no anchor is written as a fact, because the daemon refuses such a note', () => {
+    const [merge, split] = steps([
+      { action: 'merge', targetIds: ['a'], text: 'One fact.', type: 'file_note', anchors: [{ type: 'file', path: '/elsewhere/x.ts' }] },
+      { action: 'split', targetId: 'b', items: [{ text: 'Rule.', type: 'symbol_note' }, { text: 'Kept.', type: 'file_note', anchors: [{ type: 'file', path: 'src/a.ts' }] }] },
+    ])
+    expect(merge?.kind === 'replace' ? merge.inputs.map(i => i.kind) : []).toEqual(['fact'])
+    expect(split?.kind === 'replace' ? split.inputs.map(i => i.kind) : []).toEqual(['fact', 'file_note'])
+    expect(additionsOf(JSON.stringify({ candidates: [{ is: 'keep', memory: { text: 'A note.', kind: 'reference', anchors: [] } }] }), 's1', '/repo').map(i => i.kind)).toEqual(['fact'])
   })
 
   test('the line names only the counts that moved, a deletion red and any other change yellow', () => {
