@@ -67,6 +67,17 @@ describe("a reminder on a file tool's result", () => {
     w.close()
   })
 
+  test('a memory related to the strongest find comes along with no shared anchor, and stays away once unlinked', async () => {
+    const w = world()
+    const neighbour = (await w.remember({ text: 'Session tokens rotate every twelve hours on the auth service' })).memory
+    const seed = (await w.remember({ text: 'The app entry must register the router before the store', anchors: [{ type: 'file', path: 'src/app.ts' }], related: [neighbour.id] })).memory
+    const linked = rankForTools(w.readers('s1', 'main'), READ_APP)
+    assert.deepEqual(linked.candidates.find(c => c.memory.id === neighbour.id)?.reasons, [`graph:related:${seed.id}`])
+    await w.run(op => updateMemory(op, { id: seed.id, patch: { related: [] } }))
+    assert.ok(!rankForTools(w.readers('s1', 'main'), READ_APP).candidates.some(c => c.memory.id === neighbour.id))
+    w.close()
+  })
+
   test('a context is reminded of a memory once, until it starts over', async () => {
     const w = world()
     const { memory } = await w.remember({ text: 'The app entry must register the router before the store', anchors: [{ type: 'file', path: 'src/app.ts' }] })

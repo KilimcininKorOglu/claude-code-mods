@@ -32,6 +32,7 @@ const PATCH_KEYS = new Set([
   'staleReason',
   'supersedes',
   'contradicts',
+  'related',
   'supersededBy',
   'force',
 ])
@@ -51,7 +52,7 @@ function checkKeys(patch: UpdatePatch): void {
 }
 
 function checkLists(patch: UpdatePatch): void {
-  for (const name of ['tags', 'anchors', 'supersedes', 'contradicts'] as const) {
+  for (const name of ['tags', 'anchors', 'supersedes', 'contradicts', 'related'] as const) {
     const list = patch[name]
     if (list !== undefined && (!Array.isArray(list) || list.length > MAX_ITEMS)) throw refused(`${name} must be an array of at most ${MAX_ITEMS} items`)
   }
@@ -59,6 +60,7 @@ function checkLists(patch: UpdatePatch): void {
   checkAnchors(patch.anchors)
   checkIds(patch.supersedes, 'supersedes')
   checkIds(patch.contradicts, 'contradicts')
+  checkIds(patch.related, 'related')
 }
 
 export function checkPatch(patch: UpdatePatch): void {
@@ -97,9 +99,9 @@ function checkEditable(existing: Memory, patch: UpdatePatch): void {
 
 /** Every relationship the patch names points at another live memory of the store `op` writes. */
 export function checkPatchRelations(op: Op, id: string, patch: UpdatePatch): void {
-  const self = [...(patch.supersedes ?? []), ...(patch.contradicts ?? [])].some(other => other.trim() === id)
-  if (self) throw refused('a memory cannot supersede or contradict itself')
-  checkRelations(op, { supersedes: patch.supersedes, contradicts: patch.contradicts })
+  const self = [...(patch.supersedes ?? []), ...(patch.contradicts ?? []), ...(patch.related ?? [])].some(other => other.trim() === id)
+  if (self) throw refused('a memory cannot supersede, contradict or relate to itself')
+  checkRelations(op, { supersedes: patch.supersedes, contradicts: patch.contradicts, related: patch.related })
 }
 
 function checkLinks(op: Op, existing: Memory, patch: UpdatePatch): void {
@@ -149,6 +151,7 @@ export function relationFields(patch: UpdatePatch): Partial<Memory> {
   }
   if (patch.supersedes !== undefined) fields.supersedes = listOf(patch.supersedes)
   if (patch.contradicts !== undefined) fields.contradicts = listOf(patch.contradicts)
+  if (patch.related !== undefined) fields.related = listOf(patch.related)
   if (patch.supersededBy !== undefined) fields.supersededBy = patch.supersededBy
   return fields
 }

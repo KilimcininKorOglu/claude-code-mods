@@ -214,6 +214,20 @@ describe('the graph', () => {
     w.close()
   })
 
+  test('a related link is one edge, needs a live memory of the same store, and goes when either side is deleted', async () => {
+    const w = world()
+    const a = await w.remember({ text: 'Deploys go through the staging branch before production' })
+    const b = await w.remember({ text: 'Staging deploys need the VPN profile named ops-eu', related: [a.memory.id] })
+    assert.deepEqual(w.edges().filter(edge => edge.includes(' related ')), [`mem:${b.memory.id} related mem:${a.memory.id}`])
+    const user = await w.remember({ text: 'Answers are written in Turkish for this person', scope: 'user' }, w.global)
+    await assert.rejects(w.remember({ text: 'Releases are cut from the main branch every Tuesday', related: [user.memory.id] }), /related names .* not a live memory in the project store/)
+    await assert.rejects(w.run(op => updateMemory(op, { id: a.memory.id, patch: { related: [a.memory.id] } })), /relate to itself/)
+    await w.run(op => updateMemory(op, { id: a.memory.id, patch: { status: 'deleted', force: true } }))
+    assert.deepEqual(w.edges().filter(edge => edge.includes(' related ')), [])
+    assert.equal(w.read(b.memory.id).related, undefined, 'the deleted id is taken out of the list')
+    w.close()
+  })
+
   test('a memory that is no longer live loses its anchor edges', async () => {
     const w = world()
     const { memory } = await w.remember({ text: MIGRATIONS, anchors: [{ type: 'file', path: 'src/app.ts' }] })

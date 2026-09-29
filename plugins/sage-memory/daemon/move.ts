@@ -33,7 +33,7 @@ function checkMovable(existing: Memory, patch: UpdatePatch): void {
 /** The relationships the patch names, checked against the target, which holds none of `existing`'s own. */
 function movedRelations(to: Op, existing: Memory, patch: UpdatePatch): Partial<Memory> {
   checkPatchRelations(to, existing.id, patch)
-  return { supersedes: undefined, contradicts: undefined, supersededBy: undefined, ...relationFields(patch) }
+  return { supersedes: undefined, contradicts: undefined, related: undefined, supersededBy: undefined, ...relationFields(patch) }
 }
 
 /**

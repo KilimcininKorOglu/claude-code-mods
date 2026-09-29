@@ -229,8 +229,18 @@ function structuralKeys(memory: Memory): Set<string> {
   return keys
 }
 
-/** The corroboration a graph neighbour needs: an anchor it shares with a seed, or two shared tags. */
+/** The seed a `related` link joins to the memory, in either direction. */
+function relatedSeed(memory: Memory, seeds: readonly Memory[]): Memory | undefined {
+  return seeds.find(seed => (memory.related ?? []).includes(seed.id) || (seed.related ?? []).includes(memory.id))
+}
+
+/**
+ * The corroboration a graph neighbour needs: a `related` link to a seed, an anchor it shares with
+ * a seed, or two shared tags.
+ */
 export function memoryStructuralRelevance(memory: Memory, seeds: readonly Memory[]): Relevance {
+  const linked = relatedSeed(memory, seeds)
+  if (linked) return { strength: 0.88, reasons: [`graph:related:${linked.id}`] }
   const keys = structuralKeys(memory)
   const tags = new Set(memory.tags.flatMap(informativeTerms))
   for (const seed of seeds) {

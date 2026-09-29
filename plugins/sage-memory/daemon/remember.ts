@@ -34,6 +34,7 @@ type Draft = {
   contextPolicy: ContextPolicy | undefined
   supersedes: string[]
   contradicts: string[]
+  related: string[]
   ownerSessionId: string | undefined
   expiresAt: string | undefined
 }
@@ -69,14 +70,20 @@ function draftOf(op: Op, input: RememberInput, text: string): Draft {
     contextPolicy: input.contextPolicy,
     supersedes: ids(input.supersedes),
     contradicts: ids(input.contradicts),
+    related: ids(input.related),
     ownerSessionId: scope === 'session' ? input.ownerSessionId : undefined,
     expiresAt: input.expiresAt,
   }
 }
 
 /** Every id a relationship names is a live memory of this store. */
-export function checkRelations(op: Op, lists: { supersedes?: readonly string[]; contradicts?: readonly string[] }): void {
-  for (const [name, list] of [['supersedes', lists.supersedes ?? []], ['contradicts', lists.contradicts ?? []]] as const) {
+export function checkRelations(op: Op, lists: { supersedes?: readonly string[]; contradicts?: readonly string[]; related?: readonly string[] }): void {
+  const named = [
+    ['supersedes', lists.supersedes ?? []],
+    ['contradicts', lists.contradicts ?? []],
+    ['related', lists.related ?? []],
+  ] as const
+  for (const [name, list] of named) {
     for (const id of list) {
       const target = readMemory(op.store.db, id)
       if (!target || target.status === 'deleted') throw refused(`${name} names ${id}, which is not a live memory in the ${storeLabel(op.store)} store`)
@@ -138,13 +145,14 @@ function mergedPersistence(existing: Persistence, incoming: Persistence | undefi
 }
 
 /** The lists of both writes joined, and no memory naming itself. */
-function mergedLists(existing: Memory, draft: Draft): Pick<Memory, 'tags' | 'anchors' | 'sources' | 'supersedes' | 'contradicts'> {
+function mergedLists(existing: Memory, draft: Draft): Pick<Memory, 'tags' | 'anchors' | 'sources' | 'supersedes' | 'contradicts' | 'related'> {
   return {
     tags: [...new Set([...existing.tags, ...draft.tags])],
     anchors: distinct([...existing.anchors, ...draft.anchors]),
     sources: distinct([...existing.sources, ...draft.sources]),
     supersedes: without([...new Set([...(existing.supersedes ?? []), ...draft.supersedes])], existing.id),
     contradicts: without([...new Set([...(existing.contradicts ?? []), ...draft.contradicts])], existing.id),
+    related: without([...new Set([...(existing.related ?? []), ...draft.related])], existing.id),
   }
 }
 
@@ -193,6 +201,7 @@ function added(op: Op, draft: Draft): Memory {
     sources: draft.sources,
     supersedes: draft.supersedes.length > 0 ? draft.supersedes : undefined,
     contradicts: draft.contradicts.length > 0 ? draft.contradicts : undefined,
+    related: draft.related.length > 0 ? draft.related : undefined,
     createdAt: op.now,
     updatedAt: op.now,
     ownerSessionId: draft.ownerSessionId,

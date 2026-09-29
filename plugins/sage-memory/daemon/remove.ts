@@ -18,6 +18,7 @@ export function tombstone(op: Op, memory: Memory, neverRemind = false): number {
     contextPolicy: neverRemind ? 'never' : memory.contextPolicy,
     supersedes: undefined,
     contradicts: undefined,
+    related: undefined,
     supersededBy: undefined,
     revision: memory.revision + 1,
     updatedAt: op.now,

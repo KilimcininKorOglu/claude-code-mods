@@ -7,7 +7,8 @@ import { parseMemory, sql, writeMemory } from './rows.ts'
 /**
  * The memory graph: `mem:<id>` nodes joined to the files, directories, symbols, commands and
  * agents their anchors name (`about_*`, weighted by the memory's confidence), to each other
- * (`supersedes`, `contradicts`), and paths joined to their parents (`related_to`, shared by every
+ * (`supersedes`, `contradicts`, `related`; one edge per pair, since a walk follows an edge both
+ * ways), and paths joined to their parents (`related_to`, shared by every
  * memory). A repeated edge keeps the larger weight.
  */
 
@@ -87,6 +88,7 @@ function relationshipEdges(memory: Memory): Edge[] {
   const pairs = [
     ...(memory.supersedes ?? []).map(id => ({ relation: 'supersedes', id })),
     ...(memory.contradicts ?? []).map(id => ({ relation: 'contradicts', id })),
+    ...(memory.related ?? []).map(id => ({ relation: 'related', id })),
   ]
   const self = memoryNode(memory.id)
   const seen = new Set<string>()
@@ -104,8 +106,8 @@ function relationshipEdges(memory: Memory): Edge[] {
 
 /**
  * Rewrites a memory's own edges from its record: its `about_*` edges while it is active or stale,
- * and its `supersedes` and `contradicts` edges always, so an id taken out of either list loses its
- * edge.
+ * and its `supersedes`, `contradicts` and `related` edges always, so an id taken out of a list loses
+ * its edge.
  */
 export function syncEdges(db: DatabaseSync, memory: Memory, now: string): void {
   const from = memoryNode(memory.id)
@@ -118,7 +120,7 @@ export function syncEdges(db: DatabaseSync, memory: Memory, now: string): void {
   replaceEdges(db, from, 'about_*', about, now)
   anchors.forEach(anchor => structureEdges(db, anchor, memory.confidence, now))
   const relationships = relationshipEdges(memory)
-  for (const relation of ['supersedes', 'contradicts']) {
+  for (const relation of ['supersedes', 'contradicts', 'related']) {
     replaceEdges(db, from, relation, relationships.filter(edge => edge.relation === relation), now)
   }
 }
@@ -141,16 +143,19 @@ const REFERRING = `
   WHERE id != ? AND status != 'deleted' AND (
     json_extract(data, '$.supersededBy') = ?
     OR EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data, '$.supersedes'), '[]')) WHERE value = ?)
-    OR EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data, '$.contradicts'), '[]')) WHERE value = ?))`
+    OR EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data, '$.contradicts'), '[]')) WHERE value = ?)
+    OR EXISTS (SELECT 1 FROM json_each(COALESCE(json_extract(data, '$.related'), '[]')) WHERE value = ?))`
 
 /** Takes a deleted memory's id out of every live memory that names it. */
 export function clearReferences(db: DatabaseSync, id: string, now: string): void {
-  const rows = sql(db, REFERRING).all(id, id, id, id) as Array<{ id: string; data: string }>
+  const rows = sql(db, REFERRING).all(id, id, id, id, id) as Array<{ id: string; data: string }>
   for (const other of rows.map(parseMemory)) {
+    const related = other.related?.filter(value => value !== id)
     const next: Memory = {
       ...other,
       supersedes: other.supersedes?.filter(value => value !== id),
       contradicts: other.contradicts?.filter(value => value !== id),
+      related: related !== undefined && related.length > 0 ? related : undefined,
       supersededBy: other.supersededBy === id ? undefined : other.supersededBy,
       revision: other.revision + 1,
       updatedAt: now,

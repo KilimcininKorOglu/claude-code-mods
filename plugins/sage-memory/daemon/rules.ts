@@ -208,10 +208,11 @@ function checkEnums(input: RememberInput): void {
 }
 
 function checkShape(input: RememberInput): void {
-  checkListLengths({ tags: input.tags, anchors: input.anchors, sources: input.sources, supersedes: input.supersedes, contradicts: input.contradicts })
+  checkListLengths({ tags: input.tags, anchors: input.anchors, sources: input.sources, supersedes: input.supersedes, contradicts: input.contradicts, related: input.related })
   checkTags(input.tags)
   checkIds(input.supersedes, 'supersedes')
   checkIds(input.contradicts, 'contradicts')
+  checkIds(input.related, 'related')
   for (const name of ['importance', 'confidence', 'freshness'] as const) checkScore(input[name], name)
   if (input.expiresAt !== undefined && (typeof input.expiresAt !== 'string' || !Number.isFinite(Date.parse(input.expiresAt)))) {
     throw refused('expiresAt must be an ISO-8601 time')

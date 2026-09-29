@@ -100,6 +100,8 @@ export type Memory = {
   supersedes?: string[]
   supersededBy?: string
   contradicts?: string[]
+  /** Memories of the same store that are read together with this one; the tool reminder walks to them. */
+  related?: string[]
   createdAt: string
   updatedAt: string
   lastAccessedAt?: string
@@ -129,6 +131,7 @@ export type RememberInput = {
   /** Ids this memory replaces; the ones still active or stale become superseded by it. */
   supersedes?: string[]
   contradicts?: string[]
+  related?: string[]
   ownerSessionId?: string
   expiresAt?: string
 }
@@ -162,6 +165,7 @@ export type UpdatePatch = {
   staleReason?: 'manual' | 'review'
   supersedes?: string[]
   contradicts?: string[]
+  related?: string[]
   /** The memory that replaces this one; needs the resulting status `superseded`. */
   supersededBy?: string
   /** Needed for `status: 'deleted'`, which then takes no other field. */

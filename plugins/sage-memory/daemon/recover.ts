@@ -124,6 +124,7 @@ function revived(op: Op, original: Memory): Memory {
     supersedes: [original.id],
     supersededBy: undefined,
     contradicts: undefined,
+    related: undefined,
     reminderCount: 0,
     useCount: 0,
     createdAt: op.now,
