@@ -31,11 +31,17 @@ export function roundId(hunt: Hunt): string {
   return `${hunt.id}-r${hunt.round}`
 }
 
-/** The outcome label the answer begins with, markdown marks stripped. */
+/**
+ * The outcome label of the first line that begins with one, markdown marks stripped. The model sometimes
+ * writes a sentence before the label (measured), so every line is read, not only the first.
+ */
 export function outcomeOf(answer: string): Outcome | undefined {
-  const line = answer.split('\n').find(l => l.trim() !== '') ?? ''
-  const bare = line.replace(/[*`#>_]/g, '').replace(/^\s*[-:]?\s*/, '').trim().toLowerCase()
-  return OUTCOMES.find(o => bare === o || new RegExp(`^${o}(?![\\w-])`).test(bare))
+  for (const line of answer.split('\n')) {
+    const bare = line.replace(/[*`#>_]/g, '').replace(/^\s*[-:]?\s*/, '').trim().toLowerCase()
+    const hit = OUTCOMES.find(o => bare === o || new RegExp(`^${o}(?![\\w-])`).test(bare))
+    if (hit !== undefined) return hit
+  }
+  return undefined
 }
 
 /** The `fingerprint:` line of a round's answer. */

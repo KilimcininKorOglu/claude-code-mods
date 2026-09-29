@@ -42,8 +42,9 @@ describe('outcomeOf and fingerprintOf', () => {
     expect(outcomeOf('# no-proven-bug')).toBe('no-proven-bug')
   })
 
-  test('does not read a label that is only mentioned later or is a longer word', async () => {
-    expect(outcomeOf('I looked around.\nblocked')).toBeUndefined()
+  test('reads a label after a sentence of its own, but not a label inside a sentence or a longer word', async () => {
+    expect(outcomeOf('That is the whole scope.\n\nno-proven-bug\n\nfingerprint: none')).toBe('no-proven-bug')
+    expect(outcomeOf('The round was not blocked at all.')).toBeUndefined()
     expect(outcomeOf('fixed-and-verified-ish')).toBeUndefined()
   })
 
