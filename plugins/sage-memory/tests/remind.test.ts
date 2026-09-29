@@ -83,11 +83,11 @@ describe('remind', () => {
     expect(ids({ tool_name: 'Bash', tool_input: { command: 'ls -la' } })).toEqual([])
   })
 
-  test('an answer uses a memory by its id, its opening text, or enough shared terms', () => {
+  test('an answer uses a memory only by naming its id; shared words or its opening text are no evidence', () => {
     const idle = memory('m1', 'The daemon closes itself five minutes after its last request.')
     const pnpm = memory('m2', 'Install packages with pnpm, never with npm, in this repository.')
     const other = memory('m3', 'Tests run with the cache disabled on every change.')
-    const answer = 'As m2 notes, and since the daemon closes itself after five minutes idle, restart it.'
-    expect(usedBy(answer, [idle, pnpm, other]).map(m => m.id)).toEqual(['m1', 'm2'])
+    const answer = 'As m2 notes, and since the daemon closes itself five minutes after its last request, restart it.'
+    expect(usedBy(answer, [idle, pnpm, other]).map(m => m.id)).toEqual(['m2'])
   })
 })

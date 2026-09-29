@@ -5,7 +5,7 @@
  */
 import { wordLine, type Line } from './link.ts'
 import type { Anchor, Memory, Ranked } from './shared/model.ts'
-import { collapseSpace, textKey, tokenize } from './shared/text.ts'
+import { collapseSpace, textKey } from './shared/text.ts'
 
 /** Tools that read a file; each one's result carries the active memories about it. */
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LSP'])
@@ -262,35 +262,12 @@ export function spawnPrompt(block: string, prompt: string): string {
   return `${block}\n\n${prompt}`
 }
 
-/** A memory counts as reminded only with at least this many distinct terms (SAGE's tracker). */
-const TRACK_MIN_TERMS = 4
-const OVERLAP_MIN_TERMS = 3
-const OVERLAP_MIN_SHARE = 0.5
-const PREFIX_CHARS = 80
-
-export function isTracked(memory: Memory): boolean {
-  return tokenize(memory.text).length >= TRACK_MIN_TERMS
-}
-
-function overlaps(memory: Memory, answerTerms: ReadonlySet<string>): boolean {
-  const terms = tokenize(memory.text)
-  const shared = terms.filter(term => answerTerms.has(term)).length
-  return shared >= OVERLAP_MIN_TERMS && shared / Math.min(terms.length, answerTerms.size) >= OVERLAP_MIN_SHARE
-}
-
 /**
- * The reminded memories an answer used, by SAGE's three rules in order: the answer names the id,
- * holds the first 80 characters of the text, or shares at least three terms and half the smaller set.
+ * The reminded memories an answer names by id. Words the answer shares with a memory are no
+ * evidence: they depend on the language of each, and an answer that says a memory is wrong shares them too.
  */
 export function usedBy(answer: string, reminded: readonly Memory[]): Memory[] {
-  const key = textKey(answer)
-  const answerTerms = new Set(tokenize(answer))
-  return reminded.filter(memory => {
-    if (answer.includes(memory.id)) return true
-    const text = textKey(memory.text)
-    if (text.length >= VISIBLE_MIN && key.includes(text.slice(0, PREFIX_CHARS))) return true
-    return overlaps(memory, answerTerms)
-  })
+  return reminded.filter(memory => answer.includes(memory.id))
 }
 
 /** The shortest anchored command a Bash command must hold to act on it, so `ls` does not match every listing. */

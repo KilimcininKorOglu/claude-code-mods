@@ -26,7 +26,6 @@ import {
   actedOn,
   CHANGE_TOOLS,
   isReminding,
-  isTracked,
   MAIN_LOOP,
   globalReminder,
   pathsOf,
@@ -772,7 +771,7 @@ type Block = { text: string; sent: Memory[] }
 async function record($: EngineInterface, state: State, loopKey: string, trigger: string, block: Block): Promise<void> {
   const loop = loopOf(state, loopKey)
   loop.visible = seen(loop.visible, block.text)
-  loop.reminded.push(...block.sent.filter(isTracked))
+  loop.reminded.push(...block.sent)
   state.counts.reminded += block.sent.length
   await ask($, state, '/memory/reminded', { sessionId: await $.session.id(), loop: loopKey, trigger, ids: block.sent.map(memory => memory.id) })
   await show($, state)
