@@ -12,7 +12,7 @@ after(cleanUp)
 const FACT = 'Integration tests run against a disposable Postgres container'
 
 function review(w: World, targetMemoryId: string, suggestedAction: ProposeInput['suggestedAction']) {
-  return w.run(op => propose(op, { text: 'This memory was reminded ten times and never used', targetMemoryId, reviewReason: 'reminded_never_used', suggestedAction }))
+  return w.run(op => propose(op, { text: 'This memory went stale and nobody touched it for 90 days', targetMemoryId, reviewReason: 'freshness_low', suggestedAction }))
 }
 
 describe('proposals', () => {

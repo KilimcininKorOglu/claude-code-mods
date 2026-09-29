@@ -237,4 +237,16 @@ describe('usage counters', () => {
     assert.equal(stored.updatedAt, memory.updatedAt)
     w.close()
   })
+
+  test('the global rules sent to every context count toward no reminder, and are still audited', async () => {
+    const w = world()
+    const { memory } = await w.remember({ text: MIGRATIONS })
+    await w.run(op => recordReminder(op, [memory.id], 'global', 's1'))
+    const stored = w.read(memory.id)
+    assert.equal(stored.reminderCount, undefined)
+    assert.equal(stored.lastAccessedAt, undefined)
+    const audited = w.run(op => op.store.db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'memory.reminded'").get() as { n: number })
+    assert.equal((await audited).n, 1)
+    w.close()
+  })
 })

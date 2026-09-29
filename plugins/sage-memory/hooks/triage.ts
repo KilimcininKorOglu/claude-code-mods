@@ -63,11 +63,9 @@ function anchorScore(m: Memory, now: number): number {
   return Math.min(15 + Math.min(new Set(m.anchors.map(a => a.type)).size * 3, 10), 25)
 }
 
+/** A counted use raises the score; no counted use scores as a memory never reminded, because a use the plugin did not see is no evidence against it. */
 function usageScore(m: Memory): number {
-  if ((m.useCount ?? 0) > 0) return Math.min(20 + Math.min(5, m.useCount ?? 0), 25)
-  const reminded = m.reminderCount ?? 0
-  if (reminded >= 5) return 3
-  return reminded >= 1 ? 8 : 10
+  return (m.useCount ?? 0) > 0 ? Math.min(20 + Math.min(5, m.useCount ?? 0), 25) : 10
 }
 
 function freshnessScore(m: Memory, now: number): number {
@@ -111,12 +109,15 @@ function cut(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 3)}...`
 }
 
+/**
+ * What the rating model reads about one memory. The reminder and use counts are left out: a use is
+ * only what the plugin could see, so "reminded 50x, used 0x" would read as a verdict it is not.
+ */
 export function ratePrompt(m: Memory, score: Score, now: number): string {
   const anchors = m.anchors.length > 0 ? m.anchors.map(a => a.path ?? a.symbol ?? a.command ?? a.type).slice(0, 3).join(', ') : 'none'
   return [
     `TEXT: "${cut(m.text, 300)}"`,
     `ANCHORS: ${anchors} | KIND: ${m.kind}`,
-    `REMINDED: ${m.reminderCount ?? 0}x | USED: ${m.useCount ?? 0}x`,
     `AGE: ${daysSince(m.createdAt, now)}d | SCORE: ${score.total}/100 | IMPORTANCE: ${m.importance.toFixed(1)}`,
   ].join('\n')
 }

@@ -437,7 +437,11 @@ describe('memory reminders', () => {
     expect(prompt).toContain('<memory id="g2"')
     expect(prompt.match(/<memory id="g1"/g)).toHaveLength(1)
     expect(prompt).toContain('[sage-memory] project memory for this agent and its task\n<memory id="m2"')
-    expect(bodiesOf(w, '/memory/reminded').at(-1)).toMatchObject({ trigger: 'subagent', ids: ['g1', 'g2', 'm2'] })
+    // The rules go under the global trigger, which counts no reminder; the agent's own memory under subagent.
+    expect(bodiesOf(w, '/memory/reminded').slice(-2)).toMatchObject([
+      { loop: 'agent-7', trigger: 'global', ids: ['g1', 'g2'] },
+      { loop: 'agent-7', trigger: 'subagent', ids: ['m2'] },
+    ])
   })
 
   withSidebar('an answer that names a reminded memory counts one use, once', async ($, on) => {

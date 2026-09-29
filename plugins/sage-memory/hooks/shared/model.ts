@@ -333,10 +333,6 @@ export type HygieneOptions = {
   staleReviewDays?: number
   /** A memory under 0.5 confidence untouched this many days gets a review. Default 30. */
   lowConfidenceReviewDays?: number
-  /** A memory reminded `unusedMinReminders` times and never used gets a review this many days after it was last reminded. Default 30. */
-  unusedReviewDays?: number
-  /** Default 10. */
-  unusedMinReminders?: number
   /** A session memory without `expiresAt` is deleted this many days after its last change. Default 7. */
   sessionRetentionDays?: number
   /** Tombstones this many days old are removed for good. Off unless given. */

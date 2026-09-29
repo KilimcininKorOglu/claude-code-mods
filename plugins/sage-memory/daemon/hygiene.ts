@@ -43,8 +43,6 @@ function limitsOf(options: HygieneOptions): ReviewLimits {
   return {
     staleMs: (options.staleReviewDays ?? 90) * DAY_MS,
     lowConfidenceMs: (options.lowConfidenceReviewDays ?? 30) * DAY_MS,
-    unusedMs: (options.unusedReviewDays ?? 30) * DAY_MS,
-    minReminders: options.unusedMinReminders ?? 10,
     sessionRetentionMs: (options.sessionRetentionDays ?? 7) * DAY_MS,
   }
 }
@@ -153,8 +151,8 @@ export async function runHygiene(job: HygieneJob): Promise<HygieneReport> {
   return report
 }
 
-const DAY_FIELDS = ['staleReviewDays', 'lowConfidenceReviewDays', 'unusedReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays'] as const
-const OPTION_KEYS: ReadonlySet<string> = new Set([...DAY_FIELDS, 'verify', 'verifyDepth', 'nearDedup', 'unusedMinReminders'])
+const DAY_FIELDS = ['staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays'] as const
+const OPTION_KEYS: ReadonlySet<string> = new Set([...DAY_FIELDS, 'verify', 'verifyDepth', 'nearDedup'])
 
 function checkFlags(options: Record<string, unknown>): void {
   for (const key of ['verify', 'nearDedup']) {
@@ -167,12 +165,9 @@ function checkFlags(options: Record<string, unknown>): void {
 
 const isDays = (value: unknown): boolean => typeof value === 'number' && Number.isFinite(value) && value > 0
 
-const isCount = (value: unknown): boolean => typeof value === 'number' && Number.isInteger(value) && value >= 1
-
 function checkNumbers(options: Record<string, unknown>): void {
   const wrongDays = DAY_FIELDS.find(key => options[key] !== undefined && !isDays(options[key]))
   if (wrongDays !== undefined) throw refused(`options.${wrongDays} must be a number of days above 0`)
-  if (options.unusedMinReminders !== undefined && !isCount(options.unusedMinReminders)) throw refused('options.unusedMinReminders must be a whole number from 1')
 }
 
 /** The options of a hygiene request, every field checked; a field it does not know is refused. */

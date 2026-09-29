@@ -95,7 +95,7 @@ describe('reminder scores', () => {
     assert.ok(base > 0.8 && base <= 1)
     assert.ok(reminderScore(memoryOf({}), 0.95) < base, 'an unanchored memory scores lower')
     assert.ok(reminderScore({ ...anchored, persistence: 'short_lived' }, 0.95) < base)
-    assert.ok(reminderScore({ ...anchored, reminderCount: 5 }, 0.95) < base, 'reminded five times, never used')
+    assert.equal(reminderScore({ ...anchored, reminderCount: 5 }, 0.95), base, 'reminders without a counted use are no evidence against a memory')
     assert.ok(reminderScore({ ...anchored, useCount: 2 }, 0.9) > reminderScore(anchored, 0.9), 'a used memory scores higher')
   })
 

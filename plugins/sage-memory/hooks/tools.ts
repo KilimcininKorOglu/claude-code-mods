@@ -243,14 +243,13 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'hygiene',
     listed: false,
     description:
-      'Verify anchors, supersede exact and near duplicates, mark contradictions, open review candidates for stale, low-confidence and unused memories, delete expired session memories, and forget the reminder records of sessions whose transcripts are gone. Never deletes a live project or user memory; `purgeDeletedAfterDays` removes tombstones older than N days for good.',
+      'Verify anchors, supersede exact and near duplicates, mark contradictions, open review candidates for stale and low-confidence memories, delete expired session memories, and forget the reminder records of sessions whose transcripts are gone. Never deletes a live project or user memory; `purgeDeletedAfterDays` removes tombstones older than N days for good.',
     inputSchema: object({
       verify: yes('Check anchors. Default true.'),
       verifyDepth: choice(VERIFY_DEPTHS, 'existence (default), content, or git.'),
       nearDedup: yes('Merge near duplicates. Default true.'),
       staleReviewDays: number(0, 3650),
       lowConfidenceReviewDays: number(0, 3650),
-      unusedReviewDays: number(0, 3650),
       sessionRetentionDays: number(0, 3650),
       purgeDeletedAfterDays: number(0, 3650, 'Opt-in: remove tombstones deleted more than this many days ago. Omit to keep them.'),
     }),
@@ -303,7 +302,7 @@ function picked(input: Input, keys: readonly string[]): Record<string, unknown> 
 
 const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'supersedes', 'contradicts']
 const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
-const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'unusedReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
+const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 
 /** A memory the model writes: a session memory belongs to this session, and each carries this session as its source. */
 function rememberCall(input: Input, sessionId: string): Call {

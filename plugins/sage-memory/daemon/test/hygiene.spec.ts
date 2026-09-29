@@ -168,23 +168,18 @@ describe('hygiene reviews', () => {
     w.close()
   })
 
-  test('an unused memory, a stale one and a doubtful one get a review each; a critical one is investigated, not deleted', async () => {
+  test('a stale memory and a doubtful one get a review each; reminders without a counted use open none', async () => {
     const w = world()
-    const unused = await remembered(w, { text: 'The cache layer keeps sessions for an hour' })
-    const critical = await remembered(w, { text: 'Production deploys need two approvals', importance: 0.95 })
-    const permanent = await remembered(w, { text: 'The billing service owns the invoice tables', persistence: 'permanent' })
-    const audience = await remembered(w, { text: 'Reviewers check the migration order first', audience: { roles: ['reviewer'] } })
-    for (const memory of [unused, critical, permanent, audience]) await patched(w, memory.id, { reminderCount: 10 })
+    const reminded = await remembered(w, { text: 'The cache layer keeps sessions for an hour' })
+    await patched(w, reminded.id, { reminderCount: 10 })
     const stale = await remembered(w, { text: 'The legacy importer reads CSV files from the inbox folder' })
     await w.run(op => updateMemory(op, { id: stale.id, patch: { status: 'stale' } }))
     const doubtful = await remembered(w, { text: 'The search index may rebuild itself every night', confidence: 0.4 })
     const report = await hygieneAt(w, 91)
-    assert.equal(report.reviewsOpened, 4)
+    assert.equal(report.reviewsOpened, 2)
     assert.deepEqual(
       pendingReviews(w),
       byTarget([
-        [unused.id, 'reminded_never_used', 'delete'],
-        [critical.id, 'reminded_never_used', 'investigate'],
         [stale.id, 'freshness_low', 'investigate'],
         [doubtful.id, 'confidence_low', 'investigate'],
       ]),
@@ -194,8 +189,7 @@ describe('hygiene reviews', () => {
 
   test('a memory a person reviewed is not asked about again while it says the same thing', async () => {
     const w = world()
-    const memory = await remembered(w, { text: 'The cache layer keeps sessions for an hour' })
-    await patched(w, memory.id, { reminderCount: 10 })
+    const memory = await remembered(w, { text: 'The cache layer may keep sessions for an hour', confidence: 0.4 })
     assert.equal((await hygieneAt(w, 31)).reviewsOpened, 1)
     const [review] = selectCandidates(w.project.db, "SELECT id, data FROM candidates WHERE status = 'pending'")
     await w.run(op => reject(op, { id: review?.id ?? '', reason: 'still true' }))
@@ -274,11 +268,11 @@ describe('hygiene runs', () => {
   })
 
   test('each option is checked, and one it does not know is refused', () => {
-    assert.deepEqual(checkedOptions({ verifyDepth: 'git', staleReviewDays: 30, unusedMinReminders: 3 }), { verifyDepth: 'git', staleReviewDays: 30, unusedMinReminders: 3 })
+    assert.deepEqual(checkedOptions({ verifyDepth: 'git', staleReviewDays: 30 }), { verifyDepth: 'git', staleReviewDays: 30 })
     assert.throws(() => checkedOptions({ retentionDays: 90 }), /^Error: options take no retentionDays$/)
+    assert.throws(() => checkedOptions({ unusedMinReminders: 3 }), /^Error: options take no unusedMinReminders$/)
     assert.throws(() => checkedOptions({ verifyDepth: 'deep' }), /options\.verifyDepth must be one of: existence, content, git/)
     assert.throws(() => checkedOptions({ purgeDeletedAfterDays: 0 }), /options\.purgeDeletedAfterDays must be a number of days above 0/)
-    assert.throws(() => checkedOptions({ unusedMinReminders: 1.5 }), /options\.unusedMinReminders must be a whole number from 1/)
     assert.throws(() => checkedOptions({ nearDedup: 'no' }), /options\.nearDedup must be true or false/)
   })
 })

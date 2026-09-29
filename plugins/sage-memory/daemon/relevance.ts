@@ -304,12 +304,14 @@ const DURABLE_KINDS: ReadonlySet<Kind> = new Set<Kind>([
   'fleet_convention',
 ])
 
-/** A memory the model drew on gains; one reminded three times and never used loses. */
+/**
+ * A memory the model drew on gains. A memory with no counted use loses nothing: a use is only what
+ * the plugin could see, so a reminded memory the model followed without a visible trace is no
+ * evidence against the memory.
+ */
 function usageTerm(memory: Memory): number {
   const uses = memory.useCount ?? 0
-  const reminders = memory.reminderCount ?? 0
-  if (uses > 0) return Math.min(0.14, 0.05 + uses * 0.02)
-  return reminders >= 3 ? -Math.min(0.18, 0.05 + reminders * 0.012) : 0
+  return uses > 0 ? Math.min(0.14, 0.05 + uses * 0.02) : 0
 }
 
 /**
@@ -330,12 +332,10 @@ export function reminderScore(memory: Memory, relationStrength: number): number 
 /** How much of a prompt reminder's score the metadata alone carries; relevance carries the rest. */
 const METADATA_WEIGHT = 0.3
 
-/** The score a prompt reminder gates by: the metadata scaled by relevance, then use and anchoring. */
+/** The score a prompt reminder gates by: the metadata scaled by relevance, then use and anchoring; no counted use costs nothing (see `usageTerm`). */
 export function turnScore(memory: Memory, relevance: number): number {
   const uses = memory.useCount ?? 0
-  const reminders = memory.reminderCount ?? 0
   const useBoost = uses > 0 ? Math.min(0.1, 0.04 + uses * 0.015) : 0
-  const unusedPenalty = reminders >= 3 && uses === 0 ? Math.min(0.12, 0.03 + reminders * 0.01) : 0
   const anchorBoost = memory.anchors.length > 0 ? 0.03 : -0.04
-  return clamp01(metadataScore(memory) * (METADATA_WEIGHT + relevance * (1 - METADATA_WEIGHT)) + useBoost + anchorBoost - unusedPenalty)
+  return clamp01(metadataScore(memory) * (METADATA_WEIGHT + relevance * (1 - METADATA_WEIGHT)) + useBoost + anchorBoost)
 }

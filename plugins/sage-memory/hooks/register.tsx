@@ -882,14 +882,26 @@ async function promptRelated($: EngineInterface, state: State, text: string): Pr
 
 type Spawn = { prompt: string; subagentType: string; permissionMode?: string }
 
+type SpawnBlock = Block & { rules: Memory[] }
+
 /** What a subagent starts with: the user's global rules, then its own memories unless the person turned them off; or nothing. */
-async function forSubagent($: EngineInterface, state: State, e: Spawn): Promise<Block | undefined> {
+async function forSubagent($: EngineInterface, state: State, e: Spawn): Promise<SpawnBlock | undefined> {
   await follow($, state)
   if (!(await isReady(state))) return undefined
   const rules = await ask<Memory[]>($, state, '/remind/global', {}, REMIND_MS)
   const ranking = await subagentRanking($, state, e)
   const block = subagentReminder(rules, ranking.audience, ranking.task)
   return block.sent.length > 0 ? block : undefined
+}
+
+/**
+ * Records a subagent's reminder in two parts: its global rules under the `global` trigger, which
+ * the daemon counts toward no memory's reminders, and its own memories under `subagent`.
+ */
+async function recordSpawn($: EngineInterface, state: State, agentId: string, block: SpawnBlock): Promise<void> {
+  const own = block.sent.filter(memory => !block.rules.includes(memory))
+  const parts = [{ trigger: 'global', sent: block.rules }, { trigger: 'subagent', sent: own }].filter(part => part.sent.length > 0)
+  for (const [i, part] of parts.entries()) await record($, state, agentId, part.trigger, { text: i === 0 ? block.text : '', sent: part.sent })
 }
 
 /** The memories written for a subagent and the ones about its task; none while the person turned them off. */
@@ -1577,7 +1589,7 @@ export const register: Register = on => {
     if (block === undefined) return next(e)
     const r = await next({ ...e, prompt: spawnPrompt(block.text, e.prompt) })
     const agentId = r.agentId
-    if (agentId !== undefined) await guarded($, 'recording the subagent reminder', () => record($, state, agentId, 'subagent', block))
+    if (agentId !== undefined) await guarded($, 'recording the subagent reminder', () => recordSpawn($, state, agentId, block))
     return r
   })
 

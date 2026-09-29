@@ -26,7 +26,9 @@ describe('triage', () => {
   test('phase 2 adds the five sub-scores into its bands', () => {
     const anchored = memory('a', { anchors: [{ type: 'file', path: 'a.ts' }, { type: 'symbol', symbol: 'f', path: 'a.ts' }], tags: ['x', 'y', 'z'], useCount: 2, lastVerifiedAt: '2026-09-20T00:00:00Z' })
     expect(valueScore(anchored, NOW)).toEqual({ total: 21 + 22 + 20 + 12 + 10, band: 'keep' })
-    expect(valueScore(memory('b', { reminderCount: 6, persistence: 'short_lived', kind: 'summary', text: 'short' }), NOW)).toEqual({ total: 0 + 3 + 5 + 2 + 3, band: 'discard' })
+    expect(valueScore(memory('b', { persistence: 'short_lived', kind: 'summary', text: 'short' }), NOW)).toEqual({ total: 0 + 10 + 5 + 2 + 3, band: 'discard' })
+    // No counted use is no evidence against a memory: six reminders without one score as none.
+    expect(valueScore(memory('c', { reminderCount: 6 }), NOW).total).toBe(valueScore(memory('c'), NOW).total)
   })
 
   test('a reply without a 1-5 score is no rating; a low rating deletes, and importance 0.9 is left to a person', () => {

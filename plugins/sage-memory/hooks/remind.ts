@@ -245,15 +245,16 @@ export function globalReminder(rules: readonly Memory[], framed: boolean): { tex
 
 /**
  * What a subagent starts with: the user's global rules in full, then the memories written for its
- * role or mode and the ones about its task, each once and within the subagent budget.
+ * role or mode and the ones about its task, each once and within the subagent budget. `rules` names
+ * the global rules it sent, which are recorded apart from the rest.
  */
-export function subagentReminder(rules: readonly Memory[], audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[] } {
+export function subagentReminder(rules: readonly Memory[], audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[]; rules: Memory[] } {
   const global = globalReminder(rules, true)
   const all = [...audience, ...task.map(item => item.memory)].filter(memory => !rules.some(rule => rule.id === memory.id))
   const memories = all.filter((memory, i) => all.findIndex(other => other.id === memory.id) === i)
   const own = reminderBlock('project memory for this agent and its task', memories, SUBAGENT_CHARS, global.sent.length === 0)
   const blocks = [global, own].filter(block => block.sent.length > 0)
-  return { text: blocks.map(block => block.text).join('\n\n'), sent: blocks.flatMap(block => block.sent) }
+  return { text: blocks.map(block => block.text).join('\n\n'), sent: blocks.flatMap(block => block.sent), rules: global.sent }
 }
 
 /** The prompt that goes to a subagent: the reminder block first, then the task as it was written. */

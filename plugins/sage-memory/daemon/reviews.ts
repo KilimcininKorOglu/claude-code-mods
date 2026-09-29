@@ -11,7 +11,7 @@ import { isPossiblyContradictory } from './rules.ts'
 
 /**
  * Hygiene's reviews and deletions, ported from SAGE: a pair that cannot both hold is flagged, a
- * memory that looks unused, stale or doubtful gets a review a person decides, an expired session
+ * memory that looks stale or doubtful gets a review a person decides, an expired session
  * memory is deleted, and old tombstones can be removed for good. A memory with a pending review
  * gets no second one, and one a person reviewed in the last 90 days is not asked about again while
  * it says the same thing.
@@ -21,9 +21,6 @@ const DAY_MS = 86_400_000
 
 /** How many memories of one bucket the pairwise contradiction pass compares, the newest changes first. */
 const CONTRADICTION_BUCKET_CAP = 80
-
-/** At or above this importance a memory is never proposed for deletion by a statistical signal. */
-const CRITICAL_IMPORTANCE = 0.9
 
 /** How long a person's review keeps the same memory from being asked about again. */
 const REVIEW_SUPPRESSION_MS = 90 * DAY_MS
@@ -104,7 +101,7 @@ export function flagContradictions(op: Op): { contradictions: number; reviews: n
   return { contradictions: flagged.size, reviews }
 }
 
-export type ReviewLimits = { staleMs: number; lowConfidenceMs: number; unusedMs: number; minReminders: number; sessionRetentionMs: number }
+export type ReviewLimits = { staleMs: number; lowConfidenceMs: number; sessionRetentionMs: number }
 
 const REVIEWABLE = "SELECT id FROM memories WHERE status NOT IN ('deleted', 'superseded', 'contradicted') AND persistence != 'permanent' ORDER BY id"
 
@@ -126,12 +123,6 @@ function sessionExpired(memory: Memory, nowMs: number, limits: ReviewLimits): bo
   return nowMs - Date.parse(memory.updatedAt) >= limits.sessionRetentionMs
 }
 
-/** Reminded often enough and never used, for long enough; a memory written for an audience has no use to count. */
-function unused(memory: Memory, age: number, limits: ReviewLimits): boolean {
-  const neverUsed = (memory.reminderCount ?? 0) >= limits.minReminders && (memory.useCount ?? 0) === 0
-  return memory.status === 'active' && memory.scope !== 'session' && memory.audience === undefined && neverUsed && age >= limits.unusedMs
-}
-
 /** A doubtful memory left alone long enough, or a stale one left alone longer. */
 function agedReview(memory: Memory, age: number, limits: ReviewLimits): Review | undefined {
   if (memory.confidence < 0.5 && age >= limits.lowConfidenceMs) return { reason: 'confidence_low', action: 'investigate' }
@@ -143,7 +134,6 @@ function agedReview(memory: Memory, age: number, limits: ReviewLimits): Review |
 function reviewOf(memory: Memory, nowMs: number, limits: ReviewLimits): Review | undefined {
   const age = nowMs - Date.parse(memory.lastAccessedAt ?? memory.updatedAt)
   if (memory.expiresAt !== undefined && Date.parse(memory.expiresAt) <= nowMs) return { reason: 'expires_at_passed', action: 'delete' }
-  if (unused(memory, age, limits)) return { reason: 'reminded_never_used', action: memory.importance >= CRITICAL_IMPORTANCE ? 'investigate' : 'delete' }
   return agedReview(memory, age, limits)
 }
 

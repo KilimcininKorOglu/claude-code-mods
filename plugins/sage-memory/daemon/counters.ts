@@ -19,10 +19,16 @@ const USED = `
     '$.lastAccessedAt', ?)
   WHERE id = ? AND status != 'deleted'`
 
-/** Counts one memory reminder for each memory a trigger sent to the model. */
+/**
+ * The trigger that sends every active user memory to each context, whatever it asks. It is no
+ * relevance decision, so it counts toward no memory's reminders, which the ranking weighs.
+ */
+export const GLOBAL_TRIGGER = 'global'
+
+/** Counts one memory reminder for each memory a trigger sent to the model; the global rules are only audited. */
 export function recordReminder(op: Op, ids: readonly string[], trigger: string, sessionId: string | undefined): void {
   const distinct = [...new Set(ids)]
-  for (const id of distinct) sql(op.store.db, REMINDED).run(op.now, id)
+  if (trigger !== GLOBAL_TRIGGER) for (const id of distinct) sql(op.store.db, REMINDED).run(op.now, id)
   audit(op.store, op.now, 'memory.reminded', { sessionId, detail: { memoryIds: distinct, trigger } })
 }
 
