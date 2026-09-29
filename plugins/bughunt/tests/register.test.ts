@@ -77,7 +77,7 @@ async function hunt($: Engine, w: World, args: string): Promise<string> {
 }
 
 const call = ($: Engine, input: Record<string, unknown>) => $.tool.call(input as never)
-const openSkill = ($: Engine, agentId?: string) => call($, { tool: 'Skill', skill: 'bughunt:bughunt', args: '', ...(agentId === undefined ? {} : { agentId }) })
+const openSkill = ($: Engine, agentId?: string) => call($, { tool: 'Skill', skill: 'bughunt:hunt', args: '', ...(agentId === undefined ? {} : { agentId }) })
 const edit = ($: Engine, path: string, agentId?: string) => call($, { tool: 'Edit', file_path: `${ROOT}/${path}`, old_string: 'a', new_string: 'b', ...(agentId === undefined ? {} : { agentId }) })
 const proof = ($: Engine, phase: string, argv = ['node', 'p.js'], agentId?: string) => call($, { tool: 'mcp__bughunt__proof', phase, argv, ...(agentId === undefined ? {} : { agentId }) })
 const say = ($: Engine, text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
@@ -104,7 +104,7 @@ describe('the round loop', () => {
     expect(w.sent).toHaveLength(1)
     expect(w.sent[0]).toContain('round 1/2')
     expect(w.sent[0]).toContain('Scope: src and everything under it')
-    expect(w.sent[0]).toContain('invoke the bughunt:bughunt skill')
+    expect(w.sent[0]).toContain('invoke the bughunt:hunt skill')
     expect(await hunt($, w, '--rounds 26')).toContain('from 1 to 25')
   })
 
@@ -157,9 +157,9 @@ describe('the round loop', () => {
   test('the skill text gets the running round, and nothing outside a hunt', async ($, on) => {
     const w = world(on)
     await started($)
-    expect((await $.skill.prompt({ skill: 'bughunt:bughunt', text: 'BODY' })).text).toBe('BODY')
+    expect((await $.skill.prompt({ skill: 'bughunt:hunt', text: 'BODY' })).text).toBe('BODY')
     await hunt($, w, 'src')
-    const text = (await $.skill.prompt({ skill: 'bughunt:bughunt', text: 'BODY' })).text
+    const text = (await $.skill.prompt({ skill: 'bughunt:hunt', text: 'BODY' })).text
     expect(text).toContain('## Current round (bughunt)')
     expect(text).toContain('Proof directory: .temp_files/bughunt/')
   })
@@ -170,7 +170,7 @@ describe('the gates of a round', () => {
     const w = world(on)
     await started($)
     await hunt($, w, 'src')
-    expect((await edit($, 'src/a.ts')).deny).toContain('the bughunt:bughunt skill is not open')
+    expect((await edit($, 'src/a.ts')).deny).toContain('the bughunt:hunt skill is not open')
     await openSkill($)
     expect((await edit($, 'src/a.ts')).deny).toContain('No FAIL is recorded in this round')
     const dir = /Proof directory: (\S+)/.exec(w.sent[0] ?? '')?.[1] ?? ''

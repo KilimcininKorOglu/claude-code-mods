@@ -1,5 +1,5 @@
 ---
-name: bughunt
+name: hunt
 description: >
   Finds real bugs in source code and, inside a /bughunt round, proves, fixes and
   verifies one of them. Invoke it at the start of every /bughunt round, and when

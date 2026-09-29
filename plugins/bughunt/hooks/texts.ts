@@ -1,7 +1,7 @@
 import type { EditRule } from './paths.ts'
 import { fingerprints, type Hunt } from './round.ts'
 
-export const SKILL = 'bughunt:bughunt'
+export const SKILL = 'bughunt:hunt'
 export const PROOF_TOOL = 'mcp__bughunt__proof'
 
 const PROTOCOL = [

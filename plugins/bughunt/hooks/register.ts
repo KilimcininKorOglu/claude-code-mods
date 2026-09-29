@@ -320,7 +320,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('skill.prompt', { skill: 'bughunt:bughunt' }, async (_, e, next) => {
+  on('skill.prompt', { skill: 'bughunt:hunt' }, async (_, e, next) => {
     const r = await next(e)
     const hunt = state.hunt
     return hunt === undefined ? r : { text: `${r.text}\n${skillBlock(hunt, proofDir(roundId(hunt)))}` }
