@@ -1,8 +1,11 @@
 export const OUTCOMES = ['fixed-and-verified', 'fixed-verification-incomplete', 'no-proven-bug', 'blocked'] as const
 export type Outcome = (typeof OUTCOMES)[number]
 
-/** What the proof tool recorded in the running round. */
-export type ProofState = { argv: string[]; failed: boolean; passed: boolean }
+/**
+ * What the proof tool recorded in the running round; `base` is the working tree's snapshot commit taken
+ * when the FAIL was recorded, which the revert check puts the fixed files back to.
+ */
+export type ProofState = { argv: string[]; failed: boolean; passed: boolean; base?: string }
 
 export type RoundRecord = { round: number; outcome: Outcome | 'none'; fingerprint?: string; note?: string }
 

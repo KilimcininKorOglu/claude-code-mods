@@ -3,7 +3,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 import { parseArgs } from '../hooks/args.ts'
 import { criticTask, findingOf, handBackOf, reportText, verdictOf } from '../hooks/collab.ts'
 import { editRule, inScope, isTestPath, relativeTo } from '../hooks/paths.ts'
-import { judgeProof, proofInput } from '../hooks/proof.ts'
+import { judgeProof, judgeReverted, proofInput, revertTargets, savedFix } from '../hooks/proof.ts'
 import { advance, decide, fingerprintOf, newHunt, outcomeOf, type Hunt } from '../hooks/round.ts'
 import { roundText } from '../hooks/texts.ts'
 
@@ -157,5 +157,24 @@ describe('collab', () => {
     const text = criticTask(['src'], [{ file: 'a.ts', line: 2, severity: 'low', description: 'd' }], 'step 1')
     expect(text).toContain('[low] a.ts:2: d')
     expect(text).toContain('step 1')
+  })
+})
+
+describe('the revert check', () => {
+  test('reverts production files only: not the proof directory, not tests, not an empty name', () => {
+    expect(revertTargets(['src/a.ts', '.temp_files/bughunt/x-r1/p.js', 'tests/a.test.ts', ''], '.temp_files/bughunt/x-r1')).toEqual(['src/a.ts'])
+  })
+
+  test('a reverted run must fail with a FAIL line; a pass or a crash without one refuses the PASS', () => {
+    expect(judgeReverted(run(1, 'FAIL: got 3'), ['src/a.ts'])).toBeUndefined()
+    expect(judgeReverted(run(0, 'PASS'), ['src/a.ts'])).toBe('with the fix reverted (src/a.ts) the proof still exits 0 without a FAIL line, so it does not show that the fix makes it pass')
+    expect(judgeReverted(run(2, 'SyntaxError'), ['src/a.ts'])).toContain('still exits 2 without a FAIL line')
+  })
+
+  test('a stored record is read back only whole', () => {
+    expect(savedFix({ base: 'S1', fixed: 'S2', files: ['src/a.ts', 3] })).toEqual({ base: 'S1', fixed: 'S2', files: ['src/a.ts'] })
+    expect(savedFix({ base: 'S1', fixed: 'S2', files: [] })).toBeUndefined()
+    expect(savedFix({ base: 'S1', files: ['src/a.ts'] })).toBeUndefined()
+    expect(savedFix(undefined)).toBeUndefined()
   })
 })

@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import { parseArgs } from './args.ts'
 import { COLLAB_SCHEMA, CRITIC_PROMPT, criticTask, findingOf, FOUND_SCHEMA, handBackOf, PLANNER_PROMPT, plannerTask, reportText, SCANNER_PROMPT, scannerTask, verdictOf, type Finding, type Step, type StepResult } from './collab.ts'
 import { editRule, proofDir, relativeTo } from './paths.ts'
-import { judgeProof, proofInput, tailOf, type ProofRun } from './proof.ts'
+import { judgeProof, judgeReverted, proofInput, revertTargets, savedFix, tailOf, type Phase, type ProofJudgement, type ProofRun, type SavedFix } from './proof.ts'
 import { advance, decide, newHunt, outcomeOf, roundId, type Hunt, type RoundEnd } from './round.ts'
 import { editDenyText, editLog, roundLine, roundText, SKILL, skillBlock, SPAWN_DENY } from './texts.ts'
 
@@ -10,6 +10,8 @@ const ENABLED_KEY = 'enabled'
 const SEND_COMMAND = 'bughunt:send'
 const FOUND_TOOL = 'mcp__bughunt__found'
 const PROOF_MS = 300_000
+const GIT_MS = 30_000
+const RESTORE_KEY = 'restore'
 const STEP_MS: Record<Step, number> = { scanner: 600_000, planner: 480_000, critic: 360_000 }
 const MAX_TURNS: Record<Step, number> = { scanner: 200, planner: 120, critic: 80 }
 const SECTION = { consumer: 'bughunt', key: 'hunt', order: 22 } as const
@@ -167,15 +169,107 @@ async function runProof($: EngineInterface, argv: string[], cwd: string): Promis
   }
 }
 
+/** Runs one git command in `cwd` and answers its stdout; a non-zero exit throws with git's own message. */
+async function git($: EngineInterface, cwd: string, args: string[]): Promise<string> {
+  const r = await $.process.run(['git', ...args], { cwd, timeoutMs: GIT_MS })
+  if (r.exitCode !== 0) throw new Error(`git ${args[0]} exited ${r.exitCode}: ${r.stderr.trim()}`)
+  return r.stdout
+}
+
+/** A commit that holds the working tree's tracked files as they are now: a stash commit, or HEAD on a clean tree. */
+async function snapshot($: EngineInterface, cwd: string): Promise<string> {
+  const stash = (await git($, cwd, ['stash', 'create'])).trim()
+  return stash !== '' ? stash : (await git($, cwd, ['rev-parse', 'HEAD'])).trim()
+}
+
+/** The snapshot a recorded FAIL keeps, or undefined outside a git repository; the round's first FAIL wins. */
+async function baseOf($: EngineInterface, state: State, hunt: Hunt): Promise<string | undefined> {
+  if (hunt.proof?.base !== undefined) return hunt.proof.base
+  try {
+    return await snapshot($, state.cwd)
+  } catch {
+    // No git repository: the revert check refuses the PASS later and says why.
+    return undefined
+  }
+}
+
+const restoreKey = (cwd: string): string => `${RESTORE_KEY}:${cwd}`
+
+/** Puts the fix back and forgets the record; a failure throws, so the person hears where the fix is. */
+async function putBack($: EngineInterface, cwd: string, saved: SavedFix): Promise<void> {
+  await git($, cwd, ['restore', `--source=${saved.fixed}`, '--worktree', '--', ...saved.files])
+  await $.store.delete(restoreKey(cwd))
+}
+
+/** Reverts the fix, runs the proof again and puts the fix back; undefined when the reverted run failed as it must. */
+async function revertCheck($: EngineInterface, state: State, hunt: Hunt, argv: string[], proofCwd: string): Promise<string | undefined> {
+  const base = hunt.proof?.base
+  if (base === undefined) return 'the revert check needs a git repository, and none answered when the FAIL was recorded'
+  const changed = (await git($, state.cwd, ['diff', '--name-only', '-z', '--diff-filter=M', '--relative', base])).split('\0')
+  const files = revertTargets(changed, proofDir(roundId(hunt)))
+  if (files.length === 0) return 'no production file was modified since the FAIL, so there is no fix to revert'
+  const saved: SavedFix = { base, fixed: await snapshot($, state.cwd), files }
+  await $.store.set(restoreKey(state.cwd), saved)
+  try {
+    await git($, state.cwd, ['restore', `--source=${base}`, '--worktree', '--', ...files])
+    const reverted = await runProof($, argv, proofCwd)
+    return typeof reverted === 'string' ? `the reverted run failed to start: ${reverted}` : judgeReverted(reverted, files)
+  } finally {
+    await putBack($, state.cwd, saved)
+  }
+}
+
+/** The PASS a judge accepted stands only when the revert check holds; its refusal or failure rejects it. */
+async function checkedPass($: EngineInterface, state: State, hunt: Hunt, argv: string[], proofCwd: string): Promise<string | undefined> {
+  try {
+    return await revertCheck($, state, hunt, argv, proofCwd)
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err)
+    await toPerson($, `revert check failed: ${why}`, 'error')
+    return `the revert check failed: ${why}`
+  }
+}
+
+/**
+ * A revert check a crash cut short left the fix reverted: at the session's start the fix is put back when the
+ * files still hold the reverted text, else the person is told where the fix is, because a later edit would be lost.
+ */
+async function recoverFix($: EngineInterface, cwd: string): Promise<void> {
+  const saved = savedFix(await $.store.get(restoreKey(cwd)))
+  if (saved === undefined) return
+  try {
+    const untouched = await $.process.run(['git', 'diff', '--quiet', saved.base, '--', ...saved.files], { cwd, timeoutMs: GIT_MS })
+    if (untouched.exitCode === 0) {
+      await putBack($, cwd, saved)
+      await toPerson($, `put back the fix a cut-short revert check left reverted: ${saved.files.join(', ')}`, 'warn')
+      return
+    }
+    await $.store.delete(restoreKey(cwd))
+    await toPerson($, `a cut-short revert check left ${saved.files.join(', ')} reverted, and they changed since; the fix is in ${saved.fixed}: git restore --source=${saved.fixed} --worktree -- ${saved.files.join(' ')}`, 'error')
+  } catch (err) {
+    await toPerson($, `the fix a revert check left reverted was not put back (${err instanceof Error ? err.message : String(err)}); it is in ${saved.fixed}`, 'error')
+  }
+}
+
+/** The judgement of one proof run, with the base a FAIL keeps and the revert check an accepted PASS needs. */
+async function judged($: EngineInterface, state: State, hunt: Hunt, input: { phase: Phase; argv: string[]; cwd: string }, run: ProofRun): Promise<ProofJudgement> {
+  const j = judgeProof(input.phase, input.argv, run, hunt.proof)
+  if (!j.accepted || j.state === undefined) return j
+  if (input.phase === 'before') return { ...j, state: { ...j.state, base: await baseOf($, state, hunt) } }
+  const refused = await checkedPass($, state, hunt, input.argv, input.cwd)
+  return refused === undefined ? j : { accepted: false, reason: refused, state: hunt.proof }
+}
+
 /** The proof tool: runs the command itself and records FAIL or PASS for the round. */
 async function onProof($: EngineInterface, state: State, e: Record<string, unknown>): Promise<{ result: string } | { deny: string }> {
   const hunt = state.hunt
   if (hunt === undefined || e.agentId !== undefined) return { deny: 'The proof tool works only inside a /bughunt round, in the main conversation.' }
   const input = proofInput(e)
   if (typeof input === 'string') return { deny: input }
-  const run = await runProof($, input.argv, joinCwd(state.cwd, input.cwd))
+  const proofCwd = joinCwd(state.cwd, input.cwd)
+  const run = await runProof($, input.argv, proofCwd)
   if (typeof run === 'string') return { result: `rejected: ${run}` }
-  const j = judgeProof(input.phase, input.argv, run, hunt.proof)
+  const j = await judged($, state, hunt, { phase: input.phase, argv: input.argv, cwd: proofCwd }, run)
   state.hunt = { ...hunt, proof: j.state }
   await toPerson($, `proof ${input.phase}: ${j.accepted ? j.reason : `rejected, ${j.reason}`}`, j.accepted ? 'ok' : 'warn')
   await show($, state)
@@ -322,6 +416,7 @@ export const register: Register = on => {
     state.cwd = e.cwd
     await declare($)
     await readSettings($, state)
+    await recoverFix($, e.cwd)
     return r
   })
 

@@ -9,7 +9,7 @@ const PROTOCOL = [
   '1. Survey: record the starting revision and dirty paths; keep other changes untouched.',
   `2. Prove: write a proof in the proof directory that runs the real code path, prints a FAIL line and exits non-zero; call ${PROOF_TOOL} with phase "before". Without a recorded FAIL, change no production code.`,
   '3. Fix the root cause with the smallest change.',
-  `4. Verify: the same proof prints PASS and exits 0; call ${PROOF_TOOL} with phase "after" and the same argv. Add a regression test to the suite and run the checks.`,
+  `4. Verify: the same proof prints PASS and exits 0; call ${PROOF_TOOL} with phase "after" and the same argv. The mod then reverts the production files modified since the FAIL, runs the proof again and puts them back; the PASS counts only when that run fails. Add a regression test to the suite and run the checks.`,
   '5. Report: begin the answer with one line, fixed-and-verified, fixed-verification-incomplete, no-proven-bug or blocked, and give a "fingerprint: <file>:<symbol>: <cause>" line. Then stop.',
   'No subagents in a round. One root cause per round. Do not count a fingerprint listed below again.',
 ].join('\n')

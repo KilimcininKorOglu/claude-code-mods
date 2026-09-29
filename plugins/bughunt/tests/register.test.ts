@@ -33,14 +33,36 @@ type World = {
   spawned: string[]
   edits: string[]
   clock: MockClock
+  git: Git
 }
 
-const answer = (exitCode: number, stdout: string): ProcessRunResult => ({ exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
+/**
+ * The repository beneath the proof: whether there is one, the files `git diff` lists as modified, the git
+ * commands that ran, whether the fix is reverted now, what the proof prints then, whether the reverted files
+ * are untouched since, and whether putting the fix back fails. The first snapshot, the FAIL's base, is S1.
+ */
+type Git = { repo: boolean; changed: string[]; ran: string[][]; reverted: boolean; revertedProof: ProcessRunResult; untouched: boolean; putBackFails: boolean; snapshots: number }
+
+const answer = (exitCode: number, stdout: string, stderr = ''): ProcessRunResult => ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
+
+function gitAnswer(g: Git, args: string[]): ProcessRunResult {
+  g.ran.push(args)
+  if (!g.repo) return answer(128, '', 'fatal: not a git repository')
+  if (args[0] === 'stash') return answer(0, `S${++g.snapshots}\n`)
+  if (args[0] === 'rev-parse') return answer(0, 'HEAD1\n')
+  if (args[0] === 'diff') return args.includes('--quiet') ? answer(g.untouched ? 0 : 1, '') : answer(0, `${g.changed.join('\0')}\0`)
+  const source = args.find(a => a.startsWith('--source='))?.slice('--source='.length)
+  if (source !== 'S1' && g.putBackFails) return answer(1, '', 'error: pathspec did not match')
+  g.reverted = source === 'S1'
+  return answer(0, '')
+}
 
 function world(on: On): World {
-  const w: World = { store: new Map(), sent: [], logs: [], proof: answer(1, 'FAIL: got 3'), ran: [], tools: [], agents: [], spawned: [], edits: [], clock: mock.clock(on) }
+  const git: Git = { repo: true, changed: ['src/a.ts'], ran: [], reverted: false, revertedProof: answer(1, 'FAIL: got 3'), untouched: true, putBackFails: false, snapshots: 0 }
+  const w: World = { store: new Map(), sent: [], logs: [], proof: answer(1, 'FAIL: got 3'), ran: [], tools: [], agents: [], spawned: [], edits: [], clock: mock.clock(on), git }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
+  on('store.delete', (_, e) => { w.store.delete(e.key); return { value: undefined } })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__bughunt__${e.name}` } } })
@@ -53,7 +75,11 @@ function world(on: On): World {
   on('tool.call', { tool: 'Skill' }, (_, e) => ({ result: { success: true, commandName: e.skill }, text: `Launching skill: ${e.skill}` }) as never)
   on('tool.call', { tool: 'Edit' }, (_, e) => { w.edits.push(e.file_path); return { result: 'ok' } as never })
   on('tool.call', { tool: 'Write' }, (_, e) => { w.edits.push(e.file_path); return { result: 'ok' } as never })
-  on('process.run', (_, e) => { w.ran.push([...e.argv]); return { value: w.proof } })
+  on('process.run', (_, e) => {
+    if (e.argv[0] === 'git') return { value: gitAnswer(git, e.argv.slice(1)) }
+    w.ran.push([...e.argv])
+    return { value: git.reverted ? git.revertedProof : w.proof }
+  })
   // The test engine hands a plugin's own spawn over in the Agent tool's shape (`subagent_type`).
   on('agent.spawn', (_, e) => {
     const type = e.subagentType ?? (e as unknown as { subagent_type: string }).subagent_type
@@ -212,8 +238,86 @@ describe('the gates of a round', () => {
     w.proof = answer(0, 'PASS')
     expect(String((await proof($, 'after', ['node', 'other.js'])).result)).toContain('rejected: argv differs')
     expect(String((await proof($, 'after')).result)).toContain('accepted: PASS recorded')
-    expect(w.ran).toEqual([['node', 'p.js'], ['node', 'p.js'], ['node', 'other.js'], ['node', 'p.js']])
+    expect(w.ran).toEqual([['node', 'p.js'], ['node', 'p.js'], ['node', 'other.js'], ['node', 'p.js'], ['node', 'p.js']])
     expect((await proof($, 'during')).deny).toBe('phase must be "before" or "after"')
+  })
+})
+
+describe('the revert check of a PASS', () => {
+  const after = async ($: Engine) => String((await proof($, 'after')).result)
+
+  async function failed($: Engine, w: World): Promise<string> {
+    await started($)
+    await hunt($, w, '')
+    await openSkill($)
+    await proof($, 'before')
+    w.proof = answer(0, 'PASS')
+    return /Proof directory: (\S+)/.exec(w.sent[0] ?? '')?.[1] ?? ''
+  }
+
+  test('a proof that passes with the fix reverted records no PASS, and the fix is put back', async ($, on) => {
+    const w = world(on)
+    const dir = await failed($, w)
+    w.git.changed = ['src/a.ts', 'tests/a.test.ts', `${dir}/p.js`]
+    w.git.revertedProof = answer(0, 'PASS')
+    const text = await after($)
+    expect(text).toContain('rejected: with the fix reverted (src/a.ts) the proof still exits 0 without a FAIL line')
+    expect(w.git.ran.filter(a => a[0] === 'restore')).toEqual([['restore', '--source=S1', '--worktree', '--', 'src/a.ts'], ['restore', '--source=S2', '--worktree', '--', 'src/a.ts']])
+    expect(w.git.reverted).toBe(false)
+    expect(w.store.has(`restore:${ROOT}`)).toBe(false)
+    expect((await $.command.run(run('status'))).text).toBe('on · round 1/1')
+  })
+
+  test('a proof that fails again with the fix reverted records the PASS', async ($, on) => {
+    const w = world(on)
+    await failed($, w)
+    expect(await after($)).toContain('accepted: PASS recorded')
+    expect(w.ran).toEqual([['node', 'p.js'], ['node', 'p.js'], ['node', 'p.js']])
+    await roundEnds($, w, 'fixed-and-verified')
+    expect(w.logs.at(-1)).toBe('hunt finished: 1 round(s), last fixed-and-verified')
+  })
+
+  test('with no modified production file there is no fix to revert, and the PASS is refused', async ($, on) => {
+    const w = world(on)
+    await failed($, w)
+    w.git.changed = ['tests/a.test.ts']
+    expect(await after($)).toContain('rejected: no production file was modified since the FAIL')
+    expect(w.ran).toEqual([['node', 'p.js'], ['node', 'p.js']])
+  })
+
+  test('outside a git repository the FAIL records, and the PASS is refused saying why', async ($, on) => {
+    const w = world(on)
+    w.git.repo = false
+    await failed($, w)
+    expect(await after($)).toContain('rejected: the revert check needs a git repository')
+  })
+
+  test('a fix that cannot be put back refuses the PASS, keeps the record and tells the person', async ($, on) => {
+    const w = world(on)
+    await failed($, w)
+    w.git.putBackFails = true
+    expect(await after($)).toContain('rejected: the revert check failed: git restore exited 1: error: pathspec did not match')
+    expect(w.store.get(`restore:${ROOT}`)).toEqual({ base: 'S1', fixed: 'S2', files: ['src/a.ts'] })
+    expect(w.logs).toContain('revert check failed: git restore exited 1: error: pathspec did not match')
+  })
+
+  test('a revert check a crash cut short is put back at the next session start', async ($, on) => {
+    const w = world(on)
+    w.store.set(`restore:${ROOT}`, { base: 'S1', fixed: 'S7', files: ['src/a.ts'] })
+    await started($)
+    expect(w.git.ran).toEqual([['diff', '--quiet', 'S1', '--', 'src/a.ts'], ['restore', '--source=S7', '--worktree', '--', 'src/a.ts']])
+    expect(w.store.has(`restore:${ROOT}`)).toBe(false)
+    expect(w.logs).toEqual(['put back the fix a cut-short revert check left reverted: src/a.ts'])
+  })
+
+  test('a cut-short revert whose files changed since is not overwritten; the person gets the command', async ($, on) => {
+    const w = world(on)
+    w.git.untouched = false
+    w.store.set(`restore:${ROOT}`, { base: 'S1', fixed: 'S7', files: ['src/a.ts'] })
+    await started($)
+    expect(w.git.ran.filter(a => a[0] === 'restore')).toEqual([])
+    expect(w.store.has(`restore:${ROOT}`)).toBe(false)
+    expect(w.logs.at(-1)).toContain('the fix is in S7: git restore --source=S7 --worktree -- src/a.ts')
   })
 })
 
