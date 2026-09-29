@@ -1,18 +1,298 @@
-import { describe, expect, test, tier } from 'claude-code/testing'
+import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
+import type { CommandRunInput, On, ProcessRunResult } from 'claude-code'
 
 tier('user')
 
-describe('register', () => {
-  test('reports that the mod loaded', async ($, on) => {
-    const lines: string[] = []
-    on('ui.log', ($, e) => {
-      lines.push(e.text)
-      return { value: undefined }
-    })
-    on('session.start', ($, e) => ({ cwd: e.cwd }))
+/** sidebar as an inline plugin: it adds `$.sidebar`, whose calls the world answers. */
+const SIDEBAR: Plugin = {
+  name: 'sidebar',
+  register(on) {
+    const stub = async (): Promise<never> => { throw new Error('answered by the test world') }
+    on('engine.create', async (_, e, next) => ({ ...(await next(e)), sidebar: { set: stub, clear: stub, isOpen: stub } }))
+  },
+}
 
-    await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-    expect(lines).toContain('bughunt loaded in /work')
+
+const ROOT = '/repo'
+
+/**
+ * What the engine beneath the mod saw: the store every window shares, the prompts sent through the send
+ * command, the log lines, the proof command's answer and the argv it ran, the tools and agents declared,
+ * the subagents started and the edits that ran.
+ */
+type World = {
+  store: Map<string, unknown>
+  sent: string[]
+  logs: string[]
+  proof: ProcessRunResult
+  ran: string[][]
+  tools: string[]
+  agents: string[]
+  spawned: string[]
+  edits: string[]
+  clock: MockClock
+}
+
+const answer = (exitCode: number, stdout: string): ProcessRunResult => ({ exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
+
+function world(on: On): World {
+  const w: World = { store: new Map(), sent: [], logs: [], proof: answer(1, 'FAIL: got 3'), ran: [], tools: [], agents: [], spawned: [], edits: [], clock: mock.clock(on) }
+  on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
+  on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__bughunt__${e.name}` } } })
+  on('agent.register', (_, e) => { w.agents.push(e.name); return { value: { agent: `bughunt:${e.name}` } } })
+  on('command.run', { command: 'bughunt:send' }, (_, e) => { w.sent.push(String(e.args)); return { text: '' } })
+  on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
+  on('skill.prompt', (_, e) => ({ text: e.text }))
+  on('tool.call', { tool: 'Skill' }, (_, e) => ({ result: { success: true, commandName: e.skill }, text: `Launching skill: ${e.skill}` }) as never)
+  on('tool.call', { tool: 'Edit' }, (_, e) => { w.edits.push(e.file_path); return { result: 'ok' } as never })
+  on('tool.call', { tool: 'Write' }, (_, e) => { w.edits.push(e.file_path); return { result: 'ok' } as never })
+  on('process.run', (_, e) => { w.ran.push([...e.argv]); return { value: w.proof } })
+  // The test engine hands a plugin's own spawn over in the Agent tool's shape (`subagent_type`).
+  on('agent.spawn', (_, e) => {
+    const type = e.subagentType ?? (e as unknown as { subagent_type: string }).subagent_type
+    w.spawned.push(type)
+    return { model: 'claude-sonnet-5-5', agentId: `a-${type}` }
+  })
+  on('session.receive', (_, e) => ({ text: e.text }))
+  return w
+}
+
+async function started($: Engine): Promise<void> {
+  await $.session.start({ surface: null, isInteractive: true, cwd: ROOT })
+}
+
+const run = (args: string): CommandRunInput => ({ command: 'bughunt', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
+
+async function hunt($: Engine, w: World, args: string): Promise<string> {
+  const r = await $.command.run(run(args))
+  await w.clock.advance(0)
+  return String(r.text)
+}
+
+const call = ($: Engine, input: Record<string, unknown>) => $.tool.call(input as never)
+const openSkill = ($: Engine, agentId?: string) => call($, { tool: 'Skill', skill: 'bughunt:bughunt', args: '', ...(agentId === undefined ? {} : { agentId }) })
+const edit = ($: Engine, path: string, agentId?: string) => call($, { tool: 'Edit', file_path: `${ROOT}/${path}`, old_string: 'a', new_string: 'b', ...(agentId === undefined ? {} : { agentId }) })
+const proof = ($: Engine, phase: string, argv = ['node', 'p.js'], agentId?: string) => call($, { tool: 'mcp__bughunt__proof', phase, argv, ...(agentId === undefined ? {} : { agentId }) })
+const say = ($: Engine, text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
+
+async function roundEnds($: Engine, w: World, text: string, agentId?: string, reason: 'answer' | 'error' = 'answer'): Promise<void> {
+  await $.turn.complete({ answer: text, durationMs: 1, isAborted: false, turnId: 't', reason, ...(agentId === undefined ? {} : { agentId }) } as never)
+  await w.clock.advance(0)
+}
+
+/** A round that proves and fixes one bug, as the model would run it. */
+async function provenRound($: Engine, w: World): Promise<void> {
+  await openSkill($)
+  w.proof = answer(1, 'FAIL: got 3')
+  await proof($, 'before')
+  w.proof = answer(0, 'PASS')
+  await proof($, 'after')
+}
+
+describe('the round loop', () => {
+  test('/bughunt sends the first round with the protocol, and --rounds may follow the target', async ($, on) => {
+    const w = world(on)
+    await started($)
+    expect(await hunt($, w, 'src --rounds 2')).toBe('hunt started: 2 round(s) over src')
+    expect(w.sent).toHaveLength(1)
+    expect(w.sent[0]).toContain('round 1/2')
+    expect(w.sent[0]).toContain('Scope: src and everything under it')
+    expect(w.sent[0]).toContain('invoke the bughunt:bughunt skill')
+    expect(await hunt($, w, '--rounds 26')).toContain('from 1 to 25')
+  })
+
+  test('a proven round starts the next one with its fingerprint, and the last round ends the hunt', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await hunt($, w, '--rounds 2')
+    await provenRound($, w)
+    await roundEnds($, w, 'fixed-and-verified\n\nfingerprint: src/a.ts:parse: off by one')
+    expect(w.sent).toHaveLength(2)
+    expect(w.sent[1]).toContain('round 2/2')
+    expect(w.sent[1]).toContain('- src/a.ts:parse: off by one')
+    await roundEnds($, w, 'no-proven-bug')
+    expect(w.sent).toHaveLength(2)
+    expect(w.logs.at(-1)).toBe('hunt finished: 2 round(s), last no-proven-bug')
+  })
+
+  test('blocked, an incomplete fix and an unrecorded fixed claim each end the hunt', async ($, on) => {
+    const w = world(on)
+    await started($)
+    for (const [text, reason] of [['blocked', 'the round reported blocked'], ['fixed-verification-incomplete', 'the round reported fixed-verification-incomplete'], ['fixed-and-verified', 'the mod recorded no FAIL followed by a PASS']]) {
+      await hunt($, w, '--rounds 3')
+      await roundEnds($, w, text)
+      expect(w.logs.at(-1)).toContain(reason)
+    }
+    expect(w.sent).toHaveLength(3)
+  })
+
+  test('an API error ends the hunt, and a subagent\'s turn is not a round', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await hunt($, w, '--rounds 2')
+    await roundEnds($, w, 'fixed-and-verified', 'agent-1')
+    expect((await $.command.run(run('status'))).text).toBe('on · round 1/2')
+    await roundEnds($, w, '', undefined, 'error')
+    expect(w.logs.at(-1)).toBe('hunt stopped after round 1/2: the round ended with error')
+  })
+
+  test('a prompt of the person ends the hunt; /bughunt status does not', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await hunt($, w, '--rounds 2')
+    await say($, '/bughunt status')
+    expect((await $.command.run(run('status'))).text).toBe('on · round 1/2')
+    await say($, 'wait, look at this instead')
+    expect(w.logs.at(-1)).toBe('hunt stopped: you wrote a prompt in round 1/2')
+    expect((await $.command.run(run('stop'))).text).toBe('no hunt is running')
+  })
+
+  test('the skill text gets the running round, and nothing outside a hunt', async ($, on) => {
+    const w = world(on)
+    await started($)
+    expect((await $.skill.prompt({ skill: 'bughunt:bughunt', text: 'BODY' })).text).toBe('BODY')
+    await hunt($, w, 'src')
+    const text = (await $.skill.prompt({ skill: 'bughunt:bughunt', text: 'BODY' })).text
+    expect(text).toContain('## Current round (bughunt)')
+    expect(text).toContain('Proof directory: .temp_files/bughunt/')
+  })
+})
+
+describe('the gates of a round', () => {
+  test('an edit waits for the skill, then for a recorded FAIL; the proof directory is open after the skill', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await hunt($, w, 'src')
+    expect((await edit($, 'src/a.ts')).deny).toContain('the bughunt:bughunt skill is not open')
+    await openSkill($)
+    expect((await edit($, 'src/a.ts')).deny).toContain('No FAIL is recorded in this round')
+    const dir = /Proof directory: (\S+)/.exec(w.sent[0] ?? '')?.[1] ?? ''
+    expect((await edit($, `${dir}/p.js`)).result).toBe('ok')
+    await proof($, 'before')
+    expect((await edit($, 'src/a.ts')).result).toBe('ok')
+    expect(w.edits).toEqual([`${ROOT}/${dir}/p.js`, `${ROOT}/src/a.ts`])
+    expect(w.logs).toContain('edit stopped (proof): src/a.ts')
+  })
+
+  test('after the FAIL an edit outside the scope stops, and a test file passes', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await hunt($, w, 'src')
+    await openSkill($)
+    await proof($, 'before')
+    expect((await edit($, 'lib/b.ts')).deny).toContain('outside the round\'s scope (src)')
+    expect((await edit($, 'tests/a.test.ts')).result).toBe('ok')
+  })
+
+  test('a subagent spawn stops during a round and runs outside one; a subagent\'s own edit is not gated', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const spawn = () => $.agent.spawn({ tool_use_id: 'u', prompt: 'p', description: 'd', subagentType: 'Explore', provider: { plugin: 'engine', tier: 'core' }, parentModel: 'm', background: false, fork: false })
+    expect((await spawn()).agentId).toBe('a-Explore')
+    await hunt($, w, '')
+    expect((await spawn()).deny).toContain('a round uses no subagents')
+    expect((await edit($, 'src/a.ts', 'agent-1')).result).toBe('ok')
+  })
+
+  test('the proof tool runs the command and records only a real FAIL, then only a PASS of the same argv', async ($, on) => {
+    const w = world(on)
+    await started($)
+    expect((await proof($, 'before')).deny).toContain('only inside a /bughunt round')
+    await hunt($, w, '')
+    w.proof = answer(1, 'Error: Cannot find module')
+    expect(String((await proof($, 'before')).result)).toContain('rejected: the proof exited non-zero but printed no line starting with FAIL')
+    w.proof = answer(1, 'FAIL: got 3')
+    expect(String((await proof($, 'before')).result)).toContain('accepted: FAIL recorded')
+    w.proof = answer(0, 'PASS')
+    expect(String((await proof($, 'after', ['node', 'other.js'])).result)).toContain('rejected: argv differs')
+    expect(String((await proof($, 'after')).result)).toContain('accepted: PASS recorded')
+    expect(w.ran).toEqual([['node', 'p.js'], ['node', 'p.js'], ['node', 'other.js'], ['node', 'p.js']])
+    expect((await proof($, 'during')).deny).toBe('phase must be "before" or "after"')
+  })
+})
+
+describe('settings', () => {
+  test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.store.set('enabled', false)
+    expect(await hunt($, w, '')).toBe('off: /bughunt on turns it on')
+    expect(w.sent).toEqual([])
+    expect(await hunt($, w, 'on')).toBe('on: /bughunt starts a hunt')
+    await hunt($, w, '')
+    expect(await hunt($, w, 'off')).toBe('off: /bughunt starts nothing and no gate holds edits')
+    expect((await edit($, 'src/a.ts')).result).toBe('ok')
+  })
+
+  test('the session declares the tools and the three collab agents', async ($, on) => {
+    const w = world(on)
+    await started($)
+    expect(w.tools).toEqual(['proof', 'found', 'collab'])
+    expect(w.agents).toEqual(['scanner', 'planner', 'critic'])
+  })
+
+  withSidebar('the sidebar holds the running round; a stopped edit goes to its stream', async ($, on) => {
+    const w = world(on)
+    const sets: { key: string; until: string; lines: string[] }[] = []
+    on('sidebar.set', (_, e) => { const s = e as unknown as { key: string; until: string; lines: { text: string }[] }; sets.push({ key: s.key, until: s.until, lines: s.lines.map(l => l.text) }); return { value: true } })
+    on('sidebar.clear', () => ({ value: undefined }))
+    await started($)
+    await hunt($, w, '--rounds 3 src')
+    await edit($, 'src/a.ts')
+    expect(sets.find(s => s.key === 'hunt')?.lines[0]).toBe('round 1/3 · src')
+    expect(sets.filter(s => s.key === 'log').map(s => s.lines[0])).toContain('edit stopped (skill): src/a.ts')
+    expect(w.logs).toEqual([])
+  })
+})
+
+/**
+ * The test engine has no core to start a subagent: a plugin's own `$.agent.spawn` resolves there without an
+ * agent id, whatever the hooks beneath answer (measured). The steps that wait for a started subagent are
+ * covered by the pure tests of `collab.ts` and by the live check; these tests cover the paths around them.
+ */
+describe('collab', () => {
+  const collab = ($: Engine, paths: string[]) => call($, { tool: 'mcp__bughunt__collab', paths })
+  const found = ($: Engine, agentId: string) => call($, { tool: 'mcp__bughunt__found', file: 'src/a.ts', line: 4, severity: 'high', description: 'd', agentId })
+
+  test('a scanner that did not start ends the run with no verdict, never an approval', async ($, on) => {
+    const w = world(on)
+    await started($)
+    const text = String((await collab($, ['src'])).result)
+    expect(w.spawned).toEqual(['bughunt:scanner'])
+    expect(text).toContain('- scanner: failed (no agent started)')
+    expect(text).toContain('- planner: skipped')
+    expect(text).toContain('Verdict: no-verdict (the critic gave no verdict line; this is not an approval)')
+  })
+
+  test('only a running scanner reports findings, and an empty path list is refused', async ($, on) => {
+    world(on)
+    await started($)
+    expect((await found($, 'a-bughunt:scanner')).deny).toContain('Only the running bughunt scanner')
+    expect((await collab($, [])).deny).toBe('paths must name at least one file or directory')
+  })
+
+  test('a message that is no collab step\'s hand-back reaches the model', async ($, on) => {
+    world(on)
+    await started($)
+    const other = await $.session.receive({ origin: { kind: 'peer' }, text: '<agent-message from="a-Explore">done</agent-message>' })
+    expect(other.text).toContain('a-Explore')
+  })
+
+  test('collab waits while a round runs, and /bughunt collab sends its report as a message', async ($, on) => {
+    const w = world(on)
+    await started($)
+    await hunt($, w, '')
+    expect((await collab($, ['src'])).deny).toBe('a hunt round is running; collab waits until it ends')
+    await hunt($, w, 'stop')
+    expect(await hunt($, w, 'collab src')).toBe('collab started over src; the report arrives as a message')
+    await w.clock.advance(0)
+    expect(w.sent.at(-1)).toContain('# bughunt collab report')
   })
 })
