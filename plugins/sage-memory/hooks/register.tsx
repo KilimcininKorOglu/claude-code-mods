@@ -249,11 +249,25 @@ async function show($: EngineInterface, state: State): Promise<void> {
   await toPerson($, [...first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts)])
 }
 
-/** The timed redraw: the store counts read again while the daemon is ready, one at a time. */
+/**
+ * The embeddings state read again: the daemon loads the model at its first use, and another window's
+ * query can load it, so the state read at linking goes stale. A failed read keeps the last state.
+ */
+async function readEmbedding($: EngineInterface, state: State): Promise<void> {
+  try {
+    const status = await ask<EmbedStatus>($, state, '/embed/status', {})
+    if (state.link.state === 'ready') state.link = { ...state.link, embedding: status.embedding, setup: status.setup }
+  } catch (err) {
+    await toStream($, 'error', { text: `the embeddings state was not read: ${errorText(err)}`, kind: 'error' })
+  }
+}
+
+/** The timed redraw: the embeddings state and the store counts read again while the daemon is ready, one at a time. */
 async function redraw($: EngineInterface, state: State): Promise<void> {
   if (state.redrawing || state.link.state !== 'ready') return
   state.redrawing = true
   try {
+    await readEmbedding($, state)
     await show($, state)
   } finally {
     state.redrawing = false

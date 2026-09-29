@@ -200,6 +200,16 @@ describe('sage-memory', () => {
     expect(w.lines.at(-1)).toContain('this project: 6 active · global: 2 active')
   })
 
+  withSidebar('the 60 s redraw reads the embeddings again, so a model another window loaded shows by name', async ($, on) => {
+    const w = world(on)
+    w.routes.set('/embed/status', { embedding: { state: 'available' }, setup: { state: 'idle' } })
+    await $.session.start(START)
+    expect(w.lines.at(-1)).toContain('embeddings available')
+    w.routes.set('/embed/status', { embedding: { state: 'ready', modelId: 'paraphrase-multilingual', dims: 384 }, setup: { state: 'idle' } })
+    await w.clock.advance(60_000)
+    expect(w.lines.at(-1)).toContain('embeddings paraphrase-multilingual')
+  })
+
   withSidebar('a Node without type stripping or node:sqlite fails before any launch', async ($, on) => {
     const w = world(on)
     w.node = JSON.stringify({ version: 'v20.11.0', typescript: false, sqlite: false })
