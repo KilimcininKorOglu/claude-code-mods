@@ -108,7 +108,7 @@ export const TOOLS: readonly ToolDef[] = [
   },
   {
     name: 'for_file',
-    listed: false,
+    listed: true,
     description:
       'Retrieve memories attached to a file, grouped by how they match: `primaryMatches` (file scope or file/directory anchor), `symbolMatches` (symbol scope or anchor, boosted under `lineStart`/`lineEnd`), `relatedMatches` (text mentions).',
     inputSchema: object(

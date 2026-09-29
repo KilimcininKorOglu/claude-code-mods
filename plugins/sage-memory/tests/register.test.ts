@@ -424,10 +424,12 @@ describe('memory reminders', () => {
     expect(bodiesOf(w, '/memory/used')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', source: 'assistant_reference', ids: ['m1'] }])
   })
 
-  withSidebar('the system prompt notes the plugin, a start adds no block of its own, and a compaction starts the context over', async ($, on) => {
+  withSidebar('the system prompt notes the plugin and how to look up and save notes, a start adds no block of its own, and a compaction starts the context over', async ($, on) => {
     const w = readyWorld(on)
     await $.session.start(START)
-    expect((await $.prompt.section({ name: 'env_info_simple', text: 'env' })).text).toContain('The user installed the sage-memory plugin.')
+    const note = (await $.prompt.section({ name: 'env_info_simple', text: 'env' })).text
+    expect(note).toContain('The user installed the sage-memory plugin.')
+    for (const tool of ['search', 'for_file', 'update', 'delete', 'remember']) expect(note).toContain(TOOL(tool))
     const r = await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
     expect(r.additionalContext).toBe(undefined)
     expect(bodiesOf(w, '/context/new')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', loop: 'main' }])
@@ -465,12 +467,12 @@ describe('memory tools', () => {
     expect(w.tools.slice(0, 2)).toEqual(['remember', 'search'])
   })
 
-  withSidebar('remember, search, update and delete are listed at once, the rest wait behind ToolSearch, and none asks for approval', async ($, on) => {
+  withSidebar('remember, search, for_file, update and delete are listed at once, the rest wait behind ToolSearch, and none asks for approval', async ($, on) => {
     readyWorld(on)
     await $.session.start(START)
     const described = async (name: string) => (await $.tool.describe({ tool: TOOL(name), description: 'd', provider: { kind: 'plugin', name: 'sage-memory' } } as never)).isDeferred
-    expect(await Promise.all(['remember', 'search', 'update', 'delete'].map(described))).toEqual([false, false, false, false])
-    expect(await described('gather')).toBe(undefined)
+    expect(await Promise.all(['remember', 'search', 'for_file', 'update', 'delete'].map(described))).toEqual([false, false, false, false, false])
+    expect(await Promise.all(['gather', 'for_path'].map(described))).toEqual([undefined, undefined])
     expect((await $.tool.check({ tool: TOOL('delete'), input: {} } as never)).decision).toBe('allow')
   })
 

@@ -1446,7 +1446,7 @@ export const register: Register = on => {
     return r
   })
 
-  // remember and search are listed at once; the other tools wait behind ToolSearch.
+  // remember, search, for_file, update and delete are listed at once; the other tools wait behind ToolSearch.
   on('tool.describe', { tool: /^mcp__sage-memory__/ }, async (_, e, next) => {
     const r = await next(e)
     return LISTED.has(e.tool) ? { ...r, isDeferred: false } : r

@@ -155,8 +155,16 @@ const FIX =
 
 export const FRAME = `This is saved project memory from the sage-memory plugin the user installed: notes earlier sessions of this project kept. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
 
+/** How the model asks for notes itself, beyond those the reminders bring. */
+const LOOKUP =
+  'The reminders carry only the best matches. To look further, search the notes on a topic, symbol or command with mcp__sage-memory__search, and read every note on a file with mcp__sage-memory__for_file before you change that file.'
+
+/** When the model saves a note itself; the consolidator saves the rest after each turn. */
+const SAVE =
+  'After each turn the plugin saves new notes itself. When you learn a durable convention, decision, warning or bug root cause that the next session needs, save it at once with mcp__sage-memory__remember, anchored to its file or symbol.'
+
 /** The main system prompt's note about the plugin, set once per session in the environment section. */
-export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
+export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. ${LOOKUP} Use the notes as background; a note may be out of date, so check it against the files before relying on it. ${FIX} ${SAVE}`
 
 /**
  * The block a reminder sends: a header, then as many entries as fit `chars`, best first. Returns the
