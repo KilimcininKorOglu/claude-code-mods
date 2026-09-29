@@ -1,6 +1,6 @@
 # bughunt
 
-Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini söyler. Model çoğu zaman önce düzeltmeyi, sonra düzeltmeden sonra geçen bir test'i yazar. Bu mod avı turlara böler ve her turu kanıtına bağlar. Model bir kanıt komutu yazar, mod komutu kendisi çalıştırır. Kanıt sıfır olmayan bir kodla ve bir `FAIL` satırıyla çıkana kadar üretim kodu değişmez. Tur ancak aynı komut sonra 0 ile ve bir `PASS` satırıyla çıkarsa düzeltilmiş sayılır. Döngü her turun sonucunu okur, engellenen ya da doğrulanmayan bir turda bir sonraki turu başlatmaz, durur.
+Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini söyler. Model çoğu zaman önce düzeltmeyi, sonra düzeltmeden sonra geçen bir test'i yazar. Bu mod avı turlara böler ve her turu kanıtına bağlar. Model bir kanıt komutu yazar, mod komutu kendisi çalıştırır. Kanıt sıfır olmayan bir kodla ve bir `FAIL` satırıyla çıkana kadar üretim kodu değişmez. Tur ancak aynı komut sonra 0 ile ve bir `PASS` satırıyla çıkarsa ve mod düzeltmeyi kısa bir süre geri aldığında yeniden başarısız olursa düzeltilmiş sayılır. Döngü her turun sonucunu okur, engellenen ya da doğrulanmayan bir turda bir sonraki turu başlatmaz, durur.
 
 `/bughunt collab <yollar>` ikinci ve salt okunur bir moddur: bir scanner, bir planner ve bir critic subagent'ı yolları sırayla inceler. Rapor bulguları, planı ve critic'in kararını taşır.
 
@@ -15,15 +15,22 @@ Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini 
    - Mod bir `FAIL` kaydedene kadar kanıt dizini dışındaki bir edit durur.
    - Hedef verildiyse, `FAIL`'den sonra hedef dışındaki bir edit de durur. Regression test'i suite'e girebilsin diye test dosyaları (`tests/`, `__tests__/`, `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`) geçer.
    - Her subagent spawn'ı durur: bir tur tek bir konuşmada çalışır.
-4. Model `mcp__bughunt__proof` tool'unu `phase: "before"` ve kanıt komutunun `argv`'si ile çağırır. Mod komutu çalıştırır (en fazla 5 dakika). `FAIL`'i yalnız komut sıfır olmayan bir kodla çıkar ve `FAIL` ile başlayan bir satır yazarsa kaydeder. Böyle bir satır yazmayan bir kurulum ya da import hatası reddedilir. Düzeltmeden sonra aynı `argv` ile `phase: "after"` yalnız 0 çıkış kodu ve `PASS` ile başlayan bir satırla `PASS` kaydeder. Model çıkış kodunu, çıktının son 20 satırını ve nedeni okur.
-5. Turun turn'ü bitince mod cevabın sonuç satırını okur: bir sonuç etiketiyle başlayan ilk satır. Böylece önündeki bir cümle etiketi gizlemez:
+4. Model `mcp__bughunt__proof` tool'unu `phase: "before"` ve kanıt komutunun `argv`'si ile çağırır. Mod komutu çalıştırır (en fazla 5 dakika). `FAIL`'i yalnız komut sıfır olmayan bir kodla çıkar ve `FAIL` ile başlayan bir satır yazarsa kaydeder. Böyle bir satır yazmayan bir kurulum ya da import hatası reddedilir. Düzeltmeden sonra aynı `argv` ile `phase: "after"` komutu yeniden çalıştırır. Komutun 0 ile çıkması ve `PASS` ile başlayan bir satır yazması gerekir. Model çıkış kodunu, çıktının son 20 satırını ve nedeni okur.
+5. Mod `PASS`'i kaydetmeden önce kanıtın düzeltmeye ulaştığını kontrol eder. `FAIL` kaydedilirken çalışma ağacının bir snapshot'ını almıştır (`git stash create`, stash listesine kayıt eklemez; temiz bir ağaçta `HEAD`). Kabul edilen bir `PASS` çalıştırmasından sonra o snapshot'tan beri değişen dosyaları listeler (`git diff --diff-filter=M`), kanıt dizinini ve test dosyalarını dışarıda bırakır ve bu dosyaları çalışma ağacında snapshot'taki hâline döndürür (`git restore --source`, index olduğu gibi kalır). Kanıtı yeniden çalıştırır, sonra düzeltmeyi geri koyar. `PASS` yalnız bu geri alınmış çalıştırma sıfır olmayan bir kodla ve bir `FAIL` satırıyla çıkarsa sayılır. Aksi hâlde çağrı reddedilir, model kanıtı düzeltip yeniden çağırabilir. Model her durumda nedeni okur:
+   - kanıt düzeltme geri alınmışken de geçer, yani düzeltilen koda ulaşmaz;
+   - `FAIL`'den beri hiçbir üretim dosyası değişmedi;
+   - dizin bir git reposu değil;
+   - bir git komutu başarısız oldu.
+
+   Düzeltme geri alınmışken mod `$.store` içinde bir kayıt tutar. Bir çökme kontrolü yarıda keserse, aynı dizindeki bir sonraki session düzeltmeyi geri koyar, ama yalnız geri alınan dosyalar hâlâ değişmemişse. Dosyalar o arada değiştiyse onların üzerine yazmaz ve sana düzeltmeyi geri getiren `git restore` komutunu söyler.
+6. Turun turn'ü bitince mod cevabın sonuç satırını okur: bir sonuç etiketiyle başlayan ilk satır. Böylece önündeki bir cümle etiketi gizlemez:
    - `fixed-and-verified` ancak mod bu turda önce `FAIL` sonra `PASS` kaydettiyse devam eder. Kayıt yoksa av durur.
    - `no-proven-bug` devam eder.
    - `blocked`, `fixed-verification-incomplete`, sonuç satırının olmaması, bir kesinti ya da bir API hatası avı durdurur.
    - Son turdan sonra av biter.
 
    Her cevabın `fingerprint:` satırı sonraki turların prompt'una girer, böylece aynı kök neden iki kez sayılmaz.
-6. Senin yazdığın bir prompt avı bitirir. `/bughunt` komutları bitirmez.
+7. Senin yazdığın bir prompt avı bitirir. `/bughunt` komutları bitirmez.
 
 ### Collab
 
@@ -66,23 +73,25 @@ Function hook'lar erken erişimdedir ve flag olmadan hiçbir şey yüklenmez. A�
 Claude Code 2.1.284 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=bughunt}, agent.offer{agent=/"^bughunt:(scanner|planner|critic)$"/}, tool.describe{tool=/"^mcp__bughunt__(proof|found|collab)$"/}, tool.call{tool=/"^mcp__bughunt__proof$"/}, tool.call{tool=/"^mcp__bughunt__found$"/}, tool.call{tool=/"^mcp__bughunt__collab$"/}, prompt.submit, skill.prompt{skill=bughunt:hunt}, tool.call{tool=Skill}, tool.call{tool=Edit}, tool.call{tool=Write}, tool.call{tool=NotebookEdit}, agent.spawn, turn.complete
-    ❯ ./register.ts calls: $.agent.register (via declare), $.agent.spawn (via runStep), $.clock.after (via answerOf, send), $.command.register (via declare), $.command.run (via send), $.process.run (via runProof), $.prompt.submit (via send), $.sidebar.clear (via show), $.sidebar.set (via show, toPerson), $.store.get (via readSettings), $.store.set (via setEnabled), $.tool.register (via declare), $.ui.log (via launchCollab, send, toPerson)
+    ❯ ./register.ts calls: $.agent.register (via declare), $.agent.spawn (via portsOf), $.clock.after (via portsOf, send), $.command.register (via declare), $.command.run (via send), $.process.run (via git, recoverFix, runProof), $.prompt.submit (via send), $.sidebar.clear (via show), $.sidebar.set (via show, toPerson), $.store.delete (via putBack, recoverFix), $.store.get (via readSettings, recoverFix), $.store.set (via revertCheck, setEnabled), $.tool.register (via declare), $.ui.log (via launchCollab, send, toPerson)
 
 Reach L2: modelin adlandırdığı kanıt komutunu çalıştırır.
 
     1. Okur:           her Edit, Write ve NotebookEdit çağrısının yolunu; prompt'larını, yalnız senin yazıp yazmadığını görmek için; her turun son cevabını; collab subagent'larının cevaplarını
-    2. Çalıştırır:     modelin mcp__bughunt__proof'a verdiği kanıt komutunu, shell olmadan argv olarak, çalışma dizininde ya da verdiği cwd'de, en fazla 5 dakika; collab için salt okunur üç subagent
+    2. Çalıştırır:     modelin mcp__bughunt__proof'a verdiği kanıt komutunu, shell olmadan argv olarak, çalışma dizininde ya da verdiği cwd'de, en fazla 5 dakika, düzeltme geri alınmışken bir kez daha; bu kontrol için çalışma dizininde git stash create, rev-parse, diff ve restore --worktree; collab için salt okunur üç subagent
     3. Gönderir:       her turun prompt'unu ve her collab raporunu modele mesaj olarak, durdurulan bir edit ya da spawn için bir deny metni, skill metninin sonuna turun bloğunu, sana sidebar bölümleri ve satırları ya da transcript satırları; makineden hiçbir şey çıkmaz
-    4. Saklar:         $.store içinde açık/kapalı ayarını; avın kendisi bellekte durur ve session ile biter
+    4. Saklar:         $.store içinde açık/kapalı ayarını, bir geri alma kontrolü sürerken düzeltmeyi tutan snapshot'ı ve geri alınan dosyaları; avın kendisi bellekte durur ve session ile biter
     5. Güvenilmez girdi: kanıt komutu modelindir ve bir Bash çağrısı gibi senin yetkilerinle, ama shell olmadan çalışır; bir bulgunun alanları saklanmadan önce kontrol edilir
 
 ## Sınırlar
 
 - Gate Edit, Write ve NotebookEdit'i okur. Bash ile değiştirilen bir dosya (`sed -i`, bir yönlendirme, bir script) tutulmaz.
-- Mod kanıtın çıkış kodunu ve `FAIL` ile `PASS` satırlarını ölçer. Kanıtın gerçek kod yolunu çalıştırıp çalıştırmadığını ya da doğru davranışı assert edip etmediğini ölçemez.
+- Geri alma kontrolü kanıtın düzeltmenin değiştirdiği dosyalara bağlı olduğunu gösterir. Kanıtın doğru davranışı assert edip etmediğini ölçemez.
+- Geri alma kontrolü yalnız düzeltmenin değiştirdiği, git'in izlediği dosyaları geri alır. Yalnız dosya ekleyen bir düzeltmede geri alınacak bir şey yoktur, bu yüzden `PASS`'i reddedilir. Git reposu dışında hiçbir `PASS` kaydedilmez.
+- Kontrol sürerken (en fazla bir kanıt çalıştırması) düzeltilen dosyalar eski kodu taşır. Bu sırada onları okuyan başka bir süreç bug'ı görür.
 - Mod skill'in teslim edildiğini ölçer, modelin onu okuduğunu değil.
 - Süresi dolan bir collab adımı bitene kadar arka planda çalışmaya devam eder. Mod artık onu beklemez.
-- Collab adımları başlatılan bir subagent'ın cevabını bekler. Test engine subagent başlatamaz, bu yol test'lerle değil canlı kontrolle doğrulanır. 2.1.284 üzerinde canlı kontrol: iki turluk bir av önce FAIL sonra PASS kaydetti, parmak izini 2. tura taşıdı ve orada bitti. Bir collab scanner'ın bulgusunu sakladı, critic'in kararını okudu ve üç hand-back hiçbir turn başlatmadı.
+- Test engine subagent başlatamaz. Bu yüzden collab beklemeleri (hand-back, erken cevap, süre sınırı, başarısız bitiş) `pipeline.ts` üzerinde sahte engine çağrılarıyla test edilir, bütün akış canlı kontrolle doğrulanır. 2.1.284 üzerinde canlı kontrol: iki turluk bir av önce FAIL sonra PASS kaydetti, parmak izini 2. tura taşıdı ve orada bitti. Bir collab scanner'ın bulgusunu sakladı, critic'in kararını okudu ve üç hand-back hiçbir turn başlatmadı. Bir git reposundaki tur, geri alınmış çalıştırma başarısız olduktan sonra `PASS` kaydetti. Düzeltme sonra yerindeydi ve `git stash list` boş kaldı.
 - Bir turun gate'lerini aşmanın yolu yoktur. `/bughunt stop` avı bitirir, `/bughunt off` modu kapatır.
 
 ## Geliştirme
