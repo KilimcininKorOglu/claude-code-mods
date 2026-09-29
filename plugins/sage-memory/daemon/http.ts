@@ -108,8 +108,19 @@ export type Probe = { state: 'alive'; hello: Hello } | { state: 'absent' } | { s
 
 const NO_LISTENER = new Set(['ECONNREFUSED', 'ENOENT', 'ENOTSOCK'])
 
-/** A listener took the connection and dropped it, as one that closes with the connection still in its backlog does. */
-const DROPPED = new Set(['ECONNRESET', 'EPIPE'])
+/**
+ * A listener took the connection and dropped it, as one that closes with the connection still in its
+ * backlog does. A daemon that shuts down answered a launch's probe with `write ENOTCONN` on macOS.
+ */
+const DROPPED = new Set(['ECONNRESET', 'EPIPE', 'ENOTCONN'])
+
+/** What a failed `/hello` request says about the socket; a failure of any other kind throws. */
+export function failedProbe(err: unknown): Probe {
+  const code = codeOf(err)
+  if (code !== undefined && NO_LISTENER.has(code)) return { state: 'absent' }
+  if (code === undefined || DROPPED.has(code)) return { state: 'silent', reason: messageOf(err) }
+  throw err
+}
 
 /** Asks the socket for `/hello`. Any failure but the kinds above throws. */
 export async function probe(socket: string, timeoutMs: number): Promise<Probe> {
@@ -117,10 +128,7 @@ export async function probe(socket: string, timeoutMs: number): Promise<Probe> {
   try {
     answer = await call(socket, '/hello', { method: 'GET', timeoutMs })
   } catch (err) {
-    const code = codeOf(err)
-    if (code !== undefined && NO_LISTENER.has(code)) return { state: 'absent' }
-    if (code === undefined || DROPPED.has(code)) return { state: 'silent', reason: messageOf(err) }
-    throw err
+    return failedProbe(err)
   }
   const hello = helloOf(answer.reply)
   return hello ? { state: 'alive', hello } : { state: 'silent', reason: `/hello answered HTTP ${answer.status} without a sage-memory hello` }

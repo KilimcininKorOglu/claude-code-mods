@@ -8,7 +8,7 @@ import { after, describe, test } from 'node:test'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { layoutOf } from '../../hooks/shared/layout.ts'
 import { MAX_BODY_BYTES, PROTOCOL } from '../../hooks/shared/protocol.ts'
-import { call, probe } from '../http.ts'
+import { call, failedProbe, probe } from '../http.ts'
 import { startServer, type Started } from '../server.ts'
 import { fakeRuntime } from './fake-runtime.ts'
 import { cleanUp, serverFileOf, tempDir, waitFor } from './support.ts'
@@ -178,6 +178,13 @@ describe('daemon server', () => {
     const found = probe(socket, 1000)
     raw.server.close()
     assert.equal((await found).state, 'silent')
+  })
+
+  test('a dropped connection reads as silent, a missing listener as absent, and any other failure throws', () => {
+    const failure = (code: string) => Object.assign(new Error(`write ${code}`), { code })
+    for (const code of ['ECONNRESET', 'EPIPE', 'ENOTCONN']) assert.deepEqual(failedProbe(failure(code)), { state: 'silent', reason: `write ${code}` })
+    for (const code of ['ECONNREFUSED', 'ENOENT', 'ENOTSOCK']) assert.deepEqual(failedProbe(failure(code)), { state: 'absent' })
+    assert.throws(() => failedProbe(failure('EACCES')), /write EACCES/)
   })
 
   test('a lock whose process is gone is taken over', async () => {
