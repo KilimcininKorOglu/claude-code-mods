@@ -101,7 +101,8 @@ describe('dep-sentinel', () => {
     on('process.run', (_, e) => {
       argvs.push([...e.argv])
       const view = [{ 'time.created': '2015-05-14T22:30:38.015Z', 'dist-tags.latest': '4.63.5', versions: ['4.63.4', '4.63.5'] }]
-      return { value: npmFails ? { exitCode: 1, stdout: '', stderr: 'npm error code E404\n' } : { exitCode: 0, stdout: JSON.stringify(view), stderr: '' } }
+      const whole = { isStdoutTruncated: false, isStderrTruncated: false }
+      return { value: npmFails ? { exitCode: 1, stdout: '', stderr: 'npm error code E404\n', ...whole } : { exitCode: 0, stdout: JSON.stringify(view), stderr: '', ...whole } }
     })
     expect(await $.tool.call({ tool: 'Bash', command: 'npm i -D rollup' })).toEqual({ result: 'ok' })
     expect(argvs).toEqual([['npm', 'view', 'rollup', 'time.created', 'dist-tags.latest', 'versions', '--json']])
