@@ -1,6 +1,8 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
   countsLine,
+  jobText,
+  workingLine,
   faint,
   launchOf,
   listed,
@@ -192,6 +194,8 @@ type State = {
   counts: SessionCounts
   /** Whether a timed redraw is under way, so a slow daemon answer does not stack a second one. */
   redrawing: boolean
+  /** The job under way after the main-loop turn (consolidating, saving, curating), shown as the section's last line. */
+  working?: string
 }
 
 /**
@@ -252,7 +256,15 @@ async function show($: EngineInterface, state: State): Promise<void> {
   const first = stateLines(state.link, state.project?.name ?? '')
   if (state.link.state !== 'ready') return toPerson($, first)
   await readStored($, state)
-  await toPerson($, [...first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts)])
+  const job = state.working === undefined ? [] : [workingLine(state.working)]
+  await toPerson($, [...first, ...(state.stored === undefined ? [] : [storedLine(state.stored)]), countsLine(state.counts), ...job])
+}
+
+/** Names the job under way after the turn in the section, or takes its line down with `undefined`. */
+async function working($: EngineInterface, state: State, what: string | undefined): Promise<void> {
+  if (state.working === what) return
+  state.working = what
+  await show($, state)
 }
 
 /**
@@ -1053,6 +1065,7 @@ type Since = { asked: readonly string[]; turn: TurnEvidence; relevant: readonly 
  */
 async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
   if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
+  await working($, state, 'consolidating…')
   const root = state.project?.root ?? ''
   const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
   const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant)
@@ -1063,7 +1076,9 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   }
   const sessionId = await $.session.id()
   if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant) })
-  for (const input of additionsOf(r.text, sessionId, root, existing)) await writeOne($, state, input)
+  const additions = additionsOf(r.text, sessionId, root, existing)
+  if (additions.length > 0) await working($, state, jobText('saving', additions.length))
+  for (const input of additions) await writeOne($, state, input)
 }
 
 /** The memories the curator audits: those anchored to the turn's written files, then the targets of pending candidates. */
@@ -1106,6 +1121,7 @@ async function curate($: EngineInterface, state: State, answer: string, written:
   if (written.length === 0 || !(await isReady(state)) || (await $.store.get('curate')) === false) return
   const targets = await curatorTargets($, state, written.map(path => relativeTo(state.project?.root ?? '', path)))
   if (targets.length === 0) return
+  await working($, state, jobText('curating', targets.length))
   const prompt = curatorPrompt(written.map(path => relativeTo(state.project?.root ?? '', path)), answer, targets)
   const r = await $.model.complete({ model: await jobModel($), system: CURATOR_SYSTEM, prompt, maxTokens: CURATE_TOKENS, timeoutMs: CURATE_MS })
   if (!r.isAnswered) {
@@ -1125,7 +1141,9 @@ function afterAnswer($: EngineInterface, state: State, answer: string): void {
   const since: Since = { asked: state.asked, turn: state.turn, relevant: state.relevant }
   state.asked = []
   state.relevant = []
-  void guarded($, 'the consolidator', () => consolidate($, state, answer, since)).then(() => guarded($, 'the curator', () => curate($, state, answer, since.turn.written)))
+  void guarded($, 'the consolidator', () => consolidate($, state, answer, since))
+    .then(() => guarded($, 'the curator', () => curate($, state, answer, since.turn.written)))
+    .then(() => working($, state, undefined))
 }
 
 /** Notes what a main-loop tool batch touched, for the consolidator. */

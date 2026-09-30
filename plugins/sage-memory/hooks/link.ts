@@ -154,6 +154,16 @@ export function storedLine(stored: StoredCounts): Line {
   ], 'dim')
 }
 
+/** The words the section shows while a job after the turn works on `count` memories: `saving 2 memories…`. */
+export function jobText(verb: 'saving' | 'curating', count: number): string {
+  return `${verb} ${count} ${count === 1 ? 'memory' : 'memories'}…`
+}
+
+/** The line of the job under way after the turn; the section drops it when the job ends. */
+export function workingLine(text: string): Line {
+  return { text, kind: 'info' }
+}
+
 /** The sidebar's last line while the daemon answers: this session's counts. */
 export function countsLine(counts: SessionCounts): Line {
   return partsLine([

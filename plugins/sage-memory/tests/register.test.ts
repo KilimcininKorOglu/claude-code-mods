@@ -656,6 +656,8 @@ describe('consolidator', () => {
     expect(inputs.map(input => input.related)).toEqual([['m1'], undefined])
     expect(streamOf(w, 'consolidator')).toEqual(Array(2).fill('added (project): The daemon closes itself five minutes after its last request.'))
     expect(painted(w, 'consolidator')).toEqual(['ok:added', 'ok:added'])
+    expect(w.lines.some(line => line.endsWith(' / saving 2 memories…'))).toBe(true)
+    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).not.toContain('…')
   })
 
   withSidebar('the consolidator reads what the person wrote, so a reason the answer does not repeat is not lost, and each prompt once', async ($, on) => {
@@ -765,6 +767,11 @@ describe('curator', () => {
     expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([{ id: 'm4', patch: { importance: 1 } }])
     expect(streamOf(w, 'curator')).toEqual(['curated: 1 merged, 1 recalibrated'])
     expect(painted(w, 'curator')).toEqual(['warn:1 merged warn:1 recalibrated'])
+    // While the jobs after the turn run, the section's last line names each; the line goes once they end.
+    const section = w.lines.filter(line => line.startsWith('daemon ready'))
+    const jobs = section.map(line => line.split(' / ').find(part => part.endsWith('…'))).filter(job => job !== undefined)
+    expect([...new Set(jobs)]).toEqual(['consolidating…', 'curating 2 memories…'])
+    expect(section.at(-1)).not.toContain('…')
   })
 })
 
