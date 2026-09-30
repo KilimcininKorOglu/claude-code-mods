@@ -8,23 +8,33 @@ export type Install = { ecosystem: Ecosystem; name: string; version?: string; ex
 /** What a command installs; `skipped` when it carries the DEP_SENTINEL_SKIP=1 prefix. */
 export type Plan = { skipped: boolean; installs: Install[] }
 
-/** The shell words of a command, quotes removed; a separator (`&&`, `;`, `|`, a newline) is its own word. */
+/** A redirection (`2>&1`, `>log`, `&>all`, `<in`); a bare operator (`>`, `2>`) takes the next word as its target. */
+const REDIRECT = /^(?:\d*|&)[<>]/
+const BARE_REDIRECT = /^(?:\d*|&)[<>]+$/
+
+/**
+ * The shell words of a command, quotes removed; a separator (`&&`, `;`, `|`, a newline) is its own word.
+ * A redirection stays one word (`2>&1`), so `commands` can drop it with its target.
+ */
 export function words(command: string): string[] {
   const out: string[] = []
-  const re = /"([^"]*)"|'([^']*)'|(&&|\|\||[;|\n])|([^\s"';|&]+)/g
-  for (const m of command.matchAll(re)) out.push(m[1] ?? m[2] ?? m[3] ?? m[4] ?? '')
+  const re = /"([^"]*)"|'([^']*)'|(&&|\|\||[;|\n])|((?:\d*|&)[<>]+&?[^\s"';|&<>]*)|([^\s"';|&]+)/g
+  for (const m of command.matchAll(re)) out.push(m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? '')
   return out
 }
 
 const SEPARATOR = new Set(['&&', '||', ';', '|', '\n'])
 
-/** The simple commands of a command line, each without its leading `VAR=value` words. */
+/** The simple commands of a command line, each without its leading `VAR=value` words and its redirections. */
 export function commands(command: string): { env: string[]; argv: string[] }[] {
   const out: { env: string[]; argv: string[] }[] = [{ env: [], argv: [] }]
-  for (const w of words(command)) {
+  const all = words(command)
+  for (let i = 0; i < all.length; i++) {
+    const w = all[i] ?? ''
     const cur = out[out.length - 1]
     if (cur === undefined) break
-    if (SEPARATOR.has(w)) out.push({ env: [], argv: [] })
+    if (REDIRECT.test(w)) i += BARE_REDIRECT.test(w) ? 1 : 0
+    else if (SEPARATOR.has(w)) out.push({ env: [], argv: [] })
     else if (cur.argv.length === 0 && /^[A-Za-z_]\w*=/.test(w)) cur.env.push(w)
     else cur.argv.push(w)
   }

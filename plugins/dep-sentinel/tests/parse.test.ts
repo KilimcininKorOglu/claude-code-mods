@@ -36,4 +36,10 @@ describe('parse', () => {
     expect(names('echo "npm install evil" && git status')).toEqual([])
     expect(planOf('npm i a b c d e f g h i j k l').installs).toHaveLength(10)
   })
+
+  test('a redirection and its target are not packages', async () => {
+    expect(names('cargo add regex -p browser_oxide --offline 2>&1 | tail -2')).toEqual(['crates.io:regex'])
+    expect(names('npm i left-pad > log 2> err &>all <in')).toEqual(['npm:left-pad'])
+    expect(names('pip install httpx >/dev/null 2>&- && npm i a &')).toEqual(['PyPI:httpx', 'npm:a'])
+  })
 })
