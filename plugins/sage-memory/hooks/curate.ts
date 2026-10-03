@@ -9,7 +9,8 @@ import { anchorsOf, confidenceOf, importanceOf, keptKind, kindOf, operationsOf }
 import { faint, listed, partsLine, type Line } from './link.ts'
 import type { Memory, RememberInput, UpdatePatch } from './shared/model.ts'
 
-export const CURATE_MS = 30_000
+/** 2.1.288 enforces this timeout on a timer-launched call; 30 s cut the curator's answer as aborted. */
+export const CURATE_MS = 180_000
 export const CURATE_TOKENS = 2048
 /** At most this many written files are looked up, and this many memories per file. */
 export const CURATED_FILES = 6

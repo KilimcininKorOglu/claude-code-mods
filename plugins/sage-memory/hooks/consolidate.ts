@@ -11,8 +11,9 @@ import { ANCHOR_TYPES, KINDS, PATH_ANCHOR_TYPES, STRUCTURAL_KINDS, type Anchor, 
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
 export const DEFAULT_MODEL = 'haiku'
-/** How long a consolidation may take. */
-export const CONSOLIDATE_MS = 30_000
+/** How long a consolidation may take. 2.1.288 enforces this timeout on a timer-launched call, and
+ * the jobModel answer through a slow proxy needs over 30 s; a call cut at 30 s settled as aborted. */
+export const CONSOLIDATE_MS = 180_000
 /** Room for the candidate list: a reply took at most 1,434 output tokens in 228 measured runs. */
 export const CONSOLIDATE_TOKENS = 4096
 

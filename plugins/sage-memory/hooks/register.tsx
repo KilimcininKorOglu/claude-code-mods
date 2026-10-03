@@ -1072,6 +1072,9 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const r = await $.model.complete({ model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
   if (!r.isAnswered) {
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
+    // The turn's material was taken out of state before the timer ran. Hand the typed prompts back,
+    // so the next consolidation still reads them instead of this turn being lost for good.
+    state.asked = [...since.asked, ...state.asked].slice(-MAX_ASKED)
     return
   }
   const sessionId = await $.session.id()
