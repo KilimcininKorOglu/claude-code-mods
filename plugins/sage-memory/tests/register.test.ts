@@ -44,8 +44,8 @@ type World = {
   toolFails: boolean
   /** What a tool the world runs returns: a file's text for Read. */
   toolText: string
-  /** How the daemon is lost until the launcher runs again: its socket refuses, or it refuses the token. */
-  lost?: 'socket' | 'token'
+  /** How the daemon is lost until the launcher runs again: its socket refuses, it refuses the token, or it answers 503 while closing. */
+  lost?: 'socket' | 'token' | 'closing'
   tools: string[]
   asked: { system: string; prompt: string; model: string }[]
   modelText?: string
@@ -60,6 +60,14 @@ type World = {
 }
 
 type Drawn = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
+
+/** The world's answer while the daemon is lost in one of the three ways, or undefined to serve the route. */
+function lostAnswer(lost: World['lost']): { value: unknown } | undefined {
+  if (lost === 'socket') throw new Error('connect ENOENT daemon.sock')
+  if (lost === 'closing') return { value: { status: 503, ok: false, headers: {}, text: JSON.stringify({ ok: false, error: 'the daemon is closing' }) } }
+  if (lost === 'token') return { value: { status: 401, ok: false, headers: {}, text: JSON.stringify({ ok: false, error: 'unauthorized' }) } }
+  return undefined
+}
 
 function world(on: On): World {
   const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
@@ -127,8 +135,10 @@ function world(on: On): World {
     const init = (e.init ?? {}) as { socketPath?: string; headers?: Record<string, string>; body?: string }
     const path = new URL(e.url).pathname
     w.fetches.push({ url: path, socketPath: init.socketPath, auth: init.headers?.authorization, body: JSON.parse(init.body ?? '{}') as Record<string, unknown> })
-    if (w.lost === 'socket') throw new Error('connect ENOENT daemon.sock')
-    if (w.lost === 'token') return { value: { status: 401, ok: false, headers: {}, text: JSON.stringify({ ok: false, error: 'unauthorized' }) } }
+    const lost = lostAnswer(w.lost)
+    // The closing window catches exactly one request; the relaunch that answers it closes it.
+    if (w.lost === 'closing') w.lost = undefined
+    if (lost !== undefined) return lost as never
     const route = w.routes.get(path)
     const value = typeof route === 'function' ? (route as (body: Record<string, unknown>) => unknown)(w.fetches.at(-1)?.body ?? {}) : route
     const reply = value === undefined ? { ok: false, error: 'no such route' } : { ok: true, value }
@@ -171,6 +181,19 @@ describe('sage-memory', () => {
     const project = status.body.project as { key: string; name: string; root: string; commonDir: string }
     expect(project.key).toMatch(/^my-app-[0-9a-f]{8}$/)
     expect(project).toMatchObject({ name: 'my app', root: '/src/my app', commonDir: '/src/my app/.git' })
+  })
+
+  withSidebar('a request that lands while the daemon is closing relinks and asks again, with no error line', async ($, on) => {
+    const w = world(on)
+    w.routes.set('/memory/stats', { project: { total: 2, byStatus: { active: 2 }, byKind: {}, edges: 0 }, user: { total: 0, byStatus: {}, byKind: {}, edges: 0 } })
+    await $.session.start(START)
+    w.lost = 'closing'
+    const stats = await $.command.run(run('stats'))
+    // The ask got the 503 of a closing daemon, the relink started a fresh one, and the retry went
+    // through; so the launcher ran once more and the route was asked twice, with no error line.
+    expect(w.argvs.filter(a => a.includes('--dir'))).toHaveLength(2)
+    expect(w.logs).toEqual([])
+    expect(String(stats.text)).toMatch(/^project: 2 memories/)
   })
 
   withSidebar("the section counts the active memories of the project's store and the global one, and a failed count read says so", async ($, on) => {

@@ -347,7 +347,13 @@ async function send($: EngineInterface, state: State, path: string, body: Record
     body: JSON.stringify({ project: state.project, sessionId: await $.session.id(), ...body }),
   }
   const fetching = $.http.fetch(`http://sage-memory${path}`, init).then(
-    (response): Sent => (response.status === 401 ? { gone: 'the daemon refused the token' } : { response }),
+    (response): Sent => {
+      if (response.status === 401) return { gone: 'the daemon refused the token' }
+      // The daemon answers 503 only while it is shutting down, so a request that lands in that
+      // closing window takes the same path as a dead socket: relaunch and ask again.
+      if (response.status === 503) return { gone: 'the daemon is closing' }
+      return { response }
+    },
     (err: unknown): Sent => ({ gone: errorText(err) }),
   )
   return within($, ms, path, fetching)
