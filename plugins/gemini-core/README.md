@@ -65,9 +65,7 @@ The Gemini mods send the conversation, tool outputs and diffs. The Gemini API Ad
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-core@kilimcininkoroglu-mods
 
-A Gemini mod lists `gemini-core` in its `dependencies`, so installing one installs this one. Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+A Gemini mod lists `gemini-core` in its `dependencies`, so installing one installs this one. Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 ## After installing
 

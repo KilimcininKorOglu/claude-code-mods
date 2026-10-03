@@ -43,9 +43,7 @@ A GitHub Actions step written as `actions/checkout@v4` runs whatever code that t
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install action-pin@kilimcininkoroglu-mods
 
-Function hooks are early access, and no mod loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 ## After installing
 

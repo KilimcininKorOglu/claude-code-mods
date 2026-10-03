@@ -96,17 +96,11 @@ Each such reply replaces the file, so it holds the last one. Read it to see whet
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install memory-save@kilimcininkoroglu-mods
 
-Function hooks are early access, and nothing loads without the flag:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 Load it from a local checkout for one session:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/memory-save
-
-To keep the flag on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+    claude --plugin-dir plugins/memory-save
 
 ## After installing
 

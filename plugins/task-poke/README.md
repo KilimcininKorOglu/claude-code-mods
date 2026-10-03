@@ -77,17 +77,11 @@ The count goes back to zero at the first turn that moved something, so a model w
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install task-poke@kilimcininkoroglu-mods
 
-Function hooks are early access, and nothing loads without the flag:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 Load it from a local checkout for one session:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/task-poke
-
-To keep the flag on, add this to `~/.claude/settings.json` (measured on 2.1.278):
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+    claude --plugin-dir plugins/task-poke
 
 ## After installing
 

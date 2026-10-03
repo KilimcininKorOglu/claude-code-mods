@@ -78,17 +78,11 @@ Ayarlar ve klipler mod'un store'unda durur. Store bütün projelerde ve bütün 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install idle-art@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 Yerel bir checkout'tan tek session için yüklemek istersen:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/idle-art
-
-Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+    claude --plugin-dir plugins/idle-art
 
 ## Kurulumdan sonra
 

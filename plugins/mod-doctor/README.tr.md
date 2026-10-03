@@ -35,9 +35,7 @@ Clone ancak son `claude plugin marketplace update` kadar yenidir; yani bu mod "m
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install mod-doctor@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 ## Kurulumdan sonra
 

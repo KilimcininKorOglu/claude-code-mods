@@ -60,13 +60,7 @@ The repository is its git common directory, so the worktrees of one repository s
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install flaky-memory@kilimcininkoroglu-mods
 
-Function hooks are early access, and no mod loads without the flag:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
-
-To keep the flag on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 ## After installing
 

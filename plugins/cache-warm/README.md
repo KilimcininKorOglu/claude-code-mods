@@ -109,17 +109,11 @@ On a subscription the dollars are a yardstick, not your bill. How a cache read c
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install cache-warm@kilimcininkoroglu-mods
 
-Function hooks are early access, and no mod loads without the flag:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 To load it from a local checkout for one session:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/cache-warm
-
-To keep the flag on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+    claude --plugin-dir plugins/cache-warm
 
 ## After installing
 

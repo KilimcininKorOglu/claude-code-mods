@@ -77,17 +77,11 @@ Sayım, bir şeyi ilerleten ilk turn'de sıfıra döner, yani uzun bir task üze
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install task-poke@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 Yerel bir checkout'tan tek session için yüklemek istersen:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/task-poke
-
-Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle (2.1.278 üzerinde ölçüldü):
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+    claude --plugin-dir plugins/task-poke
 
 ## Kurulumdan sonra
 

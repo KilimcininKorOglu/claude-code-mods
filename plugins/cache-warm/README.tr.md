@@ -109,17 +109,11 @@ Abonelikteysen dolarlar bir ölçü birimidir, faturan değil. Bir cache okumas�
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install cache-warm@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod yüklenmiyor:
-
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 Bir session için yerel bir checkout'tan yüklemek istersen:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/cache-warm
-
-Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+    claude --plugin-dir plugins/cache-warm
 
 ## Kurulumdan sonra
 

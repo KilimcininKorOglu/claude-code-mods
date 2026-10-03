@@ -81,13 +81,11 @@ Google AI Studio shows the free tier limits per model; the documentation does no
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-compact@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 To load it from a local checkout for one session, put gemini-core beside it:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/gemini-core --plugin-dir plugins/gemini-compact
+    claude --plugin-dir plugins/gemini-core --plugin-dir plugins/gemini-compact
 
 ## After installing
 

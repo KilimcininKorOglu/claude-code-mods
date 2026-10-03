@@ -59,9 +59,7 @@ Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install bughunt@kilimcininkoroglu-mods
 
-Function hook'lar erken erişimdedir ve flag olmadan hiçbir şey yüklenmez. Açık tutmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 ## Kurduktan sonra
 

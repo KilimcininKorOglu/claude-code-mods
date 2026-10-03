@@ -48,9 +48,7 @@ With the free key used in the live check, `gemini-3.1-pro-preview` answered HTTP
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-advisor@kilimcininkoroglu-mods
 
-It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+It depends on `gemini-core`, which `claude plugin install` adds. Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 ## After installing
 

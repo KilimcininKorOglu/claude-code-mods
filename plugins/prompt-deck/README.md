@@ -34,9 +34,7 @@ In the live check a pinned `YalnÄ±z tamam kelimesini yaz.` appeared as `1: YalnÄ
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-deck@kilimcininkoroglu-mods
 
-Function hooks are early access, and nothing loads without the flag. To keep it on, add this to `~/.claude/settings.json`:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, so there is nothing to switch on.
 
 ## After installing
 

@@ -2,7 +2,7 @@
 
 Claude Mods for Claude Code. A Claude Mod is a Claude Code plugin whose `hooks/hooks.json` names a TypeScript module. The module exports `register(on, options)`, where `options` holds the plugin's `userConfig` values, and each hook is `on("event", matcher, async ($, e, next) => result)`. `$` is the engine interface, `e` is the event, and `next(e)` runs every hook beneath and then the engine.
 
-Function hooks are early access. Nothing loads unless `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` is set, and the API can change between releases.
+Function hooks are early access. Claude Code 2.1.288 and later load them by default, and the API can change between releases.
 
 Every mod has a page of its own at [cc-mods.keremgok.tr](https://cc-mods.keremgok.tr), in English and in Turkish. The site is built from this repository: a mod's `README.md` is its English page and its `README.tr.md` the Turkish one, so a push to `main` publishes both.
 
@@ -15,14 +15,8 @@ claude plugin install <mod>@kilimcininkoroglu-mods
 
 ## After installing
 
-1. Turn function hooks on for good. Add this to `~/.claude/settings.json`; without it no mod loads (measured on 2.1.278):
-
-   ```json
-   { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
-   ```
-
-2. Restart Claude Code. A session that was open during the install does not load the mod.
-3. For a Gemini mod, give gemini-core a Gemini API key and choose the tier, then turn the mod on (`/gemini-review on`, `/gemini-plan-review on`, `/gemini-advisor on`, `/gemini-compact on`). A Gemini mod is off after an install and sends nothing to Gemini until then. The [gemini-core README](plugins/gemini-core/README.md#after-installing) lists the steps.
+1. Restart Claude Code. A session that was open during the install does not load the mod.
+2. For a Gemini mod, give gemini-core a Gemini API key and choose the tier, then turn the mod on (`/gemini-review on`, `/gemini-plan-review on`, `/gemini-advisor on`, `/gemini-compact on`). A Gemini mod is off after an install and sends nothing to Gemini until then. The [gemini-core README](plugins/gemini-core/README.md#after-installing) lists the steps.
 
 Each mod README has an "After installing" section when that mod needs more.
 
@@ -131,7 +125,7 @@ make test
 Load a mod for one session:
 
 ```sh
-CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/<mod>
+claude --plugin-dir plugins/<mod>
 ```
 
 Run `/plugin-types` inside that session to write `.claude/types/` for type checking. The directory is version-specific and git-ignored. Then run the checks of one mod from its directory:

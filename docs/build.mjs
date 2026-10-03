@@ -198,9 +198,7 @@ function installBlock(lang) {
   const c = copy[lang]
   return `<p class="sub">${escape(c.installLead)}</p>
 <pre><code>claude plugin marketplace add KilimcininKorOglu/claude-code-mods
-claude plugin install &lt;mod&gt;@${escape(copy.site.marketplace)}</code></pre>
-<p>${c.flagNote}</p>
-<pre><code>{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }</code></pre>`
+claude plugin install &lt;mod&gt;@${escape(copy.site.marketplace)}</code></pre>`
 }
 
 function hero(list, lang) {

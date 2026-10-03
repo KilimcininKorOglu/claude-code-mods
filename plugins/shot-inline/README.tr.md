@@ -30,9 +30,7 @@ Canlı kontrolde bir PNG'nin ve bir JPG'nin `Read` çağrısı resmi kendi satı
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install shot-inline@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 ## Kurulumdan sonra
 

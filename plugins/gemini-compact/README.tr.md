@@ -81,13 +81,11 @@ Model başına free tier sınırlarını Google AI Studio gösterir, dokümantas
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install gemini-compact@kilimcininkoroglu-mods
 
-`gemini-core`'a bağlıdır; `claude plugin install` onu da kurar. Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+`gemini-core`'a bağlıdır; `claude plugin install` onu da kurar. Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 Yerel bir checkout'tan tek session için yüklemek istersen gemini-core'u da yanına koy:
 
-    CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir plugins/gemini-core --plugin-dir plugins/gemini-compact
+    claude --plugin-dir plugins/gemini-core --plugin-dir plugins/gemini-compact
 
 ## Kurulumdan sonra
 

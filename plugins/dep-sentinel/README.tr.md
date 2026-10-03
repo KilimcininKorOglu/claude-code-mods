@@ -61,9 +61,7 @@ Canlı denemede `npm install --dry-run lodash@4.17.15` en güncel version 4.18.1
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install dep-sentinel@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir mod yüklenmiyor. Flag'i kalıcı açmak için `~/.claude/settings.json` dosyasına şunu ekle:
-
-    { "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1" } }
+Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
 
 ## Kurulumdan sonra
 
