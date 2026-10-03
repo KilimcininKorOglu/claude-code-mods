@@ -1141,9 +1141,14 @@ function afterAnswer($: EngineInterface, state: State, answer: string): void {
   const since: Since = { asked: state.asked, turn: state.turn, relevant: state.relevant }
   state.asked = []
   state.relevant = []
-  void guarded($, 'the consolidator', () => consolidate($, state, answer, since))
-    .then(() => guarded($, 'the curator', () => curate($, state, answer, since.turn.written)))
-    .then(() => working($, state, undefined))
+  // The jobs run on a timer, not in the turn's dispatch: since 2.1.288 a model call still in
+  // flight when the turn's dispatch closes is aborted, and every consolidation was lost that way.
+  // A timer outlives the dispatch, so the model answers reach the daemon.
+  $.clock.after(0, () => {
+    void guarded($, 'the consolidator', () => consolidate($, state, answer, since))
+      .then(() => guarded($, 'the curator', () => curate($, state, answer, since.turn.written)))
+      .then(() => working($, state, undefined))
+  })
 }
 
 /** Notes what a main-loop tool batch touched, for the consolidator. */
