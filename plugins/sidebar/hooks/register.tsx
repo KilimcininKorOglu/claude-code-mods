@@ -34,16 +34,19 @@ type Answer = { command: string; text: string; failed: boolean }
 
 /**
  * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
- * each stream entry's id its own, whether the pane is open, the last button's answer, and the log: the
- * directory of every project's logs and this project's name, read once at the session's start. The file
- * is picked by the day of each write, so a session that runs past midnight writes the new day's file, and
- * its lines are not held here: every write reads the file again, because another session writes it too.
+ * each stream entry's id its own, whether the pane is open, whether the surface seats it beside the
+ * transcript (learned at the pane's first render), the last button's answer, and the log: the
+ * directory of every project's logs and this project's name, read once at the session's start. The
+ * file is picked by the day of each write, so a session that runs past midnight writes the new day's
+ * file, and its lines are not held here: every write reads the file again, because another session
+ * writes it too.
  */
 export type State = {
   board: Board
   stream: Kept[]
   written: number
   open: boolean
+  docked?: boolean
   message?: Answer
   dir: string
   project: string
@@ -359,18 +362,23 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e)
+    // A surface that seats no pane beside the transcript seats it above the prompt instead; the
+    // sidebar is a sidebar or nothing, so the pane stands down and every mod keeps its own line.
+    if (e.props.placement === 'inline') return closePane($, state).then(() => next(e))
+    state.docked = true
     // The body's own rows are the stream's room; the button's answer takes the last one.
     const rows = (e.props.scroll.bodyRows || MAX_BOARD_LINES) - (state.message === undefined ? 0 : 1)
     return paneTree($.ui.resolve(e), state, e.props.bodyColumns, rows, (command, args) => void pressButton($, state, command, args))
   })
 
-  // The person's close ends the session's sections; the stored choice follows, so it stays closed.
+  // A close, by the pane's own button, ends the session's sections only: the stored choice belongs
+  // to /sidebar alone, so the pane comes back with the session that follows.
   on('ui.close', async ($, e, next) => {
     if (e.id !== PANE_ID) return next(e)
     const r = await next(e)
     state.open = false
+    state.docked = undefined
     forget(state)
-    if (e.origin.kind === 'person') await $.store.set(OPEN_KEY, false)
     return r
   })
 

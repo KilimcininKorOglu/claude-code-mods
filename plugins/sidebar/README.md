@@ -4,7 +4,7 @@ When a dozen mods each write their findings as transcript lines and status lines
 
 ## What it does
 
-1. `/sidebar` opens the pane and `/sidebar off` closes it. The choice is kept in `$.store`, so a session started later opens the sidebar again by itself.
+1. `/sidebar` opens the pane and `/sidebar off` closes it. The choice is kept in `$.store`, so a session started later opens the sidebar again by itself. The pane is a sidebar or nothing: where the surface seats panes beside the transcript (the fullscreen layout, from 110 columns) it opens there; where it does not, the pane stands down at its first render, every mod keeps its own transcript or status line, and the choice is untouched. Closing it, through the pane's own close or `/sidebar off`, ends it for that session only: a closed sidebar comes back with the next session until you run `/sidebar off`.
 2. While it is open, any mod writes a section: `$.sidebar.set({ consumer, key, title, lines, buttons, until, order })` answers `true`. While it is closed nothing is kept and the call answers `false`, so the mod keeps showing its own transcript line or status line instead.
 3. A section is drawn as a bold heading (`<consumer>: <title>`, plus the time for a stream entry), its lines (`ok` green, `warn` yellow, `error` red, `dim` faint) and its buttons. The pane has two parts: the standing sections at the top (`until: 'session'`, then `until: 'turn'`, each group by `order`, then consumer, then key), and the stream under them.
 4. The stream is what `until: 'stream'` writes: a log of findings, newest first, right under the standing sections. While both are drawn, a faint divider row separates them: dashes across the pane's width with an `o` in the middle (`---------o---------`). An entry never replaces another, so the same mod and key twice reads as two entries. A stream entry's heading also carries the day and time it was written, in the machine's own time zone (`edit-loop: edit loop (21.09 14:32)`), so the person reads the log after the fact; a standing section carries none, because it is rewritten at every measure. Nothing drops an entry at the turn's end: an entry leaves only when newer ones push it past the pane's last row. A taller terminal holds more of the stream, a shorter one less. The stream's rows are shared: while several mods write into it, each one draws at most its own share of the rows, so a talkative mod cannot push another mod's finding off the pane. The rows a share leaves over go to the entries it held back, and a mod writing alone takes the whole area.
@@ -79,7 +79,7 @@ Function hooks are early access, and nothing loads without the flag. To keep it 
 ## After installing
 
 1. Restart Claude Code.
-2. Run `/sidebar` once. From then on every session opens it until you run `/sidebar off`.
+2. Run `/sidebar` once. From then on every session opens it until you run `/sidebar off`. The pane's own close ends it for the session only; the choice stays.
 
 ## What it can reach
 

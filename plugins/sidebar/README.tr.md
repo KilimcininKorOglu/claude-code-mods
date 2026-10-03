@@ -4,7 +4,7 @@ Bir düzine mod bulgularını transcript satırı ve status line olarak yazınca
 
 ## Ne yapar
 
-1. `/sidebar` pane'i açar, `/sidebar off` kapatır. Seçim `$.store` içinde tutulur, yani daha sonra başlayan bir session sidebar'ı kendiliğinden yeniden açar.
+1. `/sidebar` pane'i açar, `/sidebar off` kapatır. Seçim `$.store` içinde tutulur, yani daha sonra başlayan bir session sidebar'ı kendiliğinden yeniden açar. Pane ya sidebar'dır ya hiçtir: yüzey pane'leri transcript'in yanına oturtuyorsa (fullscreen layout, 110 kolondan itibaren) orada açılır; oturtmuyorsa pane ilk çiziminde yerini bırakır, her mod kendi transcript ya da status line'ını göstermeye devam eder ve seçime dokunulmaz. Kapatmak, pane'in kendi tuşuyla ya da `/sidebar off` ile, yalnız o session için bitirir: kapanan sidebar bir sonraki session'da, `/sidebar off` çalıştırana dek yine açılır.
 2. Açıkken herhangi bir mod bir section yazar: `$.sidebar.set({ consumer, key, title, lines, buttons, until, order })` `true` cevaplar. Kapalıyken hiçbir şey tutulmaz ve çağrı `false` cevaplar, yani mod kendi transcript satırını ya da status line'ını göstermeye devam eder.
 3. Bir section kalın bir başlık (`<consumer>: <title>`, bir stream entry'sinde ayrıca saat), satırları (`ok` yeşil, `warn` sarı, `error` kırmızı, `dim` soluk) ve button'ları olarak çizilir. Pane iki parçadır: üstte duran section'lar (`until: 'session'`, sonra `until: 'turn'`, her grup `order`, sonra consumer, sonra key sırasıyla) ve altlarında stream.
 4. Stream, `until: 'stream'` ile yazılanlardır: bulguların bir log'u, en yenisi önce, duran section'ların hemen altında. İkisi birlikte çizildiğinde aralarında soluk bir ayraç satırı durur: pane genişliğinde tireler ve tam ortada bir `o` (`---------o---------`). Bir entry başka birinin yerini almaz, yani aynı mod ve key iki kere iki entry olarak okunur. Bir stream entry'sinin başlığı ayrıca yazıldığı gün ve saati taşır, makinenin kendi time zone'unda (`edit-loop: edit loop (21.09 14:32)`), böylece kişi log'u sonradan okur; duran bir section saat taşımaz, çünkü her ölçümde yeniden yazılır. Turn'ün sonunda hiçbir şey bir entry'yi düşürmez: bir entry yalnız yenileri onu pane'in son satırının ötesine ittiğinde gider. Daha uzun bir terminal stream'in daha fazlasını tutar, daha kısası daha azını. Stream'in satırları paylaşılır: birden fazla mod oraya yazarken her biri en fazla kendi payı kadar satır çizer, yani konuşkan bir mod başka bir mod'un bulgusunu pane'den itemez. Bir payın artırdığı satırlar onun geri tuttuğu entry'lere gider ve tek başına yazan bir mod bütün alanı alır.
@@ -79,7 +79,7 @@ Function hook'lar henüz early access aşamasında ve flag olmadan hiçbir şey 
 ## Kurulumdan sonra
 
 1. Claude Code'u yeniden başlat.
-2. Bir kez `/sidebar` çalıştır. O andan sonra sen `/sidebar off` çalıştırana kadar her session onu açar.
+2. Bir kez `/sidebar` çalıştır. O andan sonra sen `/sidebar off` çalıştırana kadar her session onu açar. Pane'in kendi tuşu onu yalnız o session için bitirir; seçim kalır.
 
 ## Nereye uzanır
 

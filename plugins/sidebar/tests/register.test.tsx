@@ -9,6 +9,8 @@ const ROOT = '/Users/u/app'
 
 const PANE_ID = 'sidebar'
 
+const PANE_TITLE = 'Sidebar'
+
 const run = (args: string): CommandRunInput => ({
   command: 'sidebar', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 160 },
 })
@@ -26,11 +28,11 @@ const NOW = new Date(2026, 8, 20, 13, 0).getTime()
 const LINE = (consumer: string, title: string, at: number) =>
   JSON.stringify({ at, consumer, key: 'note', title, lines: [{ text: 'a finding', kind: 'error' }] })
 
-/** The store as a record the test can read back, the panes the plugin opened, and the log files. */
-type World = { store: Record<string, unknown>; panes: UiPane[]; files: Map<string, string>; now: number; tools: string[] }
+/** The store as a record the test can read back, the panes the plugin opened, the open arguments, and the log files. */
+type World = { store: Record<string, unknown>; panes: UiPane[]; opens: unknown[]; files: Map<string, string>; now: number; tools: string[] }
 
 function world(on: On, store: Record<string, unknown> = {}, files: Map<string, string> = new Map()): World {
-  const w: World = { store, panes: [], files, now: Date.parse('2026-09-20T10:00:00Z'), tools: [] }
+  const w: World = { store, panes: [], opens: [], files, now: Date.parse('2026-09-20T10:00:00Z'), tools: [] }
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__sidebar__${e.name}` } } })
   on('clock.now', () => ({ value: w.now }))
   mock.env(on, { HOME: '/Users/u' })
@@ -45,14 +47,20 @@ function world(on: On, store: Record<string, unknown> = {}, files: Map<string, s
   on('fs.list', (_, e) => ({
     value: [...w.files.keys()]
       .filter(p => p.startsWith(`${e.path}/`))
-      .map(p => ({ name: p.slice(e.path.length + 1), kind: 'file' as const, size: 0, isLink: false })),
+      .map(p => ({ name: p.slice(e.path.length + 1), kind: 'file' as const, size: 0, isLink: false, mtimeMs: 0 })),
   }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
   on('ui.panes', () => ({ value: w.panes }))
-  on('ui.open', (_, e) => { w.panes = [...w.panes, { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true }]; return { value: { isPlaced: true as const } } })
+  on('ui.open', (_, e) => {
+    w.opens.push(e)
+    // A pane opens under one id: an open of the same id refits it rather than adding a second.
+    const pane: UiPane = { id: e.id, title: e.title ?? e.id, isShown: true, isFocused: false, isPlaced: true }
+    w.panes = [...w.panes.filter(p => p.id !== e.id), pane]
+    return { value: { isPlaced: true as const } }
+  })
   on('ui.close', (_, e) => { w.panes = w.panes.filter(p => p.id !== e.id); return { value: undefined } })
   return w
 }
@@ -165,5 +173,28 @@ describe('sidebar', () => {
     await started($)
     const pane = await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: PANE })
     expect(await pane.find({ text: EMPTY_TEXT })).toBeDefined()
+  })
+
+  test('a pane the surface seats above the prompt stands down, and the choice stands', async ($, on) => {
+    const w = world(on, { open: true })
+    // The stand-down hands the render back to the surface, which is closing the pane anyway.
+    on('ui.render', ($, e) => { const { Box } = $.ui.resolve(e); return <Box /> })
+    await started($)
+    expect(w.opens[0]).toEqual({ id: PANE_ID, title: PANE_TITLE })
+    expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
+    // The surface seated it above the prompt: the pane closes at once, every mod keeps its own
+    // line, and the stored choice is untouched.
+    await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: { ...PANE, placement: 'inline' } })
+    expect(w.panes).toEqual([])
+    expect(w.store.open).toBe(true)
+    expect((await $.command.run(run('status'))).text).toBe('off')
+  })
+
+  test('a pane the surface seats beside the transcript stays and draws', async ($, on) => {
+    const w = world(on, { open: true }, new Map([[`${LOG_DIR}/app-2026-09-20.log`, `${LINE('env-sync', 'today', NOW)}\n`]]))
+    await started($)
+    const pane = await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: PANE })
+    expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
+    expect(await pane.find({ text: 'env-sync: today (20.09 13:00)' })).toBeDefined()
   })
 })
