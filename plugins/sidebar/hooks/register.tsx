@@ -92,6 +92,22 @@ async function takeSections($: EngineInterface, state: State): Promise<void> {
   await restoreLog($, state)
 }
 
+/**
+ * Runs the engine's `/tui fullscreen`, because only the fullscreen layout seats panes beside the
+ * transcript and the pane is a sidebar or nothing. A session already fullscreen answers "already
+ * using", and one whose launch flags forbid the switch refuses; either way the pane's own stand-down
+ * keeps the rule, so a refusal here must not stop the pane from opening.
+ */
+async function switchToFullscreen($: EngineInterface): Promise<void> {
+  try {
+    await $.command.run({ command: 'tui', args: 'fullscreen' })
+  } catch (err) {
+    // The switch is an aid, not a requirement; the pane's own stand-down holds the rule. The
+    // failure still shows, because a swallowed error reads as the switch having worked.
+    await $.ui.log(`fullscreen switch failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 /** Draws the pane; one that does not open takes nothing, so every mod goes back to its own line. */
 async function showPane($: EngineInterface, state: State): Promise<void> {
   try {
@@ -113,6 +129,10 @@ async function closePane($: EngineInterface, state: State): Promise<void> {
 async function setOpen($: EngineInterface, state: State, open: boolean): Promise<string> {
   await $.store.set(OPEN_KEY, open)
   if (open) {
+    // The switch runs on its own timer: a command.run issued from inside a command.run dispatch
+    // does not reach the engine, and the switch may restart the session, which must not happen
+    // while this hook is still running.
+    $.clock.after(0, () => void switchToFullscreen($))
     await openPane($, state)
     return 'on: the sidebar is open and every mod may write into it'
   }
@@ -348,7 +368,10 @@ export const register: Register = on => {
     await $.command.register({ name: 'sidebar', description: 'The shared sidebar pane every mod writes into: open or close it, on, off, status, log, snapshot (sidebar)', argumentHint: '[on | off | status | log | snapshot]' })
     // Declared once at the start, so the tool list the prompt cache holds does not change mid-session.
     await $.tool.register({ name: READ_TOOL, description: READ_DESCRIPTION, inputSchema: READ_SCHEMA })
-    if (open) await showPane($, state)
+    if (open) {
+      await switchToFullscreen($)
+      await showPane($, state)
+    }
     return r
   })
 

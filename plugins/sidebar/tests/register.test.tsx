@@ -28,11 +28,16 @@ const NOW = new Date(2026, 8, 20, 13, 0).getTime()
 const LINE = (consumer: string, title: string, at: number) =>
   JSON.stringify({ at, consumer, key: 'note', title, lines: [{ text: 'a finding', kind: 'error' }] })
 
-/** The store as a record the test can read back, the panes the plugin opened, the open arguments, and the log files. */
-type World = { store: Record<string, unknown>; panes: UiPane[]; opens: unknown[]; files: Map<string, string>; now: number; tools: string[] }
+/** The store as a record the test can read back, the panes the plugin opened, the open arguments, the commands the mod ran, and the log files. */
+type World = { store: Record<string, unknown>; panes: UiPane[]; opens: unknown[]; commands: string[]; files: Map<string, string>; now: number; tools: string[] }
 
 function world(on: On, store: Record<string, unknown> = {}, files: Map<string, string> = new Map()): World {
-  const w: World = { store, panes: [], opens: [], files, now: Date.parse('2026-09-20T10:00:00Z'), tools: [] }
+  const w: World = { store, panes: [], opens: [], commands: [], files, now: Date.parse('2026-09-20T10:00:00Z'), tools: [] }
+  on('command.run', async (_, e, next) => {
+    if (e.command !== 'tui') return next(e)
+    w.commands.push(`${e.command}${e.args === undefined ? '' : ` ${e.args}`}`)
+    return { text: 'Already using the fullscreen renderer.' }
+  })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__sidebar__${e.name}` } } })
   on('clock.now', () => ({ value: w.now }))
   mock.env(on, { HOME: '/Users/u' })
@@ -180,6 +185,8 @@ describe('sidebar', () => {
     // The stand-down hands the render back to the surface, which is closing the pane anyway.
     on('ui.render', ($, e) => { const { Box } = $.ui.resolve(e); return <Box /> })
     await started($)
+    // With the choice on, the session starts by asking the engine for the fullscreen layout.
+    expect(w.commands).toEqual(['tui fullscreen'])
     expect(w.opens[0]).toEqual({ id: PANE_ID, title: PANE_TITLE })
     expect(w.panes.map(p => p.id)).toEqual([PANE_ID])
     // The surface seated it above the prompt: the pane closes at once, every mod keeps its own
