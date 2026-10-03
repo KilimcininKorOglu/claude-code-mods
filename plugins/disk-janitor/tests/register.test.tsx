@@ -147,6 +147,8 @@ describe('disk-janitor', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
     // The button runs the command as a plugin: it opens the pane, and deletes nothing by itself.
     expect((await $.command.run(run('', { kind: 'plugin' } as PromptOrigin))).text).toBe('pane open: Enter picks a row, the delete button asks twice, Esc closes')
+    // The pane's rescan runs on a timer now; it settles before the person picks and deletes.
+    await w.clock.settle()
     expect(w.panes.map(p => p.id)).toEqual(['disk-janitor'])
     expect(w.removed).toEqual([])
     const ui = await pane($)

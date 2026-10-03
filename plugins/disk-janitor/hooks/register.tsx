@@ -169,18 +169,24 @@ async function refresh($: EngineInterface, state: State): Promise<void> {
   }
 }
 
-/** A background scan has no hook to fail, so its error is logged; the same error once. */
+/**
+ * A background scan has no hook to fail, so its error is logged; the same error once. The scan runs
+ * on a timer, not in the calling dispatch: since 2.1.288 a process call still in flight when the
+ * dispatch closes is aborted, and a scan aborted at its start never finishes.
+ */
 function refreshInBackground($: EngineInterface, state: State): void {
-  refresh($, state).then(
-    () => {
-      state.lastError = undefined
-    },
-    (err: unknown) => {
-      const text = errorText(err)
-      if (text !== state.lastError) $.ui.log(`cannot measure the artifacts: ${text}`)
-      state.lastError = text
-    },
-  )
+  $.clock.after(0, () => {
+    refresh($, state).then(
+      () => {
+        state.lastError = undefined
+      },
+      (err: unknown) => {
+        const text = errorText(err)
+        if (text !== state.lastError) $.ui.log(`cannot measure the artifacts: ${text}`)
+        state.lastError = text
+      },
+    )
+  })
 }
 
 /**
