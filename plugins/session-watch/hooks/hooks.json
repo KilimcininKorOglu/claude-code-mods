@@ -1,4 +1,4 @@
 {
-  "description": "session-watch: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Shows this session's state in the sidebar: context fill, token totals, cost, model and effort, the Claude Code version, the other sessions of this machine, and the git branch and status.",
   "modules": ["./register.ts"]
 }

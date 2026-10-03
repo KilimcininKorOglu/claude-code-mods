@@ -1,4 +1,4 @@
 {
-  "description": "lockfile-sync: session.start, command.run, tool.call on Bash. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After each commit the model makes, names the manifests whose dependencies it changed without their lockfile (npm, Composer, Cargo, Go, Python, Bundler, Dart, Mix).",
   "modules": ["./register.ts"]
 }

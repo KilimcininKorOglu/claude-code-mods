@@ -1,4 +1,4 @@
 {
-  "description": "ask-autopick: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Picks the recommended option of a question that waited unanswered for a set time, so a session you left does not stop. Off until you turn it on.",
   "modules": ["./register.ts"]
 }

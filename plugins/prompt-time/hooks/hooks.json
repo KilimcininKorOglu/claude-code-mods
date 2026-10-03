@@ -1,4 +1,4 @@
 {
-  "description": "prompt-time: classic.SessionStart, prompt.submit, turn.start, turn.complete, ui.render{component=UserMessage}, ui.render{component=AssistantMessage}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Draws the time under each of your messages and each text block of the model's replies, also for a resumed session whose transcript is 4 MiB or smaller. Display only: nothing reaches the model.",
   "modules": ["./register.tsx"]
 }

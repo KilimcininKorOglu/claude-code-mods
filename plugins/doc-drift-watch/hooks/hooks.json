@@ -1,4 +1,4 @@
 {
-  "description": "doc-drift-watch: session.start, command.run, tool.call on Bash. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After each commit the model makes, adds the doc lines that commit made stale (file:line references, symbol names) to the commit's result, from ripwire doc-drift, and holds each finding open until the doc holds again.",
   "modules": ["./register.ts"]
 }

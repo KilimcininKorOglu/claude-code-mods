@@ -1,4 +1,4 @@
 {
-  "description": "ua-fallback: session.start, command.run{command=ua-fallback}, tool.call{tool=Bash}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After a curl or wget an automated-client filter answered 403 or 429, gives the model the browser User-Agent to retry with, and the two cases where it must not.",
   "modules": ["./register.ts"]
 }

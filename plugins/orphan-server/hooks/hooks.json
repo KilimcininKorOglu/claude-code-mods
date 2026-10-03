@@ -1,5 +1,5 @@
 {
-  "description": "orphan-server: session.start, command.run, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Lists the servers a Bash call of the model started in this repository and left listening on a port, with their age and session, and stops one with SIGTERM, then SIGKILL.",
   "modules": [
     "./register.ts"
   ]

@@ -55,9 +55,9 @@ function reachOf(readme) {
   return /^Reach (L[0-3])/m.exec(readme)?.[1] ?? 'L1'
 }
 
-/** The card's own sentence: the manifest description without the early-access note every mod repeats. */
+/** The card's own sentence: the manifest description, which no longer carries an early-access note. */
 function summaryOf(description) {
-  return description.replace(/\s*Needs function hooks \(early access\)\.\s*$/, '').trim()
+  return description.trim()
 }
 
 /** The Turkish card sentence: the first paragraph of the mod's Turkish README, as plain text. */

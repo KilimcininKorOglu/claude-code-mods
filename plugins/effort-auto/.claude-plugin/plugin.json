@@ -1,7 +1,7 @@
 {
   "name": "effort-auto",
   "version": "0.4.0",
-  "description": "Has a small model rate how hard each prompt is and runs that turn and its subagents at the matching effort, within the levels you allow, on the models whose prompt cache survives an effort change. Needs function hooks (early access).",
+  "description": "Has a small model rate how hard each prompt is and runs that turn and its subagents at the matching effort, within the levels you allow, on the models whose prompt cache survives an effort change.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,4 +1,4 @@
 {
-  "description": "git-commit: session.start, command.run, turn.start, prompt.submit, tool.call on Skill and Bash, skill.prompt, attribution.text, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Ships a commit skill and holds every Bash git commit to it: a commit the skill did not open, a blanket git add, a signature trailer, a secret, an ignored path, or a push or branch change nobody asked for is stopped before git runs.",
   "modules": ["./register.ts"]
 }

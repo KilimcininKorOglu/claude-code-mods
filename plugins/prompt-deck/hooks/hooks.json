@@ -1,4 +1,4 @@
 {
-  "description": "prompt-deck: session.start, command.run, prompt.submit, ui.render on AbovePrompt. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Learns the short prompts you send often in this project and draws them, with the ones you pin by hand, above the prompt; with the prompt box empty, a digit key sends one at once.",
   "modules": ["./register.tsx"]
 }

@@ -1,4 +1,4 @@
 {
-  "description": "diagram-render: session.start, command.run, turn.complete, ui.render on AssistantMessage. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Renders the mermaid blocks of the model's replies with an installed mmdc after each turn and draws each picture under its reply.",
   "modules": ["./register.tsx"]
 }

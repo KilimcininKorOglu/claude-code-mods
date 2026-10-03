@@ -1,4 +1,4 @@
 {
-  "description": "contract-watch: session.start, command.run{command=contract-watch}, tool.call{tool=Edit}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After the model changes a function signature with Edit, adds the callers ripwire finds to the Edit's result, so the model fixes them before the build does.",
   "modules": ["./register.ts"]
 }

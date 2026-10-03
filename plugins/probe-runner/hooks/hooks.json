@@ -1,4 +1,4 @@
 {
-  "description": "probe-runner: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "For mod development: runs a live check of plugins in a fresh Claude Code session in tmux, types the steps one by one, collects the pane and the transcript, then deletes the temp directory, its transcripts and the inline store files.",
   "modules": ["./register.ts"]
 }

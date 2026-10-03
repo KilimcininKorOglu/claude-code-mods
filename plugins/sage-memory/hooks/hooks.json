@@ -1,4 +1,4 @@
 {
-  "description": "sage-memory: the memory daemon link, memory injection, the consolidator and the /sage-memory command. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn.",
   "modules": ["./register.tsx"]
 }

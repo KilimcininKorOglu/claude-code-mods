@@ -1,4 +1,4 @@
 {
-  "description": "gemini-review: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Has Gemini review every git commit the model runs, from the staged diff and the conversation, and stops a commit with a blocking finding: a bug, data loss, a security hole or a committed secret. Off until /gemini-review on; gemini-core holds the key, tier, model and thinking level.",
   "modules": ["./register.ts"]
 }

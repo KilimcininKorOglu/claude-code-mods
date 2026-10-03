@@ -1,7 +1,7 @@
 {
   "name": "gemini-core",
   "version": "0.3.1",
-  "description": "Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place: adds $.gemini, which builds their Gemini requests, reads the answers and moves to the next key after a quota or key error, and picks a model from Google's list. Needs function hooks (early access).",
+  "description": "Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place: adds $.gemini, which builds their Gemini requests, reads the answers and moves to the next key after a quota or key error, and picks a model from Google's list.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

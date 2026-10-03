@@ -1,4 +1,4 @@
 {
-  "description": "effort-auto: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Has a small model rate how hard each prompt is and runs that turn and its subagents at the matching effort, within the levels you allow, on the models whose prompt cache survives an effort change.",
   "modules": ["./register.ts"]
 }

@@ -1,7 +1,7 @@
 {
   "name": "mod-doctor",
   "version": "0.5.1",
-  "description": "Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the claude plugin update command that closes the gap. Needs function hooks (early access).",
+  "description": "Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the claude plugin update command that closes the gap.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

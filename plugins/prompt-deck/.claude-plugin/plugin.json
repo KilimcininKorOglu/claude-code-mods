@@ -1,7 +1,7 @@
 {
   "name": "prompt-deck",
   "version": "0.6.2",
-  "description": "Learns the short prompts you send often in this project and draws them, with the ones you pin by hand, above the prompt; with the prompt box empty, a digit key sends one at once. Needs function hooks (early access).",
+  "description": "Learns the short prompts you send often in this project and draws them, with the ones you pin by hand, above the prompt; with the prompt box empty, a digit key sends one at once.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,4 +1,4 @@
 {
-  "description": "tool-coach: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Stops the model from repeating a tool call that just failed with the same input, until a file or command has changed something.",
   "modules": ["./register.ts"]
 }

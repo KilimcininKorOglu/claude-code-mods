@@ -1,5 +1,5 @@
 {
-  "description": "limit-watch: session.start, turn.complete, command.run{command=limits}, ui.render{component=Pane}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Shows the subscription usage limits under the prompt or in the shared sidebar with a reset countdown and a projection, opens a /limit-watch pane, and logs once when a limit passes 80% and 95%.",
   "modules": [
     "./register.tsx"
   ]

@@ -1,4 +1,4 @@
 {
-  "description": "mod-doctor: session.start, command.run, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the claude plugin update command that closes the gap.",
   "modules": ["./register.ts"]
 }

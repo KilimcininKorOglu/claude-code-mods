@@ -1,4 +1,4 @@
 {
-  "description": "gemini-compact: session.start, command.run{command=gemini-compact}, session.compact, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Moves compaction from Claude to Gemini: in summary mode Gemini summarizes the conversation and the newest messages stay verbatim, in prune mode every message stays and Gemini keeps, cuts or drops older tool calls. Off until /gemini-compact on; gemini-core holds the key, tier, model and thinking level.",
   "modules": ["./register.ts"]
 }

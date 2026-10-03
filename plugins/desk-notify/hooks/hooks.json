@@ -1,4 +1,4 @@
 {
-  "description": "desk-notify: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Sends a desktop notification when a question or a plan waits for your answer, and when a turn ends or fails.",
   "modules": ["./register.ts"]
 }

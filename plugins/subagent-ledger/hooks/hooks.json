@@ -1,4 +1,4 @@
 {
-  "description": "subagent-ledger: session.start, command.run{command=subagent-ledger}, agent.spawn, turn.step, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Shows each subagent of the session with its turns, time, model and tokens, the costliest first, yellow while it runs and green once it answered, and marks one that passed the token limit.",
   "modules": ["./register.ts"]
 }

@@ -1,4 +1,4 @@
 {
-  "description": "cache-warm: session.start, classic.SessionStart, command.run{command=cache-warm|cache-status}, turn.step, turn.complete, session.compact. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Keeps the 1-hour prompt cache warm for a window you set, or with no end in every session under always, with one cache-shared fork per idle stretch and one keep-warm message after a resume, arms a window for you after a paid cold write, and shows the cache state, the cold price and this session's cold writes.",
   "modules": ["./register.ts"]
 }

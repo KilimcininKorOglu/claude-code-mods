@@ -1,7 +1,7 @@
 {
   "name": "self-command",
   "version": "0.1.0",
-  "description": "For mod development: lets the model run a slash command in its own session, such as /reload-plugins after a plugin update, and read the output as the next prompt. Needs function hooks (early access).",
+  "description": "For mod development: lets the model run a slash command in its own session, such as /reload-plugins after a plugin update, and read the output as the next prompt.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,7 +1,7 @@
 {
   "name": "subagent-ledger",
   "version": "0.4.3",
-  "description": "Shows each subagent of the session with its turns, time, model and tokens, the costliest first, yellow while it runs and green once it answered, and marks one that passed the token limit. Needs function hooks (early access).",
+  "description": "Shows each subagent of the session with its turns, time, model and tokens, the costliest first, yellow while it runs and green once it answered, and marks one that passed the token limit.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

@@ -1,4 +1,4 @@
 {
-  "description": "output-flood: session.start, command.run{command=output-flood}, tool.call{tool=Bash}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question.",
   "modules": ["./register.ts"]
 }

@@ -1,7 +1,7 @@
 {
   "name": "bughunt",
   "version": "0.2.0",
-  "description": "Runs proof-driven bug hunt rounds with /bughunt: each round proves one bug with a failing command the mod runs itself, fixes it, and proves the fix, and the loop stops on a blocked or unverified round. /bughunt collab runs a read-only scanner, planner and critic in sequence. Needs function hooks (early access).",
+  "description": "Runs proof-driven bug hunt rounds with /bughunt: each round proves one bug with a failing command the mod runs itself, fixes it, and proves the fix, and the loop stops on a blocked or unverified round. /bughunt collab runs a read-only scanner, planner and critic in sequence.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

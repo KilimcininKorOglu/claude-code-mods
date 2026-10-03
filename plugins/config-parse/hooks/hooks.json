@@ -1,4 +1,4 @@
 {
-  "description": "config-parse: session.start, command.run, tool.call{Edit,Write}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Parses each JSON, YAML, TOML or .env file an Edit or Write touches, notes a parse error at once instead of at the next build, and says so again when a later edit fixes it.",
   "modules": ["./register.ts"]
 }

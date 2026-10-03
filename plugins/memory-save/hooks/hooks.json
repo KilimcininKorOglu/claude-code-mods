@@ -1,4 +1,4 @@
 {
-  "description": "memory-save: session.start, classic.SessionStart, turn.complete. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Loads MEMORY.md into the session and saves project learnings to it after every turn through a tool-less fork in the background, without blocking the stop.",
   "modules": ["./register.ts"]
 }

@@ -1,4 +1,4 @@
 {
-  "description": "sql-concat-watch: session.start, command.run, tool.call on Edit and Write. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters.",
   "modules": ["./register.ts"]
 }

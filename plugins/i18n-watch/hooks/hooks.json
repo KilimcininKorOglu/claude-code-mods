@@ -1,4 +1,4 @@
 {
-  "description": "i18n-watch: session.start, command.run, turn.start, tool.call on Edit and Write. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After an edit that calls translation keys, names the keys the JSON, Laravel PHP, YAML or gettext locale files lack, and the languages that lack them.",
   "modules": ["./register.ts"]
 }

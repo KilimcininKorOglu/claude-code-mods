@@ -1,4 +1,4 @@
 {
-  "description": "pin-note: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Keeps the notes you pin with /pin-note for the whole session and sends them to the model again, word for word, after each compaction and /clear. Off until /pin-note on.",
   "modules": ["./register.ts"]
 }

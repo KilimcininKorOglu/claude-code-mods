@@ -1,4 +1,4 @@
 {
-  "description": "dep-sentinel: session.start, command.run, tool.call on Bash. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Checks each package the model installs against its registry and OSV.dev, and stops a missing, brand-new, look-alike, outdated or vulnerable one, naming the latest version.",
   "modules": ["./register.ts"]
 }

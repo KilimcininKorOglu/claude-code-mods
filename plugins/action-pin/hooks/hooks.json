@@ -1,4 +1,4 @@
 {
-  "description": "action-pin: session.start, command.run{command=action-pin}, tool.call{tool=Edit}, tool.call{tool=Write}. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "After an edit that adds a GitHub Actions step pinned to a tag or a branch, names the commit SHA to write instead, from the GitHub API.",
   "modules": ["./register.ts"]
 }

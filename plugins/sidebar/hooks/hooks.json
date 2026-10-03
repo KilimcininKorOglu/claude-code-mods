@@ -1,4 +1,4 @@
 {
-  "description": "engine.create, session.start, command.run{command=sidebar}, ui.render{component=Pane}, ui.close, turn.complete",
+  "description": "Opens one shared pane beside the transcript and draws the sections, lines and buttons every other mod writes into it through $.sidebar; each stream entry is stamped with its time and kept in a per-project log the next session takes back.",
   "modules": ["./register.tsx"]
 }

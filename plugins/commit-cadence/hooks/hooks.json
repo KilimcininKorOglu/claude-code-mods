@@ -1,4 +1,4 @@
 {
-  "description": "commit-cadence: session.start, command.run, turn.complete, prompt.submit. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Names the uncommitted files to you at the end of each turn, and tells the model at the next prompt to commit each finished piece as it lands.",
   "modules": ["./register.ts"]
 }

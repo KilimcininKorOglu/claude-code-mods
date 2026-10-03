@@ -1,7 +1,7 @@
 {
   "name": "probe-runner",
   "version": "0.1.0",
-  "description": "For mod development: runs a live check of plugins in a fresh Claude Code session in tmux, types the steps one by one, collects the pane and the transcript, then deletes the temp directory, its transcripts and the inline store files. Needs function hooks (early access).",
+  "description": "For mod development: runs a live check of plugins in a fresh Claude Code session in tmux, types the steps one by one, collects the pane and the transcript, then deletes the temp directory, its transcripts and the inline store files.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

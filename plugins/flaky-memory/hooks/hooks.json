@@ -1,4 +1,4 @@
 {
-  "description": "flaky-memory: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code.",
   "modules": ["./register.ts"]
 }

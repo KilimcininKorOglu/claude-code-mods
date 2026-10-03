@@ -1,7 +1,7 @@
 {
   "name": "storage-guard",
   "version": "0.1.4",
-  "description": "After an edit that keeps browser data in localStorage or sessionStorage, names each line, so the model stores the data in a cookie instead. Needs function hooks (early access).",
+  "description": "After an edit that keeps browser data in localStorage or sessionStorage, names each line, so the model stores the data in a cookie instead.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

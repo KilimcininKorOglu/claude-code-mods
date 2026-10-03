@@ -1,4 +1,4 @@
 {
-  "description": "gemini-core: engine.create, session.start, command.run. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Keeps the Gemini keys and tier of every Gemini mod, and each mod's model and thinking level, in one place: adds $.gemini, which builds their Gemini requests, reads the answers and moves to the next key after a quota or key error, and picks a model from Google's list.",
   "modules": ["./register.ts"]
 }

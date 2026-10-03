@@ -1,5 +1,5 @@
 {
-  "description": "slash-chain: session.start, command.run, skill.prompt, ui.open, ui.close, turn.complete, prompt.submit. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Runs slash commands joined with && one after another, waits for each command's turn, pane or dialog to end, and stops the chain at a command that failed or a turn that ended without an answer.",
   "modules": [
     "./register.ts"
   ]

@@ -1,7 +1,7 @@
 {
   "name": "session-watch",
   "version": "0.6.13",
-  "description": "Shows this session's state in the sidebar: context fill, token totals, cost, model and effort, the Claude Code version, the other sessions of this machine, and the git branch and status. Needs function hooks (early access).",
+  "description": "Shows this session's state in the sidebar: context fill, token totals, cost, model and effort, the Claude Code version, the other sessions of this machine, and the git branch and status.",
   "author": {
     "name": "Kerem Gok",
     "email": "k@keremgok.tr",

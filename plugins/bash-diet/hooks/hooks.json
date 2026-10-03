@@ -1,4 +1,4 @@
 {
-  "description": "bash-diet: session.start. Needs CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1; builds without function hooks ignore the modules key.",
+  "description": "Shrinks each Bash result before the model reads it: per-command filters for git, test runners, linters, package managers, containers and file tools, the full output kept in a file.",
   "modules": ["./register.ts"]
 }
