@@ -32,12 +32,14 @@ async function send($: EngineInterface, state: State, n: Notice): Promise<void> 
 
 /**
  * Sends the notification of one event while that event is on, as the store holds it now; the hook that
- * calls it does not wait on the notification command.
+ * calls it does not wait on the notification command. The command runs on a timer, not in the calling
+ * dispatch: since 2.1.288 a process call still in flight when the dispatch closes is aborted, and a
+ * turn's end notification would die that way.
  */
 async function notifyOn($: EngineInterface, state: State, event: Event, n: Notice): Promise<void> {
   if (state.platform === undefined) return
   await readSettings($, state)
-  if (state.on[event]) void send($, state, n)
+  if (state.on[event]) $.clock.after(0, () => void send($, state, n))
 }
 
 /** The stdout of a git command, or '' where git fails or is missing. */
