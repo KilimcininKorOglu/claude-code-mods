@@ -309,8 +309,10 @@ export const register: Register = on => {
     const r = await next(e)
     if (e.agentId !== undefined || e.reason === 'error' || e.reason === 'refusal') return r
     if (!worthSaving(state)) return r
-    // Not awaited: the save runs in the background, so the next prompt is not held.
-    void drain($, state)
+    // The save runs on a timer, not in the turn's dispatch: since 2.1.288 an engine call still in
+    // flight when the dispatch closes is aborted. A timer outlives the dispatch and still holds the
+    // next prompt for nothing.
+    $.clock.after(0, () => void drain($, state))
     return r
   })
 }
