@@ -126,8 +126,10 @@ export const register: Register = on => {
     await readSettings($, state)
     if (!state.enabled) return r
     want(state, mermaidBlocks(e.answer))
-    // Not awaited: mmdc takes seconds, and the next prompt must not wait for it.
-    void drain($, state)
+    // The renders run on a timer: mmdc takes seconds, the next prompt must not wait for it, and
+    // since 2.1.288 a process call still in flight when the turn's dispatch closes is aborted. A
+    // timer outlives the dispatch, so the picture still arrives after the turn's end.
+    $.clock.after(0, () => void drain($, state))
     return r
   })
 
