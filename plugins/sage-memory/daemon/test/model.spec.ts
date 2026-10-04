@@ -20,7 +20,7 @@ describe('the multilingual model', { skip: RUNTIME === undefined ? 'SAGE_MEMORY_
     const runtime = transformersRuntime({ ...layoutOf(dir), runtimeDir: dir, modelsDir: join(dir, 'models') })
     assert.equal(runtime.installed(), true)
     const model = await runtime.load({ allowRemote: false, onProgress: () => undefined })
-    assert.equal(model.dims, 384)
+    assert.equal(model.dims, 768)
     const memories = [
       'Never write a Gemini API key into a file, a test or a commit; gemini-core reads it from its apiKey option',
       'Run tests with caching disabled, for example go test -count=1',

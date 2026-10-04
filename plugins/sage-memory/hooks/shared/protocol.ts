@@ -28,7 +28,7 @@ export type ProjectRef = { key: string; name: string; root: string; commonDir: s
 export const MAX_BODY_BYTES = 8 * 1024 * 1024
 
 /** The embedding model and the package that runs it; `/sage-memory setup` installs both. */
-export const EMBED_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2'
+export const EMBED_MODEL = 'Xenova/paraphrase-multilingual-mpnet-base-v2'
 export const TRANSFORMERS_VERSION = '4.3.0'
 
 /**

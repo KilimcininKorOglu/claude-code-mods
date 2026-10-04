@@ -186,14 +186,15 @@ export function memoryQueryRelevance(memory: Memory, query: string): Relevance {
 }
 
 /**
- * The cosine at which a vector hit is as strong as the relation floor. Measured on the
- * multilingual model with 147 memory texts, 15 targeted and 15 unrelated Turkish questions: from
- * 0.50 no unrelated question found a memory, and 8 of the 15 targeted ones found their own.
+ * The cosine at which a vector hit is as strong as the relation floor. Measured against the
+ * paraphrase-multilingual models with 2174 real memories, 15 targeted and 15 unrelated Turkish
+ * questions: on the mpnet model 10 of the 15 targeted ones reach it with their own memory and 1
+ * unrelated one finds some memory there.
  */
 export const SEMANTIC_PIVOT_COSINE = 0.5
 /**
- * The cosine at which a vector hit is as strong as a prompt reminder's relevance floor: 9 of the
- * 15 targeted questions reach it with their own memory, and 3 of the 15 unrelated ones with some
+ * The cosine at which a vector hit is as strong as a prompt reminder's relevance floor: 11 of the
+ * 15 targeted questions reach it with their own memory, and 1 of the 15 unrelated ones with some
  * memory. A vector hit below it can pass no reminder gate.
  */
 export const SEMANTIC_FLOOR_COSINE = 0.46
