@@ -24,7 +24,7 @@
     {
       "name": "limit-watch",
       "source": "./plugins/limit-watch",
-      "description": "Shows the subscription usage limits under the prompt or in the shared sidebar with a reset countdown and a projection, opens a /limit-watch pane, and logs once when a limit passes 80% and 95%.",
+      "description": "Shows the subscription usage limits under the prompt or in the shared sidebar with a reset countdown and a projection, opens a /limit-watch pane, logs once when a limit passes 80% and 95%, and stops sampling entirely with /limit-watch off.",
       "category": "productivity",
       "tags": [
         "mods",

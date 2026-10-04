@@ -34,7 +34,7 @@ Then restart Claude Code, or run `/reload-plugins` in each open session.
 | Mod | What it does | Reach |
 |---|---|---|
 | [task-poke](plugins/task-poke) | Submits a continue prompt while the task list has unfinished tasks, at most 99 times in a row by default, and turns the task tools on for every model unless `CLAUDE_CODE_ENABLE_TODO_TOOLS` is set. | L2 |
-| [limit-watch](plugins/limit-watch) | Shows the subscription usage limits under the prompt or in the shared sidebar with a reset countdown and a projection, opens a /limit-watch pane, and logs once when a limit passes 80% and 95%. | L0 |
+| [limit-watch](plugins/limit-watch) | Shows the subscription usage limits under the prompt or in the shared sidebar with a reset countdown and a projection, opens a /limit-watch pane, logs once when a limit passes 80% and 95%, and stops sampling entirely with /limit-watch off. | L0 |
 | [memory-save](plugins/memory-save) | Loads `MEMORY.md` into the session and saves project learnings to it after every turn through a tool-less fork in the background, without blocking the stop. | L2 |
 | [sage-memory](plugins/sage-memory) | Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn. | L3 |
 | [cache-warm](plugins/cache-warm) | Keeps the 1-hour prompt cache warm for a window you set, or with no end in every session under always, with one cache-shared fork per idle stretch and one keep-warm message after a resume, arms a window for you after a paid cold write, and shows the cache state, the cold price and this session's cold writes. | L2 |

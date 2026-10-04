@@ -88,14 +88,19 @@ const SIDEBAR: Plugin = {
 
 const withSidebar = (name: string, body: TestBody) => test(name, { plugins: [SIDEBAR] }, body)
 
-/** The sections the sidebar took; `open` says whether it takes them at all. */
-type Bar = { open: boolean; sections: { title: string; lines: { text: string; kind?: string }[] }[] }
+/** The sections the sidebar took; `open` says whether it takes them at all, `cleared` lists the drops. */
+type Bar = { open: boolean; sections: { title: string; lines: { text: string; kind?: string }[] }[]; cleared?: string[] }
 
 function seatSidebar(on: On, bar: Bar): void {
   on('sidebar.set', (_, e) => {
     const section = e as unknown as { title: string; lines: { text: string; kind?: string }[] }
     if (bar.open) bar.sections.push({ title: section.title, lines: section.lines })
     return { value: bar.open }
+  })
+  on('sidebar.clear', (_, e) => {
+    const drop = e as unknown as { consumer: string; key: string }
+    if (bar.cleared !== undefined) bar.cleared.push(`${drop.consumer}:${drop.key}`)
+    return { value: undefined }
   })
 }
 
@@ -287,6 +292,63 @@ describe('limit-watch', () => {
     expect((await $.command.run(run)).text).toContain('pane open')
     expect(w.panes.map(p => p.id)).toEqual(['limit-watch'])
     expect((await $.command.run(run)).text).toContain('pane closed')
+    expect(w.panes).toEqual([])
+  })
+
+  test('off stops the sampling, clears the drawings and holds in the store', async ($, on) => {
+    const w = world(on)
+    w.setLimits([fiveHour(23)])
+    await $.session.start({ ...session, isInteractive: true })
+    expect(w.statuses.at(-1)).toContain('5h 23%')
+    expect((await $.command.run({ ...run, args: 'off' })).text).toContain('off')
+    expect(w.statuses.at(-1)).toBe(undefined)
+    expect(w.store.enabled).toBe(false)
+    await $.turn.complete(turn())
+    await w.clock.advance(60_000)
+    expect(w.statuses.at(-1)).toBe(undefined)
+  })
+
+  test('on samples again at once and stores the setting', async ($, on) => {
+    const w = world(on)
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    await $.command.run({ ...run, args: 'off' })
+    expect((await $.command.run({ ...run, args: 'on' })).text).toContain('on')
+    expect(w.store.enabled).toBe(true)
+    expect(w.statuses.at(-1)).toContain('5h 23%')
+  })
+
+  withSidebar('off closes an open pane and drops the sidebar section', async ($, on) => {
+    const bar: Bar = { open: true, sections: [], cleared: [] }
+    seatSidebar(on, bar)
+    const w = world(on)
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    expect((await $.command.run(run)).text).toContain('pane open')
+    expect((await $.command.run({ ...run, args: 'off' })).text).toContain('off')
+    expect(w.panes).toEqual([])
+    expect(bar.cleared).toEqual(['limit-watch:limits'])
+  })
+
+  test('a watcher another window turned off stops here at the next hook that acts on it', async ($, on) => {
+    const w = world(on)
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    expect(w.statuses.at(-1)).toContain('5h 23%')
+    w.store.enabled = false
+    await $.turn.complete(turn())
+    expect(w.statuses.at(-1)).toBe(undefined)
+    w.store.enabled = true
+    await $.turn.complete(turn())
+    expect(w.statuses.at(-1)).toContain('5h 23%')
+  })
+
+  test('a bare run while off reports off and opens no pane, and an unknown word gets the usage', async ($, on) => {
+    const w = world(on)
+    await $.command.run({ ...run, args: 'off' })
+    expect((await $.command.run(run)).text).toContain('off')
+    expect(w.panes).toEqual([])
+    expect((await $.command.run({ ...run, args: 'maybe' })).text).toContain('on or off')
     expect(w.panes).toEqual([])
   })
 })

@@ -1,6 +1,6 @@
 # limit-watch
 
-Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti vardır, bir Claude gateway de spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmak üzereyken bir uyarıda gösterir; nerede olduğunu iş işten geçtiğinde öğrenirsin. Bu mod limitleri session boyunca ekranda tutar, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar.
+Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti vardır, bir Claude gateway de spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmak üzereyken bir uyarıda gösterir; nerede olduğunu iş işten geçtiğinde öğrenirsin. Bu mod limitleri session boyunca ekranda tutar, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar. `/limit-watch off` hepsini durdurur; `/limit-watch on` yeniden başlatır.
 
 ## Ne gösterir
 
@@ -27,6 +27,8 @@ Bir API key session'ı hiçbir limit bildirmez. Status line o zaman `no usage li
     pace +4.2%/h over the last 38m
 
 Bar pane'in genişliğini doldurur. %80 altında yeşil, %80'den itibaren sarı ve %95'ten itibaren kırmızıdır. Hız ölçülürken hız satırı ne kadar daha örnek gerektiğini söyler.
+
+**`/limit-watch on` ve `/limit-watch off`** izleyicinin tamamını durdurur ve başlatır. Kapalıyken hiçbir şey örneklenmez: status line, sidebar section, pane ve uyarı olmaz; açık bir pane ve duran section düşürülür. Ayar, her pencerenin paylaştığı store'da tutulur; bir penceredeki `off`, öbür pencereleri de onlara etki eden sonraki hook'ta durdurur ve restart'ı aşar. İzleyici kapalıyken çıplak `/limit-watch`, pane açmak yerine `off.` diye yanıtlar.
 
 **Transcript'te bir uyarı**, bir limit %80'i geçtiğinde ve %95'i geçtiğinde yeniden:
 
@@ -63,17 +65,17 @@ Yerel bir checkout'tan tek session için yüklemek istersen:
 
 ## Nereye uzanır
 
-Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.288 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
 Reach L0: çizer ve hatırlar.
 
     1. Okur:     $.session.usage'ın rate-limit window'larını (kind, kullanılan yüzde, reset zamanı); dört hook'unun event payload'larını
     2. Çalıştırır: hiçbir şey; interaktif bir session'da bir 60 saniyelik timer
     3. Gönderir: makineden hiçbir şey çıkmaz
-    4. Saklar:   her limitin örneklerini ve uyarılmış seviyelerini $.store içinde, limit başına en fazla 1500 örnek
+    4. Saklar:   her limitin örneklerini ve uyarılmış seviyelerini $.store içinde, limit başına en fazla 1500 örnek, ve saklanan on/off ayarı
     5. Düşman girdi: tek dış girdi kullanım rakamlarıdır; bilinmeyen biçimde saklanmış bir değer bildirilir ve değiştirilir, hiçbir zaman güvenilmez
 
 ## Sınırlar
@@ -82,7 +84,7 @@ Reach L0: çizer ve hatırlar.
 - 7 günlük limit cycle'ının ilk 24 saatinde hız göstermez.
 - 7 günlük hız, cycle'ın `resetsAt`'ten tam 7 gün önce başladığını varsayar.
 - Bir spend limit %100'ü geçebilir. Bar dolu yerde durur; yüzde durmaz.
-- `/limit-watch` tek bir pane'i açıp kapar. İkinci çalıştırma onu kapatır.
+- `/limit-watch` tek bir pane'i açıp kapar. İkinci çalıştırma onu kapatır. İzleyici kapalıyken çıplak komut hiçbir şey açmaz; `/limit-watch on` örneklemeyi yeniden başlatır.
 
 ## Geliştirme
 

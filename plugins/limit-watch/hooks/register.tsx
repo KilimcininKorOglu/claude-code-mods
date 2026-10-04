@@ -22,14 +22,21 @@ import {
 
 const PANE_ID = 'limit-watch'
 const TRACKS_KEY = 'tracks'
+const ENABLED_KEY = 'enabled'
 const TICK_MS = 60_000
 /** Body rows one limit takes in the pane: heading, bar, reset, pace, blank line. */
 const ROWS_PER_LIMIT = 5
 
+const USAGE = 'expects nothing (opens or closes the pane), on or off'
+const OFF_TEXT = 'off. /limit-watch on starts it again.'
+
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
-/** What the hooks share: the last reading, the tracks kept in the store, and the last timer error. */
-type State = { limits: readonly SessionRateLimit[]; tracks: Tracks; lastError?: string }
+/**
+ * What the hooks share: the last reading, the tracks kept in the store, the stored on/off setting with
+ * whether a drawing of it stands, and the last timer error.
+ */
+type State = { limits: readonly SessionRateLimit[]; tracks: Tracks; enabled: boolean; drawn: boolean; lastError?: string }
 
 /** Logs each threshold the last sample passed for the first time in its cycle, and marks it. */
 function warn($: EngineInterface, state: State, now: number): void {
@@ -60,10 +67,37 @@ async function toSidebar($: EngineInterface, state: State, now: number): Promise
 }
 
 /**
+ * Reads the on/off setting from the store, which every window shares, so a change made in another
+ * window applies here at the next hook that acts on it.
+ */
+async function readSettings($: EngineInterface, state: State): Promise<void> {
+  state.enabled = (await $.store.get(ENABLED_KEY)) !== false
+}
+
+/** Drops everything the mod drew: the sidebar section, the status line and an open pane. */
+async function clearDrawings($: EngineInterface): Promise<void> {
+  try {
+    await $.sidebar.clear({ consumer: 'limit-watch', key: 'limits' })
+  } catch {
+    // The sidebar mod is not installed.
+  }
+  $.ui.status(undefined)
+  if ((await $.ui.panes()).some(pane => pane.id === PANE_ID)) await $.ui.close({ id: PANE_ID })
+}
+
+/**
  * Reads the limits, records a sample, raises new warnings, stores the tracks and redraws. The stored
  * tracks are read again first, so a warning another session of the account wrote is not repeated.
+ * The stored on/off setting is read first too: while it says off nothing is sampled and what stands
+ * is cleared, so a watcher another window turned off stops here as well.
  */
 async function sample($: EngineInterface, state: State): Promise<void> {
+  await readSettings($, state)
+  if (!state.enabled) {
+    if (state.drawn) await clearDrawings($)
+    state.drawn = false
+    return
+  }
   const usage = await $.session.usage()
   const now = await $.clock.now()
   state.limits = usage.rateLimits
@@ -74,6 +108,7 @@ async function sample($: EngineInterface, state: State): Promise<void> {
   // The sidebar takes the reading while it is open; otherwise the status line shows it, as before.
   $.ui.status((await toSidebar($, state, now)) ? undefined : statusLine(state.limits, state.tracks, now))
   $.ui.invalidate('ui.render')
+  state.drawn = true
 }
 
 /**
@@ -91,23 +126,58 @@ async function sampleOrLog($: EngineInterface, state: State): Promise<void> {
   }
 }
 
+/**
+ * The /limit-watch command. A bare run opens or closes the pane. `on` and `off` stop and start the
+ * whole watcher; the setting is stored, so it holds for every window at its next hook that acts on it.
+ */
+async function runCommand($: EngineInterface, state: State, args: string): Promise<string> {
+  const word = args.trim()
+  if (word === 'on') {
+    await $.store.set(ENABLED_KEY, true)
+    state.enabled = true
+    await sample($, state)
+    if (!state.enabled) return OFF_TEXT
+    return 'on. /limit-watch opens the pane.'
+  }
+  if (word === 'off') {
+    await $.store.set(ENABLED_KEY, false)
+    state.enabled = false
+    if (state.drawn) await clearDrawings($)
+    state.drawn = false
+    return OFF_TEXT
+  }
+  if (word !== '') return USAGE
+  if (!state.enabled) return OFF_TEXT
+  const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
+  if (isOpen) {
+    await $.ui.close({ id: PANE_ID })
+    return 'pane closed'
+  }
+  await sample($, state)
+  if (!state.enabled) return OFF_TEXT
+  await $.ui.open({ id: PANE_ID, title: 'Usage limits', rows: Math.max(2, state.limits.length * ROWS_PER_LIMIT) })
+  return 'pane open. /limit-watch closes it.'
+}
+
 export const register: Register = on => {
-  const state: State = { limits: [], tracks: {} }
+  const state: State = { limits: [], tracks: {}, enabled: true, drawn: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     const stored = parseTracks(await $.store.get(TRACKS_KEY))
     if (stored === undefined) $.ui.log('the stored samples have an unknown shape, so the pace starts over')
     state.tracks = stored ?? {}
+    await readSettings($, state)
     await $.command.register({
       name: 'limit-watch',
-      description: 'Open or close the usage limits pane (limit-watch)',
+      description: 'Open or close the usage limits pane, or turn the watcher off and on (limit-watch)',
+      argumentHint: '[on | off]',
       immediate: true,
     })
     // A -p run draws nothing, so only an interactive session samples on a timer. The timer is armed
     // before the first read, so a first read that fails does not leave the session without one.
     if (e.isInteractive) $.clock.every(TICK_MS, () => void sampleOrLog($, state))
-    await sampleOrLog($, state)
+    if (state.enabled) await sampleOrLog($, state)
     return r
   })
 
@@ -118,16 +188,7 @@ export const register: Register = on => {
   })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
-  on('command.run', { command: 'limit-watch' }, async $ => {
-    const isOpen = (await $.ui.panes()).some(pane => pane.id === PANE_ID)
-    if (isOpen) {
-      await $.ui.close({ id: PANE_ID })
-      return { text: 'pane closed' }
-    }
-    await sample($, state)
-    await $.ui.open({ id: PANE_ID, title: 'Usage limits', rows: Math.max(2, state.limits.length * ROWS_PER_LIMIT) })
-    return { text: 'pane open. /limit-watch closes it.' }
-  })
+  on('command.run', { command: 'limit-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE_ID) return next(e)

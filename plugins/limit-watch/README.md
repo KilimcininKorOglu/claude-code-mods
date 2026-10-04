@@ -1,6 +1,6 @@
 # limit-watch
 
-A Claude subscription has a 5-hour limit and a 7-day limit, and a Claude gateway can add a spend limit. Claude Code shows them only in a notice when a limit is almost full, so you learn where you stand when it is already late. This mod keeps them on screen for the whole session, counts down to each reset, forecasts when the current pace fills a limit, and logs a warning when a limit passes 80% and 95%.
+A Claude subscription has a 5-hour limit and a 7-day limit, and a Claude gateway can add a spend limit. Claude Code shows them only in a notice when a limit is almost full, so you learn where you stand when it is already late. This mod keeps them on screen for the whole session, counts down to each reset, forecasts when the current pace fills a limit, and logs a warning when a limit passes 80% and 95%. `/limit-watch off` stops all of it until `/limit-watch on` starts it again.
 
 ## What it shows
 
@@ -27,6 +27,8 @@ An API key session reports no limits. The status line then reads `no usage limit
     pace +4.2%/h over the last 38m
 
 The bar fills the width of the pane. It is green below 80%, yellow from 80% and red from 95%. While the pace is measured, the pace line says how much more sampling it needs.
+
+**`/limit-watch on` and `/limit-watch off`** stop and start the whole watcher. While it is off nothing is sampled: no status line, no sidebar section, no pane and no warnings, and an open pane and the standing section are dropped. The setting lives in the store every window shares, so an `off` in one window also stops the others at their next hook that acts on it, and it survives a restart. While the watcher is off, a bare `/limit-watch` answers `off.` instead of opening the pane.
 
 **A warning in the transcript** when a limit passes 80% and again when it passes 95%:
 
@@ -63,17 +65,17 @@ Load it from a local checkout for one session:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.288:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via sample), $.ui.close, $.ui.invalidate (via sample), $.ui.log, $.ui.open, $.ui.panes, $.ui.resolve, $.ui.status (via sample)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
 Reach L0, draws and remembers.
 
     1. Reads:    the rate-limit windows of $.session.usage (kind, percent used, reset time); the event payloads of its four hooks
     2. Runs:     nothing; one 60 second timer in an interactive session
     3. Sends:    nothing leaves the machine
-    4. Persists: the samples and the warned levels of each limit in $.store, at most 1500 samples per limit
+    4. Persists: the samples and the warned levels of each limit in $.store, at most 1500 samples per limit, and the stored on/off setting
     5. Hostile input: the only outside input is the usage figures; a stored value of an unknown shape is reported and replaced, never trusted
 
 ## Limits
@@ -82,7 +84,7 @@ Reach L0, draws and remembers.
 - The 7-day limit shows no pace in the first 24 hours of its cycle.
 - The 7-day pace assumes the cycle began exactly 7 days before `resetsAt`.
 - A spend limit can pass 100%. The bar stops at full; the percentage does not.
-- `/limit-watch` toggles one pane. The second run closes it.
+- `/limit-watch` toggles one pane. The second run closes it. While the watcher is off, the bare command opens nothing; `/limit-watch on` starts the sampling again.
 
 ## Development
 
