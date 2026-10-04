@@ -1,6 +1,6 @@
 {
   "name": "sage-memory",
-  "version": "0.2.36",
+  "version": "0.2.37",
   "description": "Keeps project and global memories in SQLite through a shared local daemon, hands the model the entries that match its file tool calls, prompts and subagent tasks, and saves new ones with a haiku consolidator after each main-loop turn.",
   "author": {
     "name": "Kerem Gok",

@@ -1064,10 +1064,20 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
 /** What a consolidation reads besides the answer: the person's prompts, the turn's evidence, and the memories relevance reminded. */
 type Since = { asked: readonly string[]; turn: TurnEvidence; relevant: readonly Memory[] }
 
+/** Calls the job model; one empty reply is retried once with the same request, because a gateway can hand one call an empty body. */
+async function completeWithRetry(
+  $: EngineInterface,
+  request: Parameters<EngineInterface['model']['complete']>[0],
+): Promise<Awaited<ReturnType<EngineInterface['model']['complete']>>> {
+  let r = await $.model.complete(request)
+  if (!r.isAnswered && r.reason === 'empty-reply') r = await $.model.complete(request)
+  return r
+}
+
 /**
  * Asks the model what the turn taught and writes each memory it kept. It also judges which of the
  * memories relevance reminded the turn followed; the verdict goes to the audit log alone, until it is
- * measured against real turns.
+ * measured against real turns. One empty reply is retried once with the same request.
  */
 async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
   if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
@@ -1075,7 +1085,7 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const root = state.project?.root ?? ''
   const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
   const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant)
-  const r = await $.model.complete({ model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
+  const r = await completeWithRetry($, { model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
   if (!r.isAnswered) {
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
     // The turn's material was taken out of state before the timer ran. Hand the typed prompts back,

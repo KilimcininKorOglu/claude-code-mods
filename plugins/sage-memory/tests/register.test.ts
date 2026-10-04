@@ -49,6 +49,8 @@ type World = {
   tools: string[]
   asked: { system: string; prompt: string; model: string }[]
   modelText?: string
+  /** How many model calls the world answers with an empty body before the texts flow again. */
+  emptyReplies: number
   curatorText?: string
   rateText?: string
   mergeText?: string
@@ -70,7 +72,7 @@ function lostAnswer(lost: World['lost']): { value: unknown } | undefined {
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -107,6 +109,10 @@ function world(on: On): World {
   on('session.id', () => ({ value: 'sess-1' }))
   on('model.complete', (_, e) => {
     w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model })
+    if (w.emptyReplies > 0) {
+      w.emptyReplies -= 1
+      return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
+    }
     const system = e.system ?? ''
     const text = system.startsWith('Rate one memory') ? w.rateText : system.startsWith('Do these two') ? w.mergeText : system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
     return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
@@ -755,6 +761,25 @@ describe('consolidator', () => {
     await settled(w)
     expect(w.lines).toContain('the consolidator got no answer (empty-reply)')
     expect(bodiesOf(w, '/memory/remember')).toEqual([])
+  })
+
+  withSidebar('one empty reply is retried once, and the retry writes what the call lost', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+    w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
+    w.routes.set('/memory/stats', { project: { total: 1, byStatus: { active: 1 }, byKind: {}, edges: 0 }, user: { total: 0, byStatus: { active: 0 }, byKind: {}, edges: 0 } })
+    w.modelText = JSON.stringify({ candidates: [{ text: 'The daemon closes after five idle minutes', is: 'keep', memory: { text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', anchors: [{ type: 'file', path: 'daemon/server.ts' }] } }] })
+    w.emptyReplies = 1
+    await $.session.start(START)
+    await $.prompt.submit(typed('what is the timeout?'))
+    await $.turn.complete(answered('The idle timeout is five minutes.'))
+    await settled(w)
+    // The retry repeats the same request; it does not rebuild a shorter one.
+    expect(w.asked).toHaveLength(2)
+    expect(w.asked[1]?.prompt).toBe(w.asked[0]?.prompt)
+    expect(w.asked[1]?.model).toBe('haiku')
+    expect(streamOf(w, 'error')).toEqual([])
+    expect(streamOf(w, 'consolidator')).toEqual(['added (project): The daemon closes itself five minutes after its last request.'])
   })
 })
 
