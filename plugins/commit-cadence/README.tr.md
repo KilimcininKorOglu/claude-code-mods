@@ -15,7 +15,7 @@ Uzun bir session kolayca yirmi değişmiş dosya ve tek bir dev commit ile biter
 6. Bulgu açık kaldıkça repository başına `$.store`'da tutulur: yolları ve kırmızı kayıtlarının key'leri. Yeniden yüklenen bir modül (`/reload-plugins`, bir güncelleme, bir yeniden başlatma) session başında onu geri alır. Böylece kendisinden önce yazılan kırmızı kayıtları yine silebilir, aynı yolları yeniden bildirmez ve notu tekrar göndermez.
 7. `/commit-cadence` o anda ölçer; ayarı ve tree'de ne olduğunu yazar.
 
-Hiçbir şeyi durdurmaz. Neyin commit'e değdiğine sen karar verirsin; model de notu bir kapı değil, hatırlatma olarak okur.
+Hiçbir şeyi durdurmaz. Neyin commit'e değdiğine sen karar verirsin; model de notu bir gate değil, hatırlatma olarak okur.
 
 ## Komut
 
