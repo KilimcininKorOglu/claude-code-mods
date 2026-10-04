@@ -4,7 +4,7 @@ Bir Bash komutunun ekrana bastıklarının çoğu model için gürültüdür: pr
 
 ## Ne yapar
 
-1. Bash tool'unu hook'lar, komutu çalıştırır ve çıktıyı modelden önce okur: başarılı bir çağrıda `stdout` ve `stderr`'i, başarısız bir exit'te hata metnini. Subagent çağrıları da aynı hook'tan geçer.
+1. Bash tool'unu hook'lar, komutu çalıştırır ve çıktıyı modelden önce okur: başarılı bir çağrıda `stdout` ve `stderr`'i, exit başarısızsa hata metnini. Subagent çağrıları da aynı hook'tan geçer.
 2. Komutu bir shell'in okuduğu gibi okur. Öndeki değişkenler ve wrapper'lar (`FOO=1`, `timeout 60`, `nice`, `env`, `sudo`) ayıklanır. `cd app && cargo test` gibi bir zincirde çıktı basan tek komut filtrelenir. Bir pipeline iki durumda filtrelenir: son aşaması `grep` ya da `rg` olduğunda, ya da çıktıyı üreten komuttan sonra yalnız `cat`, `head` ya da takip etmeyen bir `tail` geldiğinde.
 3. Filtre, çıktıyı ne için okuyacaksan onu tutar, gerisini atar:
    - Geçen bir test koşusu sayı satırına iner. Başarısız olan koşu her hatayı mesajıyla ve senin kodundaki stack frame'leriyle tutar.
@@ -12,7 +12,7 @@ Bir Bash komutunun ekrana bastıklarının çoğu model için gürültüdür: pr
    - Bir liste, arama ya da tablo satırlarını bir sınıra kadar tutar ve geri kalanın sayısını söyleyerek biter.
    - Progress bar'lar, indirme satırları, spinner'lar ve renk kodları her yerde atılır.
 4. İki komuta çıktıyı küçülten bir flag ekler: sayı, aralık ya da format verilmemişse `git log -10`, bir de `pytest --tb=short -q`. Hiçbir aracı JSON gibi daha büyük bir formata geçirmez, çünkü başarısız bir komutun metni hook'a 10.000 karakterde kesilmiş gelir ve bir JSON raporu bu sınırı düz metinden çok önce aşar. Model JSON'u kendisi isterse (`go test -json`, `jest --json`, `eslint -f json`, `rspec --format json`, `rubocop --format json`, `phpstan analyse --error-format=json`, `ruff check --output-format=json`) filtre o raporu okur. Flag ancak permission kontrolü yeni komuta, modelin yazdığı komuta verdiği cevabın aynısını veriyorsa eklenir. Argümanlar zaten bir format seçmişse, komut bir pipeline'ın ya da zincirin içindeyse, `sudo`'dan sonra geliyorsa ya da bir redirect varsa hiç eklenmez.
-5. Çıktının %5'inden ya da 40 karakterden az kazandıran filtre sonucu atılır, model çıktıyı olduğu gibi okur; senin kuralların da aynı eşiğe tabidir. Daha küçük bir kazanç, modelin okuduğu metni boşuna değiştirir ve işe yaramayan bir küçülmeyi kazanç diye sayar. İki durumda filtrelenmiş sonuç her zaman kalır:
+5. Çıktının %5'inden ya da 40 karakterden az kazandıran filtre atılır, model çıktıyı olduğu gibi okur; senin kuralların da aynı eşiğe tabidir. Daha küçük bir kazanç, modelin okuduğu metni boşuna değiştirir ve işe yaramayan bir küçülmeyi kazanç diye sayar. İki durumda filtrelenmiş sonuç her zaman kalır:
    - Bir credential değeri maskelenmiş `env` ya da `printenv` listesi. Bunun için tam çıktı dosyası tutulmaz, çünkü o dosya maskelenen değerleri içerirdi; `BASH_DIET_RAW=1 env` onları geri verir.
    - Mod'un eklediği bir flag'den sonraki çıktı, çünkü ham çıktı o zaman modelin istemediği bir formattadır.
 
@@ -52,7 +52,7 @@ Mod'un kendi filtresi olan komutların hepsi aşağıda. `*` ile işaretli komut
 | make | `make`, `gmake`: make'in dizin satırları ve compiler'ın kaynak alıntıları atılır; her runner'ın geçen test için yazdığı satır (`go test -v`, `cargo test`, `pytest -v`, `vitest --reporter=verbose`, `claude plugin test`) tek bir sayıya iner; her hata, özet ve geri kalan satırlar kalır |
 | Yerleşik kurallar | `gcc`, `g++`, `cc`, `c++`, `clang`, `clang++` (`gcc-14` gibi sürüm ekiyle de); `cmake`, `cmake --build`; `brew install`, `upgrade`, `reinstall`, `update`, `tap`, `bundle`; `rsync`; `df`; `du`; `ping`, `ping6`; `shellcheck` |
 
-- Bir runner üzerinden başlatılan komut, başlattığı komut sayılır: `npx`, `bunx`, `pnpx`, `pnpm exec` ve `dlx`, `npm exec` ve `x`, `uv run`, `poetry run`, `pipenv run`, `bundle exec`, `python -m`, `python3 -m`, `php artisan`. Mutlak yol (`/usr/bin/git`) dosya adı olarak, `git -C <dizin>` ise `git` olarak okunur.
+- Bir runner üzerinden başlatılan komut, başlattığı komutun adıyla sayılır: `npx`, `bunx`, `pnpx`, `pnpm exec` ve `dlx`, `npm exec` ve `x`, `uv run`, `poetry run`, `pipenv run`, `bundle exec`, `python -m`, `python3 -m`, `php artisan`. Mutlak yol (`/usr/bin/git`) dosya adı olarak, `git -C <dizin>` ise `git` olarak okunur.
 - Geri kalan her komut genel temizlikten geçer: renk kodları, carriage-return ile yeniden çizilen satırlar ve tekrarlanan satırlar atılır.
 - Bir dosyanın `cat`, `head` ve `tail` çıktısı hiçbir zaman filtrelenmez, çünkü model tam olarak o satırları istemiştir.
 
@@ -68,7 +68,7 @@ Mod'un kendi filtresi olan komutların hepsi aşağıda. `*` ile işaretli komut
 | Bütün request'lerin input token'ı | 2.856.172 | 2.512.370 | %12 |
 | Session maliyeti | $1,00 | $0,78 | %21 |
 
-- Bir sonucun token'ı, komutu çalıştıran request'ten bir sonrakine context'in ne kadar büyüdüğüdür; o request'in output token'ları bundan düşülür. Bu sayıda çağrının kendisi için yaklaşık 100 token vardır ve hiçbir filtre onu küçültemez.
+- Bir sonucun token'ı, komutu çalıştıran request'ten bir sonrakine context'in ne kadar büyüdüğüdür; o request'in output token'ları bundan düşülür. Bu sayının içinde çağrının kendisi için yaklaşık 100 token var ve hiçbir filtre onu küçültemez.
 - Session'ın kendi prompt'u, tool'ları ve talimatları iki koşuda da aynıdır. Bu yüzden bütün session'daki kazanç, sonuçlardaki kazançtan küçük kalır.
 
 35 sonucun context token'ları, aileye göre. Her sayı, ailedeki komutların medyanlarının toplamıdır.
@@ -93,7 +93,7 @@ Mod'un kendi filtresi olan komutların hepsi aşağıda. `*` ile işaretli komut
 
 - En az kazanç `env` (filtre yalnız credential değerlerini maskeler), `php -l`, `make` ve `go vet` komutlarında. Bunların çıktısı zaten birkaç satır; sayılarının çoğu da çağrının kendi 100 token'ı.
 
-O session'dan sonra eklenen filtreler bir deneme projesinde birer kez çalıştırılarak, sonucun karakter sayısıyla ölçüldü:
+O session'dan sonra eklenen filtreler bir deneme projesinde birer kez çalıştırıldı ve kazanç, sonucun karakter sayısıyla ölçüldü:
 
 | Komut | Mod olmadan | Mod ile | Kazanç |
 |---|---|---|---|
@@ -113,10 +113,10 @@ O session'dan sonra eklenen filtreler bir deneme projesinde birer kez çalışt�
 
 ## Kendi kuralların
 
-Hiçbir filtrenin tanımadığı bir komuta kendi kuralını yazabilirsin. Kurallar iki dosyada durur:
+Hiçbir filtrenin tanımadığı bir komut için kendi kuralını yazabilirsin. Kurallar iki dosyada durur:
 
 - `~/.claude/bash-diet/filters.json`: bütün projeler için, olduğu gibi çalışır.
-- `<repository>/.bash-diet/filters.json`: tek bir proje için. Yalnız `/bash-diet trust`'tan sonra çalışır ve içeriği değişince yeniden durur, çünkü clone'ladığın bir repository'yle gelen dosya çıktının bir kısmını modelden saklayabilir.
+- `<repository>/.bash-diet/filters.json`: tek bir proje için. Yalnız `/bash-diet trust`'tan sonra çalışır ve içeriği değişince bir daha çalışmaz, çünkü clone'ladığın bir repository'yle gelen dosya çıktının bir kısmını modelden saklayabilir.
 
 Senin kuralın, aynı komut için mod'un kendi filtresinden önce çalışır. Adımlar bu sırayla işler ve hepsi isteğe bağlıdır:
 
@@ -145,13 +145,13 @@ Senin kuralın, aynı komut için mod'un kendi filtresinden önce çalışır. A
 - `match_output`, çıktının tamamı `pattern` ile eşleşiyor ve `unless` ile eşleşmiyorsa yalnız `message` ile cevap verir.
 - `head_lines` ve `tail_lines` iki ucu tutar, aradakinin sayısını yazar. Ardından `max_lines` satır sayısını sınırlar.
 
-Hatalı bir dosyanın doğru kuralları yine çalışır; tek bir transcript satırı bütün hataları sayar. `/bash-diet filters` iki dosyayı, içlerindeki kuralları ve yerleşik kuralları listeler.
+Dosya hatalı olsa bile doğru kurallar yine çalışır; tek bir transcript satırı bütün hataları sayar. `/bash-diet filters` iki dosyayı, içlerindeki kuralları ve yerleşik kuralları listeler.
 
 ## Komut
 
     /bash-diet                               açık mı kapalı mı, exclude'lar ve bu session'ın kazancı
     /bash-diet on | off                      açar ya da kapatır; kurulumdan sonra açıktır
-    /bash-diet exclude <prefix | ^regex>     o komut filtresiz çalışır; excludes listeler, include birini geri alır
+    /bash-diet exclude <prefix | ^regex>     o komut filtresiz çalışır; exclude'ları listeler, bir include birini geri alır
     /bash-diet filters                       kural dosyaları, içlerindeki kurallar ve yerleşik kurallar
     /bash-diet trust | untrust               bu repository'nin .bash-diet/filters.json dosyasını çalıştırır ya da durdurur
     /bash-diet gain                          son 90 günün kazancı ve en çok kazandıran aileler
@@ -160,9 +160,9 @@ Hatalı bir dosyanın doğru kuralları yine çalışır; tek bir transcript sat
     /bash-diet discover [days] [all]         modelin önceki session'larda okuduğu çıktı (filtreye göre) ve hiçbir filtrenin okumadığı komutlar
     /bash-diet learn [days] [write]          bir CLI hatasıyla başarısız olan komutlar ve arkasından çalışan doğru biçimleri
 
-- `gain`, `~/.claude/bash-diet/gain/` altındaki kayıtları okur: session ve gün başına bir dosya, 90 gün saklanır. Her rapor önceki ve sonraki karakter sayılarını ölçerek verir. Token sayısı, token başına dört karakter kabul edilerek yapılan bir tahmindir; `history` ve `graph` yalnız karakter gösterir.
+- `gain`, `~/.claude/bash-diet/gain/` altındaki kayıtları okur: session ve gün başına bir dosya, 90 gün saklanır. Her rapor önceki ve sonraki karakter sayılarını ölçer. Token sayısı, token başına dört karakter kabul edilerek yapılan bir tahmindir; `history` ve `graph` yalnız karakter gösterir.
 - `cost`, context dışında tutulan token'ları modelin Eylül 2026 liste fiyatlarıyla hesaplar: bir kez cache write fiyatıyla, ardından sonraki her request için cache read fiyatıyla.
-- `discover` ve `learn` varsayılan olarak bu projenin son 30 günlük transcript'lerini okur. `discover all` bütün projelerinkini okur; hemen cevap verir, raporu ise arkadan bir transcript satırı olarak gelir.
+- `discover` ve `learn` varsayılan olarak bu projenin son 30 günlük transcript'lerini okur. `discover all` bütün projelerinkini okur; hemen cevap verir, raporu ise arkasından bir transcript satırı olarak gelir.
 - `learn` yalnız şu durumu sayar: tek bir komut bilinmeyen bir flag, bulunamayan bir komut, eksik bir argüman ya da syntax hatası yüzünden başarısız olmuş ve üç çağrı içinde çalışan benzer bir komut gelmiş. `learn write` bu çiftleri repository'deki `.claude/rules/cli-corrections.md` dosyasına yazar; model onu sonraki session'larda okur. Credential taşıyabilecek bir komut asla yazılmaz.
 
 ## Kurulum
