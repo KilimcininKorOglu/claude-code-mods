@@ -1,6 +1,6 @@
 # bughunt
 
-Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini söyler. Model çoğu zaman önce düzeltmeyi, sonra düzeltmeden sonra geçen bir test'i yazar. Bu mod avı turlara böler ve her turu kanıtına bağlar. Model bir kanıt komutu yazar, mod komutu kendisi çalıştırır. Kanıt sıfır olmayan bir kodla ve bir `FAIL` satırıyla çıkana kadar üretim kodu değişmez. Tur ancak aynı komut sonra 0 ile ve bir `PASS` satırıyla çıkarsa ve mod düzeltmeyi kısa bir süre geri aldığında yeniden başarısız olursa düzeltilmiş sayılır. Döngü her turun sonucunu okur, engellenen ya da doğrulanmayan bir turda bir sonraki turu başlatmaz, durur.
+Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini söyler. Model çoğu zaman önce düzeltmeyi, sonra da düzeltmeden sonra geçen bir test yazar. Bu mod avı turlara böler ve her turu kanıtına bağlar. Model bir kanıt komutu yazar, mod komutu kendisi çalıştırır. Kanıt sıfır olmayan bir kodla ve bir `FAIL` satırıyla çıkana kadar üretim kodu değişmez. Bir tur ancak şöyle düzeltilmiş sayılır: aynı komut sonra 0 ile çıkar ve bir `PASS` satırı yazar; mod düzeltmeyi kısa bir süre geri alır ve komut yeniden başarısız olur. Döngü her turun sonucunu okur, engellenen ya da doğrulanmayan bir turda bir sonraki turu başlatmaz, durur.
 
 `/bughunt collab <yollar>` ikinci ve salt okunur bir moddur: bir scanner, bir planner ve bir critic subagent'ı yolları sırayla inceler. Rapor bulguları, planı ve critic'in kararını taşır.
 
@@ -24,8 +24,8 @@ Bir bug avı prompt'u modele önce bug'ı kanıtlamasını, sonra düzeltmesini 
 
    Düzeltme geri alınmışken mod `$.store` içinde bir kayıt tutar. Bir çökme kontrolü yarıda keserse, aynı dizindeki bir sonraki session düzeltmeyi geri koyar, ama yalnız geri alınan dosyalar hâlâ değişmemişse. Dosyalar o arada değiştiyse onların üzerine yazmaz ve sana düzeltmeyi geri getiren `git restore` komutunu söyler.
 6. Turun turn'ü bitince mod cevabın sonuç satırını okur: bir sonuç etiketiyle başlayan ilk satır. Böylece önündeki bir cümle etiketi gizlemez:
-   - `fixed-and-verified` ancak mod bu turda önce `FAIL` sonra `PASS` kaydettiyse devam eder. Kayıt yoksa av durur.
-   - `no-proven-bug` devam eder.
+   - Av, `fixed-and-verified` sonucunda ancak mod bu turda önce `FAIL` sonra `PASS` kaydettiyse devam eder; kayıt yoksa durur.
+   - `no-proven-bug` ile de devam eder.
    - `blocked`, `fixed-verification-incomplete`, sonuç satırının olmaması, bir kesinti ya da bir API hatası avı durdurur.
    - Son turdan sonra av biter.
 
@@ -64,7 +64,7 @@ Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzer
 ## Kurduktan sonra
 
 1. Claude Code'u yeniden başlat.
-2. `/bughunt`'ı test'lerini komut satırından çalıştırabildiğin bir repoda çalıştır. Kanıt komutu senin yetkilerinle çalışır, bu yüzden modelin önerdiği komutu oku.
+2. `/bughunt`'ı, testlerini komut satırından çalıştırabildiğin bir repoda çalıştır. Kanıt komutu senin yetkilerinle çalışır, bu yüzden modelin önerdiği komutu oku.
 
 ## Neye ulaşabilir
 
@@ -85,7 +85,7 @@ Reach L2: modelin adlandırdığı kanıt komutunu çalıştırır.
 
 - Gate Edit, Write ve NotebookEdit'i okur. Bash ile değiştirilen bir dosya (`sed -i`, bir yönlendirme, bir script) tutulmaz.
 - Geri alma kontrolü kanıtın düzeltmenin değiştirdiği dosyalara bağlı olduğunu gösterir. Kanıtın doğru davranışı assert edip etmediğini ölçemez.
-- Geri alma kontrolü yalnız düzeltmenin değiştirdiği, git'in izlediği dosyaları geri alır. Yalnız dosya ekleyen bir düzeltmede geri alınacak bir şey yoktur, bu yüzden `PASS`'i reddedilir. Git reposu dışında hiçbir `PASS` kaydedilmez.
+- Geri alma kontrolü yalnız düzeltmenin değiştirdiği, git'in izlediği dosyaları geri alır. Yalnız dosya ekleyen bir düzeltmede geri alınacak bir şey yoktur, bu yüzden `PASS` reddedilir. Git reposu dışında hiçbir `PASS` kaydedilmez.
 - Kontrol sürerken (en fazla bir kanıt çalıştırması) düzeltilen dosyalar eski kodu taşır. Bu sırada onları okuyan başka bir süreç bug'ı görür.
 - Mod skill'in teslim edildiğini ölçer, modelin onu okuduğunu değil.
 - Süresi dolan bir collab adımı bitene kadar arka planda çalışmaya devam eder. Mod artık onu beklemez.
