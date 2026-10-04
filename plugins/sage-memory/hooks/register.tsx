@@ -1065,9 +1065,12 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
 type Since = { asked: readonly string[]; turn: TurnEvidence; relevant: readonly Memory[] }
 
 /**
- * Calls the job model; one empty reply is retried once. The retry doubles maxTokens: a thinking job
- * model spends the budget on its reasoning and the answer then arrives as no text at all (measured
- * 2026-10-04: max_tokens 128 with a reasoning prompt returned a thinking block alone).
+ * Calls the job model; one failed call is retried once. An empty reply means the thinking job model
+ * spent the budget on its reasoning, so the retry doubles maxTokens (measured 2026-10-04: max_tokens
+ * 128 with a reasoning prompt returned a thinking block alone). An api-error is the HTTP layer
+ * failing under load, so the retry repeats the same request. An aborted call is one cut at its
+ * timeoutMs (measured: a call cut at exactly its limit settles as aborted), so the retry raises the
+ * limit by 120 s.
  */
 async function completeWithRetry(
   $: EngineInterface,
@@ -1075,7 +1078,18 @@ async function completeWithRetry(
 ): Promise<Awaited<ReturnType<EngineInterface['model']['complete']>>> {
   let r = await $.model.complete(request)
   if (!r.isAnswered && r.reason === 'empty-reply') r = await $.model.complete({ ...request, maxTokens: (request.maxTokens ?? 0) * 2 })
+  if (!r.isAnswered && r.reason === 'api-error') r = await $.model.complete(request)
+  if (!r.isAnswered && r.reason === 'aborted') r = await $.model.complete({ ...request, timeoutMs: (request.timeoutMs ?? 0) + 120_000 })
   return r
+}
+
+/** The status and error text an api-error result carries, when the engine includes them. */
+function apiErrorDetail(r: Awaited<ReturnType<EngineInterface['model']['complete']>>): string {
+  if (r.isAnswered || r.reason !== 'api-error') return ''
+  const extra = r as unknown as { status?: number; error?: string }
+  const status = extra.status !== undefined ? ` ${extra.status}` : ''
+  const error = extra.error !== undefined && extra.error !== '' ? ` ${extra.error}` : ''
+  return status + error
 }
 
 /**
@@ -1091,7 +1105,7 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant)
   const r = await completeWithRetry($, { model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
   if (!r.isAnswered) {
-    await toStream($, 'error', { text: `the consolidator got no answer (${r.reason})`, kind: 'error' })
+    await toStream($, 'error', { text: `the consolidator got no answer (${r.reason}${apiErrorDetail(r)})`, kind: 'error' })
     // The turn's material was taken out of state before the timer ran. Hand the typed prompts back,
     // so the next consolidation still reads them instead of this turn being lost for good.
     state.asked = [...since.asked, ...state.asked].slice(-MAX_ASKED)
@@ -1148,7 +1162,7 @@ async function curate($: EngineInterface, state: State, answer: string, written:
   const prompt = curatorPrompt(written.map(path => relativeTo(state.project?.root ?? '', path)), answer, targets)
   const r = await completeWithRetry($, { model: await jobModel($), system: CURATOR_SYSTEM, prompt, maxTokens: CURATE_TOKENS, timeoutMs: CURATE_MS })
   if (!r.isAnswered) {
-    await toStream($, 'error', { text: `the curator got no answer (${r.reason})`, kind: 'error' })
+    await toStream($, 'error', { text: `the curator got no answer (${r.reason}${apiErrorDetail(r)})`, kind: 'error' })
     return
   }
   const tally = emptyTally()
