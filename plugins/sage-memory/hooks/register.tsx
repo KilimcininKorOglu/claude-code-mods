@@ -1064,13 +1064,17 @@ async function writeOne($: EngineInterface, state: State, input: RememberInput):
 /** What a consolidation reads besides the answer: the person's prompts, the turn's evidence, and the memories relevance reminded. */
 type Since = { asked: readonly string[]; turn: TurnEvidence; relevant: readonly Memory[] }
 
-/** Calls the job model; one empty reply is retried once with the same request, because a gateway can hand one call an empty body. */
+/**
+ * Calls the job model; one empty reply is retried once. The retry doubles maxTokens: a thinking job
+ * model spends the budget on its reasoning and the answer then arrives as no text at all (measured
+ * 2026-10-04: max_tokens 128 with a reasoning prompt returned a thinking block alone).
+ */
 async function completeWithRetry(
   $: EngineInterface,
   request: Parameters<EngineInterface['model']['complete']>[0],
 ): Promise<Awaited<ReturnType<EngineInterface['model']['complete']>>> {
   let r = await $.model.complete(request)
-  if (!r.isAnswered && r.reason === 'empty-reply') r = await $.model.complete(request)
+  if (!r.isAnswered && r.reason === 'empty-reply') r = await $.model.complete({ ...request, maxTokens: (request.maxTokens ?? 0) * 2 })
   return r
 }
 
@@ -1142,7 +1146,7 @@ async function curate($: EngineInterface, state: State, answer: string, written:
   if (targets.length === 0) return
   await working($, state, jobText('curating', targets.length))
   const prompt = curatorPrompt(written.map(path => relativeTo(state.project?.root ?? '', path)), answer, targets)
-  const r = await $.model.complete({ model: await jobModel($), system: CURATOR_SYSTEM, prompt, maxTokens: CURATE_TOKENS, timeoutMs: CURATE_MS })
+  const r = await completeWithRetry($, { model: await jobModel($), system: CURATOR_SYSTEM, prompt, maxTokens: CURATE_TOKENS, timeoutMs: CURATE_MS })
   if (!r.isAnswered) {
     await toStream($, 'error', { text: `the curator got no answer (${r.reason})`, kind: 'error' })
     return

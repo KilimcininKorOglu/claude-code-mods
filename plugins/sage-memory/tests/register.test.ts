@@ -47,7 +47,7 @@ type World = {
   /** How the daemon is lost until the launcher runs again: its socket refuses, it refuses the token, or it answers 503 while closing. */
   lost?: 'socket' | 'token' | 'closing'
   tools: string[]
-  asked: { system: string; prompt: string; model: string }[]
+  asked: { system: string; prompt: string; model: string; maxTokens?: number }[]
   modelText?: string
   /** How many model calls the world answers with an empty body before the texts flow again. */
   emptyReplies: number
@@ -108,7 +108,7 @@ function world(on: On): World {
   })
   on('session.id', () => ({ value: 'sess-1' }))
   on('model.complete', (_, e) => {
-    w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model })
+    w.asked.push({ system: e.system ?? '', prompt: e.prompt, model: e.model, maxTokens: e.maxTokens })
     if (w.emptyReplies > 0) {
       w.emptyReplies -= 1
       return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
@@ -774,9 +774,11 @@ describe('consolidator', () => {
     await $.prompt.submit(typed('what is the timeout?'))
     await $.turn.complete(answered('The idle timeout is five minutes.'))
     await settled(w)
-    // The retry repeats the same request; it does not rebuild a shorter one.
+    // The retry repeats the same request with a doubled token budget: the first call lost the
+    // answer to the thinking block, so the same budget would lose it again.
     expect(w.asked).toHaveLength(2)
     expect(w.asked[1]?.prompt).toBe(w.asked[0]?.prompt)
+    expect(w.asked[1]?.maxTokens).toBe((w.asked[0]?.maxTokens ?? 0) * 2)
     expect(w.asked[1]?.model).toBe('haiku')
     expect(streamOf(w, 'error')).toEqual([])
     expect(streamOf(w, 'consolidator')).toEqual(['added (project): The daemon closes itself five minutes after its last request.'])

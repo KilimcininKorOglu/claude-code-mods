@@ -11,7 +11,8 @@ import type { Memory, RememberInput, UpdatePatch } from './shared/model.ts'
 
 /** 2.1.288 enforces this timeout on a timer-launched call; 30 s cut the curator's answer as aborted. */
 export const CURATE_MS = 180_000
-export const CURATE_TOKENS = 2048
+/** Doubled from 2048 like CONSOLIDATE_TOKENS: a thinking job model spends the budget on reasoning. */
+export const CURATE_TOKENS = 4096
 /** At most this many written files are looked up, and this many memories per file. */
 export const CURATED_FILES = 6
 export const PER_FILE = 4
