@@ -148,9 +148,9 @@ export type StoredCounts = { project: number; global: number }
 export function storedLine(stored: StoredCounts): Line {
   return partsLine([
     faint('this project: '),
-    { text: `${stored.project} active`, kind: 'ok' },
+    { text: `${stored.project} rules`, kind: 'ok' },
     faint(' · global: '),
-    { text: `${stored.global} active`, kind: 'info' },
+    { text: `${stored.global} rules`, kind: 'info' },
   ], 'dim')
 }
 
