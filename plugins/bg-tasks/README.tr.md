@@ -1,29 +1,29 @@
 # bg-tasks
 
-Model arka planda bir dev server ya da dosya izleyici başlatır, işine devam eder ve onu unutur. Bir saat sonra o süreç hâlâ çalışıyordur ve siz nereden çıktığını bilemezsiniz. Bu mod, session'daki her arka plan shell task'ını bitene kadar gözünüzün önünde tutar ve istediğinizi tek tuşla durdurmanızı sağlar.
+Model arka planda bir dev server ya da dosya izleyici başlatır, işine devam eder ve onu unutur. Bir saat sonra süreç hâlâ çalışıyordur ve nereden başlatıldığını bilmezsiniz. Bu mod, session'daki her arka plan shell task'ını bitene kadar gözünüzün önünde tutar ve istediğinizi tek bir basışla durdurmanızı sağlar.
 
 ## Ne yapar
 
-1. Bash tool'unu izler. `backgroundTaskId` döndüren her çağrı listeye girer: modelin `run_in_background` ile başlattığı da, sizin Ctrl+B ile arka plana attığınız da.
-2. Bir task, şu durumlarda listeden çıkar:
-   - Bildirimi gelince (`<task-id>` taşıyan ve status'u `running` olmayan bir `<task-notification>`). Ana loop bunu bir prompt olarak okur. Hâlâ çalışan bir subagent, onu kendi loop'unda sıraya girmiş bir mesaj olarak okur. Cevabını çoktan vermiş bir subagent ise bu bildirimle yeniden uyandırılır; mod da o agent'ın mesajlarını, turn'ünün sonunda okur.
-   - Foreground'da çalışan bir subagent cevap verince. Engine, o agent'ın arka plan task'larını cevabıyla birlikte sonlandırır ve bildirim göndermez; mod da onları `killed` olarak kapatır.
-   - Model, onu TaskStop tool'uyla durdurunca.
-   - Siz, onu pane'den durdurunca.
-3. Status line, kaç task'ın çalıştığını, en eskisinin yaşını ve komutunu gösterir; her 30 saniyede bir yenilenir:
+1. Bash tool'unu izler. `backgroundTaskId` döndüren her çağrı listeye girer: modelin `run_in_background` ile başlattığı task kadar, sizin Ctrl+B ile arka plana attığınız da.
+2. Bir task şu durumlarda listeden çıkar:
+   - Bildirimi geldiğinde (`<task-id>` taşıyan ve status'u `running` olmayan bir `<task-notification>`). Main loop bu bildirimi bir prompt olarak okur. Hâlâ çalışan bir subagent onu kendi loop'unda sıraya girmiş bir mesaj olarak okur. Cevabını çoktan vermiş bir subagent ise bu bildirimle yeniden başlatılır ve mod, o agent'ın mesajlarını turn'ünün sonunda okur;
+   - Foreground'da çalışan bir subagent cevap verdiğinde. Engine, o agent'ın arka plan task'larını cevabıyla birlikte bitirir ve bildirim göndermez; mod da onları `killed` olarak kapatır;
+   - Model, TaskStop tool'uyla durdurduğunda;
+   - Siz, pane'den durdurduğunuzda.
+3. Status line, kaç task'ın çalıştığını, en eskisinin yaşını ve komutunu gösterir; 30 saniyede bir yeniden çizilir:
 
        bg-tasks: 2 running · oldest 12m (npm run dev)
 
-   Çalışan task yoksa satır da yoktur.
-4. `/bg-tasks`, her task için bir satırı olan bir pane açar; en eskisi en üsttedir:
+   Çalışan hiçbir şey yoksa satır da yoktur.
+4. `/bg-tasks`, her task için bir satır taşıyan bir pane açar; en eskisi üsttedir:
 
           age  who    command
        [ stop ]    12m  model  npm run dev
        [ stop ]     3m  you    tail -f logs/app.log
 
-   Satırda Enter'a basınca mod, o task'ı engine'in TaskStop tool'uyla durdurur; ayrıca onay sorulmaz, onay sizin basmanızdır. Ardından pane `stopped: npm run dev` yazar. Task durmadıysa sebebiyle birlikte `not stopped: ...` yazar ve task listede kalır.
-5. [sidebar](../sidebar) açıksa liste oraya gider ve status line boş kalır. Liste, başlığında sayıyı gösteren (`2 running`) tek bir section'dır; içinde aynı satırlar ve her task için bir `[ stop ... ]` butonu vardır. Satırda yaş ve task'ı kimin başlattığı soluk, komut varsayılan renktedir. Yaş bir saati geçince sarıya döner; böylece kontrolden çıkmış bir task göze çarpar. Buton, `/bg-tasks stop <id>` komutunu çalıştırır ve task'ı aynı yoldan durdurur. Sidebar yoksa her şey, yukarıdaki gibi işler.
-6. Kendiliğinden biten bir task, sidebar'ın stream'ine de bir kayıt bırakır. Böylece yukarıdaki section yalnızca çalışanları gösterirken pane, bitenlerin kaydını da tutar. Kayıt, task'ın nasıl bittiğini söyler ve yalnızca o kelime renklidir: `completed` için yeşil `finished`, sarı `killed`, kırmızı `failed` (ya da engine'in bildirdiği başka herhangi bir status):
+   Bir satırda Enter'a basmak o task'ı engine'in TaskStop tool'uyla durdurur; onay sizin basışınızdır. Pane ardından `stopped: npm run dev` yazar; durmadıysa sebebiyle birlikte `not stopped: ...` yazar ve o durumda task listede kalır.
+5. [sidebar](../sidebar) açıkken liste oraya gider ve status line boş kalır. Liste, başlığında sayıyı taşıyan (`2 running`) tek bir section'dır; içinde aynı satırlar ve her task için bir `[ stop ... ]` butonu vardır. Satırda yaş ve başlatanın kim olduğu soluk, komut varsayılan renktedir. Yaş bir saate ulaştığında sarıya döner; böylece kontrolden çıkmış bir task göz çarpar. Buton, `/bg-tasks stop <id>`'yi çalıştırır ve task'ı aynı yolla durdurur. Sidebar kapalıysa her şey yukarıdaki gibi işler.
+6. Kendi kendine biten bir task, sidebar'ın stream'ine de bir kayıt bırakır. Böylece pane, bitenlerin kaydını taşırken yukarıdaki section yalnız çalışanları taşır. Kayıt task'ın nasıl bittiğini söyler ve yalnız o kelime renklidir: `completed` için yeşil `finished`, `killed` için sarı, `failed` (ya da engine'in bildirdiği başka herhangi bir status) için kırmızı:
 
        bg-tasks: task finished
        sleep 600 · finished after 12m
@@ -31,20 +31,20 @@ Model arka planda bir dev server ya da dosya izleyici başlatır, işine devam e
        bg-tasks: task failed
        npm test · failed after 3m
 
-   Sizin ya da modelin durdurduğu task, böyle bir kayıt bırakmaz; pane zaten `stopped: <task>` der. Sidebar kapalıysa hiçbir şey yazılmaz; çünkü engine'in kendi task bildirimi bitişi zaten haber verir.
+   Sizin ya da modelin durdurduğu task böyle bir kayıt yazmaz; pane zaten `stopped: <task>` der. Sidebar kapalıyken hiçbir şey yazılmaz; çünkü engine'in kendi task bildirimi bitişi zaten haber verir.
 
-2.1.282'deki canlı denemede subagent'lı üç yolun üçü de task'ını kapattı: bir foreground subagent'ın bitmesini beklediği `sleep 5`, bir foreground subagent'ın cevap verirken çalışır bıraktığı `sleep 120` ve bir background subagent'ın, agent bittikten sonra biten `sleep 15`'i.
+2.1.282'deki canlı denemede üç subagent yolu da task'ını kapattı: bir foreground subagent'ın bekleyerek bitirdiği `sleep 5`; başka bir foreground subagent'ın cevap verirken çalışır bıraktığı `sleep 120`; ve agent'ından sonra biten bir background subagent'ın `sleep 15`'i.
 
-Daha önceki bir canlı denemede model, arka planda `sleep 900` başlattı. Status line `1 running · oldest <1m (sleep 900)` gösterdi. Pane'de satırına basılınca süreç durdu; hem status line hem de engine'in `1 shell` alt satırı kayboldu.
+Daha eski bir canlı denemede model arka planda `sleep 900` başlattı. Status line `1 running · oldest <1m (sleep 900)` gösterdi. Pane'de satırına basılınca süreç durdu; hem status line hem engine'in `1 shell` alt yazısı kayboldu.
 
 ## Komut
 
     /bg-tasks            pane'i açar ya da kapatır
-    /bg-tasks list       task'ları id'leriyle birlikte metin olarak verir
+    /bg-tasks list       task'ları metin olarak, id'leriyle verir
     /bg-tasks stop <id>  o task'ı durdurur; sidebar butonunun çalıştırdığı komut budur
     /bg-tasks on | off   varsayılan açık; off listeyi temizler
 
-Komutun adı `/bg` değildir; çünkü engine `/bg`'yi yerleşik `/background` komutu için ayırmıştır.
+Komutun adı `/bg` değildir; çünkü engine `/bg`'yi yerleşik `/background` komutu için saklı tutar.
 
 ## Kurulum
 
@@ -66,17 +66,17 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L2: bir tool çağırır.
 
-    1. Okur:     her Bash çağrısının komutunu ve sonucunu; task bildirimlerinin metnini; her TaskStop çağrısının task id'sini; bir subagent'ın turn'ü bitince, listedeki bir task'ı başlatmış subagent'ın mesajlarını
-    2. Çalıştırır: engine'in TaskStop tool'unu; yalnızca siz pane'de ya da sidebar butonunda bastığınızda
-    3. Gönderir: modele hiçbir şey; status line ve pane yalnızca sizin için çizilir
-    4. Saklar:   $.store içinde açık/kapalı ayarını; task listesi session boyunca bellekte durur
-    5. Düşman girdi: TaskStop'a giden task id, yalnızca engine'in kendi Bash sonuçlarından kurulan listeden gelir; bildirim metninde yalnızca id'ler aranır
+    1. Okur:     her Bash çağrısının komutunu ve sonucunu; task bildirimlerinin metnini; her TaskStop çağrısının task id'sini; bir subagent'ın turn'ünün sonunda, listedeki bir task'ı başlatmış subagent'ın mesajlarını
+    2. Çalıştırır: engine'in TaskStop tool'unu; yalnız sizin pane'deki basışınız ya da sidebar butonu üzerine
+    3. Gönderir: modele hiçbir şey; status line ve pane yalnız sizin için çizilir
+    4. Saklar:   $.store içinde açık/kapalı ayarını; task listesi session boyunca bellekte yaşar
+    5. Düşman girdi: TaskStop'a giden task id, yalnız engine'in kendi Bash sonuçlarının kurduğu listeden gelir; bildirim metninde yalnız id aranır
 
 ## Sınırlar
 
-- Yalnızca mod yüklüyken başlayan task'lar listelenir. Resume, `/reload-plugins` ya da güncellemeden sonra daha önce başlamış task'ları bilmez.
-- Yalnızca arka plan shell'leri listelenir; subagent'lar, workflow'lar ve monitor'ler listelenmez.
-- Bildirimi hâlâ sırada bekleyen (session meşgulken biten) bir task, bildirim gelene kadar listede kalır.
+- Yalnız mod yüklüyken başlatılan task'lar listelenir. Bir resume, `/reload-plugins` ya da güncellemeden sonra daha önce başlatılmış task'ları bilmez.
+- Yalnız arka plan shell'leri listelenir; subagent'lar, workflow'lar ve monitor'ler listelenmez.
+- Bildirimi hâlâ sırada bekleyen bir task (session meşgulken biten), bildirim gelene kadar listede kalır.
 
 ## Geliştirme
 
