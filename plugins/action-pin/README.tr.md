@@ -1,17 +1,17 @@
 # action-pin
 
-`actions/checkout@v4` diye yazılmış bir GitHub Actions adımı, workflow hangi gün çalışırsa o gün tag'in gösterdiği kodu çalıştırır. Tag ya da branch sen inceledikten sonra başka bir koda kaydırılabilir. Bu mod, modelin düzenlediği workflow'ları izler: bir edit hareket eden bir ref'e bağlı adım eklerse modele yerine yazması gereken commit SHA'sını söyler. Varsayılan hâlinde hiçbir şeyi durdurmaz; `deny` modunda her ref sabitlenene kadar commit, push ve merge bekler.
+`actions/checkout@v4` diye yazılmış bir GitHub Actions adımı, workflow hangi gün çalışırsa o gün tag'in gösterdiği kodu çalıştırır. Tag ya da branch, sen inceledikten sonra başka bir kodu gösterecek şekilde değiştirilebilir. Bu mod, modelin düzenlediği workflow'ları izler: bir edit hareket eden bir ref'e bağlı adım eklerse modele yerine yazması gereken commit SHA'sını söyler. Varsayılan hâlinde hiçbir şeyi durdurmaz; `deny` modunda her ref sabitlenene kadar commit, push ve merge bekler.
 
 ## Ne yapar
 
 1. Edit ve Write tool'larını izler. Path'i `.github/workflows/<name>.yml` ya da `.github/actions/<name>/action.yml` olan çağrıya bakar (`.yaml` da olur).
 2. Yalnız edit'in eklediği satırları okur. Ref'i 40 ya da 64 karakterlik hex bir commit olan `uses:` değeri zaten sabitlenmiştir, geçer. Yerel bir action'ın (`./.github/actions/setup`) ve bir container'ın (`docker://alpine:3.20`) sabitlenecek commit'i yoktur, onlar da geçer. Geri kalan her ref, yani bir tag (`@v4`) ya da bir branch (`@main`), bildirilir; `actions/*` ve `github/*` de buna dahil.
-3. Bildirdiği her action için `Accept: application/vnd.github.sha` header'ıyla `https://api.github.com/repos/<owner>/<repo>/commits/<ref>` adresine sorar, GitHub da commit'i düz metin olarak döner. Token gönderilmez, bu yüzden anonim rate limit geçerlidir (adres başına saatte 60 istek). Her action ve ref bir session'da bir kez sorulur.
+3. Bildirdiği her action için `Accept: application/vnd.github.sha` header'ıyla `https://api.github.com/repos/<owner>/<repo>/commits/<ref>` adresine sorar, GitHub da commit'i düz metin olarak döndürür. Token gönderilmez, bu yüzden anonim rate limit geçerlidir (adres başına saatte 60 istek). Her action ve ref bir session'da bir kez sorulur.
 4. Model tool'un sonucunun hemen ardından şu notu okur:
 
        action-pin: this edit uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8. A tag or a branch can be moved to other code after a review, so a workflow with write access runs whatever it points at then. Write each as the SHA with the tag as a comment, for example: uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
 
-   Notta en fazla 10 action adıyla geçer ve yalnız bunlar GitHub'a sorulur; fazlası yalnız sayılır. GitHub cevap vermezse action SHA'sız geçer ama not yine sabitlemeyi ister. Hata log'a bir kez yazılır ve farklı bir hata gelene kadar tekrarlanmaz.
+   Notta en fazla 10 action adı geçer ve yalnız bunlar GitHub'a sorulur; fazlası yalnız sayılır. GitHub cevap vermezse action SHA'sız geçer ama not yine sabitlemeyi ister. Hata log'a bir kez yazılır ve farklı bir hata gelene kadar tekrarlanmaz.
 5. Aynı anda transcript'e tek satır düşer, böylece modele ne söylendiğini görürsün. Satırda workflow ve action'ları vardır, talimat yoktur. Workflow'un adı geçer, çünkü edit'i model gördü, sen görmedin:
 
        action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
