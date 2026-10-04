@@ -169,10 +169,11 @@ export function countsLine(counts: SessionCounts): Line {
   return partsLine([
     faint('this session: '),
     { text: `reminded ${counts.reminded}`, kind: 'info' },
-    { text: `used ${counts.used}`, kind: 'warn' },
     faint(' · '),
     { text: `added ${counts.added}`, kind: 'ok' },
     faint(' · '),
-    faint(`global rules ${counts.rules} · `),
+    { text: `used ${counts.used}`, kind: 'warn' },
+    faint(' · '),
+    faint(`global rules ${counts.rules}`),
   ], 'dim')
 }

@@ -164,8 +164,8 @@ const START = { surface: 'terminal', isInteractive: true, cwd: '/src/my app/sub'
 describe('sage-memory', () => {
   test('the session counts line draws reminded blue, the global rules faint, used yellow and added green', () => {
     const line = countsLine({ reminded: 6, rules: 40, used: 1, added: 3 })
-    expect(line.text).toBe('this session: reminded 6used 1 · added 3 · global rules 40 · ')
-    expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['info:reminded 6', 'warn:used 1', 'ok:added 3'])
+    expect(line.text).toBe('this session: reminded 6 · added 3 · used 1 · global rules 40')
+    expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['info:reminded 6', 'ok:added 3', 'warn:used 1'])
   })
 
   test('the stored counts line draws the project count green and the global count blue', () => {
@@ -183,7 +183,7 @@ describe('sage-memory', () => {
   withSidebar('starts the daemon, asks it with the token over the socket, and shows it ready', async ($, on) => {
     const w = world(on)
     await $.session.start(START)
-    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 0used 0 · added 0 · global rules 0 · ')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 0 · added 0 · used 0 · global rules 0')
     expect(w.argvs.find(a => a.includes('--dir'))?.slice(-2)).toEqual(['--dir', '/Users/k/.claude/sage-memory'])
     const status = w.fetches[0]
     if (status === undefined) throw new Error('no fetch reached the daemon')
@@ -213,7 +213,7 @@ describe('sage-memory', () => {
     const stats = (active: number) => ({ total: active + 3, byStatus: { active, stale: 3 }, byKind: {}, edges: 0 })
     w.routes.set('/memory/stats', { project: stats(2031), user: stats(12) })
     await $.session.start(START)
-    const section = 'daemon ready · my app / embeddings off · /sage-memory setup / this project: 2031 rules · global: 12 rules / this session: reminded 0used 0 · added 0 · global rules 0 · '
+    const section = 'daemon ready · my app / embeddings off · /sage-memory setup / this project: 2031 rules · global: 12 rules / this session: reminded 0 · added 0 · used 0 · global rules 0'
     expect(w.lines.at(-1)).toBe(section)
     w.routes.delete('/memory/stats')
     await $.command.run(run('on'))
@@ -281,7 +281,7 @@ describe('sage-memory', () => {
     w.routes.set('/embed/status', { embedding: { state: 'ready', modelId: 'paraphrase-multilingual', dims: 384 }, setup: { state: 'done', indexed: 3, startedAt: '', finishedAt: '' } })
     await w.clock.advance(2000)
     expect(w.logs).toContain('setup done: 3 memories embedded')
-    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings paraphrase-multilingual / this session: reminded 0used 0 · added 0 · global rules 0 · ')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings paraphrase-multilingual / this session: reminded 0 · added 0 · used 0 · global rules 0')
   })
 
   withSidebar('a session end asks for the automatic hygiene run', async ($, on) => {
@@ -369,7 +369,7 @@ describe('memory reminders', () => {
     expect(w.lines.at(-1)).toBe('reminded (prompt): Install packages with pnpm, never with')
     // Only the word is coloured, blue, so a reminder stands apart from an addition, a change and a deletion.
     expect(painted(w, 'reminder').at(-1)).toBe('info:reminded')
-    expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1used 0 · added 0 · global rules 0 · ')
+    expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1 · added 0 · used 0 · global rules 0')
   })
 
   withSidebar('a slash command and a turned-off mod ask the daemon nothing', async ($, on) => {
@@ -599,7 +599,7 @@ describe('memory tools', () => {
     ])
     expect(painted(w, 'model')).toEqual(['ok:added', 'ok:added', 'warn:merged', 'warn:updated', 'error:deleted', 'error:forgot'])
     // The merge wrote no new memory, so the session counts two additions.
-    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/added 2 · global rules 0 · $/)
+    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/added 2 · used 0 · global rules 0$/)
   })
 
   withSidebar('remember writes through the daemon with this session as its source, a session memory owned by it', async ($, on) => {
