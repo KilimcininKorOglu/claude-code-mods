@@ -7,7 +7,7 @@ Model arka planda bir dev server ya da dosya izleyici başlatır, işine devam e
 1. Bash tool'unu izler. `backgroundTaskId` döndüren her çağrı listeye girer: modelin `run_in_background` ile başlattığı da, senin Ctrl+B ile arka plana attığın da.
 2. Bir task şu durumlarda listeden çıkar:
    - bildirimi gelince (`<task-id>` taşıyan ve status'u `running` olmayan bir `<task-notification>`). Ana loop bunu bir prompt olarak okur. Hâlâ çalışan bir subagent onu kendi loop'unda sıraya girmiş bir mesaj olarak okur. Cevabını çoktan vermiş bir subagent ise bu bildirimle yeniden uyandırılır; mod da o agent'ın mesajlarını turn'ünün sonunda okur;
-   - foreground'da çalışan bir subagent cevap verince. Engine o agent'ın arka plan task'larını cevabıyla birlikte sonlandırır ve bildirim göndermez; mod da onları `killed` olarak kapatır;
+   - foreground'da çalışan bir subagent cevap verince. Engine, o agent'ın arka plan task'larını cevabıyla birlikte sonlandırır ve bildirim göndermez; mod da onları `killed` olarak kapatır;
    - model onu TaskStop tool'uyla durdurunca;
    - sen onu pane'den durdurunca.
 3. Status line kaç task'ın çalıştığını, en eskisinin yaşını ve komutunu gösterir; her 30 saniyede bir yenilenir:
@@ -33,7 +33,7 @@ Model arka planda bir dev server ya da dosya izleyici başlatır, işine devam e
 
    Senin ya da modelin durdurduğu task böyle bir kayıt bırakmaz; pane zaten `stopped: <task>` der. Sidebar kapalıysa hiçbir şey yazılmaz, çünkü engine'in kendi task bildirimi bitişi zaten haber verir.
 
-2.1.282'deki canlı denemede subagent'lı üç yolun üçü de task'ını kapattı: foreground bir subagent'ın bitmesini beklediği `sleep 5`, foreground bir subagent'ın cevap verirken çalışır bıraktığı `sleep 120` ve agent'tan sonra biten, background bir subagent'ın `sleep 15`'i.
+2.1.282'deki canlı denemede subagent'lı üç yolun üçü de task'ını kapattı: bir foreground subagent'ın bitmesini beklediği `sleep 5`, bir foreground subagent'ın cevap verirken çalışır bıraktığı `sleep 120` ve bir background subagent'ın, agent bittikten sonra biten `sleep 15`'i.
 
 Daha önceki bir canlı denemede model arka planda `sleep 900` başlattı. Status line `1 running · oldest <1m (sleep 900)` gösterdi. Pane'de satırına basılınca süreç durdu; hem status line hem de engine'in `1 shell` alt satırı kayboldu.
 
