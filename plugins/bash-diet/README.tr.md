@@ -25,7 +25,7 @@ Bir Bash komutunun ekrana bastığı şeylerin çoğu model için gürültüdür
 
        [output cut by Claude Code at 10000 characters; the middle is lost: /var/folders/.../bash-diet/3fa9c1b2d4e5.log]
 7. Başarısız bir komut, exit koduyla birlikte hata olarak kalır: model `Exit code 1`'i ve filtrelenmiş metni bir tool hatası olarak okur.
-8. Session başında, `/clear`'dan ve compaction'dan sonra model tek bir not okur: kısaltılmış sonuç eksiksizdir, tam çıktı belirtilen yoldadır ve `BASH_DIET_RAW=1 <komut>`, çıktının birebir byte'larını verir.
+8. Session'ın başında, `/clear`'dan ve compaction'dan sonra model tek bir not okur. Not, modele üç şey söyler: gördüğü kısaltılmış sonuç, işini görecek kadar eksiksizdir; her şeyi görmek isterse, sonuçla birlikte verilen yoldaki dosyada komutun tam çıktısı durur; komutu `BASH_DIET_RAW=1` ile yeniden çalıştırırsa çıktıyı hiç filtrelenmemiş, birebir alır.
 9. Playwright MCP, her browser çağrısının kodunu sonucun sonunda `### Ran Playwright code` başlığı altında tekrar eder: modelin `browser_run_code_unsafe` ve `browser_evaluate` için yazdığı kodu ve her tıklamanın ya da sayfa geçişinin kodunu. Mod bu bölümü her Playwright browser tool'unun sonucundan her zaman çıkarır; bunun bir ayarı yoktur. Sayfa, snapshot bağlantısı, console olayları ve varsa hata yerinde kalır. Bu makinenin son 30 günlük transcript'lerinde bu bölüm, Playwright sonuç metninin yarısından fazlasıydı: 1,8 milyon karakterin yaklaşık 950.000'i. `PLAYWRIGHT_MCP_CODEGEN` değişkenini mod'dan ayarlamak işe yaramaz; çünkü MCP sunucusu, session başlangıcı çalışmadan önce başlar (2.1.283'te ölçüldü).
 10. [sidebar](../sidebar) açıksa session'ın kazancı orada, "Bash output" başlığı altında durur. Sidebar yoksa status line'da görünür.
 
