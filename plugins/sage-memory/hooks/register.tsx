@@ -56,6 +56,8 @@ import {
   DEFAULT_MODEL,
   MAX_ASKED,
   MAX_JUDGED,
+  FRESH_RULES,
+  FRESH_STORE,
   emptyEvidence,
   evidenceText,
   followedOf,
@@ -177,6 +179,8 @@ type State = {
   turn: TurnEvidence
   /** Whether the person typed a prompt or a main-loop tool ran since the last consolidation (memory-save's rule). */
   worth: boolean
+  /** Whether this turn already ran its mid-turn consolidation, so a long turn consolidates once while it runs. */
+  turnMid: boolean
   /** The prompts the person typed since the last consolidation, which the consolidator reads with the answer. */
   asked: string[]
   /** The memories relevance reminded the main loop of since the last consolidation, whose use the consolidator judges. */
@@ -1100,6 +1104,26 @@ function apiErrorDetail(r: Awaited<ReturnType<EngineInterface['model']['complete
  * memories relevance reminded the turn followed; the verdict goes to the audit log alone, until it is
  * measured against real turns. One empty reply is retried once with the same request.
  */
+/**
+ * The consolidator's answer, or undefined when it gave none: the red line is written and the turn's
+ * material is handed back for the next consolidation. A fresh store still lacks what a first scan
+ * teaches, so the loosened keep rules join the system prompt there alone.
+ */
+async function consolidatorAnswer(
+  $: EngineInterface,
+  state: State,
+  prompt: string,
+  since: Since,
+): Promise<Awaited<ReturnType<EngineInterface['model']['complete']>>> {
+  await readStored($, state)
+  const system = (state.stored?.project ?? 0) < FRESH_STORE ? CONSOLIDATOR_SYSTEM + FRESH_RULES : CONSOLIDATOR_SYSTEM
+  const r = await completeWithRetry($, { model: await jobModel($), system, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
+  if (r.isAnswered) return r
+  await toStream($, 'error', { text: `the consolidator got no answer (${r.reason}${apiErrorDetail(r)})`, kind: 'error' })
+  handBack(state, since)
+  return r
+}
+
 async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
   if (!(await isReady(state))) return handBack(state, since)
   if ((await $.store.get('consolidate')) === false) return
@@ -1107,14 +1131,8 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const root = state.project?.root ?? ''
   const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
   const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant)
-  const r = await completeWithRetry($, { model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
-  if (!r.isAnswered) {
-    await toStream($, 'error', { text: `the consolidator got no answer (${r.reason}${apiErrorDetail(r)})`, kind: 'error' })
-    // The turn's material was taken out of state before the timer ran. Hand it back, so the next
-    // consolidation still reads it instead of this turn being lost for good.
-    handBack(state, since)
-    return
-  }
+  const r = await consolidatorAnswer($, state, prompt, since)
+  if (!r.isAnswered) return
   const sessionId = await $.session.id()
   if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant) })
   const additions = additionsOf(r.text, sessionId, root, existing)
@@ -1212,8 +1230,11 @@ function afterAnswer($: EngineInterface, state: State, answer: string): void {
   })
 }
 
-/** Notes what a main-loop tool batch touched, for the consolidator. */
-function noteBatch(state: State, calls: readonly ToolCall[]): void {
+/** Noted paths of a turn that make a mid-turn consolidation worth its call: past this, the evidence cap would cut. */
+const MID_TURN_PATHS = 20
+
+/** Notes what a main-loop tool batch touched, and consolidates mid-turn once a long turn's evidence grows past the cap. */
+function noteBatch($: EngineInterface, state: State, calls: readonly ToolCall[]): void {
   state.worth = true
   for (const call of calls) {
     for (const path of pathsOf({ ...call, tool_response: undefined })) {
@@ -1221,6 +1242,17 @@ function noteBatch(state: State, calls: readonly ToolCall[]): void {
       else if (call.tool_name === 'Read') state.turn.read = noted(state.turn.read, path)
     }
   }
+  if (state.turnMid || state.turn.read.length + state.turn.written.length < MID_TURN_PATHS) return
+  state.turnMid = true
+  const since: Since = { asked: state.asked, turn: state.turn, relevant: state.relevant }
+  state.asked = []
+  state.relevant = []
+  // The evidence stays in state.turn, so the turn's end still audits its written files and
+  // consolidates over the whole evidence; the daemon folds what this call already wrote.
+  $.clock.after(0, () => {
+    void guarded($, 'the mid-turn consolidator', () => consolidate($, state, '', since))
+      .then(() => working($, state, undefined))
+  })
 }
 
 // ── Triage ─────────────────────────────────────────────────────────────
@@ -1587,7 +1619,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, asked: [], relevant: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1652,11 +1684,11 @@ export const register: Register = on => {
 
   // The batch adds no reminder: each file tool's result carries its own (below). What the other tools
   // returned joins what the loop shows, and the main loop's batch is evidence for the consolidator.
-  on('classic.PostToolBatch', async (_, e, next) => {
+  on('classic.PostToolBatch', async ($, e, next) => {
     const r = await next(e)
     const loop = loopOf(state, e.agent_id ?? MAIN_LOOP)
     for (const call of e.tool_calls.filter(call => !isReminding(call))) loop.visible = seen(loop.visible, responseText(call.tool_response))
-    if (e.agent_id === undefined) noteBatch(state, e.tool_calls)
+    if (e.agent_id === undefined) noteBatch($, state, e.tool_calls)
     return r
   })
 
@@ -1744,6 +1776,7 @@ export const register: Register = on => {
   on('turn.start', async ($, e, next) => {
     state.tasks = undefined
     state.turn = emptyEvidence()
+    state.turnMid = false
     await follow($, state)
     await declareTools($, state)
     return next(e)

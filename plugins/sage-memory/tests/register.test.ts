@@ -520,9 +520,10 @@ describe('memory reminders', () => {
     expect(note).toContain('The user installed the sage-memory plugin.')
     expect(note).toContain('Every note of the user scope is a global rule of the user: all of them come with the first prompt of a context')
     for (const tool of ['search', 'for_file', 'update', 'delete', 'remember']) expect(note).toContain(TOOL(tool))
-    expect(note).toContain('scope project for a fact about this repository')
-    expect(note).toContain('scope user for a preference of the user that holds in every project, with no anchor')
-    expect(note).toContain('Pick the scope from the reason behind the rule, not from how strongly the user said it')
+    expect(note).toContain('Save proactively, not only at the turn\'s end')
+    expect(note).toContain('a reason that names this project\'s structure, files or tools makes it project, anchored to its file or symbol')
+    expect(note).toContain('a preference that holds in every project makes it user, with no anchor')
+    expect(note).toContain('Pick the scope from the reason behind the fact, not from how strongly it was said')
     expect(note).toContain(`To move a note to the other scope, call ${TOOL('update')} with scope`)
     const r = await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
     expect(r.additionalContext).toBe(undefined)
@@ -859,6 +860,28 @@ describe('consolidator', () => {
     expect(prompt).toContain('and what wakes it again?')
     expect(prompt).toContain('daemon/server.ts')
     expect(bodiesOf(w, '/memory/remember')).toHaveLength(1)
+  })
+
+  withSidebar('a long turn consolidates mid-turn, without waiting for its end', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
+    w.routes.set('/memory/stats', { project: { total: 1, byStatus: { active: 1 }, byKind: {}, edges: 0 }, user: { total: 0, byStatus: { active: 0 }, byKind: {}, edges: 0 } })
+    w.modelText = JSON.stringify({ candidates: [] })
+    await $.session.start(START)
+    await $.prompt.submit(typed('scan the project'))
+    for (let i = 0; i < 30; i++) {
+      await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: `/src/my app/src/f${i}.ts` }, tool_use_id: `t${i}`, tool_response: 'ok' }] } as never)
+    }
+    await settled(w)
+    // The mid-turn consolidation read the typed prompt and carried no answer block.
+    expect(w.asked).toHaveLength(1)
+    expect(w.asked[0]?.prompt).not.toContain('Answer that ended the turn')
+    expect(w.asked[0]?.prompt).toContain('scan the project')
+    expect(streamOf(w, 'error')).toEqual([])
+    // The turn's end consolidates once more, over the whole evidence.
+    await $.turn.complete(answered('The project is a TypeScript plugin marketplace.'))
+    await settled(w)
+    expect(w.asked).toHaveLength(2)
   })
 })
 

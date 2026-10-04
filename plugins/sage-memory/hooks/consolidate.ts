@@ -21,6 +21,18 @@ export const CONSOLIDATE_TOKENS = 8192
 
 /** An answer shorter than this holds nothing worth keeping (SAGE's floor). */
 export const MIN_ANSWER = 20
+
+/** A project store under this many active entries is fresh, so a first scan's knowledge is the store's seed. */
+export const FRESH_STORE = 20
+
+/** Appended to the consolidator's system prompt while the store is fresh: what a first scan teaches is kept. */
+export const FRESH_RULES = `
+
+This project's memory is fresh, so it holds little yet. While it is fresh, also keep a
+candidate that says what the project is built with, how its code is organised, which
+tools and commands drive it, and the convention a first session must follow; the code
+shows these today, but a later session reads them here first. Still drop this turn's
+work, its plans, and its measurements.`
 const SUMMARY_CHARS = 3000
 const EVIDENCE_CHARS = 6000
 const MAX_ADDS = 5
@@ -253,7 +265,8 @@ function remindedBlock(reminded: readonly Memory[]): string {
  */
 export function consolidatorPrompt(asked: readonly string[], answer: string, evidence: string, existing: readonly Memory[], reminded: readonly Memory[] = []): string {
   const task = reminded.length === 0 ? 'the candidates' : 'the candidates and the judged memories'
-  return `${askedBlock(asked)}Answer that ended the turn:\n${answer.slice(0, SUMMARY_CHARS)}\n\nGrounding evidence from this turn:\n${evidence}${existingBlock(existing)}${remindedBlock(reminded)}\n\nReview the turn and return ${task} as JSON.`
+  const answerBlock = answer.trim() === '' ? '' : `Answer that ended the turn:\n${answer.slice(0, SUMMARY_CHARS)}\n\n`
+  return `${askedBlock(asked)}${answerBlock}Grounding evidence from this turn:\n${evidence}${existingBlock(existing)}${remindedBlock(reminded)}\n\nReview the turn and return ${task} as JSON.`
 }
 
 /** An entry the model labelled applied with evidence, on an id it was shown. */
