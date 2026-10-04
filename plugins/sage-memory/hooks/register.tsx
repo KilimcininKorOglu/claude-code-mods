@@ -55,6 +55,7 @@ import {
   consolidatorPrompt,
   DEFAULT_MODEL,
   MAX_ASKED,
+  MAX_JUDGED,
   emptyEvidence,
   evidenceText,
   followedOf,
@@ -180,6 +181,8 @@ type State = {
   asked: string[]
   /** The memories relevance reminded the main loop of since the last consolidation, whose use the consolidator judges. */
   relevant: Memory[]
+  /** A turn's material a consolidation could not read yet (the daemon was not ready, or the model gave no answer), joined into the next one. */
+  pending?: Since
   /** The active memories of the project's store and the global one at the last draw; unset until the daemon answered. */
   stored?: StoredCounts
   /** The last compact proposal, which `/sage-memory compact apply` writes. */
@@ -1098,7 +1101,8 @@ function apiErrorDetail(r: Awaited<ReturnType<EngineInterface['model']['complete
  * measured against real turns. One empty reply is retried once with the same request.
  */
 async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
-  if (!(await isReady(state)) || (await $.store.get('consolidate')) === false) return
+  if (!(await isReady(state))) return handBack(state, since)
+  if ((await $.store.get('consolidate')) === false) return
   await working($, state, 'consolidating…')
   const root = state.project?.root ?? ''
   const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
@@ -1106,9 +1110,9 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const r = await completeWithRetry($, { model: await jobModel($), system: CONSOLIDATOR_SYSTEM, prompt, maxTokens: CONSOLIDATE_TOKENS, timeoutMs: CONSOLIDATE_MS })
   if (!r.isAnswered) {
     await toStream($, 'error', { text: `the consolidator got no answer (${r.reason}${apiErrorDetail(r)})`, kind: 'error' })
-    // The turn's material was taken out of state before the timer ran. Hand the typed prompts back,
-    // so the next consolidation still reads them instead of this turn being lost for good.
-    state.asked = [...since.asked, ...state.asked].slice(-MAX_ASKED)
+    // The turn's material was taken out of state before the timer ran. Hand it back, so the next
+    // consolidation still reads it instead of this turn being lost for good.
+    handBack(state, since)
     return
   }
   const sessionId = await $.session.id()
@@ -1171,13 +1175,33 @@ async function curate($: EngineInterface, state: State, answer: string, written:
   if (line !== undefined) await toStream($, 'curator', line)
 }
 
+/** Joins a turn's material that could not be consolidated yet with the next turn's, each list once. */
+function joinedSince(pending: Since, since: Since): Since {
+  return {
+    asked: [...new Set([...pending.asked, ...since.asked])].slice(-MAX_ASKED),
+    relevant: [...pending.relevant.filter(memory => !since.relevant.some(other => other.id === memory.id)), ...since.relevant].slice(-MAX_JUDGED),
+    turn: {
+      read: [...new Set([...pending.turn.read, ...since.turn.read])].slice(-20),
+      written: [...new Set([...pending.turn.written, ...since.turn.written])].slice(-20),
+      commands: [...new Set([...pending.turn.commands, ...since.turn.commands])].slice(-10),
+    },
+  }
+}
+
+/** Keeps a turn's material for the next consolidation: the daemon was not ready, or the model gave no answer. */
+function handBack(state: State, since: Since): void {
+  state.pending = state.pending === undefined ? since : joinedSince(state.pending, since)
+}
+
 /** Starts a consolidation after a main-loop answer the person asked for or a tool worked on; the turn does not wait for it. */
 function afterAnswer($: EngineInterface, state: State, answer: string): void {
   if (!state.worth || answer.trim().length < MIN_ANSWER) return
   state.worth = false
-  const since: Since = { asked: state.asked, turn: state.turn, relevant: state.relevant }
+  const current: Since = { asked: state.asked, turn: state.turn, relevant: state.relevant }
+  const since: Since = state.pending === undefined ? current : joinedSince(state.pending, current)
   state.asked = []
   state.relevant = []
+  state.pending = undefined
   // The jobs run on a timer, not in the turn's dispatch: since 2.1.288 a model call still in
   // flight when the turn's dispatch closes is aborted, and every consolidation was lost that way.
   // A timer outlives the dispatch, so the model answers reach the daemon.

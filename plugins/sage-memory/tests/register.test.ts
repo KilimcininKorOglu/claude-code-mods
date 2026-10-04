@@ -164,14 +164,14 @@ const START = { surface: 'terminal', isInteractive: true, cwd: '/src/my app/sub'
 describe('sage-memory', () => {
   test('the session counts line draws reminded blue, the global rules faint, used yellow and added green', () => {
     const line = countsLine({ reminded: 6, rules: 40, used: 1, added: 3 })
-    expect(line.text).toBe('this session: reminded 6 · rules 40 · used 1 · added 3')
+    expect(line.text).toBe('this session: reminded 6used 1 · added 3 · global rules 40 · ')
     expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['info:reminded 6', 'warn:used 1', 'ok:added 3'])
   })
 
   test('the stored counts line draws the project count green and the global count blue', () => {
     const line = storedLine({ project: 2054, global: 12 })
-    expect(line.text).toBe('this project: 2054 active · global: 12 active')
-    expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['ok:2054 active', 'info:12 active'])
+    expect(line.text).toBe('this project: 2054 rules · global: 12 rules')
+    expect(line.parts?.filter(part => part.kind !== 'dim').map(part => `${part.kind}:${part.text}`)).toEqual(['ok:2054 rules', 'info:12 rules'])
   })
 
   test('a ready daemon puts the project on one line and the embeddings under it', () => {
@@ -183,7 +183,7 @@ describe('sage-memory', () => {
   withSidebar('starts the daemon, asks it with the token over the socket, and shows it ready', async ($, on) => {
     const w = world(on)
     await $.session.start(START)
-    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 0 · rules 0 · used 0 · added 0')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 0used 0 · added 0 · global rules 0 · ')
     expect(w.argvs.find(a => a.includes('--dir'))?.slice(-2)).toEqual(['--dir', '/Users/k/.claude/sage-memory'])
     const status = w.fetches[0]
     if (status === undefined) throw new Error('no fetch reached the daemon')
@@ -213,7 +213,7 @@ describe('sage-memory', () => {
     const stats = (active: number) => ({ total: active + 3, byStatus: { active, stale: 3 }, byKind: {}, edges: 0 })
     w.routes.set('/memory/stats', { project: stats(2031), user: stats(12) })
     await $.session.start(START)
-    const section = 'daemon ready · my app / embeddings off · /sage-memory setup / this project: 2031 active · global: 12 active / this session: reminded 0 · rules 0 · used 0 · added 0'
+    const section = 'daemon ready · my app / embeddings off · /sage-memory setup / this project: 2031 rules · global: 12 rules / this session: reminded 0used 0 · added 0 · global rules 0 · '
     expect(w.lines.at(-1)).toBe(section)
     w.routes.delete('/memory/stats')
     await $.command.run(run('on'))
@@ -227,12 +227,12 @@ describe('sage-memory', () => {
     const stats = (active: number) => ({ total: active, byStatus: { active }, byKind: {}, edges: 0 })
     w.routes.set('/memory/stats', { project: stats(5), user: stats(1) })
     await $.session.start(START)
-    expect(w.lines.at(-1)).toContain('this project: 5 active · global: 1 active')
+    expect(w.lines.at(-1)).toContain('this project: 5 rules · global: 1 rules')
     w.routes.set('/memory/stats', { project: stats(6), user: stats(2) })
     await w.clock.advance(59_000)
-    expect(w.lines.at(-1)).toContain('this project: 5 active · global: 1 active')
+    expect(w.lines.at(-1)).toContain('this project: 5 rules · global: 1 rules')
     await w.clock.advance(1000)
-    expect(w.lines.at(-1)).toContain('this project: 6 active · global: 2 active')
+    expect(w.lines.at(-1)).toContain('this project: 6 rules · global: 2 rules')
   })
 
   withSidebar('the 60 s redraw reads the embeddings again, so a model another window loaded shows by name', async ($, on) => {
@@ -281,7 +281,7 @@ describe('sage-memory', () => {
     w.routes.set('/embed/status', { embedding: { state: 'ready', modelId: 'paraphrase-multilingual', dims: 384 }, setup: { state: 'done', indexed: 3, startedAt: '', finishedAt: '' } })
     await w.clock.advance(2000)
     expect(w.logs).toContain('setup done: 3 memories embedded')
-    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings paraphrase-multilingual / this session: reminded 0 · rules 0 · used 0 · added 0')
+    expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings paraphrase-multilingual / this session: reminded 0used 0 · added 0 · global rules 0 · ')
   })
 
   withSidebar('a session end asks for the automatic hygiene run', async ($, on) => {
@@ -369,7 +369,7 @@ describe('memory reminders', () => {
     expect(w.lines.at(-1)).toBe('reminded (prompt): Install packages with pnpm, never with')
     // Only the word is coloured, blue, so a reminder stands apart from an addition, a change and a deletion.
     expect(painted(w, 'reminder').at(-1)).toBe('info:reminded')
-    expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1 · rules 0 · used 0 · added 0')
+    expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1used 0 · added 0 · global rules 0 · ')
   })
 
   withSidebar('a slash command and a turned-off mod ask the daemon nothing', async ($, on) => {
@@ -461,7 +461,7 @@ describe('memory reminders', () => {
     expect(first.context?.[0]).toContain('<memory id="g2"')
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'main', trigger: 'global', ids: ['g1', 'g2'] })
     // The rules are no relevance decision, so the section counts them apart from the reminders.
-    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toContain('this session: reminded 0 · rules 2 · ')
+    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toContain('global rules 2')
     expect((await $.prompt.submit(typed('and 3 + 3?'))).context).toBe(undefined)
     // A compaction in the middle of a turn: the next file tool brings the rules back, before the next prompt.
     await $.classic.SessionStart({ source: 'compact', session_id: 'sess-1' } as never)
@@ -598,7 +598,7 @@ describe('memory tools', () => {
     ])
     expect(painted(w, 'model')).toEqual(['ok:added', 'ok:added', 'warn:merged', 'warn:updated', 'error:deleted', 'error:forgot'])
     // The merge wrote no new memory, so the session counts two additions.
-    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/ · added 2$/)
+    expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).toMatch(/added 2 · global rules 0 · $/)
   })
 
   withSidebar('remember writes through the daemon with this session as its source, a session memory owned by it', async ($, on) => {
@@ -833,6 +833,32 @@ describe('consolidator', () => {
     expect(w.asked).toHaveLength(2)
     expect(streamOf(w, 'error')).toEqual(['the consolidator got no answer (api-error 429 rate limited)'])
     expect(bodiesOf(w, '/memory/remember')).toEqual([])
+  })
+
+  withSidebar('a turn whose daemon is not ready hands its material to the next turn', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
+    w.routes.set('/memory/stats', { project: { total: 1, byStatus: { active: 1 }, byKind: {}, edges: 0 }, user: { total: 0, byStatus: { active: 0 }, byKind: {}, edges: 0 } })
+    w.modelText = JSON.stringify({ candidates: [{ text: 'The daemon closes after five idle minutes', is: 'keep', memory: { text: 'The daemon closes itself five minutes after its last request.', kind: 'fact', anchors: [{ type: 'file', path: 'daemon/server.ts' }] } }] })
+    // The store is off, so the first turn ends with no daemon and no consolidation.
+    w.store.set('enabled', false)
+    await $.session.start(START)
+    await $.prompt.submit(typed('why does the daemon close?'))
+    await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: '/src/my app/daemon/server.ts' }, tool_use_id: 't1', tool_response: 'ok' }] } as never)
+    await $.turn.complete(answered('The daemon closes itself five minutes after its last request.'))
+    await settled(w)
+    expect(w.asked).toEqual([])
+    // The mod turns on: the next consolidation reads both turns' prompts and the first turn's evidence.
+    await $.command.run(run('on'))
+    await $.prompt.submit(typed('and what wakes it again?'))
+    await $.turn.complete(answered('A request wakes the daemon; the timer closes it five minutes later.'))
+    await settled(w)
+    expect(w.asked).toHaveLength(1)
+    const prompt = w.asked[0]?.prompt ?? ''
+    expect(prompt).toContain('why does the daemon close?')
+    expect(prompt).toContain('and what wakes it again?')
+    expect(prompt).toContain('daemon/server.ts')
+    expect(bodiesOf(w, '/memory/remember')).toHaveLength(1)
   })
 })
 
