@@ -92,7 +92,7 @@ Section pencerenin altında ikinci, soluk bir satır tutar: son transcript satı
     break-even  up to 80 pings at the read rate cost one cold write, about 2d 18h of idle at one ping per 50m
     session     1 cold write paid, $4.01
 
-**Transcript'te bir satır**, modele gönderilmez: bir soğuk yazma pencereyi açtığında ya da bir resume soğuk başladığında.
+**Transcript'te bir satır**, modele gönderilmez: bir soğuk yazma pencereyi açtığında ya da bir resume soğuk başladığında. İzleyici kapalıyken (pencere yok, `always` kapalı) satır transcript yerine sidebar'ın stream'ine gider ve transcript'e hiçbir şey yazılmaz; kapalı bir sidebar satırı düşürür. Çalışan bir izleyicinin satırı değişmez.
 
 ## Fiyatlar
 
@@ -124,10 +124,10 @@ Bir session için yerel bir checkout'tan yüklemek istersen:
 
 ## Nereye uzanır
 
-Claude Code 2.1.285 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.288 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, classic.SessionStart, prompt.submit, command.run{command=cache-warm}, command.run{command=cache-status}, turn.step, turn.complete, session.compact
-    ❯ ./register.ts calls: $.clock.after (via arm, scheduleKeepWarm), $.clock.every, $.clock.now, $.command.register (via registerCommands), $.command.run (via keepWarmAfterResume), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via forkPing), $.prompt.submit (via keepWarmAfterResume), $.session.id, $.session.model, $.session.root (via seedFromTranscript), $.session.usage, $.settings.read (via readFast), $.sidebar.set (via toSidebar, toStream), $.store.delete (via prune, pruneRequests, startEndless, startWindow, stop), $.store.get, $.store.keys (via prune, pruneRequests), $.store.set (via afterTurn, keepLastRead, startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript, toStream), $.ui.status (via showStatusAt)
+    ❯ ./register.ts calls: $.clock.after (via arm, scheduleKeepWarm), $.clock.every, $.clock.now, $.command.register (via registerCommands), $.command.run (via keepWarmAfterResume), $.env.get (via seedFromTranscript), $.fs.exists (via seedFromTranscript), $.fs.stat (via seedFromTranscript), $.model.fork (via forkPing), $.prompt.submit (via keepWarmAfterResume), $.session.id, $.session.model, $.session.root (via seedFromTranscript), $.session.usage, $.settings.read (via readFast), $.sidebar.set (via logEvent, toSidebar, toStream), $.store.delete (via prune, pruneRequests, startEndless, startWindow, stop), $.store.get, $.store.keys (via prune, pruneRequests), $.store.set (via afterTurn, keepLastRead, startWindow, warmCommand), $.ui.log (via logEvent, seedFromTranscript, toStream), $.ui.status (via showStatusAt)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CONFIG_DIR, HOME
 

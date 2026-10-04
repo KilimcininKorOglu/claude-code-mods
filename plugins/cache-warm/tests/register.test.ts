@@ -438,7 +438,9 @@ describe('keep warm', () => {
     expect(w.forks).toBe(2)
   })
 
-  test('the next message arms the window again, as long as the one that ran out', async ($, on) => {
+  withSidebar('the next message arms the window again, as long as the one that ran out', async ($, on) => {
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
     const w = world(on, [warm, warm, warm])
     await $.session.start(session)
     await $.command.run(run('cache-warm', '3m every 1m'))
@@ -447,7 +449,10 @@ describe('keep warm', () => {
     expect(w.statuses.at(-1)).toBe(undefined)
     expect((await $.command.run(run('cache-warm', 'status'))).text).toBe('off · 3m again at your next message · no cold write · context 201k tokens')
     await $.prompt.submit({ text: 'go on', wait: false, origin: { kind: 'composer' } })
-    expect(w.logs.at(-1)).toBe('the 3m window ran out; this message arms another one. /cache-warm off stops it.')
+    // The renewal line is written before the window starts, so the watcher is off at that moment and
+    // the stream takes it instead of the transcript.
+    expect(w.logs.some(l => l.startsWith('the 3m window ran out'))).toBe(false)
+    expect(bar.sections.filter(s => s.key === 'event').at(-1)).toEqual({ key: 'event', lines: ['the 3m window ran out; this message arms another one. /cache-warm off stops it.'] })
     expect(w.store.get('every:S1')).toBe(MIN)
     await $.turn.complete(turn())
     await w.clock.advance(MIN)
@@ -679,7 +684,9 @@ describe('cold writes', () => {
     await $.turn.complete(turn())
     await w.clock.advance(3 * HOUR)
     await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200_502 }) }))
-    expect(w.logs.at(-1)).toBe('cold write of 201k tokens paid ($4.01). Keeping the cache warm for 6h; /cache-warm off stops it.')
+    // The auto-arm line is written before the window starts, so the watcher is off at that moment:
+    // with no sidebar installed the line is dropped, and no transcript line is written.
+    expect(w.logs.some(l => l.startsWith('cold write of'))).toBe(false)
     expect(w.statuses.at(-1)).toMatch(/^6h left · ping in 50m · last turn read 0 \$4\.01 \(/)
     await w.clock.advance(50 * MIN)
     expect(w.forks).toBe(1)
@@ -891,5 +898,28 @@ describe('keep warm after a resume', () => {
     await $.classic.SessionStart(resumed(30 * 60))
     await w.clock.advance(3000)
     expect(w.sent).toEqual([])
+  })
+
+  withSidebar('while the watcher is off, the cold-resume line goes to the sidebar stream, not the transcript', async ($, on) => {
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    const w = world(on, [], { store: [] })
+    on('classic.SessionStart', () => ({}))
+    await $.session.start(session)
+    await $.classic.SessionStart(resumed(2 * 3600))
+    expect(w.logs.every(l => !l.startsWith('the cache expired'))).toBe(true)
+    const entry = bar.sections.filter(s => s.key === 'event').at(-1)
+    expect(entry?.lines[0]).toMatch(/^the cache expired while the session was closed\. The first message will re-write 300,000 tokens, about \$/)
+  })
+
+  withSidebar('while always runs, the cold-resume line stays a transcript line', async ($, on) => {
+    const bar: Bar = { open: true, sections: [] }
+    seatSidebar(on, bar)
+    const w = world(on, [], { store: [['always', true]] })
+    on('classic.SessionStart', () => ({}))
+    await $.session.start(session)
+    await $.classic.SessionStart(resumed(2 * 3600))
+    expect(w.logs.some(l => l.startsWith('the cache expired while the session was closed'))).toBe(true)
+    expect(bar.sections.some(s => s.key === 'event')).toBe(false)
   })
 })

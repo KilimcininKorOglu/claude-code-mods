@@ -90,10 +90,22 @@ function disarm(s: State): void {
 /** The section this mod owns in the shared sidebar. */
 const SECTION = { consumer: 'cache-warm', key: 'window' }
 
-/** Writes one transcript line and keeps a short form of it for the sidebar's second line. */
-function logEvent($: EngineInterface, s: State, text: string, short: Line): void {
-  $.ui.log(text)
+/**
+ * Writes one event line. While the watcher runs (a window or always) it goes to the transcript as
+ * before. While it is off, the sidebar's stream takes it instead and a closed sidebar drops it, so
+ * an off watcher writes nothing to the transcript; the short form still stands under the section.
+ */
+async function logEvent($: EngineInterface, s: State, text: string, short: Line): Promise<void> {
   s.event = short
+  if (hasWindow(s) || (await readAlways($, s))) {
+    $.ui.log(text)
+    return
+  }
+  try {
+    if (await $.sidebar.set({ ...SECTION, key: 'event', title: 'event', lines: [{ text }], until: 'stream' })) return
+  } catch {
+    // The sidebar mod is not installed; the line is dropped while the watcher is off.
+  }
 }
 
 /**
@@ -268,7 +280,7 @@ async function settlePing($: EngineInterface, s: State, usage: Usage, now: numbe
     if (!s.endless) return stop($, s, coldPingText(usage, usd))
     const write = usage.cache_creation_input_tokens
     s.coldWrites.push({ tokens: write, usd })
-    logEvent($, s, `the ping found the cache gone and re-wrote ${fmtTok(write)} tokens (${fmtUsd(usd)}); always keeps the loop running. /cache-warm off stops it.`, coldWriteShort(write, usd))
+    await logEvent($, s, `the ping found the cache gone and re-wrote ${fmtTok(write)} tokens (${fmtUsd(usd)}); always keeps the loop running. /cache-warm off stops it.`, coldWriteShort(write, usd))
   }
   s.lastRequestAt = now
   await arm($, s)
@@ -420,7 +432,7 @@ async function renewWindow($: EngineInterface, s: State, kind: string | undefine
   if (again === null || s.deadline || kind === undefined || !USER_ORIGINS.includes(kind)) return
   // The line is written before the window starts, so the sidebar's redraw already carries it.
   const text = `the ${fmtDuration(again.window)} window ran out; this message arms another one. /cache-warm off stops it.`
-  logEvent($, s, text, eventShort(`window armed again for ${fmtDuration(again.window)}`))
+  await logEvent($, s, text, eventShort(`window armed again for ${fmtDuration(again.window)}`))
   await startWindow($, s, again.window, again.every)
 }
 
@@ -442,7 +454,7 @@ async function measure($: EngineInterface, s: State, u: TurnUsage, now: number):
   // The endless loop already keeps this cache; a window with an end would only shorten it.
   if (s.endless || s.deadline >= now + AUTO_WARM_MS) return
   // The line is written before the window starts, so the sidebar's redraw already carries it.
-  logEvent($, s, `cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)}; /cache-warm off stops it.`, coldWriteShort(write, usd))
+  await logEvent($, s, `cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}). Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)}; /cache-warm off stops it.`, coldWriteShort(write, usd))
   await startWindow($, s, AUTO_WARM_MS, s.every)
 }
 
@@ -606,7 +618,7 @@ export const register: Register = on => {
     s.lastRead ??= pingRecordOf(await $.store.get(lastKey(s)))
     const line = seedFromResume(s, e, await $.clock.now())
     s.model ??= await $.session.model()
-    if (line) logEvent($, s, line, eventShort(line))
+    if (line) await logEvent($, s, line, eventShort(line))
     // The conditions are read when the timer fires, which scheduleKeepWarm starts after session.start too.
     if (e.source === 'resume') {
       s.keepWarmDue = true
