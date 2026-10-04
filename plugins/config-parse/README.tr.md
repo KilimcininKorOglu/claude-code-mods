@@ -5,7 +5,7 @@
 ## Ne yapar
 
 1. Engine'in çalıştırdığı her Edit ya da Write'tan sonra yola bakar. `.json`, `.jsonc`, `.yml`, `.yaml`, `.toml`, `.env` ya da `.env.<ad>` dosyası parse edilir, geri kalan dosyalara dokunulmaz. Kendi aracının yorumlu JSON olarak okuduğu dosyalarda (`.jsonc`, `tsconfig*.json`, `jsconfig*.json`, `.vscode/*.json`, `devcontainer.json`) `//` ve `/* */` yorumları ile sondaki virgüller serbesttir. Diğer bütün JSON dosyaları katı kurallarla parse edilir.
-2. JSON'u mod kendisi parse eder. `.env` dosyası satır satır okunur: boş olmayan, yorum olmayan ve `KEY=value` biçiminde olmayan bir satır (başındaki `export` sorun değildir) satır numarasıyla birlikte bulgu olur.
+2. JSON'u mod kendisi parse eder. `.env` dosyası satır satır okunur: boş olmayan, yorum olmayan ve `KEY=value` biçiminde olmayan bir satır (başındaki `export` sorun değil) satır numarasıyla birlikte bulgu olur.
 3. YAML ve TOML'u `python3` parse eder (güvenli bir loader'la `yaml.load_all` ve `tomllib.load`); dosya yolu tek bir argv öğesi olarak geçer. `---` ile ayrılmış bir akıştaki her doküman okunur; `!Ref` ya da `!vault` gibi uygulama tag'leri de kabul edilir, çünkü ikisi de geçerli YAML'dır. Python ya da modül yoksa o tür session boyunca atlanır ve tek bir satır bunu haber verir.
 4. Parse edilemeyen dosya iki kanala gider. Model dosyayı ve hatayı söyleyen bir `context` notu alır. Sen [sidebar](../sidebar) stream'inde kırmızı bir kayıt görürsün: önce dosya, sonra hata; parser'ın verdiği konum, örneğin `line 2` ya da `(line 3, column 5)`, sarı yazılır. Sidebar kapalıysa bir transcript satırı görürsün. Dosyanın yolu, session'ın başladığı git repository'sinin köküne göre yazılır; repository dışındaysan session'ın dizinine göre. Bu kök session başlarken bir kez okunur, çünkü Bash'teki bir `cd` session'ın dizinini değiştirir.
 5. Sonraki bir edit aynı dosyayı yeniden parse edilebilir hâle getirirse duran kayıt silinir ve yeşil bir satır bunu söyler. Bu satır yalnız sana gider, çünkü dosyayı model kendisi düzeltti. Bulgusu açıkken silinen bir dosya da bir sonraki ölçümde aynı şekilde kapanır: `<dosya> is gone, and its parse error with it`. Yerinde duran ama okunamayan dosyanın bulgusu açık kalır.
@@ -61,7 +61,7 @@ Reach L2: dosya okur ve bir process çalıştırır.
 - `git commit -a`, `-am` ve `--` sonrasında pathspec verilen commit index'e göre daraltılmaz, çünkü index'te henüz olmayan dosyaları da commit'ler. Bunlarda açık bulguların hepsi geçerlidir.
 - Index komut çalışmadan önce okunur. Dosyaları bu okumayla çalıştırma arasında değişen bir commit, okuma anındaki index'e göre ölçülür.
 - `.env` satırının yalnız biçimine bakılır. Yanlış bir değer, eksik bir tırnak ya da tekrarlanan bir key bulgu sayılmaz.
-- Mod'un yorumlu JSON olarak tanımadığı bir adla (1. maddedeki listenin dışındaki bir `.json` adı) duran yorumlu JSON dosyası bozuk bildirilir, çünkü o ad katı kurallarla okunur.
+- Mod'un yorumlu JSON olarak tanımadığı bir adla (1. maddedeki listenin dışındaki bir `.json` adı) duran yorumlu JSON dosyası bozuk olarak bildirilir, çünkü o ad katı kurallarla okunur.
 - YAML ve TOML için `python3` gerekir; onun olmadığı bir makinede bu dosyalar hiç kontrol edilmez.
 - Edit ve Write dışında yapılan bir düzenleme, örneğin Bash'teki bir `sed`, görülmez.
 
