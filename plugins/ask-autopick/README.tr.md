@@ -1,6 +1,6 @@
 # ask-autopick
 
-Uzun bir işi başlatıp kalkıyorsun, bir saat sonra dönüyorsun ve session'ın modelin ilk dakikada sorduğu bir soruda takılıp kaldığını görüyorsun. Bu mod bunu önler: bir soru belirlenen süre boyunca cevapsız kalırsa modelin kendi önerdiği seçeneği seçer ve iş devam eder. Sen açana kadar kapalıdır.
+Uzun bir işi başlatıp kalkıyorsun, bir saat sonra dönüyorsun ve session'ın, modelin ilk dakikada sorduğu bir soruda takılıp kaldığını görüyorsun. Bu mod bunu önler: bir soru belirlenen süre boyunca cevapsız kalırsa modelin kendi önerdiği seçeneği seçer ve iş devam eder. Sen açana kadar kapalıdır.
 
 ## Ne yapar
 
@@ -8,15 +8,15 @@ Uzun bir işi başlatıp kalkıyorsun, bir saat sonra dönüyorsun ve session'ı
 2. Bekleme süresi (varsayılan 10 dakika) dolmadan cevap verirsen cevabın geçer, mod hiçbir şey yapmaz.
 3. Süre dolar da cevap gelmezse mod senin yerine her sorunun önerilen seçeneğiyle cevap verir. Engine soruyu kapatır, transcript de cevabı senin cevabın gibi gösterir.
 
-   Tool, modele önerdiği seçeneği başa koymasını ve etiketini `(Recommended)` ile bitirmesini söyler. Başka dilde yazılmış bir soruda model bu kelimeyi o dilde yazar. Mod da ilk seçeneği, etiketi parantez içinde bu kelimeyle bitiyorsa ve başka hiçbir seçenekte bu işaret yoksa seçer. Kelimeyi İngilizce, Türkçe, Almanca, İspanyolca, Portekizce, Fransızca, İtalyanca, Felemenkçe, Lehçe, Rusça, Çince, Japonca ve Korece tanır; tam genişlikli parantezler de sayılır.
+   Tool, modele önerdiği seçeneği başa koymasını ve etiketini `(Recommended)` ile bitirmesini söyler. Başka dilde yazılmış bir soruda model bu kelimeyi o dilde yazar. Mod da yalnız ilk seçeneğin etiketi parantez içinde bu kelimeyle bitince ve başka hiçbir seçenekte bu işaret yoksa ilk seçeneği seçer. Kelimeyi İngilizce, Türkçe, Almanca, İspanyolca, Portekizce, Fransızca, İtalyanca, Felemenkçe, Lehçe, Rusça, Çince, Japonca ve Korece tanır; tam genişlikli parantezler de sayılır.
 4. Cevapla birlikte modele tek bir not gider. Not, süre içinde cevap vermediğini, seçimin senin kararın değil varsayılan olduğunu ve modelin bunu bir sonraki cevabında söylemesi gerektiğini anlatır. Canlı denemede model gerçekten de seçimi senin yapmadığını belirtti.
 5. Neyin seçildiğini söyleyen tek bir kayıt görürsün: [sidebar](../sidebar) açıksa onun stream'inde, değilse transcript'te bir satır olarak. Sidebar'da seçilen cevap sarı, soru ve geri kalanı soluktur:
 
        ask-autopick: no answer in 10 min, picked the recommended option: Renk? → Mavi (Önerilen)
 
-6. Üç tür soruya mod hiç cevap vermez: ilk seçeneği işaretli olmayan, işaretli ikinci bir seçeneği olan ve birden çok cevap alan (`multiSelect`) sorular. Bunlar seni bekler ve bunu söyleyen sarı bir kayıt düşer.
+6. Üç tür soruya mod hiç cevap vermez: ilk seçeneği işaretsiz olan, işaretli ikinci bir seçeneği barındıran ve birden çok cevap alan (`multiSelect`) sorular. Bunlar seni bekler ve bunu söyleyen sarı bir kayıt düşer.
 
-2.1.282'deki canlı denemede açık bırakılan bir soru hem 1 hem 5 dakika sonra `Mavi (Önerilen)` cevabını aldı ve model işe onunla devam etti.
+2.1.282'deki canlı denemede açık bırakılan bir soru hem 1 hem 5 dakika sonra `Mavi (Önerilen)` cevabını aldı ve model işe bu cevapla devam etti.
 
 ## Komut
 
@@ -43,7 +43,7 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
     ❯ ./register.ts hooks: session.start, command.run{command=ask-autopick}, tool.call{tool=/"^AskUserQuestion$"/}
     ❯ ./register.ts calls: $.clock.after (via answerOrPick), $.command.register, $.sidebar.set (via toPerson), $.store.get (via readSettings), $.store.set (via runCommand), $.ui.log (via toPerson)
 
-Reach L2: Claude'u yönlendirir, çünkü bir seçim senin yerine soruya cevap verir.
+Reach L2: Claude'u yönlendirir, çünkü soruyu senin yerine bir seçimle cevaplar.
 
     1. Okur:     her AskUserQuestion çağrısının sorularını ve seçenek etiketlerini
     2. Çalıştırır: hiçbir şey
@@ -53,7 +53,7 @@ Reach L2: Claude'u yönlendirir, çünkü bir seçim senin yerine soruya cevap v
 
 ## Sınırlar
 
-- Mod modelin işaretine güvenir: önerilen seçenek ne yaparsa yapsın seçilir.
+- Mod modelin işaretine güvenir: önerilen seçenek ne yazarsa yazsın seçilir.
 - Kelimesi listede olmayan bir dilde sorulan soru seni bekler.
 - 10 dakika ve üstü bekleme süreleri canlı ölçülmedi; 1 ve 5 dakika ölçüldü.
 - Bekleme sırasında mod'u başka bir pencerede kapatırsan soru seni beklemeye devam eder.
