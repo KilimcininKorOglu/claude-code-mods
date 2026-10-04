@@ -11,7 +11,15 @@ import type {
 } from 'claude-code'
 
 import { DEFAULT_MAX_POKES, MAX_STALLS, limitOf } from '../hooks/register.ts'
-import { countLine, countText, streamLine } from '../hooks/tasks.ts'
+import { countLine, countText, streamLine, tasksOfList } from '../hooks/tasks.ts'
+
+test('an empty TaskList answer is the empty list, so a task the engine deleted leaves the count', () => {
+  expect(tasksOfList('No tasks found')).toEqual(new Map())
+  expect(tasksOfList({ text: 'No tasks found' })).toEqual(new Map())
+  expect(tasksOfList({ tasks: [{ id: '1', status: 'in_progress' }] })).toEqual(new Map([['1', 'in_progress']]))
+  expect(tasksOfList('1 task: #1 [in_progress] rewrite the readmes')).toBe(null)
+  expect(tasksOfList(undefined)).toBe(null)
+})
 
 tier('user')
 

@@ -137,7 +137,12 @@ function fromTaskList(tasks: Tasks | null, use: ToolUseSummary): Tasks | null {
  */
 export function tasksOfList(result: unknown): Tasks | null {
   const rows = field(result, 'tasks')
-  if (!Array.isArray(rows)) return null
+  if (!Array.isArray(rows)) {
+    // The engine answers an empty list with the text `No tasks found`, with no tasks array. That is
+    // a list, not its absence: keeping the old one here would keep a task the engine deleted.
+    const text = typeof result === 'string' ? result : field(result, 'text')
+    return text === 'No tasks found' ? new Map() : null
+  }
   const next: Tasks = new Map()
   for (const row of rows) {
     const id = field(row, 'id')

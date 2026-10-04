@@ -1,6 +1,6 @@
 {
   "name": "task-poke",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "description": "Submits a continue prompt while the task list has unfinished tasks, at most 99 times in a row by default, and turns the task tools on for every model unless CLAUDE_CODE_ENABLE_TODO_TOOLS is set.",
   "author": {
     "name": "Kerem Gok",
