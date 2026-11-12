@@ -127,7 +127,8 @@ describe('orphan-server', () => {
     expect(w.bar.sections).toEqual([{ consumer: 'orphan-server', key: 'orphans', title: 'orphan servers', lines: [row], buttons: [{ label: 'stop :8787', command: 'orphan-server', args: 'stop 3214' }], until: 'session', order: 16 } as unknown as Section])
     // The transcripts of the repository root are read, only for the minutes around the start.
     expect(w.greps[0]).toContain('/Users/u/.claude/projects/-work')
-    expect(w.greps[0]).toContain('"timestamp":"2026-09-22T10:16')
+    expect(w.greps[0]).toContain('-rhsE')
+    expect(w.greps[0]?.find(a => a.startsWith('"timestamp":"('))).toContain('2026-09-22T10:16')
     // A turn's end with the same server reads no transcript again and draws nothing new.
     await $.turn.complete(turn())
     await clock.settle()

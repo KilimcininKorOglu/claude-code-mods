@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { callsOf, etimeMs, isSame, labelOf, listenersOf, matchOf, patternsOf, procsOf, sidebarLines, stillLine, tailOf, type Proc } from '../hooks/orphans.ts'
+import { callsOf, etimeMs, isSame, labelOf, listenersOf, matchOf, patternsOf, procsOf, sidebarLines, stillLine, tailOf, timeRegexOf, type Proc } from '../hooks/orphans.ts'
 
 tier('user')
 
@@ -54,6 +54,15 @@ describe('orphans', () => {
     expect(patterns).toContain('"timestamp":"2026-09-22T10:06')
     expect(patterns).toContain('"timestamp":"2026-09-22T10:17')
     expect(patterns).not.toContain('"timestamp":"2026-09-22T10:18')
+  })
+
+  test('the minutes go to grep as one alternation, so it reads the transcripts once', () => {
+    const regex = timeRegexOf([server])
+    expect(regex.startsWith('"timestamp":"(2026-09-22T10:')).toBe(true)
+    expect(regex.split('|')).toHaveLength(patternsOf([server]).length)
+    const re = new RegExp(regex)
+    expect(re.test('{"timestamp":"2026-09-22T10:16:05.123Z"}')).toBe(true)
+    expect(re.test('{"timestamp":"2026-09-22T10:18:05.123Z"}')).toBe(false)
   })
 
   test('a pid read again is the listed server only with the same parent, arguments and start', () => {

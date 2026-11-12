@@ -1,7 +1,7 @@
 import type { EngineInterface, Register } from 'claude-code'
 import {
-  byAge, callsOf, changedText, configDirOf, cwdsOf, isInside, isSame, listenersOf, listText, logText, matchOf, patternsOf, procsOf,
-  sectionKey, sidebarButtons, sidebarLines, SLACK, stillLine, stoppedLine, transcriptDir, type Listener, type Orphan, type Proc,
+  byAge, callsOf, changedText, configDirOf, cwdsOf, isInside, isSame, listenersOf, listText, logText, matchOf, procsOf,
+  sectionKey, sidebarButtons, sidebarLines, SLACK, stillLine, stoppedLine, timeRegexOf, transcriptDir, type Listener, type Orphan, type Proc,
 } from './orphans.ts'
 
 const ENABLED_KEY = 'enabled'
@@ -84,8 +84,7 @@ async function orphansOf($: EngineInterface, state: State, listeners: readonly L
   const fresh = listeners.filter(l => seenOf(state, l) === undefined)
   // With no transcript directory, grep would read its standard input.
   if (fresh.length > 0 && state.dirs.length > 0) {
-    const patterns = patternsOf(fresh).flatMap(p => ['-e', p])
-    const calls = callsOf(await output($, ['grep', '-rhsF', '--include=*.jsonl', ...patterns, ...state.dirs]))
+    const calls = callsOf(await output($, ['grep', '-rhsE', '--include=*.jsonl', '-e', timeRegexOf(fresh), ...state.dirs]))
     for (const l of fresh) {
       const call = matchOf(l, calls)
       state.seen.set(seenKey(l), { startedAt: l.startedAt, orphan: call === undefined ? undefined : { ...l, sessionId: call.sessionId } })

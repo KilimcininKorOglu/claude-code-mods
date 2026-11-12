@@ -124,6 +124,18 @@ export function patternsOf(procs: readonly Proc[]): string[] {
   return [...patterns]
 }
 
+const TIME_PREFIX = '"timestamp":"'
+
+/**
+ * The minutes of `patternsOf` as one extended regular expression, the shared prefix outside the
+ * alternation. macOS grep reads the files once per fixed pattern: twelve `-F` patterns over 568 MB of
+ * transcripts took 52 s, past the 30 s a `$.process.run` gets, and this one expression took 4.5 s.
+ * The minutes hold only digits, `-`, `:` and `T`, so nothing needs escaping.
+ */
+export function timeRegexOf(procs: readonly Proc[]): string {
+  return `${TIME_PREFIX}(${patternsOf(procs).map(p => p.slice(TIME_PREFIX.length)).join('|')})`
+}
+
 type Row = { timestamp?: unknown; sessionId?: unknown; message?: { content?: unknown } }
 type Block = { type?: unknown; id?: unknown; name?: unknown; input?: { command?: unknown }; tool_use_id?: unknown }
 
