@@ -21,7 +21,7 @@ function world(on: On): World {
   on('fs.exists', (_, e) => ({ value: w.exists.has(e.path) }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: { tool: `mcp__probe-runner__${e.name}` } } })
-  on('process.run', (_, e) => { w.argv.push([...e.argv]); return { value: { exitCode: 0, stdout: '# probe report', stderr: '' } } })
+  on('process.run', (_, e) => { w.argv.push([...e.argv]); return { value: { exitCode: 0, stdout: '# probe report', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } } })
   return w
 }
 
