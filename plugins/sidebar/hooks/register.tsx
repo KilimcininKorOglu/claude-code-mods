@@ -120,7 +120,7 @@ async function switchToFullscreen($: EngineInterface): Promise<void> {
   } catch (err) {
     // The switch is an aid, not a requirement; the pane's own stand-down holds the rule. The
     // failure still shows, because a swallowed error reads as the switch having worked.
-    await $.ui.log(`fullscreen switch failed: ${err instanceof Error ? err.message : String(err)}`)
+    $.ui.log(`fullscreen switch failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
@@ -416,7 +416,7 @@ export const register: Register = on => {
 
   // A close, by the pane's own button, ends the session's sections only: the stored choice belongs
   // to /sidebar alone, so the pane comes back with the session that follows.
-  on('ui.close', async ($, e, next) => {
+  on('ui.close', async (_, e, next) => {
     if (e.id !== PANE_ID) return next(e)
     const r = await next(e)
     state.open = false
