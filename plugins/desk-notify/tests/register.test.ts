@@ -35,13 +35,14 @@ function world(on: On, env: Record<string, string> = {}, store: Record<string, u
   on('session.cwd', () => ({ value: '/Users/u/app/sub' }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
+  const ran = (exitCode: number, stdout: string, stderr: string) => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
   on('process.run', (_, e) => {
     const [cmd, ...rest] = e.argv
-    if (cmd === 'uname') return { value: { exitCode: 0, stdout: `${w.uname}\n`, stderr: '' } }
-    if (cmd === 'git') return { value: { exitCode: 0, stdout: `${rest.includes('--git-common-dir') ? w.commonDir : w.top}\n`, stderr: '' } }
+    if (cmd === 'uname') return ran(0, `${w.uname}\n`, '')
+    if (cmd === 'git') return ran(0, `${rest.includes('--git-common-dir') ? w.commonDir : w.top}\n`, '')
     if (w.notifyExit === 'throw') throw new Error(`${cmd}: not found`)
     w.sent.push([...e.argv])
-    return { value: { exitCode: w.notifyExit, stdout: '', stderr: w.notifyExit === 0 ? '' : 'daemon down' } }
+    return ran(w.notifyExit, '', w.notifyExit === 0 ? '' : 'daemon down')
   })
   on('tool.call', { tool: /^(AskUserQuestion|ExitPlanMode)$/ }, () => ({ result: 'answered' }) as never)
   on('classic.Stop', () => ({}))
