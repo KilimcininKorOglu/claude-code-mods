@@ -289,6 +289,26 @@ export function paceText(p: Pace): string {
   return `pace: measuring, ${durationText(p.missing)} of samples still needed`
 }
 
+/** A forecast in words, for the model. */
+function forecastText(f: Forecast, now: number): string {
+  if (f.kind === 'full-at') return `reaches 100% at ${clockText(f.at, now)} (in ~${durationText(f.at - now)}) at this pace`
+  return { reached: 'reached', measuring: 'pace still measured', flat: 'not rising', 'reset-first': 'resets before it reaches 100% at this pace' }[f.kind]
+}
+
+/** One limit for the model: used, reset, pace and forecast on one line. */
+function limitReading(limit: SessionRateLimit, tracks: Tracks, now: number): string {
+  const p = limitPace(limit, tracks[limit.kind], now)
+  const reset = resetTime(limit)
+  const when = reset === undefined ? 'no reset time reported' : `resets ${clockText(reset, now)} (in ${durationText(reset - now)})`
+  return `${profile(limit.kind).name}: ${percentText(limit.percentUsed)} used, ${when}, ${paceText(p)}, ${forecastText(forecast(limit, p, now), now)}`
+}
+
+/** What the limits tool answers: the local time, then one line per limit. */
+export function toolText(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): string {
+  if (limits.length === 0) return 'No usage limits reported. A session on an API key reports none.'
+  return [`Usage limits at ${clockText(now, now)} local time:`, ...limits.map(l => `- ${limitReading(l, tracks, now)}`)].join('\n')
+}
+
 export function warningText(limit: SessionRateLimit, level: number, now: number): string {
   const reset = resetTime(limit)
   const when = reset === undefined ? '' : `, resets ${clockText(reset, now)} (in ${durationText(reset - now)})`

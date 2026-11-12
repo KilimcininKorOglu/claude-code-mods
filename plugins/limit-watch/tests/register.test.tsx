@@ -25,6 +25,8 @@ type World = {
   logs: string[]
   statuses: (string | undefined)[]
   panes: UiPane[]
+  /** The tools the mod declared. */
+  tools: string[]
   setLimits: (l: SessionRateLimit[]) => void
   /** How many of the next usage reads fail. */
   failUsage: number
@@ -34,7 +36,7 @@ type World = {
 }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { logs: [], statuses: [], panes: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }), store: { ...store } }
+  const w: World = { logs: [], statuses: [], panes: [], tools: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }), store: { ...store } }
   let limits: SessionRateLimit[] = []
   w.setLimits = l => {
     limits = l
@@ -47,6 +49,11 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('tool.register', (_, e) => {
+    w.tools.push(e.name)
+    return { value: { tool: `mcp__limit-watch__${e.name}` } }
+  })
+  on('tool.describe', (_, e) => ({ description: e.description }))
   on('session.usage', () => {
     if (w.failUsage > 0) {
       w.failUsage -= 1
@@ -341,6 +348,23 @@ describe('limit-watch', () => {
     w.store.enabled = true
     await $.turn.complete(turn())
     expect(w.statuses.at(-1)).toContain('5h 23%')
+  })
+
+  test('the model reads the limits as they stand now through a listed tool that asks no approval', async ($, on) => {
+    const w = world(on)
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    expect(w.tools).toEqual(['limits'])
+    const TOOL = 'mcp__limit-watch__limits'
+    expect((await $.tool.describe({ tool: TOOL, description: 'd', provider: { kind: 'plugin', name: 'limit-watch' } } as never)).isDeferred).toBe(false)
+    expect((await $.tool.check({ tool: TOOL, input: {} } as never)).decision).toBe('allow')
+    // The tool samples again, so it answers the reading of this moment, not the one of the last turn.
+    w.setLimits([fiveHour(41)])
+    const text = String((await $.tool.call({ tool: TOOL } as never)).result)
+    expect(text).toContain('5-hour limit: 41% used, resets')
+    expect(w.statuses.at(-1)).toContain('5h 41%')
+    await $.command.run({ ...run, args: 'off' })
+    expect((await $.tool.call({ tool: TOOL } as never)).result).toContain('limit-watch is off')
   })
 
   test('a bare run while off reports off and opens no pane, and an unknown word gets the usage', async ($, on) => {

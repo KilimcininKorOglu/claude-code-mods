@@ -1,6 +1,6 @@
 # limit-watch
 
-Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti vardır, bir Claude gateway de spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmak üzereyken bir uyarıda gösterir; nerede olduğunu iş işten geçtiğinde öğrenirsin. Bu mod limitleri session boyunca ekranda tutar, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar. `/limit-watch off` hepsini durdurur; `/limit-watch on` yeniden başlatır.
+Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti vardır, bir Claude gateway de spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmak üzereyken bir uyarıda gösterir; nerede olduğunu iş işten geçtiğinde öğrenirsin. Bu mod limitleri session boyunca ekranda tutar, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder, modele limitleri okuyan bir tool verir ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar. `/limit-watch off` hepsini durdurur; `/limit-watch on` yeniden başlatır.
 
 ## Ne gösterir
 
@@ -29,6 +29,13 @@ Bir API key session'ı hiçbir limit bildirmez. Status line o zaman `no usage li
 Bar pane'in genişliğini doldurur. %80 altında yeşil, %80'den itibaren sarı ve %95'ten itibaren kırmızıdır. Hız ölçülürken hız satırı ne kadar daha örnek gerektiğini söyler.
 
 **`/limit-watch on` ve `/limit-watch off`** izleyicinin tamamını durdurur ve başlatır. Kapalıyken hiçbir şey örneklenmez: status line, sidebar section, pane ve uyarı olmaz; açık bir pane ve duran section düşürülür. Ayar, her pencerenin paylaştığı store'da tutulur; bir penceredeki `off`, öbür pencereleri de onlara etki eden sonraki hook'ta durdurur ve restart'ı aşar. İzleyici kapalıyken çıplak `/limit-watch`, pane açmak yerine `off.` diye yanıtlar.
+
+**Modelin okuduğu bir tool, `mcp__limit-watch__limits`**. Session başından itibaren ToolSearch olmadan listelenir ve yalnız okuduğu için onay sormadan çalışır. Her çağrı limitleri yeniden örnekler, yani model limitleri o anki hâliyle alır. Cevap limit başına bir satırdır:
+
+    Usage limits at 20:04 local time:
+    - 5-hour limit: 41% used, resets 22:40 (in 2h 36m), pace +4.2%/h over the last 38m, reaches 100% at 10:05 (in ~14h) at this pace
+
+Açıklaması modele, uzun ya da masraflı bir işten önce ya da limitleri sorduğunda onu çağırmasını söyler. İzleyici kapalıyken tool hiçbir şey okumaz ve bunu söyler.
 
 **Transcript'te bir uyarı**, bir limit %80'i geçtiğinde ve %95'i geçtiğinde yeniden:
 
@@ -65,16 +72,16 @@ Yerel bir checkout'tan tek session için yüklemek istersen:
 
 ## Nereye uzanır
 
-Claude Code 2.1.288 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.322 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=limit-watch}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
+    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane}
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
 Reach L0: çizer ve hatırlar.
 
-    1. Okur:     $.session.usage'ın rate-limit window'larını (kind, kullanılan yüzde, reset zamanı); dört hook'unun event payload'larını
+    1. Okur:     $.session.usage'ın rate-limit window'larını (kind, kullanılan yüzde, reset zamanı); yedi hook'unun event payload'larını
     2. Çalıştırır: hiçbir şey; interaktif bir session'da bir 60 saniyelik timer
-    3. Gönderir: makineden hiçbir şey çıkmaz
+    3. Gönderir: makineden hiçbir şey çıkmaz; model mcp__limit-watch__limits'i çağırdığında okuma modelin context'ine girer
     4. Saklar:   her limitin örneklerini ve uyarılmış seviyelerini $.store içinde, limit başına en fazla 1500 örnek, ve saklanan on/off ayarı
     5. Düşman girdi: tek dış girdi kullanım rakamlarıdır; bilinmeyen biçimde saklanmış bir değer bildirilir ve değiştirilir, hiçbir zaman güvenilmez
 

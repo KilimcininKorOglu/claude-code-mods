@@ -16,6 +16,7 @@ import {
   resetTime,
   sidebarLines,
   statusLine,
+  toolText,
   warningText,
   type Tracks,
 } from './limits.ts'
@@ -29,6 +30,11 @@ const ROWS_PER_LIMIT = 5
 
 const USAGE = 'expects nothing (opens or closes the pane), on or off'
 const OFF_TEXT = 'off. /limit-watch on starts it again.'
+
+/** The tool the model reads the limits through: listed from the session's start, declared once. */
+const TOOL_NAME = 'limits'
+const TOOL_DESCRIPTION = "Read the account's usage limits now: each limit's percentage used, reset time, pace and when it reaches 100%. Call it before long or costly work, or when the person asks about limits."
+const TOOL_OFF = 'limit-watch is off, so it reads no limits; the person turns it on with /limit-watch on.'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -159,6 +165,15 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   return 'pane open. /limit-watch closes it.'
 }
 
+/**
+ * The tool's answer: a fresh sample, so the model reads the limits as they stand now. A watcher
+ * turned off samples nothing, here as on its timer.
+ */
+async function serveTool($: EngineInterface, state: State): Promise<string> {
+  await sample($, state)
+  return state.enabled ? toolText(state.limits, state.tracks, await $.clock.now()) : TOOL_OFF
+}
+
 export const register: Register = on => {
   const state: State = { limits: [], tracks: {}, enabled: true, drawn: false }
 
@@ -174,6 +189,8 @@ export const register: Register = on => {
       argumentHint: '[on | off]',
       immediate: true,
     })
+    // Declared at the start, so the tool list the prompt cache holds does not change mid-session.
+    await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: { type: 'object', properties: {} } })
     // A -p run draws nothing, so only an interactive session samples on a timer. The timer is armed
     // before the first read, so a first read that fails does not leave the session without one.
     if (e.isInteractive) $.clock.every(TICK_MS, () => void sampleOrLog($, state))
@@ -186,6 +203,11 @@ export const register: Register = on => {
     if (e.agentId === undefined) await sample($, state)
     return r
   })
+
+  // A plugin's tool waits behind ToolSearch by default; this one is listed, and it reads only, so it asks no approval.
+  on('tool.describe', { tool: /^mcp__limit-watch__limits$/ }, async (_, e, next) => ({ ...(await next(e)), isDeferred: false }))
+  on('tool.check', { tool: /^mcp__limit-watch__limits$/ }, async () => ({ decision: 'allow' as const }))
+  on('tool.call', { tool: /^mcp__limit-watch__limits$/ }, async $ => ({ result: await serveTool($, state) }))
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'limit-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))

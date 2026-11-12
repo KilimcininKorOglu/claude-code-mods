@@ -11,6 +11,7 @@ import {
   pace,
   record,
   statusLine,
+  toolText,
   type Tracks,
 } from '../hooks/limits.ts'
 
@@ -196,6 +197,21 @@ describe('text', () => {
     ])
     const now = T0 + 30 * MINUTE
     expect(statusLine([fiveHour(60)], tracks, now)).toBe('5h 60%, reset in 2h 30m · 5h hits 100% in ~1h')
+  })
+
+  test('the tool text gives each limit its use, reset, pace and forecast on one line', async () => {
+    const tracks = readings([
+      [0, 40],
+      [30, 60],
+    ])
+    const now = T0 + 30 * MINUTE
+    const text = toolText([fiveHour(60)], tracks, now)
+    expect(text.split('\n')).toHaveLength(2)
+    expect(text).toContain('5-hour limit: 60% used, resets ')
+    expect(text).toContain('(in 2h 30m), pace +40.0%/h over the last 30m, reaches 100% at ')
+    expect(text).toContain('(in ~1h) at this pace')
+    expect(toolText([fiveHour(10)], {}, T0)).toContain('pace still measured')
+    expect(toolText([], {}, T0)).toBe('No usage limits reported. A session on an API key reports none.')
   })
 
   test('the status line says so when no limit is reported', async () => {
