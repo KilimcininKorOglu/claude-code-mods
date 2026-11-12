@@ -5,15 +5,15 @@ export const TOOL_NAME = 'run'
 /** The commands that clear, end or swap the session; the model may not run them. */
 export const BLOCKED: ReadonlySet<string> = new Set(['clear', 'exit', 'quit', 'logout', 'login', 'resume', 'rewind'])
 
-export const TOOL_DESCRIPTION = `Runs a slash command in this session as if the person typed it, such as /reload-plugins or /sage-memory triage.
-A command cannot run while your turn goes on: it is queued, runs once your turn ends, and its output comes back to you as the next prompt. So call this as the last step of a turn, then end the turn.
-The commands that clear, end or swap the session (${[...BLOCKED].map(c => `/${c}`).join(', ')}) are refused.`
+export const TOOL_DESCRIPTION = `Run a slash command in this session as if the person typed it, such as /reload-plugins.
+It runs after your turn ends, and its output comes back as the next prompt, so call it last and end the turn.
+${[...BLOCKED].map(c => `/${c}`).join(', ')} are refused.`
 
 export const INPUT_SCHEMA = {
   type: 'object',
   properties: {
-    command: { type: 'string', description: 'The command name without its slash, such as reload-plugins or sage-memory' },
-    args: { type: 'string', description: 'Everything after the name, as the person would type it; leave it out for none' },
+    command: { type: 'string', description: 'The name without the slash, such as reload-plugins.' },
+    args: { type: 'string', description: 'The text after the name.' },
   },
   required: ['command'],
   additionalProperties: false,
