@@ -14,6 +14,7 @@ import {
   profile,
   record,
   resetTime,
+  scopedLimits,
   sidebarLines,
   statusLine,
   toolText,
@@ -36,13 +37,35 @@ const TOOL_NAME = 'limits'
 const TOOL_DESCRIPTION = "Read the account's usage limits now: each limit's percentage used, reset time, pace and when it reaches 100%. Call it before long or costly work, or when the person asks about limits."
 const TOOL_OFF = 'limit-watch is off, so it reads no limits; the person turns it on with /limit-watch on.'
 
+/**
+ * The account's usage endpoint: the only source of the per-model weekly limits (Fable), which
+ * `$.session.usage()` does not report. The engine sets the credential header; the mod never sees it.
+ */
+const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
+const USAGE_BETA = 'oauth-2025-04-20'
+/** The usage endpoint is read at most this often, and never by the idle timer. */
+const SCOPED_MS = 5 * 60_000
+
+/** How a sample treats the usage endpoint: not at all, when the last read is old enough, or always. */
+type ScopedRead = 'none' | 'due' | 'fresh'
+
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
 /**
  * What the hooks share: the last reading, the tracks kept in the store, the stored on/off setting with
- * whether a drawing of it stands, and the last timer error.
+ * whether a drawing of it stands, the last timer error, and the per-model limits with the time of their
+ * last read and its last error.
  */
-type State = { limits: readonly SessionRateLimit[]; tracks: Tracks; enabled: boolean; drawn: boolean; lastError?: string }
+type State = {
+  limits: readonly SessionRateLimit[]
+  tracks: Tracks
+  enabled: boolean
+  drawn: boolean
+  lastError?: string
+  scoped: readonly SessionRateLimit[]
+  scopedAt?: number
+  scopedError?: string
+}
 
 /** Logs each threshold the last sample passed for the first time in its cycle, and marks it. */
 function warn($: EngineInterface, state: State, now: number): void {
@@ -92,12 +115,46 @@ async function clearDrawings($: EngineInterface): Promise<void> {
 }
 
 /**
+ * Reads the per-model weekly limits from the usage endpoint. A session with no first-party OAuth
+ * credential (an API key, a gateway, a third-party provider) has none to read.
+ */
+async function fetchScoped($: EngineInterface): Promise<SessionRateLimit[]> {
+  const auth = await $.session.authorize()
+  if (auth === null || auth.kind !== 'bearer') return []
+  const response = await $.http.fetch(USAGE_URL, { auth: auth.handle, headers: { 'anthropic-beta': USAGE_BETA } })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const limits = scopedLimits(JSON.parse(response.text))
+  if (limits === undefined) throw new Error('the answer has no limits list')
+  return limits
+}
+
+/**
+ * Reads the per-model limits again when `read` asks for it. A failed read is logged once per error
+ * text and drops the per-model limits, so an old reading is never shown as the current one; the
+ * limits `$.session.usage()` reports stay.
+ */
+async function refreshScoped($: EngineInterface, state: State, now: number, read: ScopedRead): Promise<void> {
+  const isDue = state.scopedAt === undefined || now - state.scopedAt >= SCOPED_MS
+  if (read === 'none' || (read === 'due' && !isDue)) return
+  state.scopedAt = now
+  try {
+    state.scoped = await fetchScoped($)
+    state.scopedError = undefined
+  } catch (err) {
+    const text = err instanceof Error ? err.message : String(err)
+    if (text !== state.scopedError) $.ui.log(`cannot read the per-model limits: ${text}`)
+    state.scopedError = text
+    state.scoped = []
+  }
+}
+
+/**
  * Reads the limits, records a sample, raises new warnings, stores the tracks and redraws. The stored
  * tracks are read again first, so a warning another session of the account wrote is not repeated.
  * The stored on/off setting is read first too: while it says off nothing is sampled and what stands
  * is cleared, so a watcher another window turned off stops here as well.
  */
-async function sample($: EngineInterface, state: State): Promise<void> {
+async function sample($: EngineInterface, state: State, read: ScopedRead): Promise<void> {
   await readSettings($, state)
   if (!state.enabled) {
     if (state.drawn) await clearDrawings($)
@@ -106,7 +163,8 @@ async function sample($: EngineInterface, state: State): Promise<void> {
   }
   const usage = await $.session.usage()
   const now = await $.clock.now()
-  state.limits = usage.rateLimits
+  await refreshScoped($, state, now, read)
+  state.limits = [...usage.rateLimits, ...state.scoped]
   state.tracks = record(state.tracks, state.limits, now)
   state.tracks = mergeWarned(state.tracks, parseTracks(await $.store.get(TRACKS_KEY)) ?? {})
   warn($, state, now)
@@ -121,9 +179,9 @@ async function sample($: EngineInterface, state: State): Promise<void> {
  * Samples and logs a failed read instead of throwing: a timer sample has no hook to fail, and a failed
  * first read must not stop the hook that arms the timer. The same error is logged once.
  */
-async function sampleOrLog($: EngineInterface, state: State): Promise<void> {
+async function sampleOrLog($: EngineInterface, state: State, read: ScopedRead): Promise<void> {
   try {
-    await sample($, state)
+    await sample($, state, read)
     state.lastError = undefined
   } catch (err) {
     const text = err instanceof Error ? err.message : String(err)
@@ -141,7 +199,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
   if (word === 'on') {
     await $.store.set(ENABLED_KEY, true)
     state.enabled = true
-    await sample($, state)
+    await sample($, state, 'due')
     if (!state.enabled) return OFF_TEXT
     return 'on. /limit-watch opens the pane.'
   }
@@ -159,7 +217,7 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
     await $.ui.close({ id: PANE_ID })
     return 'pane closed'
   }
-  await sample($, state)
+  await sample($, state, 'due')
   if (!state.enabled) return OFF_TEXT
   await $.ui.open({ id: PANE_ID, title: 'Usage limits', rows: Math.max(2, state.limits.length * ROWS_PER_LIMIT) })
   return 'pane open. /limit-watch closes it.'
@@ -170,12 +228,12 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
  * turned off samples nothing, here as on its timer.
  */
 async function serveTool($: EngineInterface, state: State): Promise<string> {
-  await sample($, state)
+  await sample($, state, 'fresh')
   return state.enabled ? toolText(state.limits, state.tracks, await $.clock.now()) : TOOL_OFF
 }
 
 export const register: Register = on => {
-  const state: State = { limits: [], tracks: {}, enabled: true, drawn: false }
+  const state: State = { limits: [], tracks: {}, enabled: true, drawn: false, scoped: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -192,15 +250,16 @@ export const register: Register = on => {
     // Declared at the start, so the tool list the prompt cache holds does not change mid-session.
     await $.tool.register({ name: TOOL_NAME, description: TOOL_DESCRIPTION, inputSchema: { type: 'object', properties: {} } })
     // A -p run draws nothing, so only an interactive session samples on a timer. The timer is armed
-    // before the first read, so a first read that fails does not leave the session without one.
-    if (e.isInteractive) $.clock.every(TICK_MS, () => void sampleOrLog($, state))
-    if (state.enabled) await sampleOrLog($, state)
+    // before the first read, so a first read that fails does not leave the session without one. The
+    // idle timer never reads the usage endpoint; only a session's own activity does.
+    if (e.isInteractive) $.clock.every(TICK_MS, () => void sampleOrLog($, state, 'none'))
+    if (state.enabled) await sampleOrLog($, state, 'due')
     return r
   })
 
   on('turn.complete', async ($, e, next) => {
     const r = await next(e)
-    if (e.agentId === undefined) await sample($, state)
+    if (e.agentId === undefined) await sample($, state, 'due')
     return r
   })
 

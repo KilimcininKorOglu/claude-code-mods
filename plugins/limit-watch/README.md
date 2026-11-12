@@ -1,6 +1,6 @@
 # limit-watch
 
-A Claude subscription has a 5-hour limit and a 7-day limit, and a Claude gateway can add a spend limit. Claude Code shows them only in a notice when a limit is almost full, so you learn where you stand when it is already late. This mod keeps them on screen for the whole session, counts down to each reset, forecasts when the current pace fills a limit, gives the model a tool that reads them, and logs a warning when a limit passes 80% and 95%. `/limit-watch off` stops all of it until `/limit-watch on` starts it again.
+A Claude subscription has a 5-hour limit, a 7-day limit and per-model weekly limits such as Fable's, and a Claude gateway can add a spend limit. Claude Code shows them only in a notice when a limit is almost full, so you learn where you stand when it is already late. This mod keeps them on screen for the whole session, counts down to each reset, forecasts when the current pace fills a limit, gives the model a tool that reads them, and logs a warning when a limit passes 80% and 95%. `/limit-watch off` stops all of it until `/limit-watch on` starts it again.
 
 ## What it shows
 
@@ -14,6 +14,8 @@ The last part is one of these:
 - `no limit fills before its reset`: every limit resets before the current pace fills it, or its pace is flat.
 - `measuring the pace`: no limit has a long enough span yet.
 - `5h limit reached`: a limit is at 100%.
+
+A per-model weekly limit comes after the 7-day limit, named after its model: `7d Fable 25%, reset in 6d 9h`. It is paced like the 7-day limit.
 
 An API key session reports no limits. The status line then reads `no usage limits reported yet`. A new session also shows this until Claude answers once.
 
@@ -46,9 +48,10 @@ Each warning comes once per limit cycle. A new session in the same cycle does no
 ## How the numbers are made
 
 - `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limit-watch` opens the pane. A read that fails at session start or on the timer is logged once as `cannot read the usage limits: <error>`, and the 60 second timer keeps running.
+- `$.session.usage()` does not report the per-model weekly limits. limit-watch reads them from the account's usage endpoint, `GET https://api.anthropic.com/api/oauth/usage`: each `limits[]` entry of kind `weekly_scoped` with a model name. The mod asks `$.session.authorize()` for a handle and passes it to `$.http.fetch`; the engine sets the credential header itself, so the mod never sees the token. The endpoint is read at most every 5 minutes, at session start, after a main-loop turn and when `/limit-watch` opens the pane, and on every tool call. The 60 second timer never reads it, so an idle session sends nothing. A session with no first-party sign-in (an API key, a gateway, a third-party provider) sends no request. A failed read is logged once as `cannot read the per-model limits: <error>` and drops the per-model limits, so an old reading is not shown as the current one; the other limits stay.
 - Every reading is one sample `{ at, percent }`, kept in `$.store` so that a restart keeps the pace.
 - The 5-hour and spend limits read the pace from their samples: the slope of a least-squares line through every sample of a recent span, in percent per hour. Every sample weighs in, so one step of the whole-number percentage at either end does not set the pace alone. The span is the last hour for the 5-hour limit and the last 24 hours for the spend limit, so the pace follows how you work now. A pace is shown only when its samples span at least 10 minutes (5-hour limit) or 2 hours (spend limit). A shorter span gives a pace that one step of the percentage can double.
-- The 7-day limit reads the pace as the average of its whole cycle so far: the percentage divided by the time since the cycle began, `resetsAt` minus 7 days. Nights and idle hours are part of that time, and so is the time no session ran, so the pace needs no samples. It is shown from the cycle's second day on. Measured before this rule: 4% after 2.4 busy hours read as `7d hits 100% in ~2d 8h`, because the pace of those hours was stretched over two days without a break; the cycle average of the same reading fills the limit in about 6 days.
+- The 7-day limit and each per-model weekly limit read the pace as the average of its whole cycle so far: the percentage divided by the time since the cycle began, `resetsAt` minus 7 days. Nights and idle hours are part of that time, and so is the time no session ran, so the pace needs no samples. It is shown from the cycle's second day on. Measured before this rule: 4% after 2.4 busy hours read as `7d hits 100% in ~2d 8h`, because the pace of those hours was stretched over two days without a break; the cycle average of the same reading fills the limit in about 6 days.
 - The status line tail uses `(100 - percent) / pace` as the time to 100%. A limit that resets before that time does not count as filling.
 - A new cycle starts when `resetsAt` moves by more than 5 minutes, or, for a limit without `resetsAt`, when the percentage falls by more than half a point. A new cycle clears the samples and the warnings of that limit.
 - A stored value of an unknown shape is reported with one log line, and the samples start over.
@@ -75,21 +78,23 @@ Load it from a local checkout for one session:
 Validated with `claude plugin validate` on Claude Code 2.1.322:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane}
-    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
+    ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.http.fetch (via fetchScoped), $.session.authorize (via fetchScoped), $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
-Reach L0, draws and remembers.
+Reach L3, network.
 
-    1. Reads:    the rate-limit windows of $.session.usage (kind, percent used, reset time); the event payloads of its seven hooks
+    1. Reads:    the rate-limit windows of $.session.usage (kind, percent used, reset time); the per-model weekly limits of the account's usage endpoint; the event payloads of its seven hooks
     2. Runs:     nothing; one 60 second timer in an interactive session
-    3. Sends:    nothing leaves the machine; the reading goes into the model's context when the model calls mcp__limit-watch__limits
+    3. Sends:    one GET to https://api.anthropic.com/api/oauth/usage at most every 5 minutes while the session works, and on each tool call; the engine adds the session's credential, which the mod never sees; the reading goes into the model's context when the model calls mcp__limit-watch__limits
     4. Persists: the samples and the warned levels of each limit in $.store, at most 1500 samples per limit, and the stored on/off setting
-    5. Hostile input: the only outside input is the usage figures; a stored value of an unknown shape is reported and replaced, never trusted
+    5. Hostile input: the usage figures and the endpoint's JSON; an answer of an unknown shape and a stored value of an unknown shape are reported, never trusted
 
 ## Limits
 
 - A new session has no reading until Claude answers once, because the figures come from the last API response.
 - The 7-day limit shows no pace in the first 24 hours of its cycle.
 - The 7-day pace assumes the cycle began exactly 7 days before `resetsAt`.
+- The usage endpoint is not a documented API. When its answer changes shape, the per-model limits disappear with one log line, and the other limits stay.
+- An idle session shows the per-model limit of its last read until it works again.
 - A spend limit can pass 100%. The bar stops at full; the percentage does not.
 - `/limit-watch` toggles one pane. The second run closes it. While the watcher is off, the bare command opens nothing; `/limit-watch on` starts the sampling again.
 

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
-import type { CommandRunInput, On, SessionRateLimit, SessionStartInput, TurnCompleteInput, UiPane } from 'claude-code'
+import type { CommandRunInput, On, SessionAuthorization, SessionRateLimit, SessionStartInput, TurnCompleteInput, UiPane } from 'claude-code'
 
 tier('user')
 
@@ -33,10 +33,44 @@ type World = {
   clock: MockClock
   /** What the store holds; another session writes here too. */
   store: Record<string, unknown>
+  /** The session's credential: null on an API key or a gateway, as the engine answers there. */
+  auth: SessionAuthorization
+  /** The usage endpoint's status and body, and the requests it received. */
+  usage: { status: number; body: string }
+  fetches: { url: string; auth?: string; beta?: string }[]
+}
+
+/** The usage endpoint's answer as measured on 2026-11-12, trimmed to the parts the mod reads. */
+const usageBody = (fable: number): string =>
+  JSON.stringify({
+    five_hour: { utilization: 52 },
+    limits: [
+      { kind: 'session', group: 'session', percent: 52, resets_at: RESET, scope: null, is_active: true },
+      { kind: 'weekly_all', group: 'weekly', percent: 33, resets_at: '2026-09-20T00:00:00Z', scope: null, is_active: false },
+      {
+        kind: 'weekly_scoped',
+        group: 'weekly',
+        percent: fable,
+        resets_at: '2026-09-20T00:00:00Z',
+        scope: { model: { id: null, display_name: 'Fable' }, surface: null },
+        is_active: false,
+      },
+    ],
+  })
+
+/** Answers the credential and the usage endpoint from the world's fields, and records each request. */
+function seatEndpoint(on: On, w: World): void {
+  on('session.authorize', () => ({ value: w.auth }))
+  on('http.fetch', (_, e) => {
+    w.fetches.push({ url: e.url, auth: e.init?.auth, beta: e.init?.headers?.['anthropic-beta'] })
+    return { value: { status: w.usage.status, ok: w.usage.status < 300, headers: {}, text: w.usage.body } }
+  })
 }
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { logs: [], statuses: [], panes: [], tools: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }), store: { ...store } }
+  const endpoint = { auth: null, usage: { status: 200, body: usageBody(25) }, fetches: [] }
+  const w: World = { logs: [], statuses: [], panes: [], tools: [], setLimits: () => undefined, failUsage: 0, clock: mock.clock(on, { now: T0 }), store: { ...store }, ...endpoint }
+  seatEndpoint(on, w)
   let limits: SessionRateLimit[] = []
   w.setLimits = l => {
     limits = l
@@ -365,6 +399,61 @@ describe('limit-watch', () => {
     expect(w.statuses.at(-1)).toContain('5h 41%')
     await $.command.run({ ...run, args: 'off' })
     expect((await $.tool.call({ tool: TOOL } as never)).result).toContain('limit-watch is off')
+  })
+
+  test('a subscription session shows the per-model weekly limit the usage endpoint reports', async ($, on) => {
+    const w = world(on)
+    w.auth = { handle: 'h1', kind: 'bearer' }
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    // The engine sets the credential header from the handle; the mod sends the handle and the beta header only.
+    expect(w.fetches).toEqual([{ url: 'https://api.anthropic.com/api/oauth/usage', auth: 'h1', beta: 'oauth-2025-04-20' }])
+    expect(w.statuses.at(-1)).toContain('5h 23%, reset in 3h · 7d Fable 25%, reset in 1d 12h')
+    const text = String((await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)).result)
+    expect(text).toContain('- Fable 7-day limit: 25% used, resets')
+  })
+
+  test('the usage endpoint is read at most every five minutes, never by the idle timer, and always by the tool', async ($, on) => {
+    const w = world(on)
+    w.auth = { handle: 'h1', kind: 'bearer' }
+    await $.session.start({ ...session, isInteractive: true })
+    await $.turn.complete(turn())
+    expect(w.fetches).toHaveLength(1)
+    await w.clock.advance(10 * 60_000)
+    expect(w.fetches).toHaveLength(1)
+    w.usage.body = usageBody(30)
+    await $.turn.complete(turn())
+    expect(w.fetches).toHaveLength(2)
+    expect(w.statuses.at(-1)).toContain('7d Fable 30%')
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    expect(w.fetches).toHaveLength(3)
+  })
+
+  test('a session with no first-party OAuth credential sends nothing to the usage endpoint', async ($, on) => {
+    const w = world(on)
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    w.auth = { handle: 'k1', kind: 'api-key' }
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    expect(w.fetches).toEqual([])
+    expect(w.logs).toEqual([])
+  })
+
+  test('a failed endpoint read is logged once, drops the per-model limit and keeps the others', async ($, on) => {
+    const w = world(on)
+    w.auth = { handle: 'h1', kind: 'bearer' }
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    expect(w.statuses.at(-1)).toContain('7d Fable 25%')
+    w.usage.status = 429
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    expect(w.logs).toEqual(['cannot read the per-model limits: HTTP 429'])
+    expect(w.statuses.at(-1)).toContain('5h 23%')
+    expect(w.statuses.at(-1)).not.toContain('Fable')
+    w.usage = { status: 200, body: '{"five_hour":null}' }
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    expect(w.logs.at(-1)).toBe('cannot read the per-model limits: the answer has no limits list')
   })
 
   test('a bare run while off reports off and opens no pane, and an unknown word gets the usage', async ($, on) => {

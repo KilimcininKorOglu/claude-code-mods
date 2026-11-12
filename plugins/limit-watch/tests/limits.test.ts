@@ -9,7 +9,9 @@ import {
   limitPace,
   newThresholds,
   pace,
+  profile,
   record,
+  scopedLimits,
   statusLine,
   toolText,
   type Tracks,
@@ -19,6 +21,7 @@ tier('user')
 
 const MINUTE = 60_000
 const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
 const T0 = Date.parse('2026-09-18T12:00:00Z')
 const RESET = '2026-09-18T15:00:00Z'
 
@@ -34,6 +37,33 @@ function readings(points: readonly [number, number][], resetsAt: string | undefi
   for (const [minutes, percent] of points) tracks = record(tracks, [fiveHour(percent, resetsAt)], T0 + minutes * MINUTE)
   return tracks
 }
+
+describe('scopedLimits', () => {
+  const fable = { kind: 'weekly_scoped', percent: 25, resets_at: RESET, scope: { model: { id: null, display_name: 'Fable' }, surface: null } }
+
+  test('reads each model-scoped weekly limit and skips the limits $.session.usage() already reports', async () => {
+    const body = { limits: [{ kind: 'session', percent: 52, scope: null }, { kind: 'weekly_all', percent: 33, scope: null }, fable] }
+    expect(scopedLimits(body)).toEqual([{ kind: 'seven_day:Fable', percentUsed: 25, resetsAt: RESET }])
+  })
+
+  test('skips a scoped entry with no model name or no percentage, and keeps one with no reset time', async () => {
+    const noModel = { ...fable, scope: { model: null, surface: 'cowork' } }
+    const noPercent = { ...fable, percent: null }
+    const noReset = { ...fable, resets_at: null }
+    expect(scopedLimits({ limits: [noModel, noPercent, noReset] })).toEqual([{ kind: 'seven_day:Fable', percentUsed: 25 }])
+  })
+
+  test('an answer without a limits list has an unknown shape', async () => {
+    expect(scopedLimits({ five_hour: null })).toBe(undefined)
+    expect(scopedLimits(null)).toBe(undefined)
+    expect(scopedLimits({ limits: [] })).toEqual([])
+  })
+
+  test('a per-model limit is named after its model and paced over its 7-day cycle', async () => {
+    expect(profile('seven_day:Fable')).toEqual({ short: '7d Fable', name: 'Fable 7-day limit', lookback: DAY, minSpan: DAY, cycle: 7 * DAY })
+    expect(profile('seven_day').short).toBe('7d')
+  })
+})
 
 describe('pace', () => {
   test('measures until the samples span 10 minutes of the 5-hour limit', async () => {

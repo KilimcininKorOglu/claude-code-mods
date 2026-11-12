@@ -36,8 +36,17 @@ const PROFILES: Record<string, Profile> = {
   spend_limit: { short: 'spend', name: 'Spend limit', lookback: DAY, minSpan: 2 * HOUR },
 }
 
+/** The kind prefix of a per-model weekly limit; the model's display name follows it, as `seven_day:Fable`. */
+export const SCOPED_PREFIX = 'seven_day:'
+
 export function profile(kind: string): Profile {
-  return PROFILES[kind] ?? { short: kind, name: kind.replaceAll('_', ' '), lookback: DAY, minSpan: 2 * HOUR }
+  const fixed = PROFILES[kind]
+  if (fixed !== undefined) return fixed
+  if (kind.startsWith(SCOPED_PREFIX)) {
+    const model = kind.slice(SCOPED_PREFIX.length)
+    return { short: `7d ${model}`, name: `${model} 7-day limit`, lookback: DAY, minSpan: DAY, cycle: 7 * DAY }
+  }
+  return { short: kind, name: kind.replaceAll('_', ' '), lookback: DAY, minSpan: 2 * HOUR }
 }
 
 /** The time a limit resets, in milliseconds since the epoch, or undefined when the limit reports none. */
@@ -84,6 +93,32 @@ export function parseTracks(value: unknown): Tracks | undefined {
   if (value === undefined) return {}
   if (!isRecord(value) || !Object.values(value).every(isTrack)) return undefined
   return value as Tracks
+}
+
+/** The display name of the model a usage-endpoint limit is scoped to, or undefined when it has none. */
+function scopedModel(entry: Record<string, unknown>): string | undefined {
+  const scope = entry.scope
+  if (!isRecord(scope) || !isRecord(scope.model)) return undefined
+  const name = scope.model.display_name
+  return typeof name === 'string' && name !== '' ? name : undefined
+}
+
+function scopedLimit(entry: unknown): SessionRateLimit[] {
+  if (!isRecord(entry) || entry.kind !== 'weekly_scoped' || typeof entry.percent !== 'number') return []
+  const model = scopedModel(entry)
+  if (model === undefined) return []
+  const limit: SessionRateLimit = { kind: `${SCOPED_PREFIX}${model}`, percentUsed: entry.percent }
+  return typeof entry.resets_at === 'string' ? [{ ...limit, resetsAt: entry.resets_at }] : [limit]
+}
+
+/**
+ * The per-model weekly limits in the account's usage-endpoint answer (`limits[]` entries of kind
+ * `weekly_scoped` with a model scope), which `$.session.usage()` does not report. An answer without a
+ * `limits` array returns undefined, so the caller can report the unknown shape.
+ */
+export function scopedLimits(body: unknown): SessionRateLimit[] | undefined {
+  if (!isRecord(body) || !Array.isArray(body.limits)) return undefined
+  return body.limits.flatMap(scopedLimit)
 }
 
 /** Adds one sample per reported limit. A limit that is not reported keeps its track unchanged. */
