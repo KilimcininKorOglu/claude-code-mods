@@ -1,6 +1,6 @@
 import type { EngineInterface, Register } from 'claude-code'
 import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropConsumers, dropTurn, offConsumers, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropConsumers, dropTurn, offConsumers, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, scrolledTo, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -32,8 +32,9 @@ const LOG_DIR = '.claude/sidebar'
 type Answer = { command: string; text: string; failed: boolean }
 
 /**
- * The standing sections other mods wrote, the stream under them (newest first), the number that keeps
- * each stream entry's id its own, whether the pane is open, whether the surface seats it beside the
+ * The standing sections other mods wrote, the stream under them (newest first), how many of its newest
+ * entries the person scrolled past, the number that keeps each stream entry's id its own, whether the
+ * pane is open, whether the surface seats it beside the
  * transcript (learned at the pane's first render), the last button's answer, and the log: the
  * directory of every project's logs and this project's name, read once at the session's start. The
  * file is picked by the day of each write, so a session that runs past midnight writes the new day's
@@ -43,6 +44,7 @@ type Answer = { command: string; text: string; failed: boolean }
 export type State = {
   board: Board
   stream: Kept[]
+  skip: number
   written: number
   open: boolean
   docked?: boolean
@@ -52,14 +54,29 @@ export type State = {
 }
 
 function emptyState(): State {
-  return { board: new Map(), stream: [], written: 0, open: false, dir: '', project: '' }
+  return { board: new Map(), stream: [], skip: 0, written: 0, open: false, dir: '', project: '' }
 }
 
 /** Takes down every section and stream entry, because a closed sidebar keeps nothing. */
 function forget(state: State): void {
   state.board.clear()
   state.stream = []
+  state.skip = 0
   state.message = undefined
+}
+
+/**
+ * Moves the stream's own window by `by` entries, for the wheel and the scroll keys; the standing
+ * sections never move. The answer carries no `next`, so the engine's window stays where it is: the
+ * pane draws only as many rows as the body shows.
+ */
+function scrollStream($: EngineInterface, state: State, by: number): Record<string, never> {
+  const skip = scrolledTo(state.skip, by, state.stream.length)
+  if (skip !== state.skip) {
+    state.skip = skip
+    $.ui.invalidate('ui.render')
+  }
+  return {}
 }
 
 function errorText(err: unknown): string {
@@ -242,6 +259,8 @@ export function createSidebar(redraw: () => void, now: () => Promise<number>, lo
       if (kept.until === 'stream') {
         const entry = { ...kept, id: `${kept.id}#${++state.written}`, at: await now() }
         state.stream = pushed(state.stream, entry)
+        // A person reading older entries keeps them in view; the divider counts the new one.
+        if (state.skip > 0) state.skip += 1
         await log(logLineOf(entry))
       } else state.board.set(kept.id, kept)
       redraw()
@@ -304,7 +323,7 @@ function answerTree(els: Elements, answer: Answer) {
 
 function paneTree(els: Elements, state: State, columns: number, rows: number, press: (command: string, args?: string) => void) {
   const { Box, Text } = els
-  const sections = drawn(state.board, state.stream, columns, rows)
+  const sections = drawn(state.board, state.stream, columns, rows, state.skip)
   let buttons = 0
   return (
     <Box flexDirection="column">
@@ -392,6 +411,8 @@ export const register: Register = on => {
     const rows = (e.props.scroll.bodyRows || MAX_BOARD_LINES) - (state.message === undefined ? 0 : 1)
     return paneTree($.ui.resolve(e), state, e.props.bodyColumns, rows, (command, args) => void pressButton($, state, command, args))
   })
+
+  on('ui.scroll', { component: 'Pane', requestId: PANE_ID }, async ($, e) => scrollStream($, state, e.by))
 
   // A close, by the pane's own button, ends the session's sections only: the stored choice belongs
   // to /sidebar alone, so the pane comes back with the session that follows.

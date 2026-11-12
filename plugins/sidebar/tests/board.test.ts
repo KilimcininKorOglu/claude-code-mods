@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SidebarSection } from '../types/index.d.ts'
 
-import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropConsumers, dropTurn, headText, offConsumers, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board.ts'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropConsumers, dropTurn, headText, offConsumers, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, scrolledTo, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board.ts'
 import { createSidebar, type State } from '../hooks/register.tsx'
 
 tier('user')
@@ -236,6 +236,36 @@ describe('stream', () => {
     expect(ids(drawn(board, [entry(1)], 80, 4))).toEqual(['cache-warm:window'])
   })
 
+  test('a scrolled stream leaves its newest entries out, the standing sections stay, and the divider counts what it left out', () => {
+    const board = boardOf(section({ consumer: 'cache-warm', key: 'window', until: 'session' }))
+    const stream = [entry(3), entry(2), entry(1)]
+    expect(drawn(board, stream, 20, MAX_BOARD_LINES, 2).map(d => d.head)).toEqual(['cache-warm: the 5th…', '---- 2 newer ^ -----', 'edit-loop: t1'])
+    // With no standing section the divider still draws, so the person sees the stream is scrolled.
+    expect(drawn(new Map(), stream, 20, MAX_BOARD_LINES, 1).map(d => d.head)).toEqual(['---- 1 newer ^ -----', 'edit-loop: t2', 'edit-loop: t1'])
+    // A skip past the end keeps the oldest entry in view.
+    expect(drawn(new Map(), stream, 20, MAX_BOARD_LINES, 9).map(d => d.head)).toEqual(['---- 2 newer ^ -----', 'edit-loop: t1'])
+  })
+
+  test('a scrolled view draws every entry in order, also the ones the shared rows of the newest view held back', () => {
+    // Five rows shared by two mods: edit-loop's share holds t3 alone, so the newest view holds t2 back.
+    const stream = [entry(3), entry(2), entry(1, 'env-sync')]
+    const heads = (skip: number) => drawn(new Map(), stream, 80, 5, skip).filter(d => d.divider !== true).map(d => d.head)
+    expect(heads(0)).toEqual(['edit-loop: t3', 'env-sync: t1'])
+    expect(heads(1)).toEqual(['edit-loop: t2', 'env-sync: t1'])
+  })
+
+  test('a scroll moves by the entries it asks for, never above the newest nor past the oldest', () => {
+    expect(scrolledTo(0, 1, 3)).toBe(1)
+    expect(scrolledTo(1, -5, 3)).toBe(0)
+    expect(scrolledTo(1, 5, 3)).toBe(2)
+    expect(scrolledTo(0, 1, 0)).toBe(0)
+  })
+
+  test('the divider of a scrolled stream names how many newer entries are out of view', () => {
+    expect(dividerText(20, 3)).toBe('---- 3 newer ^ -----')
+    expect(dividerText(8, 120)).toBe(' 120 new')
+  })
+
   test("the pane's rows cut the oldest entries off the end", () => {
     const stream = [entry(3), entry(2), entry(1)]
     // Each entry draws a heading and one line, so four rows take two entries.
@@ -340,7 +370,22 @@ describe('the log', () => {
 })
 
 describe('$.sidebar', () => {
-  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], written: 0, open, dir: '', project: '' })
+  const stateOf = (open: boolean): State => ({ board: new Map(), stream: [], skip: 0, written: 0, open, dir: '', project: '' })
+
+  test('a new stream entry keeps a scrolled view on the entries the person reads, and the newest view takes it at the top', async () => {
+    const state = stateOf(true)
+    const sidebar = createSidebar(() => {}, async () => AT, async () => {}, state)
+    const write = (title: string) => sidebar.set(section({ key: title, title, until: 'stream' }))
+    await write('a')
+    await write('b')
+    expect(state.skip).toBe(0)
+    await write('c')
+    expect(state.skip).toBe(0)
+    state.skip = 1
+    await write('d')
+    expect(state.skip).toBe(2)
+    expect(drawn(new Map(), state.stream, 80, MAX_BOARD_LINES, state.skip).filter(d => d.divider !== true).map(d => d.head.split(' (')[0])).toEqual(['edit-loop: b', 'edit-loop: a'])
+  })
 
   /** The clock the engine hands the noun; a fixed time keeps a stream entry's stamp readable. */
   const NOW = async (): Promise<number> => AT

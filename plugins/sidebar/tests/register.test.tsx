@@ -197,6 +197,20 @@ describe('sidebar', () => {
     expect((await $.command.run(run('status'))).text).toBe('off')
   })
 
+  test('the wheel scrolls the stream alone and keeps the engine window still; a new entry keeps the scrolled view', async ($, on) => {
+    const files = new Map([[`${LOG_DIR}/app-2026-09-20.log`, `${LINE('env-sync', 'older', OLD)}\n${LINE('env-sync', 'newer', NOW)}\n`]])
+    world(on, { open: true }, files)
+    await started($)
+    const wheel = (by: number) => $.ui.scroll({ component: 'Pane', requestId: PANE_ID, offset: Math.max(0, by), by, bodyRows: 20, contentRows: 20, origin: { kind: 'person' } } as never)
+    const pane = await $.ui.mount({ plugin: 'sidebar', surface: 'terminal', component: 'Pane', requestId: PANE_ID, props: PANE })
+    const heads = async () => ({ newer: await pane.find({ text: 'env-sync: newer (20.09 13:00)' }), divider: await pane.find({ text: /1 newer \^/ }) })
+    expect(await heads()).toMatchObject({ newer: expect.anything(), divider: undefined })
+    expect(await wheel(1)).toEqual({})
+    expect(await heads()).toMatchObject({ newer: undefined, divider: expect.anything() })
+    expect(await wheel(-3)).toEqual({})
+    expect(await heads()).toMatchObject({ newer: expect.anything(), divider: undefined })
+  })
+
   test('a pane the surface seats beside the transcript stays and draws', async ($, on) => {
     const w = world(on, { open: true }, new Map([[`${LOG_DIR}/app-2026-09-20.log`, `${LINE('env-sync', 'today', NOW)}\n`]]))
     await started($)
