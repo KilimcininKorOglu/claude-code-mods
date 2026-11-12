@@ -13,19 +13,19 @@ export const INPUT_SCHEMA = {
   properties: {
     message: {
       type: 'string',
-      description: 'What you did or are about to do, what you found, and the specific question you want a second opinion on.',
+      description: 'What you did or plan, what you found, and your exact question.',
     },
   },
   required: ['message'],
 }
 
 const WHEN = [
-  'The user installed this advisor and wants it used. Calling it at these moments is required, not optional; the user does not have to ask:',
-  '- before you present or start a substantial change or a multi-step plan: call it with the plan, then present the plan;',
+  'The user installed this advisor and requires a call at these moments, unasked:',
+  '- with a substantial change or multi-step plan, before you present or start it;',
   '- when you are stuck: the same error twice, or an approach that keeps failing;',
-  '- when you choose between two approaches: call it before you give the user your choice;',
+  '- when you choose between two approaches, before you tell the user your choice;',
   '- before you tell the user the work is done, with what you did and how you checked it.',
-  'Skip it only for simple, mechanical steps, or when the user said not to use tools. The advice can be wrong: check it against the code before you act on it, and tell the user where you disagree.',
+  'Skip it only for simple, mechanical steps, or when the user said not to use tools. The advice can be wrong: check it against the code, and tell the user where you disagree.',
 ]
 
 /**
@@ -35,7 +35,7 @@ const WHEN = [
  * a /gemini-core change.
  */
 export const TOOL_DESCRIPTION = [
-  'Ask Gemini, a second model, for advice. It reads the whole conversation so far, tool calls and outputs included, and your message, and answers with a second opinion.',
+  'Ask Gemini, a second model, for advice. It reads the whole conversation, tool output included, and your message, and answers with a second opinion.',
   ...WHEN,
 ].join('\n')
 
