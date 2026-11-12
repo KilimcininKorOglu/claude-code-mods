@@ -1,0 +1,11 @@
+{
+  "name": "plan-split",
+  "version": "0.1.0",
+  "description": "Runs the main loop on one model in plan mode and on another in every other mode, switched by itself, set with /plan-split and off until /plan-split on.",
+  "author": {
+    "name": "Kerem Gok",
+    "email": "k@keremgok.tr",
+    "url": "https://x.com/koroglan"
+  },
+  "license": "MIT"
+}

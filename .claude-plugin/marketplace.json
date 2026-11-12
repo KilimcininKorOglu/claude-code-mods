@@ -606,6 +606,17 @@
         "git",
         "skill"
       ]
+    },
+    {
+      "name": "plan-split",
+      "source": "./plugins/plan-split",
+      "description": "Runs the main loop on one model in plan mode and on another in every other mode, switched by itself, set with /plan-split and off until /plan-split on.",
+      "category": "development",
+      "tags": [
+        "mods",
+        "function-hooks",
+        "hooks-module"
+      ]
     }
   ]
 }
