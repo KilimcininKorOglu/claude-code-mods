@@ -58,7 +58,7 @@ Reach L2: process çalıştırır.
     2. Çalıştırır: session başına bir kez uname -s ve iki git rev-parse çağrısı; bildirim başına bir osascript, notify-send ya da powershell.exe
     3. Gönderir: sabit bir başlık, proje adı ve başarısız bir turn için hatanın 60 karakterini taşıyan bir masaüstü bildirimi; modele hiçbir şey, makineden dışarı hiçbir şey
     4. Saklar:   $.store içinde her olayın açık/kapalı ayarını
-    5. Düşman girdi: proje adı ve hata metni AppleScript ve PowerShell string literal'leri için escape edilir, notify-send'e tek bir argv öğesi olarak geçer; ikisi de bir komut çalıştıramaz
+    5. Düşman girdi: proje adı ve hata metni AppleScript string literal'i için escape edilir, PowerShell script'ine yalnız base64 (UTF-16LE) olarak girer ve script -EncodedCommand ile çalışır, notify-send'e tek bir argv öğesi olarak geçer; hiçbiri bir komut çalıştıramaz
 
 ## Sınırlar
 

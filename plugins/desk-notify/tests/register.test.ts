@@ -125,7 +125,8 @@ describe('desk-notify', () => {
     await ask($)
     await w.clock.settle()
     expect(w.sent[0]?.[0]).toBe('powershell.exe')
-    expect(w.sent[0]?.[4]).toContain("CreateTextNode('Claude Code - app')")
+    expect(w.sent[0]?.[3]).toBe('-EncodedCommand')
+    expect(w.sent[0]?.[4]).toMatch(/^[A-Za-z0-9+/]+=*$/)
   })
 
   test('on Linux notify-send carries the subtitle in the body', async ($, on) => {

@@ -58,7 +58,7 @@ Reach L2: it runs processes.
     2. Runs:     uname -s and two git rev-parse calls once per session; one osascript, notify-send or powershell.exe per notification
     3. Sends:    a desktop notification with a fixed title, the project name and, for a failed turn, 60 characters of the error; nothing to the model and nothing off the machine
     4. Persists: in $.store, the on/off setting of each event
-    5. Hostile input: the project name and the error text are escaped for the AppleScript and PowerShell string literals and pass to notify-send as one argv entry, so neither can run a command
+    5. Hostile input: the project name and the error text are escaped for the AppleScript string literal, reach the PowerShell script only as base64 (UTF-16LE) with the script itself run through -EncodedCommand, and pass to notify-send as one argv entry, so none of them can run a command
 
 ## Limits
 

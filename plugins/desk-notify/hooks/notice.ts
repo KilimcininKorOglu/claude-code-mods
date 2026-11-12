@@ -41,20 +41,44 @@ export function escapeApplescript(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
 
-/** A string for a PowerShell single-quoted literal. */
-export function escapePowershell(s: string): string {
-  return s.replace(/'/g, "''")
+const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+
+function base64(bytes: readonly number[]): string {
+  let out = ''
+  for (let i = 0; i < bytes.length; i += 3) {
+    const [a = 0, b = 0, c = 0] = bytes.slice(i, i + 3)
+    const n = (a << 16) | (b << 8) | c
+    const left = bytes.length - i
+    out += BASE64[(n >> 18) & 63] + BASE64[(n >> 12) & 63] + (left > 1 ? BASE64[(n >> 6) & 63] : '=') + (left > 2 ? BASE64[n & 63] : '=')
+  }
+  return out
 }
 
+/**
+ * A text as base64 of its UTF-16LE bytes: what `[Text.Encoding]::Unicode` decodes and what
+ * `powershell.exe -EncodedCommand` takes. The base64 alphabet holds no quote character, so a text
+ * passed this way cannot end a PowerShell string literal, whichever of its five single quotes
+ * (`'` and U+2018 to U+201B) the text holds.
+ */
+export function utf16Base64(s: string): string {
+  const bytes: number[] = []
+  for (let i = 0; i < s.length; i++) {
+    const unit = s.charCodeAt(i)
+    bytes.push(unit & 0xff, unit >> 8)
+  }
+  return base64(bytes)
+}
+
+/** A PowerShell expression that decodes a text the script itself never holds as a literal. */
+const decoded = (s: string): string => `[Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${utf16Base64(s)}'))`
+
 function windowsScript(n: Notice): string {
-  const title = escapePowershell(n.title)
-  const body = escapePowershell(`${n.subtitle} - ${n.message}`)
   return (
     '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime] > $null; ' +
     '$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02); ' +
     "$t = $x.GetElementsByTagName('text'); " +
-    `$t.Item(0).AppendChild($x.CreateTextNode('${title}')) > $null; ` +
-    `$t.Item(1).AppendChild($x.CreateTextNode('${body}')) > $null; ` +
+    `$t.Item(0).AppendChild($x.CreateTextNode(${decoded(n.title)})) > $null; ` +
+    `$t.Item(1).AppendChild($x.CreateTextNode(${decoded(`${n.subtitle} - ${n.message}`)})) > $null; ` +
     "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe')" +
     '.Show([Windows.UI.Notifications.ToastNotification]::new($x))'
   )
@@ -70,7 +94,8 @@ export function argvFor(platform: Platform, n: Notice): string[] {
     return ['osascript', '-e', `display notification "${escapeApplescript(n.message)}" with title "${escapeApplescript(n.title)}" subtitle "${escapeApplescript(n.subtitle)}"`]
   }
   if (platform === 'linux') return ['notify-send', n.title, `${n.subtitle}\n${n.message}`]
-  return ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', windowsScript(n)]
+  // -EncodedCommand takes the script as base64, so no command-line quoting applies to it either.
+  return ['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', utf16Base64(windowsScript(n))]
 }
 
 /** The first line of a text with its markdown marks taken off, cut to SUMMARY_MAX_CHARS; '' for none. */
