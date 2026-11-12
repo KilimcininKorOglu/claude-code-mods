@@ -16,9 +16,8 @@ const USAGE = 'expects nothing (open or close), on, off, status, log or snapshot
 const READ_TOOL = 'read'
 
 const READ_DESCRIPTION = [
-  "Read the sidebar: the pane the person sees beside the transcript, where the installed mods show the session's state (context, tokens, cost, effort, limits, cache), their open findings and the stream of their entries.",
-  'You get its whole content as plain text, as it stands now.',
-  'Call it when the person refers to what the sidebar or the pane shows, instead of asking them to paste it.',
+  "Read the sidebar pane beside the transcript as plain text: the session's state, the mods' open findings and their stream of entries.",
+  'Call it when the person refers to what the sidebar shows, instead of asking them to paste it.',
 ].join(' ')
 
 const READ_SCHEMA = { type: 'object', properties: {} }
