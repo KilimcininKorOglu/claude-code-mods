@@ -1,7 +1,8 @@
 /**
  * The 15 memory tools the model can call: the spec each is declared with, and the daemon route and
- * body each call becomes. Descriptions are SAGE's, with the tool names of this plugin and the
- * sentences the code does not keep corrected. Pure code; `register.tsx` makes every call.
+ * body each call becomes. The model reads every description and schema on each request, so each says
+ * what the tool does, when to call it and the rule the daemon holds it to, and nothing more. Pure
+ * code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
 import { ANCHOR_TYPES, KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model.ts'
@@ -16,66 +17,37 @@ export const TOOL_PREFIX = 'mcp__sage-memory__'
 const object = (properties: Record<string, Schema>, required: string[] = []): Schema => ({ type: 'object', properties, required, additionalProperties: false })
 const text = (description: string): Schema => ({ type: 'string', minLength: 1, description })
 const number = (minimum: number, maximum: number, description?: string): Schema => ({ type: 'number', minimum, maximum, ...(description === undefined ? {} : { description }) })
-const choice = (values: readonly string[], description: string): Schema => ({ type: 'string', enum: [...values], description })
+const choice = (values: readonly string[], description?: string): Schema => ({ type: 'string', enum: [...values], ...(description === undefined ? {} : { description }) })
 const texts = (description: string): Schema => ({ type: 'array', items: { type: 'string' }, description })
 const yes = (description: string): Schema => ({ type: 'boolean', description })
 
 const ANCHORS: Schema = {
   type: 'array',
-  description: 'Bind this memory to concrete code locations so it can be verified and reminded of later.',
+  description: 'The code the memory is about; it is verified and reminded through these.',
   items: object(
     {
-      type: choice(ANCHOR_TYPES, 'Anchor kind.'),
-      path: text('Project-relative path (required for file/directory/package/test/git).'),
-      symbol: text('Symbol name (required for symbol anchors).'),
-      command: text('Shell command (required for command anchors).'),
-      role: text('Subagent type (required for agent anchors).'),
+      type: choice(ANCHOR_TYPES),
+      path: text('Project-relative path, for file, directory, package, test and git.'),
+      symbol: text('For symbol.'),
+      command: text('For command.'),
+      role: text('Subagent type, for agent.'),
     },
     ['type'],
   ),
 }
 
 const AUDIENCE: Schema = object({
-  roles: texts('Subagent types, for example Explore, Plan or a plugin agent, that get this memory when they start.'),
-  modes: texts('Permission modes, for example default or plan.'),
+  roles: texts('Subagent types that get the memory when they start; it then stays out of search and reminders.'),
+  modes: texts('Permission modes, such as default or plan.'),
 })
 
-const PERSISTENCE = choice(PERSISTENCES, 'Retention class. Prefer long_lived; permanent is only for explicit invariants.')
+const PERSISTENCE = choice(PERSISTENCES, 'long_lived by default; permanent only for an explicit invariant.')
 
 const REMEMBER_DESCRIPTION = [
-  'Persist structured project knowledge into long-term memory. Bind it to files, symbols, or commands with `anchors` so it can be verified and reminded of later.',
-  '',
-  'EFFECTIVENESS RULES (follow strictly):',
-  '1. One durable fact per call, self-contained for a reader with zero session context.',
-  '2. Always prefer anchors (file/symbol/command/package). Unanchored memories are rarely reminded of.',
-  '3. Use exact paths/symbols/commands in the text so path and text retrieval can match them.',
-  '4. Add 1-3 stable tags (package name, domain: auth, build, testing).',
-  '5. Write WHAT + WHERE + WHY/consequence in 1-4 tight sentences, in English.',
-  '6. Update with `update` instead of near-duplicate `remember` calls.',
-  '',
-  'WHEN TO USE:',
-  '- Project conventions discovered during a task (build tool, lint rules, code style)',
-  '- Architecture decisions made (chose X over Y, decided to use pattern Z)',
-  '- User preferences expressed (prefers short names, always uses pnpm)',
-  '- Anti-patterns / warnings identified (never do X, avoid pattern Y)',
-  '- Bug root-causes and file/symbol notes useful across sessions',
-  '',
-  'PREFER DURABLE PROJECT REFERENCES:',
-  '- Package ownership and boundaries, and the files that implement them',
-  '- Symbol contracts, invariants, callers, and canonical entry points',
-  '- Canonical build/test/debug commands and when to use them',
-  '- Use several anchors when one fact connects a package, file, symbol, or command',
-  '',
-  'WHEN NOT TO USE:',
-  '- Temporary task state or progress: use the task list (WIP and todo chatter is rejected)',
-  '- One-off debugging notes and "fixed the bug" summaries',
-  '- Information already obvious from the codebase',
-  '- `file_note` / `symbol_note` / `command_note` without anchors (hard reject)',
-  '',
-  'Pick the most specific `kind`. Default persistence is `long_lived`; use `permanent` only for explicit project/user invariants.',
-  '',
-  'AUDIENCE: pass `audience: { roles: [...] }` to give a memory to specific subagent types. Such memories reach matching subagents when they start, and are left out of ordinary search and reminders.',
-].join('\n')
+  'Save one durable fact for later sessions: a convention, a decision with its reason, a warning, a bug root cause, a command, or a user preference.',
+  'Write it in English, in 1-4 self-contained sentences with the exact paths, symbols or commands, and anchor it to them; file_note, symbol_note and command_note need an anchor.',
+  'Not for task progress (WIP or TODO text is refused), one-off debugging, or what the code already shows. To change a memory, call update instead of saving a near-duplicate.',
+].join(' ')
 
 export const TOOLS: readonly ToolDef[] = [
   {
@@ -84,17 +56,17 @@ export const TOOLS: readonly ToolDef[] = [
     description: REMEMBER_DESCRIPTION,
     inputSchema: object(
       {
-        text: text('The fact or note to remember. Concise and factual, in English.'),
-        kind: choice(KINDS, 'Category: the most specific kind that fits.'),
-        scope: choice(SCOPES, 'project (shared, default), user (personal, every project), session (this session only), file, or symbol.'),
-        tags: texts('Hashtag-style tags for grouping and search (omit the #).'),
+        text: text('The fact, in English.'),
+        kind: choice(KINDS, 'The most specific kind.'),
+        scope: choice(SCOPES, 'project (default), user (every project), session, file or symbol.'),
+        tags: texts('1-3 stable tags, without #.'),
         anchors: ANCHORS,
         audience: AUDIENCE,
         importance: number(0, 1),
         confidence: number(0, 1),
         persistence: PERSISTENCE,
-        supersedes: texts('Memory ids this replaces (they become superseded).'),
-        contradicts: texts('Memory ids this contradicts.'),
+        supersedes: texts('Ids this replaces.'),
+        contradicts: texts('Ids this contradicts.'),
       },
       ['text'],
     ),
@@ -102,29 +74,27 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'search',
     listed: true,
-    description: 'Search structured project memory using lexical, tag, path, and anchor signals, and meaning once embeddings are set up.',
-    inputSchema: object({ query: text('Search text, symbol, tag, command, or path.'), limit: number(1, 100), include_stale: yes('Include stale memories.') }, ['query']),
+    description: 'Search memories by text, tag, path, anchor and meaning.',
+    inputSchema: object({ query: text('Text, symbol, tag, command or path.'), limit: number(1, 100), include_stale: yes('Include stale memories.') }, ['query']),
   },
   {
     name: 'search_explain',
     listed: false,
-    description:
-      'Like `search` but each result carries a per-channel score breakdown: lexical score, vector score, RRF final score, and a `source` attribution (`lexical` | `vector` | `both`). Use when you need to weigh channels or to say WHY a result is in the list.',
-    inputSchema: object({ query: text('Search text, symbol, tag, command, or path.'), limit: number(1, 100), include_stale: yes('Include stale memories.') }, ['query']),
+    description: "search, with each result's lexical, vector and fused score. Call it to say why a result matched.",
+    inputSchema: object({ query: text('Text, symbol, tag, command or path.'), limit: number(1, 100), include_stale: yes('Include stale memories.') }, ['query']),
   },
   {
     name: 'for_file',
     listed: true,
-    description:
-      'Retrieve memories attached to a file, grouped by how they match: `primaryMatches` (file scope or file/directory anchor), `symbolMatches` (symbol scope or anchor, boosted under `lineStart`/`lineEnd`), `relatedMatches` (text mentions).',
+    description: 'Every memory on a file: anchored to it or its directory, anchored to its symbols (those in lineStart-lineEnd first), and the ones that mention it.',
     inputSchema: object(
       {
         path: text('Project-relative file path.'),
-        lineStart: { type: 'integer', minimum: 1, description: 'Optional first line; with `lineEnd`, symbol anchors overlapping the range rank first.' },
-        lineEnd: { type: 'integer', minimum: 1, description: 'Optional last line. Pair with `lineStart`.' },
-        limit: number(1, 200, 'Per-bucket cap. Default 50.'),
-        showSuperseded: yes('Default true. Set false to hide superseded memories.'),
-        showDeleted: yes('Default false. Set true to include deleted memories for recovery.'),
+        lineStart: { type: 'integer', minimum: 1, description: 'First line of the range.' },
+        lineEnd: { type: 'integer', minimum: 1, description: 'Last line of the range.' },
+        limit: number(1, 200, 'Per group, 50 by default.'),
+        showSuperseded: yes('true by default.'),
+        showDeleted: yes('false by default.'),
       },
       ['path'],
     ),
@@ -132,41 +102,40 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'for_path',
     listed: false,
-    description: 'Retrieve project knowledge for a path and its ancestor directories.',
+    description: 'Memories on a path and its parent directories.',
     inputSchema: object({ path: text('Project-relative file or directory path.'), limit: number(1, 50) }, ['path']),
   },
   {
     name: 'graph',
     listed: false,
-    description: 'Traverse relationships between memories, files, symbols, and commands.',
-    inputSchema: object({ query: text('A memory id, graph node, path, symbol, or search query.'), depth: number(1, 6), limit: number(1, 500) }, ['query']),
+    description: 'Walk the links between memories, files, symbols and commands.',
+    inputSchema: object({ query: text('Memory id, path, symbol or search text.'), depth: number(1, 6), limit: number(1, 500) }, ['query']),
   },
   {
     name: 'gather',
     listed: false,
-    description:
-      'Gather a bounded batch of memories with optional graph relations, for bulk review and cleanup: enumerates memories by status, kind, or text substring, and includes the graph edges of the first ten.',
+    description: 'List memories page by page by status, kind or text, for bulk review; the first ten carry their links.',
     inputSchema: object({
-      statuses: { type: 'array', items: choice(STATUSES, 'Status.'), description: 'Statuses to include. Default: all except deleted.' },
-      kind: choice(KINDS, 'Optional kind filter.'),
-      query: text('Case-insensitive substring match against memory text.'),
+      statuses: { type: 'array', items: choice(STATUSES), description: 'All but deleted by default.' },
+      kind: choice(KINDS),
+      query: text('Substring of the text, any case.'),
       limit: number(1, 500),
-      cursor: text("Opaque cursor from a previous page's `nextCursor`."),
-      includeRelations: yes('Include graph edges among gathered memories. Default true.'),
+      cursor: text("The previous page's nextCursor."),
+      includeRelations: yes('true by default.'),
     }),
   },
   {
     name: 'update',
     listed: true,
     description:
-      'Update a single memory by id: edit text, tags, kind, anchors, audience, importance/confidence, persistence, context policy, status, or relationships, or move it between the project and the user scope with `scope`. When a memory you were reminded of states an old value and you confirmed the current one (a limit changed from 15 to 20), rewrite its `text` here instead of deleting it. To retire a memory that no longer applies but is worth keeping as history, set `status` to "stale" or "archived" instead of deleting it. Refine or re-scope an existing memory instead of creating a near-duplicate; find the id with `search` or `for_file`.',
+      'Change one memory by id: its text, tags, kind, anchors, audience, scores, persistence, contextPolicy, status, links, or scope. When a memory states a value you confirmed is out of date, rewrite its text here. To keep it only as history, set status stale or archived. Prefer this to a near-duplicate remember.',
     inputSchema: object(
       {
-        id: text('The memory id to update.'),
-        scope: choice(['project', 'user'], 'Move the memory to this scope, keeping its id: project (this repository) or user (every project). A move to user drops path anchors (file, directory, package, test, git); a file_note or symbol_note left without an anchor needs a new kind in the same call.'),
+        id: text('The memory id.'),
+        scope: choice(['project', 'user'], 'Move it to this scope; the id stays. A move to user drops path anchors, so a file_note or symbol_note left without one needs a new kind in the same call.'),
         text: text('Replacement text.'),
-        tags: texts('Replacement tags (omit the #).'),
-        kind: choice(KINDS, 'New kind.'),
+        tags: texts('Replacement tags, without #.'),
+        kind: choice(KINDS),
         anchors: ANCHORS,
         audience: AUDIENCE,
         importance: number(0, 1),
@@ -174,10 +143,10 @@ export const TOOLS: readonly ToolDef[] = [
         freshness: number(0, 1),
         persistence: PERSISTENCE,
         contextPolicy: choice(['never', 'auto'], 'never: no automatic reminder; auto: when relevant.'),
-        status: choice(STATUSES, 'New lifecycle status.'),
-        supersedes: texts('Memory ids this replaces.'),
-        contradicts: texts('Memory ids this contradicts.'),
-        force: yes('Required to set status to "deleted"; the override is audit-logged.'),
+        status: choice(STATUSES),
+        supersedes: texts('Ids this replaces.'),
+        contradicts: texts('Ids this contradicts.'),
+        force: yes('Required for status deleted.'),
       },
       ['id'],
     ),
@@ -185,14 +154,13 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'delete',
     listed: true,
-    description:
-      'Delete one memory by id. Use it when you confirmed, against the code or this session, that a memory is wrong or obsolete and no correct value replaces it; a wrong memory left in place keeps misleading later sessions. Requires force: true and a short `reason`; every deletion is audited, and `recover` brings the memory back.',
+    description: 'Delete one memory you confirmed is wrong or obsolete when no correct value replaces it. Needs force: true and a reason; recover undoes it.',
     inputSchema: object(
       {
-        id: text('The memory id to delete.'),
-        reason: text('Reason recorded in the audit log.'),
-        force: yes('Required for ALL deletions: authorizes the removal and is recorded in the audit log.'),
-        neverRemind: yes('Absolute privacy/safety ban: this memory must never reach the model again.'),
+        id: text('The memory id.'),
+        reason: text('Why, for the audit log.'),
+        force: yes('Must be true.'),
+        neverRemind: yes('Never show this memory to the model again (privacy ban).'),
       },
       ['id', 'force'],
     ),
@@ -200,13 +168,12 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'forget',
     listed: false,
-    description:
-      'Soft-delete every memory in a scope whose text, tag or anchor matches the query (case-insensitive). Requires force: true, because it deletes every match at once; use `delete` with an id for a single entry, and `search` first to see what would match.',
+    description: 'Delete every memory of a scope whose text, tag or anchor holds the query, in any case. Needs force: true. Call search first to see the matches; for one memory, call delete.',
     inputSchema: object(
       {
-        query: { type: 'string', minLength: 3, description: 'Substring, tag or id to match; at least 3 characters.' },
-        scope: choice(SCOPES, 'Which scope to search. Defaults to project.'),
-        force: yes('Required: authorizes deleting every memory matching the query. Recorded in the audit log.'),
+        query: { type: 'string', minLength: 3, description: 'Substring, tag or id; 3 characters or more.' },
+        scope: choice(SCOPES, 'project by default.'),
+        force: yes('Must be true.'),
       },
       ['query', 'force'],
     ),
@@ -214,66 +181,64 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'recover',
     listed: false,
-    description: 'Restore a deleted memory to active status. A superseded memory resolves to the head of its version chain without a write. Provide a short `reason` for the audit log.',
-    inputSchema: object({ id: text('The memory id to recover.'), reason: text('Reason recorded in the audit log.') }, ['id']),
+    description: 'Make a deleted memory active again. A superseded id answers with its newest version.',
+    inputSchema: object({ id: text('The memory id.'), reason: text('Why, for the audit log.') }, ['id']),
   },
   {
     name: 'backfill_recoverable',
     listed: false,
-    description:
-      'Find deleted memories that are still recoverable and either preview them (default) or restore them as fresh active versions linked to the originals with `supersedes`. Pass `apply: true` to write.',
+    description: 'Find deleted memories that can still be restored. It previews them; with apply: true it restores each as a new active version that supersedes the original.',
     inputSchema: object({
       filter: object({
-        kinds: { type: 'array', items: choice(KINDS, 'Kind.'), description: 'Only memories of these kinds.' },
-        scopes: { type: 'array', items: choice(SCOPES, 'Scope.'), description: 'Only memories of these scopes.' },
-        updatedAfter: text('ISO-8601 cutoff: only memories updated at or after this.'),
-        updatedBefore: text('ISO-8601 cutoff: only memories updated at or before this.'),
-        requireProvenance: yes('Default true. Set false to consider records with neither sources nor anchors.'),
+        kinds: { type: 'array', items: choice(KINDS), description: 'Only these kinds.' },
+        scopes: { type: 'array', items: choice(SCOPES), description: 'Only these scopes.' },
+        updatedAfter: text('ISO-8601 lower bound of the update time.'),
+        updatedBefore: text('ISO-8601 upper bound of the update time.'),
+        requireProvenance: yes('true by default: skip a record with no source and no anchor.'),
       }),
-      apply: yes('Default false (preview). Set true to create the new active versions.'),
+      apply: yes('false by default (preview).'),
     }),
   },
   {
     name: 'verify',
     listed: false,
-    description: 'Verify file, directory, symbol, content-hash, and git-blob anchors and update stale state: a failed check makes a memory stale, a passing one brings a verification-stale memory back.',
-    inputSchema: object({ memory_id: text('Optional memory id; omit to verify every anchored memory.') }),
+    description: "Check memories' anchors: a failed check marks a memory stale, a passing one makes it active again.",
+    inputSchema: object({ memory_id: text('One memory; leave it out for all.') }),
   },
   {
     name: 'hygiene',
     listed: false,
     description:
-      'Verify anchors, supersede exact and near duplicates, mark contradictions, open review candidates for stale and low-confidence memories, delete expired session memories, and forget the reminder records of sessions whose transcripts are gone. Never deletes a live project or user memory; `purgeDeletedAfterDays` removes tombstones older than N days for good.',
+      'Clean the store: check anchors, merge duplicates, mark contradictions, open reviews for stale and low-confidence memories, and remove expired session memories. It never deletes a live project or user memory.',
     inputSchema: object({
-      verify: yes('Check anchors. Default true.'),
-      verifyDepth: choice(VERIFY_DEPTHS, 'existence (default), content, or git.'),
-      nearDedup: yes('Merge near duplicates. Default true.'),
+      verify: yes('true by default.'),
+      verifyDepth: choice(VERIFY_DEPTHS, 'existence by default.'),
+      nearDedup: yes('true by default.'),
       staleReviewDays: number(0, 3650),
       lowConfidenceReviewDays: number(0, 3650),
       sessionRetentionDays: number(0, 3650),
-      purgeDeletedAfterDays: number(0, 3650, 'Opt-in: remove tombstones deleted more than this many days ago. Omit to keep them.'),
+      purgeDeletedAfterDays: number(0, 3650, 'Remove the deleted memories older than this for good; leave it out to keep them.'),
     }),
   },
   {
     name: 'candidates',
     listed: false,
-    description:
-      "List, accept, reject, propose, or resolve memory candidates. Proposing files a non-destructive review of a memory; resolving applies the decision (delete/archive/keep) to the proposal's target memory, the preferred path over a raw `delete`.",
+    description: "The review queue: list, accept, reject, propose (file a review of a memory) or resolve (apply delete, archive or keep to the review's memory). Prefer propose and resolve to a direct delete.",
     inputSchema: object({
-      action: choice(['list', 'accept', 'reject', 'propose', 'resolve'], 'Default list.'),
-      candidate_id: text('Required for accept, reject, or resolve.'),
-      reason: text('Reason for rejection, the review reason for propose, or the resolution note for resolve.'),
-      include_resolved: yes('List resolved candidates too.'),
-      text: text('Candidate text (required for propose).'),
-      kind: choice(KINDS, 'Memory kind for propose.'),
-      scope: choice(SCOPES, 'Scope for propose.'),
-      tags: texts('Extra tags for propose.'),
+      action: choice(['list', 'accept', 'reject', 'propose', 'resolve'], 'list by default.'),
+      candidate_id: text('For accept, reject and resolve.'),
+      reason: text('The rejection reason, the review reason (propose) or the resolution note (resolve).'),
+      include_resolved: yes('List resolved reviews too.'),
+      text: text('For propose.'),
+      kind: choice(KINDS, 'For propose.'),
+      scope: choice(SCOPES, 'For propose.'),
+      tags: texts('For propose.'),
       anchors: ANCHORS,
       importance: number(0, 1),
       confidence: number(0, 1),
-      suggested_action: choice(['delete', 'archive', 'investigate', 'update'], 'Review action suggested for propose.'),
-      memory_id: text('Id of the memory this proposal targets (propose).'),
-      decision: choice(['delete', 'archive', 'keep'], 'Review decision to apply to the target memory (required for resolve).'),
+      suggested_action: choice(['delete', 'archive', 'investigate', 'update'], 'For propose.'),
+      memory_id: text('The memory the review is about (propose).'),
+      decision: choice(['delete', 'archive', 'keep'], 'For resolve.'),
     }),
   },
 ]
