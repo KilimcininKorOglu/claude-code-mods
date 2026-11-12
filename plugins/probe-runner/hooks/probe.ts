@@ -47,17 +47,16 @@ export function scriptArgv(script: string, probe: Probe, dirs: readonly string[]
 export const TOOL_NAME = 'probe'
 
 export const TOOL_DESCRIPTION = [
-  'Run a live check of Claude Code plugins in a fresh session: a new git repository under /private/tmp (the system temp directory where that does not exist), tmux, only the given plugin directories loaded, and the steps typed into the prompt one after another, each once the one before has finished.',
-  'You get the pane\'s final text, the session\'s transcript (prompts, replies, tool calls, command output, the context hooks added) and the list of what was deleted afterwards: the temp directory, its transcripts and the inline store files the probe wrote.',
-  'A probe takes about 15 seconds to start and then as long as its steps; it stops at 10 minutes.',
+  'Live-check plugins in a fresh Claude Code session: a temp git repository, tmux, only the given plugins loaded, and the steps typed one after another, each after the one before finished.',
+  'Answers with the final pane text, the transcript (with the context hooks added) and what it deleted afterwards. Stops at 10 minutes.',
 ].join(' ')
 
 export const INPUT_SCHEMA = {
   type: 'object',
   properties: {
-    plugins: { type: 'array', items: { type: 'string' }, description: 'Plugins to load: a name under the repository\'s plugins/ directory, or a path.' },
-    steps: { type: 'array', items: { type: 'string' }, description: 'The prompts and slash commands to type, in order. Each is one line.' },
-    model: { type: 'string', description: `The probe session's model, ${DEFAULT_MODEL} by default.` },
+    plugins: { type: 'array', items: { type: 'string' }, description: 'Names under plugins/, or paths.' },
+    steps: { type: 'array', items: { type: 'string' }, description: 'Prompts and slash commands, one line each, in order.' },
+    model: { type: 'string', description: `${DEFAULT_MODEL} by default.` },
   },
   required: ['plugins', 'steps'],
 }
