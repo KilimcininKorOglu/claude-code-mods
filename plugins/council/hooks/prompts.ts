@@ -9,7 +9,7 @@ export const INPUT_SCHEMA = {
   properties: {
     question: {
       type: 'string',
-      description: 'The problem, what you tried and what you found, and the specific question you want the council to answer.',
+      description: 'The problem, what you tried and found, and your exact question.',
     },
   },
   required: ['question'],
@@ -21,12 +21,12 @@ const WHEN = [
   '- the root cause is still unclear after you investigated;',
   '- you must choose between two designs that each have real trade-offs;',
   '- before a change that is hard to undo.',
-  'Skip it for simple, mechanical steps. The answers can be wrong: check them against the code before you act, and tell the user where you disagree.',
+  'Skip it for simple, mechanical steps. The answers can be wrong: check them against the code, and tell the user where you disagree.',
 ]
 
 /** What the model reads about the tool. It names no model, so a change of the members does not make it stale. */
 export const TOOL_DESCRIPTION = [
-  'Convene a council of models on a hard problem. Several models read the conversation so far and your question and answer on their own; then the model of this session, as the chair, writes one verdict from their answers. You get the verdict and every answer. A call takes about half a minute.',
+  'Ask a council of models about a hard problem. Each reads the conversation and your question and answers alone; the model of this session then writes one verdict from their answers. You get the verdict and every answer, in about half a minute.',
   ...WHEN,
 ].join('\n')
 
