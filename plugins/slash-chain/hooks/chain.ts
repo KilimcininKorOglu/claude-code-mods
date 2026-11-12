@@ -65,7 +65,7 @@ export function failedWhy(reason: string): string {
 export const FAIL_TOOL = 'fail'
 export const FAIL_TOOL_ID = `mcp__slash-chain__${FAIL_TOOL}` as const
 
-export const FAIL_DESCRIPTION = 'Stops the running slash-chain (/a && /b) because the step you were handed failed, so the commands after it do not run. Call it only while a slash-chain step waits on your turn, and only when you could not do what that step asked; a step you did does not need it.'
+export const FAIL_DESCRIPTION = 'Stop the running slash-chain (/a && /b) so the steps after this one do not run. Call it only when you could not do what the step you were handed asked.'
 
 export const FAIL_SCHEMA = {
   type: 'object',
