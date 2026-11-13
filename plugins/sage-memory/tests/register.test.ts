@@ -1007,7 +1007,9 @@ describe('triage, compact and capture', () => {
   withSidebar('the daily cleanup is on after an install, runs an hour after a start once a day and applies the triage', async ($, on) => {
     const w = triageWorld(on)
     w.routes.set('/memory/hygiene', { project: { state: 'started' } })
-    w.store.set('dailyAt', Date.parse('2026-09-26T12:00:00Z'))
+    // Another project ran its cleanup a minute ago; that run does not stand for this project's.
+    w.store.set('dailyAt', Date.parse('2026-09-28T11:59:00Z'))
+    w.store.set('dailyAt:other-0000aaaa', Date.parse('2026-09-28T11:59:00Z'))
     await $.session.start(START)
     expect((await $.command.run(run('daily'))).text).toBe('the daily cleanup is on')
     await w.clock.advance(59 * 60 * 1000)
@@ -1016,14 +1018,15 @@ describe('triage, compact and capture', () => {
     await settled(w)
     expect(bodiesOf(w, '/memory/hygiene')).toHaveLength(1)
     expect(bodiesOf(w, '/memory/delete')).toHaveLength(2)
-    expect(w.store.get('dailyAt')).toBe(Date.parse('2026-09-28T13:00:00Z'))
+    const own = [...w.store.keys()].filter(key => key.startsWith('dailyAt:') && key !== 'dailyAt:other-0000aaaa')
+    expect(own).toHaveLength(1)
+    expect(w.store.get(own[0] ?? '')).toBe(Date.parse('2026-09-28T13:00:00Z'))
     // The 60 s section redraw can land after the cleanup's line, so the line is looked up, not taken last.
     expect(w.lines.find(line => line.startsWith('daily cleanup'))).toMatch(/^daily cleanup of 4 memories: applied: 2 deletion\(s\)/)
   })
 
   withSidebar('the daily cleanup the person turned off runs no more', async ($, on) => {
     const w = triageWorld(on)
-    w.store.set('dailyAt', Date.parse('2026-09-26T12:00:00Z'))
     await $.session.start(START)
     expect((await $.command.run(run('daily off'))).text).toBe('the daily cleanup off')
     await w.clock.advance(2 * 60 * 60 * 1000)

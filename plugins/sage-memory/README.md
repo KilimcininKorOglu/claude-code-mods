@@ -58,7 +58,7 @@ Under it, the stream shows each reminder faint, with only the word `reminded` in
     /sage-memory model [name]             the model of the consolidator, curator, triage and compact (haiku)
     /sage-memory remind tools|prompt|subagent [on|off]
     /sage-memory consolidate|curate [on|off]
-    /sage-memory daily [on|off]           a hygiene and an applied triage once a day, an hour after a start (on)
+    /sage-memory daily [on|off]           a hygiene and an applied triage once a day per project, an hour after a start (on)
     /sage-memory capture outcomes|errors [on|off]   remember Bash results (off)
 
 Flags: `--kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts`.

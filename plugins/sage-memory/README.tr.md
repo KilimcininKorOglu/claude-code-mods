@@ -58,7 +58,7 @@ Altındaki stream her reminder'ı soluk gösterir; yalnız `reminded` kelimesi m
     /sage-memory model [ad]               consolidator, curator, triage ve compact'ın modeli (haiku)
     /sage-memory remind tools|prompt|subagent [on|off]
     /sage-memory consolidate|curate [on|off]
-    /sage-memory daily [on|off]           günde bir hygiene ve uygulanan bir triage, bir başlangıçtan bir saat sonra (açık)
+    /sage-memory daily [on|off]           her proje için günde bir hygiene ve uygulanan bir triage, bir başlangıçtan bir saat sonra (açık)
     /sage-memory capture outcomes|errors [on|off]   Bash sonuçlarını kaydeder (kapalı)
 
 Flag'ler: `--kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts`.

@@ -1408,16 +1408,23 @@ async function isDailyOn($: EngineInterface): Promise<boolean> {
 }
 
 /**
+ * The store key of a project's last daily run. The store is one file for every project, so a single
+ * key let the first project of the day hold the run and left every other project uncleaned.
+ */
+const dailyKey = (state: State): string => `dailyAt:${state.project?.key ?? ''}`
+
+/**
  * The daily cleanup: hygiene, then a triage bounded to 40 ratings and 15 pairs, applied as
- * `/sage-memory triage apply` applies it. The time of the last run is kept in the store, so one window runs it.
+ * `/sage-memory triage apply` applies it. The time of each project's last run is kept in the store,
+ * so one window per project runs it.
  */
 async function dailyRun($: EngineInterface, state: State): Promise<void> {
   state.daily = undefined
   if (!(await isDailyOn($)) || !(await isReady(state))) return
-  const last = await $.store.get('dailyAt')
+  const last = await $.store.get(dailyKey(state))
   const now = await $.clock.now()
   if (typeof last === 'number' && now - last < DAY_MS) return scheduleDaily($, state)
-  await $.store.set('dailyAt', now)
+  await $.store.set(dailyKey(state), now)
   await ask($, state, '/memory/hygiene', { automatic: true })
   const report = await triageReport($, state, DAILY_LIMITS)
   const applied = await applyTriage($, state, report)
@@ -1430,7 +1437,7 @@ async function scheduleDaily($: EngineInterface, state: State): Promise<void> {
   state.daily?.cancel()
   state.daily = undefined
   if (!(await isDailyOn($))) return
-  const last = await $.store.get('dailyAt')
+  const last = await $.store.get(dailyKey(state))
   const now = await $.clock.now()
   const wait = typeof last === 'number' && now - last < DAY_MS ? last + DAY_MS - now : HOUR_MS
   state.daily = $.clock.after(Math.max(wait, HOUR_MS), () => void guarded($, 'the daily triage', () => dailyRun($, state)))
