@@ -10,8 +10,8 @@ import type {
   TurnCompleteReason,
 } from 'claude-code'
 
-import { DEFAULT_MAX_POKES, MAX_STALLS, limitOf } from '../hooks/register.ts'
-import { countLine, countText, streamLine, tasksOfList } from '../hooks/tasks.ts'
+import { DEFAULT_MAX_POKES, MAX_STALLS, limitOf } from '../hooks/register'
+import { countLine, countText, streamLine, tasksOfList } from '../hooks/tasks'
 
 test('an empty TaskList answer is the empty list, so a task the engine deleted leaves the count', () => {
   expect(tasksOfList('No tasks found')).toEqual(new Map())

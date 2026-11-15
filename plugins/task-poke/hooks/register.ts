@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import { countLine, countText, readTurn, signatureOf, streamLine, tasksOfList, workedThisTurn, type Tasks } from './tasks.ts'
+import { countLine, countText, readTurn, signatureOf, streamLine, tasksOfList, workedThisTurn, type Tasks } from './tasks'
 
 /** Pokes sent for one stretch of unfinished tasks, until the person sets another limit. */
 export const DEFAULT_MAX_POKES = 99
