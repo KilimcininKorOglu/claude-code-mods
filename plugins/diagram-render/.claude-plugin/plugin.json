@@ -1,6 +1,6 @@
 {
   "name": "diagram-render",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Renders the mermaid blocks of the model's replies with an installed mmdc after each turn and draws each picture under its reply.",
   "author": {
     "name": "Kerem Gok",
