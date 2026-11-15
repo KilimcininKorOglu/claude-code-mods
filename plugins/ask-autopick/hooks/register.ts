@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { DEFAULT_MINUTES, minutesOf, pickedLine, pickedNote, picksOf, statusText, USAGE, waitsLine, type Line, type Question } from './pick'
 
