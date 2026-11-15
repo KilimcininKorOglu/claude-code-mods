@@ -1,5 +1,5 @@
-/// <reference path="../types/sidebar.d.ts" />
-/// <reference path="../types/gemini.d.ts" />
+import type {} from '../types/sidebar'
+import type {} from '../types/gemini'
 import type { EngineInterface, ModelForkResult, Register, SessionMessage, ToolCallResult } from 'claude-code'
 import { runLines, statusText, summaryText, type Chair, type Run, type Seat, type Via } from './board'
 import { changeText, convenedText, ENABLED_KEY, MEMBERS_KEY, membersText, OFF_DENY, parseCommand } from './command'
