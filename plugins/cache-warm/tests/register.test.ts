@@ -1,6 +1,6 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, ModelForkResult, On, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
-import { KEEP_WARM_TEXT } from '../hooks/warm.ts'
+import { KEEP_WARM_TEXT } from '../hooks/warm'
 
 tier('user')
 

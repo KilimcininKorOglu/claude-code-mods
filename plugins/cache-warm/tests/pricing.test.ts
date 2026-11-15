@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { breakEvenPings, hasFastRate, priceOf, readUsd, responseUsd, writeUsd } from '../hooks/pricing.ts'
+import { breakEvenPings, hasFastRate, priceOf, readUsd, responseUsd, writeUsd } from '../hooks/pricing'
 
 tier('user')
 

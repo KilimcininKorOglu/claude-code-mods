@@ -17,7 +17,7 @@ import {
   statusText,
   statusTone,
   windowLine,
-} from '../hooks/warm.ts'
+} from '../hooks/warm'
 
 tier('user')
 

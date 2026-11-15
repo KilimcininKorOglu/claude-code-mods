@@ -1,4 +1,4 @@
-import { breakEvenPings, hasFastRate, priceOf, readUsd, writeUsd, type Price, type Usage } from './pricing.ts'
+import { breakEvenPings, hasFastRate, priceOf, readUsd, writeUsd, type Price, type Usage } from './pricing'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN

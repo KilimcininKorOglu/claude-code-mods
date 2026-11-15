@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, ModelForkResult, Register, TurnUsage } from 'claude-code'
-import { responseUsd, writeUsd, type Usage } from './pricing.ts'
+import { responseUsd, writeUsd, type Usage } from './pricing'
 import {
   AUTO_WARM_MS,
   KEEP_WARM_TEXT,
@@ -35,7 +36,7 @@ import {
   type Line,
   type PingRecord,
   type State,
-} from './warm.ts'
+} from './warm'
 
 const PING_PROMPT = 'Reply with the single word: warm'
 /** The mod's own markdown command, whose body is its arguments alone, so the model reads the text as it is written. */
