@@ -31,7 +31,7 @@ function world(on: On): World {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: w.cwd }))
   on('process.run', () => ({
-    value: w.top === undefined ? { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } : { exitCode: 0, stdout: `${w.top}\n`, stderr: '' },
+    value: w.top === undefined ? { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' } : { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: `${w.top}\n`, stderr: '' },
   }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
