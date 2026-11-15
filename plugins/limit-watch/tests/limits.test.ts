@@ -15,7 +15,7 @@ import {
   statusLine,
   toolText,
   type Tracks,
-} from '../hooks/limits.ts'
+} from '../hooks/limits'
 
 tier('user')
 

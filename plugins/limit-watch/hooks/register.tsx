@@ -1,3 +1,4 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 import {
   barCells,
@@ -20,7 +21,7 @@ import {
   toolText,
   warningText,
   type Tracks,
-} from './limits.ts'
+} from './limits'
 
 const PANE_ID = 'limit-watch'
 const TRACKS_KEY = 'tracks'
