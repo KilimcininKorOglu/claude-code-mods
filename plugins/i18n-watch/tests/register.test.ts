@@ -66,7 +66,7 @@ function world(on: On, files: Record<string, string>): World {
   on('fs.list', (_, e) => {
     const dir = e.path ?? ROOT
     const names = new Set([...w.files.keys()].filter(f => f.startsWith(`${dir}/`)).map(f => f.slice(dir.length + 1).split('/')[0] ?? ''))
-    return { value: [...names].sort().map(name => ({ name, kind: isDirPath(w, `${dir}/${name}`) ? 'dir' as const : 'file' as const, size: 10, isLink: false })) }
+    return { value: [...names].sort().map(name => ({ name, kind: isDirPath(w, `${dir}/${name}`) ? 'dir' as const : 'file' as const, size: 10, mtimeMs: 1, isLink: false })) }
   })
   on('fs.read', (_, e) => {
     w.reads++
@@ -77,7 +77,7 @@ function world(on: On, files: Record<string, string>): World {
   on('process.run', (_, e) => {
     const argv = (e as unknown as { argv: string[] }).argv
     const stdout = argv.includes('--show-toplevel') ? `${w.top}\n` : w.staged.map(p => `${p}\0`).join('')
-    return { value: { exitCode: 0, stdout, stderr: '' } }
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }))
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }))
