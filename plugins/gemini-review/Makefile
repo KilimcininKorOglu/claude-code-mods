@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck validate test check
+.PHONY: install lint validate test check
 
 install:
 	npm install
@@ -6,14 +6,11 @@ install:
 lint:
 	npx eslint --max-warnings 0 .
 
-# Needs .claude/types/ from /plugin-types run inside a Claude Code session in this folder.
-typecheck:
-	npx tsc -p .
-
+# --strict fails on warnings, and type errors against the running build's types are warnings.
 validate:
-	claude plugin validate .
+	claude plugin validate --strict .
 
 test:
 	claude plugin test .
 
-check: lint typecheck validate test
+check: lint validate test
