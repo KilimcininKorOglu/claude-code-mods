@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { callKeys, newKeys } from '../hooks/keys.ts'
-import { addFile, denyText, doneLines, fileLang, isGuarded, jsonKeys, missingKeys, modeOf, noteText, phpKeys, poKeys, sidebarLines, yamlKeys, type Catalog } from '../hooks/locale.ts'
+import { callKeys, newKeys } from '../hooks/keys'
+import { addFile, denyText, doneLines, fileLang, isGuarded, jsonKeys, missingKeys, modeOf, noteText, phpKeys, poKeys, sidebarLines, yamlKeys, type Catalog } from '../hooks/locale'
 
 tier('user')
 

@@ -1,8 +1,8 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { isCommit, isNarrowable, verdict } from '../hooks/locale.ts'
-import { keyLines } from '../hooks/keys.ts'
+import { isCommit, isNarrowable, verdict } from '../hooks/locale'
+import { keyLines } from '../hooks/keys'
 
 tier('user')
 

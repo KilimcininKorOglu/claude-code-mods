@@ -1,5 +1,5 @@
 /** The keys each language's locale files define, and the keys an edit uses that a language lacks. */
-import { unescape } from './keys.ts'
+import { unescape } from './keys'
 
 /** Directories under the session directory that hold locale files. */
 export const LOCALE_DIRS = ['locales', 'lang', 'i18n', 'translations', 'locale', 'config/locales', 'resources/lang', 'src/locales', 'src/i18n', 'public/locales']
