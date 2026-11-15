@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, TurnStepInput } from 'claude-code'
-import { allowedLine, effortLine, keepsCacheAcrossEffort, levelFor, levelsOf, parseLevels, RATE_TIMEOUT_MS, RATER_MODEL, RATER_SYSTEM, raterPrompt, ratingOf, type Level, type Line, type Rating, type TurnEffort } from './effort.ts'
+import { allowedLine, effortLine, keepsCacheAcrossEffort, levelFor, levelsOf, parseLevels, RATE_TIMEOUT_MS, RATER_MODEL, RATER_SYSTEM, raterPrompt, ratingOf, type Level, type Line, type Rating, type TurnEffort } from './effort'
 
 const ENABLED_KEY = 'enabled'
 const LEVELS_KEY = 'levels'

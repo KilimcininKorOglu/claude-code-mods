@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { keepsCacheAcrossEffort, LEVELS, levelFor, levelsOf, parseLevels, raterPrompt, RATER_SYSTEM, ratingOf } from '../hooks/effort.ts'
+import { keepsCacheAcrossEffort, LEVELS, levelFor, levelsOf, parseLevels, raterPrompt, RATER_SYSTEM, ratingOf } from '../hooks/effort'
 
 tier('user')
 
