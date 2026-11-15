@@ -96,7 +96,7 @@ function world(on: On, env: Record<string, string> = {}, store: Record<string, u
   mock.env(on, env)
   on('env.set', (_, e) => {
     w.envSets.push(`${e.name}=${e.value}`)
-    return { value: undefined }
+    return { value: {} }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
