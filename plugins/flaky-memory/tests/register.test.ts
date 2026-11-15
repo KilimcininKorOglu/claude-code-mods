@@ -27,12 +27,12 @@ type World = {
   inGit: boolean
 }
 
-function gitAnswer(w: World, argv: readonly string[]): { exitCode: number; stdout: string; stderr: string } {
-  if (!w.inGit) return { exitCode: 128, stdout: '', stderr: 'not a git repository' }
-  if (argv.includes('--git-common-dir')) return { exitCode: 0, stdout: '/src/app/.git\n', stderr: '' }
-  if (argv.includes('HEAD') && argv[1] === 'rev-parse') return { exitCode: 0, stdout: 'abc123\n', stderr: '' }
-  if (argv[1] === 'diff') return { exitCode: 0, stdout: w.diff, stderr: '' }
-  return { exitCode: 0, stdout: '', stderr: '' }
+function gitAnswer(w: World, argv: readonly string[]): { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false } {
+  if (!w.inGit) return { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 128, stdout: '', stderr: 'not a git repository' }
+  if (argv.includes('--git-common-dir')) return { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '/src/app/.git\n', stderr: '' }
+  if (argv.includes('HEAD') && argv[1] === 'rev-parse') return { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: 'abc123\n', stderr: '' }
+  if (argv[1] === 'diff') return { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: w.diff, stderr: '' }
+  return { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '', stderr: '' }
 }
 
 /** Bash's result as the engine hands it back: a failure as error text, a success as the run's fields. */
