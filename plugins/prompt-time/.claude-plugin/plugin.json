@@ -1,6 +1,6 @@
 {
   "name": "prompt-time",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Draws the time under each of your messages and each text block of the model's replies, also for a resumed session whose transcript is 4 MiB or smaller. Display only: nothing reaches the model.",
   "author": {
     "name": "Kerem Gok",
