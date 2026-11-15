@@ -1,5 +1,5 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { BAND_SIZE, band, countsKey, fit, listText, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from './deck.ts'
+import { BAND_SIZE, band, countsKey, fit, listText, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from './deck'
 
 /** The key the mod used before the counts were split per project. */
 const LEGACY_KEY = 'counts'

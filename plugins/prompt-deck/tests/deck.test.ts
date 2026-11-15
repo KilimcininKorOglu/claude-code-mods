@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { band, countsKey, fit, listText, MAX_KEPT, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from '../hooks/deck.ts'
+import { band, countsKey, fit, listText, MAX_KEPT, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from '../hooks/deck'
 
 tier('user')
 
