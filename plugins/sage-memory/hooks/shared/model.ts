@@ -158,7 +158,12 @@ export type Memory = {
   ownerSessionId?: string
 }
 
-/** A memory no automatic job retires (replaces, merges away, rewrites or deletes): permanent, or importance 0.9 or more. */
+/**
+ * A memory that is permanent or of importance 0.9 or more. The consolidator never names it in
+ * `supersedes`, the curator never deletes, rewrites, merges away, splits or lowers it, compact never
+ * deletes or merges it away, and triage never lets it lose a merge. Hygiene's dedupe still folds a
+ * same-text copy of it into the copy it keeps.
+ */
 export function isProtected(memory: Pick<Memory, 'persistence' | 'importance'>): boolean {
   return memory.persistence === 'permanent' || memory.importance >= 0.9
 }
