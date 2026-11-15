@@ -3,9 +3,16 @@ import { SCENES } from '../hooks/art/scenes'
 import { mirrored } from '../hooks/art/cat'
 import { rngOf, runsOf, sceneDone, textOf } from '../hooks/art/grid'
 import { configOf, parseArgs, pickStyle, STYLES } from '../hooks/config'
-import { bytesOf, decodeGif } from '../hooks/gif'
-import { MAX_CLIP_CHARS, playClip, toClip } from '../hooks/clip'
+import { bytesOf, readGif, type GifFrame } from '../hooks/gif'
+import { clipFromFrames, clipFromGif, MAX_CLIP_CHARS, playClip } from '../hooks/clip'
 import { TWO_FRAMES } from './fixtures'
+
+/** Every composed frame of a small GIF at once, with the picture's size. */
+function framesOf(bytes: Uint8Array): { width: number; height: number; frames: GifFrame[] } {
+  const frames: GifFrame[] = []
+  const { width, height } = readGif(bytes, f => frames.push(f))
+  return { width, height, frames }
+}
 
 tier('user')
 
@@ -160,7 +167,7 @@ describe('config', () => {
 
 describe('gif', () => {
   test('decodes each frame over the disposed one, with its delay and its transparent pixels', () => {
-    const gif = decodeGif(bytesOf(TWO_FRAMES))
+    const gif = framesOf(bytesOf(TWO_FRAMES))
     expect([gif.width, gif.height, gif.frames.map(f => f.delayMs)]).toEqual([4, 2, [200, 300]])
     const opaque = (rgba: Uint8Array): string => Array.from({ length: 8 }, (_, i) => ((rgba[i * 4 + 3] ?? 0) > 0 ? 'x' : '.')).join('')
     expect(gif.frames.map(f => opaque(f.rgba))).toEqual(['xx..xx..', '..xx..xx'])
@@ -169,14 +176,14 @@ describe('gif', () => {
   })
 
   test('refuses a file that is not a GIF, and one cut short', () => {
-    expect(() => decodeGif(new TextEncoder().encode('PNG....'))).toThrow('not a GIF')
-    expect(() => decodeGif(bytesOf(TWO_FRAMES).subarray(0, 20))).toThrow('ends early')
+    expect(() => clipFromGif(new TextEncoder().encode('PNG....'), 100, 8)).toThrow('not a GIF')
+    expect(() => clipFromGif(bytesOf(TWO_FRAMES).subarray(0, 20), 100, 8)).toThrow('ends early')
   })
 
   test('a clip fills the band with the picture\'s shape kept, draws the dim half dim and the bright half bright, and loops by its delays', () => {
     // 4x2 pixels scale by 8 into the 8 rows: 32 columns, two pixel rows per cell row.
-    const { clip, dropped } = toClip(decodeGif(bytesOf(TWO_FRAMES)), 100, 8)
-    expect([clip.width, clip.height, dropped]).toEqual([32, 8, 0])
+    const { clip, dropped, frames } = clipFromGif(bytesOf(TWO_FRAMES), 100, 8)
+    expect([clip.width, clip.height, dropped, frames]).toEqual([32, 8, 0, 2])
     expect(clip.frames[0]?.[0]).toEqual([['.'.repeat(16), '#ff0000'], [' '.repeat(16), '']])
     expect(clip.frames[1]?.[7]).toEqual([[' '.repeat(16), ''], ['@'.repeat(16), '#ffffff']])
     // Centred in 40 columns: 4 blank columns on each side.
@@ -197,7 +204,7 @@ describe('gif', () => {
     const endless = SCENES.fire(10, 4, rngOf(1))
     expect([sceneDone(endless, 19_900), sceneDone(endless, 20_000)]).toEqual([false, true])
     // The clip loops every 500 ms: from 20,000 ms it is done at each end of a loop, and between them not.
-    const clip = playClip(toClip(decodeGif(bytesOf(TWO_FRAMES)), 100, 8).clip, 40, 8, 100)
+    const clip = playClip(clipFromGif(bytesOf(TWO_FRAMES), 100, 8).clip, 40, 8, 100)
     const done: number[] = []
     for (let ms = 100; ms <= 21_000; ms += 100) {
       clip.step()
@@ -208,8 +215,11 @@ describe('gif', () => {
 
   test('a clip over the size limit drops every other frame until it fits', () => {
     const frame = { rgba: new Uint8Array(200 * 16 * 4).map((_, i) => (i % 4 === 3 ? 255 : (i * 37) % 256)), delayMs: 100 }
-    const gif = { width: 200, height: 16, frames: Array.from({ length: 400 }, () => frame) }
-    const { clip, dropped } = toClip(gif, 100, 8)
+    const source = (visit: (f: GifFrame, width: number, height: number) => void): { count: number } => {
+      for (let i = 0; i < 400; i++) visit(frame, 200, 16)
+      return { count: 400 }
+    }
+    const { clip, dropped } = clipFromFrames(source, 100, 8)
     expect(JSON.stringify(clip).length).toBeLessThanOrEqual(MAX_CLIP_CHARS)
     expect(dropped).toBeGreaterThan(0)
     expect(clip.frames.length + dropped).toBe(400)

@@ -1,4 +1,4 @@
-import { readGif, type Gif } from './gif'
+import { readGif, type GifFrame } from './gif'
 import { BLANK, blankFrame, runsOf, type Animation, type Cell, type Frame } from './art/grid'
 
 /** A run of one colour in a stored row: its text and its colour ('' for none). */
@@ -128,12 +128,8 @@ function clipOf(m: Means): { clip: Clip; dropped: number } {
   return { clip, dropped: m.means.length - clip.frames.length }
 }
 
-/** A decoded GIF as a clip for a band of `cols` by `rows`. */
-export function toClip(gif: Gif, cols: number, rows: number): { clip: Clip; dropped: number } {
-  const size = fitSize(gif.width, gif.height, cols, rows)
-  const means = gif.frames.map(f => frameMeans(f.rgba, gif.width, gif.height, size.cols, size.rows))
-  return clipOf({ ...size, means, delays: gif.frames.map(f => f.delayMs) })
-}
+/** Hands each composed frame of a picture to `visit`, with the picture's size, and answers the frame count. */
+export type FrameSource = (visit: (frame: GifFrame, width: number, height: number) => void) => { count: number }
 
 /**
  * A GIF file's bytes as a clip for a band of `cols` by `rows`: each frame is
@@ -141,8 +137,13 @@ export function toClip(gif: Gif, cols: number, rows: number): { clip: Clip; drop
  * than one frame of pixels.
  */
 export function clipFromGif(bytes: Uint8Array, cols: number, rows: number): { clip: Clip; dropped: number; frames: number } {
+  return clipFromFrames(visit => readGif(bytes, visit), cols, rows)
+}
+
+/** The frames a source hands over as a clip for a band of `cols` by `rows`, one frame of pixels at a time. */
+export function clipFromFrames(source: FrameSource, cols: number, rows: number): { clip: Clip; dropped: number; frames: number } {
   const m: Means = { cols: 0, rows: 0, means: [], delays: [] }
-  const { count } = readGif(bytes, (frame, width, height) => {
+  const { count } = source((frame, width, height) => {
     if (m.means.length === 0) Object.assign(m, fitSize(width, height, cols, rows))
     m.means.push(frameMeans(frame.rgba, width, height, m.cols, m.rows))
     m.delays.push(frame.delayMs)

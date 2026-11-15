@@ -1,6 +1,5 @@
 /** One composed frame of a GIF: RGBA pixels of the whole logical screen, and how long it shows. */
 export type GifFrame = { rgba: Uint8Array; delayMs: number }
-export type Gif = { width: number; height: number; frames: GifFrame[] }
 
 /** The frame control a Graphic Control Extension sets for the next image. */
 type Control = { delayMs: number; transparent: number | null; disposal: number }
@@ -257,13 +256,6 @@ export function readGif(bytes: Uint8Array, visit: (frame: GifFrame, width: numbe
   }
   if (count === 0) throw new Error('the GIF has no image')
   return { width: s.width, height: s.height, count }
-}
-
-/** Decodes a GIF into all its composed frames at once; for a small GIF, as the tests use. */
-export function decodeGif(bytes: Uint8Array): Gif {
-  const frames: GifFrame[] = []
-  const { width, height } = readGif(bytes, f => frames.push(f))
-  return { width, height, frames }
 }
 
 function readExtension(r: Reader, ctl: Control): Control {
