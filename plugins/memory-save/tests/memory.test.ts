@@ -4,7 +4,6 @@ import {
   appendTopic,
   buildPrompt,
   changeParts,
-  changeShort,
   changeText,
   contextText,
   errorParts,
@@ -24,6 +23,9 @@ import {
 } from '../hooks/memory'
 
 tier('user')
+
+/** The status line's text: the parts `changeParts` draws, read as one string. */
+const shortText = (...args: Parameters<typeof changeParts>): string => changeParts(...args).map(p => p.text).join('')
 
 const FILE = `# demo
 
@@ -184,7 +186,7 @@ describe('apply', () => {
       `add: bullet of 702 characters, the limit is 600: ${long.slice(0, 60)}…`,
       `replace: bullet of 702 characters, the limit is 600: ${long.slice(0, 60)}…`,
     ])
-    expect(changeShort(r.changes, [])).toBe('+1 2 refused')
+    expect(shortText(r.changes, [])).toBe('+1 2 refused')
   })
 
   test('skips a remove or replace whose line is not in the file, applies the rest, and names it', async () => {
@@ -199,7 +201,7 @@ describe('apply', () => {
     expect(r.text).toContain('- New warning.')
     expect(r.changes).toEqual({ added: 1, removed: 0, replaced: 0, created: false, skipped: ['- **Run `make test` before a commit.**'], refused: [], retired: [] })
     expect(changeText(r.changes, [])).toBe('MEMORY.md: 1 added; 1 skipped, not in the file: - **Run `make test` before a commit.**')
-    expect(changeShort(r.changes, [])).toBe('+1 1 skipped')
+    expect(shortText(r.changes, [])).toBe('+1 1 skipped')
   })
 
   const RULE = '- Keep `network_mode: host`, because the user chose it.'
@@ -219,7 +221,7 @@ describe('apply', () => {
     expect(r.topics).toEqual([{ file: 'history.md', append: `## Retired CRITICAL RULES\n\n${RULE}` }])
     expect(r.changes).toMatchObject({ removed: 2, replaced: 1, refused: [], retired: [RULE] })
     expect(changeText(r.changes, r.topics)).toBe(`MEMORY.md: 2 removed, 1 replaced; appended to history.md; retired from CRITICAL RULES, kept in history.md: ${RULE}`)
-    expect(changeShort(r.changes, r.topics)).toBe('-2 ~1 topic: history 1 rule(s) retired')
+    expect(shortText(r.changes, r.topics)).toBe('-2 ~1 topic: history 1 rule(s) retired')
   })
 
   test('a save at the soft line cap only makes room, so it keeps every CRITICAL RULES bullet', async () => {
@@ -250,7 +252,7 @@ describe('apply', () => {
     expect(r.text).not.toContain('- Lost.')
     expect(r.changes.added).toBe(2)
     expect(r.changes.refused).toEqual(['add: unknown section "Misc"'])
-    expect(changeShort(r.changes, [])).toBe('+2 1 refused')
+    expect(shortText(r.changes, [])).toBe('+2 1 refused')
     expect(changeText(r.changes, [])).toBe('MEMORY.md: 2 added; refused: add: unknown section "Misc"')
   })
 
@@ -467,17 +469,17 @@ describe('texts', () => {
     expect(appendTopic('demo', 'history.md', '# t\n\n- a\n', '- b')).toBe('# t\n\n- a\n\n- b\n')
   })
 
-  test('changeText and changeShort name every change', async () => {
+  test('changeText and the status line name every change', async () => {
     const changes = { added: 12, removed: 1, replaced: 0, created: false, skipped: [], refused: [], retired: [] }
     const topics = [{ file: 'history.md', append: 'x' }]
     expect(changeText(changes, topics)).toBe('MEMORY.md: 12 added, 1 removed; appended to history.md')
-    expect(changeShort(changes, topics)).toBe('+12 -1 topic: history')
+    expect(shortText(changes, topics)).toBe('+12 -1 topic: history')
   })
 
-  test('changeShort names at most three topic files and counts the rest', async () => {
+  test('the status line names at most three topic files and counts the rest', async () => {
     const changes = { added: 0, removed: 0, replaced: 2, created: false, skipped: [], refused: [], retired: [] }
     const topics = ['history.md', 'api.md', 'history.md', 'deploy.md', 'ci.md'].map(file => ({ file, append: 'x' }))
-    expect(changeShort(changes, topics)).toBe('~2 topic: history, api, deploy +1')
+    expect(shortText(changes, topics)).toBe('~2 topic: history, api, deploy +1')
   })
 
   test('changeParts colours what was written green and each part left out yellow', async () => {
@@ -491,7 +493,7 @@ describe('texts', () => {
       { text: ' ' },
       { text: '1 rule(s) retired', kind: 'warn' },
     ])
-    expect(changeShort(changes, [])).toBe('+2 1 skipped 2 refused 1 rule(s) retired')
+    expect(shortText(changes, [])).toBe('+2 1 skipped 2 refused 1 rule(s) retired')
   })
 
   test('noChangeParts keeps no change faint and the counts yellow; errorParts colours only the front', async () => {

@@ -720,11 +720,6 @@ export function changeParts(changes: Changes, topics: TopicAppend[]): Part[] {
   return all.length === 0 ? [part('saved', 'ok')] : joinParts(all, ' ')
 }
 
-/** The short form for the status line. */
-export function changeShort(changes: Changes, topics: TopicAppend[]): string {
-  return changeParts(changes, topics).map(p => p.text).join('')
-}
-
 /** A save that changed no file, faint, with the lines it skipped and the ops it refused yellow. */
 export function noChangeParts(skipped: number, refused: number): Part[] {
   const counts = [skipped > 0 ? `${skipped} skipped` : '', refused > 0 ? `${refused} refused` : ''].filter(p => p !== '')
