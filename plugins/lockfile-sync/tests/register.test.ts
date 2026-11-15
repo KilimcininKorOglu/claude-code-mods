@@ -58,10 +58,10 @@ type World = {
   store: Map<string, unknown>
 }
 
-type Ran = { exitCode: number; stdout: string; stderr: string }
+type Ran = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false }
 
-const ok = (stdout: string): Ran => ({ exitCode: 0, stdout, stderr: '' })
-const failed = (stderr: string): Ran => ({ exitCode: 128, stdout: '', stderr })
+const ok = (stdout: string): Ran => ({ exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
+const failed = (stderr: string): Ran => ({ exitCode: 128, stdout: '', stderr, isStdoutTruncated: false, isStderrTruncated: false })
 
 const CARGO_DIFF = '@@ -1,3 +1,3 @@\n [dependencies]\n-serde = "1.0.100"\n+serde = "1.0.200"\n'
 
@@ -78,7 +78,7 @@ function gitShow(w: World, cmd: string): Ran {
 /** The index, whether the pair's files are off HEAD, or the manifest's diff since the lockfile's commit. */
 function gitDiff(w: World, cmd: string): Ran {
   if (cmd.startsWith('git diff --cached')) return ok(w.staged.join('\0'))
-  if (cmd.startsWith('git diff --quiet')) return { exitCode: w.treeMoved ? 1 : 0, stdout: '', stderr: '' }
+  if (cmd.startsWith('git diff --quiet')) return { isStdoutTruncated: false, isStderrTruncated: false, exitCode: w.treeMoved ? 1 : 0, stdout: '', stderr: '' }
   return ok(w.sinceLock)
 }
 
@@ -97,7 +97,7 @@ function world(on: On): World {
     argv: [], logs: [], commitFails: false, showFails: false, notRepo: false, lockDirty: false, staged: ['package.json'],
     lockCommit: 'a1b2c3', sinceLock: DEP_DIFF,
     // A failure no check reads, so the manifest's diff decides unless a test says otherwise.
-    tool: { exitCode: 2, stdout: '', stderr: 'unrelated' }, treeMoved: false, store: new Map(),
+    tool: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 2, stdout: '', stderr: 'unrelated' }, treeMoved: false, store: new Map(),
   }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
@@ -330,7 +330,7 @@ describe('lockfile-sync', () => {
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m features' })).context).toBe(undefined)
     expect(w.argv).toContain(`cargo metadata --locked --format-version 1 --manifest-path ${ROOT}/Cargo.toml`)
     expect(w.argv.some(a => a.startsWith('git show HEAD:'))).toBe(false)
-    w.tool = { exitCode: 101, stdout: '', stderr: 'error: cannot update the lock file /x/Cargo.lock because --locked was passed to prevent this' }
+    w.tool = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 101, stdout: '', stderr: 'error: cannot update the lock file /x/Cargo.lock because --locked was passed to prevent this' }
     w.next = 'ccc'
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m derive' })).context?.[0]).toContain('Cargo.toml but not Cargo.lock')
   })
@@ -358,7 +358,7 @@ describe('lockfile-sync', () => {
     on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
     await $.tool.call({ tool: 'Bash', command: 'git commit -m bump' })
     w.sinceLock = ''
-    w.tool = { exitCode: 1, stdout: '', stderr: 'npm error `npm ci` can only install packages when your package.json and package-lock.json are in sync.' }
+    w.tool = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 1, stdout: '', stderr: 'npm error `npm ci` can only install packages when your package.json and package-lock.json are in sync.' }
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     expect((await $.command.run(run(''))).text).toBe('on · mode note · package-lock.json still behind')
   })
