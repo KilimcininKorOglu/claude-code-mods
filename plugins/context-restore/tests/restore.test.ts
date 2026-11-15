@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { appendedNote, bodyOfFile, changedLog, currentLog, currentText, fitsArguments, rereadLog, rulePathsOf, skillFileOf } from '../hooks/restore.ts'
+import { appendedNote, bodyOfFile, changedLog, currentLog, currentText, fitsArguments, rereadLog, rulePathsOf, skillFileOf } from '../hooks/restore'
 
 tier('user')
 

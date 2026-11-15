@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rereadLog, rereadNote, rulePathsOf, sectionKey, skillDirOf, skillFileOf, skillFilesIn, statusText, type Line } from './restore.ts'
+import { baseName, bodyOfFile, changedLog, changedNote, currentLog, currentText, rereadLog, rereadNote, rulePathsOf, sectionKey, skillDirOf, skillFileOf, skillFilesIn, statusText, type Line } from './restore'
 
 const ENABLED_KEY = 'enabled'
 const CONSUMER = 'context-restore'
