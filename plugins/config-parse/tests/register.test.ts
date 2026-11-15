@@ -70,9 +70,9 @@ function world(on: On): World {
     w.argv.push(e.argv)
     if (e.argv[0] === 'git') {
       const out = e.argv.includes('--show-toplevel') ? `${w.top}\n` : w.staged.join('\0')
-      return { value: { exitCode: 0, stdout: out, stderr: '' } }
+      return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: out, stderr: '' } }
     }
-    return { value: { exitCode: w.python.exitCode, stdout: '', stderr: w.python.stderr } }
+    return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: w.python.exitCode, stdout: '', stderr: w.python.stderr } }
   })
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }) as never)
   on('tool.call', { tool: 'Write' }, () => ({ result: 'ok' }) as never)
