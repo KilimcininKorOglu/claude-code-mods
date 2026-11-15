@@ -2,9 +2,18 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { distance, lookAlike } from '../hooks/popular'
 import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry'
-import { denyText, failureLines, gateText, isGuarded, modeOf, reasonLines, registryReasonParts, registryReasons, skippedLines, targetVersion, vulnParts, vulnReason } from '../hooks/rules'
+import { denyText, failureLines, gateText, isGuarded, modeOf, reasonLines, registryReasonParts, skippedLines, targetVersion, textOf, vulnParts, type Reason } from '../hooks/rules'
 
 tier('user')
+
+/** The registry reasons as the deny text joins them: each reason's parts read as one string. */
+const registryReasons = (...args: Parameters<typeof registryReasonParts>): string[] => registryReasonParts(...args).map(textOf)
+
+/** The vulnerability reason as one string, or undefined when there is none. */
+const vulnReason = (...args: Parameters<typeof vulnParts>): string | undefined => {
+  const parts: Reason | undefined = vulnParts(...args)
+  return parts === undefined ? undefined : textOf(parts)
+}
 
 const NOW = Date.parse('2026-09-19T12:00:00Z')
 const DAY = 24 * 60 * 60 * 1000

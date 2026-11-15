@@ -76,19 +76,9 @@ export function vulnParts(p: Install, version: string, v: Vulns): Reason | undef
   return [part(`${p.name}@${version} `, undefined), part(`has ${v.ids.length} known vulnerability(ies)`, 'error'), part(` on OSV.dev: ${ids}; `, undefined), fix]
 }
 
-export function vulnReason(p: Install, version: string, v: Vulns): string | undefined {
-  const parts = vulnParts(p, version, v)
-  return parts === undefined ? undefined : textOf(parts)
-}
-
 /** The reasons the registry answer alone gives to stop the install, in parts. */
 export function registryReasonParts(p: Install, info: Info, now: number): Reason[] {
   return [lookAlikeReason(p, info, now), newReason(p, info, now), oldReason(p, info)].filter((r): r is Reason => r !== undefined)
-}
-
-/** The reasons the registry answer alone gives to stop the install. */
-export function registryReasons(p: Install, info: Info, now: number): string[] {
-  return registryReasonParts(p, info, now).map(textOf)
 }
 
 /** The `deny` text the model reads. */
