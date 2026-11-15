@@ -36,7 +36,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('process.run', () => {
     // A throwing world hook reaches the mod as a rejected call, as a missing git does.
     if (w.gitFails === true) throw new Error('git: command not found')
-    return { value: { exitCode: 0, stdout: `${w.root}\n`, stderr: '' } }
+    return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: `${w.root}\n`, stderr: '' } }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('command.register', (_, e) => ({ value: { command: e.name } }))
