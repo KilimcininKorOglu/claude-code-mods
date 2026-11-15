@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { formatSent, indexTranscript } from '../hooks/time.ts'
+import { formatSent, indexTranscript } from '../hooks/time'
 
 tier('user')
 

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, RenderElement, RenderInput } from 'claude-code'
-import { formatSent, indexTranscript } from './time.ts'
+import { formatSent, indexTranscript } from './time'
 
 interface State {
   /** Time in epoch milliseconds, by message or reply block id (the transcript row's uuid). */
