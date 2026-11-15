@@ -4,10 +4,10 @@ Some problems do not yield to one more attempt: the same error survives every fi
 
 ## What it does
 
-1. The members are Opus 5.5, Sonnet 5, Fable 5.1 and Haiku 4.5, plus `gemini-3.8-flash` when [gemini-core](../gemini-core) is installed and has a key. Without gemini-core, or without a key, the Gemini members are skipped and the result says why. `/council members` changes the list.
+1. The members are Opus 5.5, Sonnet 5.5, Fable 5.2 and Haiku 5.5, plus `gemini-3.8-flash` when [gemini-core](../gemini-core) is installed and has a key. Without gemini-core, or without a key, the Gemini members are skipped and the result says why. `/council members` changes the list.
 2. Every member is asked at the same time:
    - The member that runs on the session's own model forks the session with `$.model.fork`, so it reads the whole conversation from the prompt cache.
-   - Every other Claude member gets the conversation as text through `$.model.complete`, at `high` effort. Above 400,000 characters the longest tool outputs are cut first, then the oldest messages are left out. Haiku 4.5 reads at most 560,000 characters, because its window is 200k tokens.
+   - Every other Claude member gets the conversation as text through `$.model.complete`, at `high` effort. Above 400,000 characters the longest tool outputs are cut first, then the oldest messages are left out. Haiku 4.5, named with `/council members`, reads at most 560,000 characters, because its window is 200k tokens; Haiku 5.5 has 1M, like the other members.
    - A Gemini member gets the same text through gemini-core, which holds the key, the tier and the thinking level. It needs gemini-core 0.3.0 or later, because each request names its own model.
 3. The chair forks the session too. It reads the answers under letters (`Member A`, `Member B`), not model names, and writes where the members agree, where they disagree and which side the conversation supports, what they missed, and the next step.
 4. The caller reads the verdict and every answer, each headed with its letter, model and time. A member that failed is named with its reason. When no member answers, the call is refused with each reason, and no chair runs.
@@ -59,7 +59,7 @@ Each run makes one request per member and one for the chair. Measured on Claude 
 - A run of the five default members took 25 to 44 seconds; the slowest member sets the pace. Forks took 4 to 11 seconds and read the conversation from the cache (83k tokens in a short session).
 - 400,000 characters of conversation, the default limit, are 163,828 input tokens on Opus 5.5, Sonnet 5 and Fable 5.1, 128,018 on Haiku 4.5 and 120,057 on gemini-3.8-flash.
 
-At list prices, one run at the full 400,000 characters costs about $2.20, estimated: Fable 5.1 about $1.70 ($10 per million input tokens), Sonnet 5.5 about $0.34 (the same list price as Sonnet 5, whose token count the check measured), Haiku 4.5 about $0.13, and the two forks a few cents of cache reads. A shorter conversation costs proportionally less. On a Claude subscription the requests count toward your usage limits instead. To lower the cost, leave a member out with `/council members`, for example `/council members opus sonnet haiku gemini-3.8-flash`.
+The input list prices per million tokens are $8 for Fable 5.2, $2 for Sonnet 5.5 and $0.10 for Haiku 5.5, which bills a prompt over 100,000 tokens at $0.50 on all of it. The token counts above were measured on the earlier members; those of Fable 5.2 and Haiku 5.5 were not measured, so no dollar total for a run is given here. The two forks cost cache reads. A shorter conversation costs proportionally less. On a Claude subscription the requests count toward your usage limits instead. To lower the cost, leave a member out with `/council members`, for example `/council members opus sonnet haiku gemini-3.8-flash`.
 
 `gemini-3.1-pro-preview` answered HTTP 429 on every free-tier key in the check, because the free tier has no quota for it. Add it to the members only with a paid key.
 

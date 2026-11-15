@@ -12,6 +12,14 @@ export const DEFAULTS: Config = { maxInputChars: 400_000 }
 /** Haiku 4.5 has a 200k token window; 560,000 characters are about 180k of its tokens. */
 export const HAIKU_MAX_CHARS = 560_000
 
+/** The Haiku models with a 200k window; Haiku 5.5 has 1M, like the other members (models overview, November 2026). */
+const SMALL_WINDOW = /haiku-4|3-5-haiku|3-haiku/
+
+/** How many characters of the conversation a member reads: fewer for a model whose window is small. */
+export function inputCapFor(id: string, maxInputChars: number): number {
+  return SMALL_WINDOW.test(id) ? Math.min(maxInputChars, HAIKU_MAX_CHARS) : maxInputChars
+}
+
 /** A member that has not answered by then is counted as failed; it guards against a hung request only. */
 export const MEMBER_MS = 300_000
 

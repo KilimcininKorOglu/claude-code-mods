@@ -3,7 +3,7 @@ import type {} from '../types/gemini'
 import type { EngineInterface, ModelForkResult, Register, SessionMessage, ToolCallResult } from 'claude-code'
 import { runLines, statusText, summaryText, type Chair, type Run, type Seat, type Via } from './board'
 import { changeText, convenedText, ENABLED_KEY, MEMBERS_KEY, membersText, OFF_DENY, parseCommand } from './command'
-import { configFrom, HAIKU_MAX_CHARS, MAX_TOKENS, MEMBER_MS, type Config } from './config'
+import { configFrom, inputCapFor, MAX_TOKENS, MEMBER_MS, type Config } from './config'
 import { bare, DEFAULT_MEMBERS, isSessionModel, labelOfModel, storedMembers, type Member } from './members'
 import { chairPrompt, forkMemberPrompt, INPUT_SCHEMA, letterOf, MEMBER_SYSTEM, memberPrompt, noAnswerText, questionOf, resultText, sendText, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, type Lettered, type Row } from './prompts'
 import { renderTranscript } from './transcript'
@@ -123,7 +123,7 @@ function chairModel(ctx: Ctx, members: readonly Member[]): string {
 /** The conversation as one member reads it; Haiku 4.5 reads less, because its window is smaller. */
 function transcriptOf(ctx: Ctx, member: Member): string | undefined {
   if (ctx.messages === undefined) return undefined
-  const cap = member.id.includes('haiku') ? Math.min(ctx.config.maxInputChars, HAIKU_MAX_CHARS) : ctx.config.maxInputChars
+  const cap = inputCapFor(member.id, ctx.config.maxInputChars)
   const cached = ctx.rendered.get(cap)
   if (cached !== undefined) return cached
   const text = renderTranscript(ctx.messages, cap)

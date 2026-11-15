@@ -4,10 +4,10 @@ Bazı sorunlar bir deneme daha yapınca çözülmez: aynı hata her düzeltmeden
 
 ## Ne yapar
 
-1. Üyeler Opus 5.5, Sonnet 5, Fable 5.1 ve Haiku 4.5'tir; [gemini-core](../gemini-core) kuruluysa ve bir key'i varsa `gemini-3.8-flash` da onlara katılır. gemini-core yoksa ya da key'i yoksa Gemini üyeleri atlanır ve sonuç nedenini söyler. Listeyi `/council members` değiştirir.
+1. Üyeler Opus 5.5, Sonnet 5.5, Fable 5.2 ve Haiku 5.5'tir; [gemini-core](../gemini-core) kuruluysa ve bir key'i varsa `gemini-3.8-flash` da onlara katılır. gemini-core yoksa ya da key'i yoksa Gemini üyeleri atlanır ve sonuç nedenini söyler. Listeyi `/council members` değiştirir.
 2. Üyelerin hepsine aynı anda sorulur:
    - Session'ın kendi modeliyle çalışan üye, session'ı `$.model.fork` ile fork'lar; böylece bütün konuşmayı prompt cache'ten okur.
-   - Diğer her Claude üyesi konuşmayı `$.model.complete` üzerinden, `high` effort'ta metin olarak alır. 400.000 karakteri aşınca önce en uzun tool çıktıları kısaltılır, sonra en eski mesajlar dışarıda bırakılır. Haiku 4.5 en fazla 560.000 karakter okur, çünkü penceresi 200k token'dır.
+   - Diğer her Claude üyesi konuşmayı `$.model.complete` üzerinden, `high` effort'ta metin olarak alır. 400.000 karakteri aşınca önce en uzun tool çıktıları kısaltılır, sonra en eski mesajlar dışarıda bırakılır. `/council members` ile seçilen Haiku 4.5 en fazla 560.000 karakter okur, çünkü penceresi 200k token'dır; Haiku 5.5'in penceresi diğer üyeler gibi 1M token'dır.
    - Bir Gemini üyesi aynı metni key'i, tier'ı ve thinking seviyesini tutan gemini-core üzerinden alır. Her request kendi modelini söylediği için gemini-core 0.3.0 veya üstü gerekir.
 3. Başkan da session'ı fork'lar. Cevapları model adlarıyla değil harflerle (`Member A`, `Member B`) okur; üyelerin nerede anlaştığını, nerede ayrıştığını ve konuşmanın hangi tarafı desteklediğini, neyi gözden kaçırdıklarını ve bir sonraki adımı yazar.
 4. Çağıran, kararı ve her cevabı okur; her cevabın başında harfi, modeli ve süresi yazar. Başarısız olan üye nedeniyle birlikte anılır. Hiçbir üye cevap vermezse çağrı her nedenle birlikte reddedilir ve başkan çalışmaz.
@@ -59,7 +59,7 @@ Her koşu, üye başına bir ve başkan için bir request yapar. Claude Code 2.1
 - Beş varsayılan üyeli bir koşu 25 ile 44 saniye sürdü; süreyi en yavaş üye belirler. Fork'lar 4 ile 11 saniye sürdü ve konuşmayı cache'ten okudu (kısa bir session'da 83k token).
 - Varsayılan sınır olan 400.000 karakterlik konuşma Opus 5.5, Sonnet 5 ve Fable 5.1'de 163.828, Haiku 4.5'te 128.018, gemini-3.8-flash'ta 120.057 input token eder.
 
-Liste fiyatlarıyla tam 400.000 karakterlik bir koşu tahminen yaklaşık $2,20 tutar: Fable 5.1 yaklaşık $1,70 (milyon input token başına $10), Sonnet 5.5 yaklaşık $0,34 (Sonnet 5 ile aynı liste fiyatı; token sayısı ölçümde Sonnet 5'te ölçüldü), Haiku 4.5 yaklaşık $0,13, iki fork da birkaç sentlik cache okuması. Daha kısa bir konuşma orantılı olarak daha ucuzdur. Claude aboneliğinde bu request'ler bunun yerine kullanım limitlerinden düşer. Maliyeti azaltmak için `/council members` ile bir üyeyi çıkar, örneğin `/council members opus sonnet haiku gemini-3.8-flash`.
+Milyon input token başına liste fiyatları Fable 5.2 için $8, Sonnet 5.5 için $2, Haiku 5.5 için $0,10'dur; Haiku 5.5, 100.000 token'ı aşan bir prompt'un tamamını $0,50'den faturalandırır. Yukarıdaki token sayıları önceki üyelerde ölçüldü; Fable 5.2 ve Haiku 5.5'in token sayıları ölçülmedi, bu yüzden burada bir koşunun dolar toplamı verilmiyor. İki fork cache okuması tutar. Daha kısa bir konuşma orantılı olarak daha ucuzdur. Claude aboneliğinde bu request'ler bunun yerine kullanım limitlerinden düşer. Maliyeti azaltmak için `/council members` ile bir üyeyi çıkar, örneğin `/council members opus sonnet haiku gemini-3.8-flash`.
 
 `gemini-3.1-pro-preview` denemedeki her free tier key'de HTTP 429 döndü, çünkü free tier'da bu model için kota yok. Onu üyelere yalnız ücretli bir key'le ekle.
 
