@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitUrl, denyText, doneLines, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, shownPath, sidebarLines, unpinnedUse, unpinnedUses } from '../hooks/pin.ts'
+import { commitUrl, denyText, doneLines, isGuarded, isWorkflow, logText, modeOf, noteText, openRefs, refOf, shownPath, sidebarLines, unpinnedUse, unpinnedUses } from '../hooks/pin'
 
 tier('user')
 

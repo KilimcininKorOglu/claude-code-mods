@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, shownPath, sidebarLines, unpinnedUses, type Line, type Mode, type Unpinned } from './pin.ts'
+import { commitUrl, denyText, doneLines, doneLog, doneTitle, isCommit, isGuarded, isNarrowable, isWorkflow, logText, MAX_NAMED, modeOf, noteText, openNote, openRefs, refOf, sectionKey, shownPath, sidebarLines, unpinnedUses, type Line, type Mode, type Unpinned } from './pin'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
