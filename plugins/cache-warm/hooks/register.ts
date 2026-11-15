@@ -442,15 +442,16 @@ async function measure($: EngineInterface, s: State, u: TurnUsage, now: number):
   if (u.model) s.model = u.model
   // A turn's usage sums its requests, so this is what the whole turn read and cost.
   const price = priceNow(s)
-  await keepLastRead($, s, { kind: 'turn', read: u.cache_read_input_tokens, write: u.cache_creation_input_tokens, usd: price ? responseUsd(u, price) : null, at: now })
   const previous = s.ctx
   const write = u.cache_creation_input_tokens
   // A turn's usage sums its responses, so a ten-step turn counts the context ten
   // times; the engine's live window figure is the context, the sum only a fallback.
   const live = (await $.session.usage()).context.tokens
   s.ctx = live && live > 0 ? live : u.input_tokens + u.cache_read_input_tokens + write
+  // The context is one request's prompt, which decides a long-prompt rate; the summed usage is not.
+  await keepLastRead($, s, { kind: 'turn', read: u.cache_read_input_tokens, write, usd: price ? responseUsd(u, price, s.ctx) : null, at: now })
   if (!isColdWrite(previous, write)) return
-  const usd = writeUsd(write, priceNow(s))
+  const usd = writeUsd(write, priceNow(s), s.ctx)
   s.coldWrites.push({ tokens: write, usd })
   // The endless loop already keeps this cache; a window with an end would only shorten it.
   if (s.endless || s.deadline >= now + AUTO_WARM_MS) return
