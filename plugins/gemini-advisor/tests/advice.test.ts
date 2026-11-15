@@ -1,10 +1,10 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 
-import { ADVISOR_TASK, adviceText, buildAdviceBody, messageOf } from '../hooks/advice.ts'
-import { parseCommand } from '../hooks/command.ts'
-import { configFrom } from '../hooks/config.ts'
-import { clip, renderTranscript } from '../hooks/transcript.ts'
+import { ADVISOR_TASK, adviceText, buildAdviceBody, messageOf } from '../hooks/advice'
+import { parseCommand } from '../hooks/command'
+import { configFrom } from '../hooks/config'
+import { clip, renderTranscript } from '../hooks/transcript'
 
 tier('user')
 

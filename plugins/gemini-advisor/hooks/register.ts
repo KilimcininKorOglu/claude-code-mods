@@ -1,8 +1,8 @@
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
-import { adviceText, buildAdviceBody, INPUT_SCHEMA, messageOf, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, usageText, type Answer } from './advice.ts'
-import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command.ts'
-import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
-import { renderTranscript } from './transcript.ts'
+import { adviceText, buildAdviceBody, INPUT_SCHEMA, messageOf, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, usageText, type Answer } from './advice'
+import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config'
+import { renderTranscript } from './transcript'
 
 /**
  * The last advice's usage line, for the status; whether the system prompt

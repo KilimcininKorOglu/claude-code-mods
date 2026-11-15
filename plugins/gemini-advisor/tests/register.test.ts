@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionMessage, ToolSpec } from 'claude-code'
 
-import { SYSTEM_GUIDANCE, TOOL_ID } from '../hooks/advice.ts'
+import { SYSTEM_GUIDANCE, TOOL_ID } from '../hooks/advice'
 
 tier('user')
 
