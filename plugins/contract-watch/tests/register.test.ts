@@ -32,17 +32,17 @@ const run = (args: string): CommandRunInput => ({
 
 const CHECK = '<edit-check sym="parse" status="contract-change" params_was="1" params_now="2"><c n="main" p="cmd/main.go:5"/></edit-check>'
 
-type World = { argv: string[][]; logs: string[]; store: Map<string, unknown>; staged: string[]; ripwire: { exitCode: number; stdout: string; stderr: string } }
+type World = { argv: string[][]; logs: string[]; store: Map<string, unknown>; staged: string[]; ripwire: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false } }
 
 function world(on: On): World {
-  const w: World = { argv: [], logs: [], store: new Map(), staged: ['cmd/parse.go'], ripwire: { exitCode: 0, stdout: CHECK, stderr: '' } }
+  const w: World = { argv: [], logs: [], store: new Map(), staged: ['cmd/parse.go'], ripwire: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: CHECK, stderr: '' } }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => { w.store.set(e.key, e.value); return { value: undefined } })
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('process.run', (_, e) => {
     w.argv.push([...e.argv, `cwd=${e.init?.cwd}`])
-    if (e.argv[1] === 'diff') return { value: { exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
-    if (e.argv[0] === 'git') return { value: { exitCode: 0, stdout: '/src/app\ncmd/\n', stderr: '' } }
+    if (e.argv[1] === 'diff') return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
+    if (e.argv[0] === 'git') return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '/src/app\ncmd/\n', stderr: '' } }
     return { value: w.ripwire }
   })
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
@@ -90,7 +90,7 @@ describe('contract-watch', () => {
 
   test('in deny mode a commit stops while a caller does not match, and runs once ripwire says it does', async ($, on) => {
     const w = world(on)
-    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: BLOCKING, stderr: '' }
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     expect((await $.command.run(run('mode deny'))).text).toBe('mode deny: git commit, push and merge stop while a caller does not match a changed signature')
     const denied = await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
@@ -98,7 +98,7 @@ describe('contract-watch', () => {
     expect((await $.command.run(run(''))).text).toBe('on · mode deny · 1 signature(s) have callers to check; it needs ripwire on PATH')
     expect((await $.tool.call({ tool: 'Bash', command: 'git status' } as never)).result).toBe('ok')
     // The caller takes the new signature now: ripwire drops the mark and the gate opens.
-    w.ripwire = { exitCode: 0, stdout: CHECK, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: CHECK, stderr: '' }
     expect((await $.tool.call({ tool: 'Bash', command: 'git push' } as never)).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('no caller of parse carries the mismatch mark any more')
     expect((await $.command.run(run('mode x'))).text).toBe('mode expects note or deny')
@@ -106,7 +106,7 @@ describe('contract-watch', () => {
 
   test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {
     const w = world(on)
-    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: BLOCKING, stderr: '' }
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     // Every window shares the store: another one turned deny mode on, and this one never ran the command.
     w.store.set('mode', 'deny')
@@ -121,7 +121,7 @@ describe('contract-watch', () => {
     const w = world(on)
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     expect((await $.command.run(run(''))).text).toBe('on · mode note · 1 signature(s) have callers to check; it needs ripwire on PATH')
-    w.ripwire = { exitCode: 0, stdout: UNCHANGED, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: UNCHANGED, stderr: '' }
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('every caller matches parse again')
     expect((await $.command.run(run(''))).text).toBe('on · mode note · no signature is open; it needs ripwire on PATH')
@@ -129,7 +129,7 @@ describe('contract-watch', () => {
 
   test('a commit that holds none of the open files runs, and a push still stops', async ($, on) => {
     const w = world(on)
-    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: BLOCKING, stderr: '' }
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     await $.command.run(run('mode deny'))
     // The index holds another file: the finding stands, and the commit runs.
@@ -149,11 +149,11 @@ describe('contract-watch', () => {
   test('a commit that takes the change leaves the finding open while a caller keeps the old arity', async ($, on) => {
     const w = world(on)
     on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
-    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: BLOCKING, stderr: '' }
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
     // After the commit ripwire compares against the new HEAD: the contract reads unchanged, the caller is still marked.
-    w.ripwire = { exitCode: 0, stdout: '<edit-check sym="parse" status="unchanged" incompatible="1"><c n="main" p="cmd/main.go:5" incompatible="1"/></edit-check>', stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '<edit-check sym="parse" status="unchanged" incompatible="1"><c n="main" p="cmd/main.go:5" incompatible="1"/></edit-check>', stderr: '' }
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
     expect(w.logs.some(l => l.includes('matches parse again'))).toBe(false)
     expect((await $.command.run(run(''))).text).toBe('on · mode note · 1 signature(s) have callers to check; it needs ripwire on PATH')
@@ -167,7 +167,7 @@ describe('contract-watch', () => {
       notes.push([...(e.context ?? [])])
       return { text: e.text }
     })
-    w.ripwire = { exitCode: 0, stdout: BLOCKING, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: BLOCKING, stderr: '' }
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
     const prompt = (text: string) => $.prompt.submit({ text, origin: { kind: 'composer' }, wait: false })
     // No turn has ended yet, so the model is owed nothing.
@@ -180,7 +180,7 @@ describe('contract-watch', () => {
     await prompt('third')
     expect(notes[2]).toEqual([])
     // The callers match now: the turn's end closes the finding and owes no note.
-    w.ripwire = { exitCode: 0, stdout: UNCHANGED, stderr: '' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: UNCHANGED, stderr: '' }
     await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' })
     expect(w.logs.at(-1)).toBe('every caller matches parse again')
     await prompt('fourth')
@@ -189,7 +189,7 @@ describe('contract-watch', () => {
 
   test('a ripwire failure is logged once and the edit result stays', async ($, on) => {
     const w = world(on)
-    w.ripwire = { exitCode: 127, stdout: '', stderr: 'ripwire: command not found' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 127, stdout: '', stderr: 'ripwire: command not found' }
     const r = await $.tool.call(edit('func parse(a int) {', 'func parse(b int) {'))
     await $.tool.call(edit('func parse(a int) {', 'func parse(b int) {'))
     expect(r).toEqual({ result: 'edited' })
@@ -204,7 +204,7 @@ describe('contract-watch', () => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], kinds: [] }
     seatSidebar(on, bar)
-    w.ripwire = { exitCode: 1, stdout: '', stderr: NOT_FOUND }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 1, stdout: '', stderr: NOT_FOUND }
     const r = await $.tool.call(edit('function parse(a) {', 'function parse(a, b) {'))
     expect(r).toEqual({ result: 'edited' })
     expect(bar.sections).toEqual([{ key: 'parse', lines: ['parse: ripwire does not index it, its callers were not checked'] }])
@@ -216,7 +216,7 @@ describe('contract-watch', () => {
   test('an open symbol ripwire no longer indexes closes', async ($, on) => {
     const w = world(on)
     await $.tool.call(edit('func parse(a int) int {', 'func parse(a int, b int) int {'))
-    w.ripwire = { exitCode: 1, stdout: '', stderr: NOT_FOUND }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 1, stdout: '', stderr: NOT_FOUND }
     expect((await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)).result).toBe('ok')
     expect(w.logs.at(-1)).toBe('every caller matches parse again')
   })
@@ -225,7 +225,7 @@ describe('contract-watch', () => {
     const w = world(on)
     const bar: Bar = { open: true, sections: [], kinds: [] }
     seatSidebar(on, bar)
-    w.ripwire = { exitCode: 127, stdout: '', stderr: 'ripwire: command not found' }
+    w.ripwire = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 127, stdout: '', stderr: 'ripwire: command not found' }
     await $.tool.call(edit('func parse(a int) {', 'func parse(b int) {'))
     expect(bar.sections).toEqual([{ key: 'unchecked', lines: ['the callers were not checked: ripwire --edit-check failed: ripwire: command not found'] }])
     expect(bar.kinds).toEqual(['warn'])
