@@ -7,7 +7,7 @@
  * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, KIND_MEANINGS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
+import { ANCHOR_TYPES, isProtected, KIND_MEANINGS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
 export const DEFAULT_MODEL = 'haiku'
@@ -418,11 +418,11 @@ export const QUERY_CHARS = 500
 /**
  * The existing entries a kept memory names, as related or as replaced: only ids the model was shown, of
  * the memory's own scope, because the daemon refuses a link into the other store and would drop the
- * memory with it.
+ * memory with it. A replaced entry is never a protected one: the daemon retires whatever it is named.
  */
-function shownIdsOf(value: unknown, scope: 'project' | 'user', existing: readonly Memory[], max: number): string[] | undefined {
+function shownIdsOf(value: unknown, scope: 'project' | 'user', existing: readonly Memory[], max: number, retires = false): string[] | undefined {
   if (!Array.isArray(value)) return undefined
-  const allowed = new Set(existing.filter(memory => memory.scope === scope).map(memory => memory.id))
+  const allowed = new Set(existing.filter(memory => memory.scope === scope && !(retires && isProtected(memory))).map(memory => memory.id))
   const ids = [...new Set(value.filter((id): id is string => typeof id === 'string' && allowed.has(id)))].slice(0, max)
   return ids.length > 0 ? ids : undefined
 }
@@ -453,7 +453,7 @@ export function additionOf(op: Op, context: Context): RememberInput | undefined 
   const anchors = anchorsOf(op.anchors, scope, context.root)
   return {
     related: shownIdsOf(op.related, scope, context.existing, MAX_RELATED),
-    supersedes: shownIdsOf(op.supersedes, scope, context.existing, MAX_SUPERSEDED),
+    supersedes: shownIdsOf(op.supersedes, scope, context.existing, MAX_SUPERSEDED, true),
     text,
     scope,
     kind: keptKind(kindOf(op.kind ?? op.type), anchors),

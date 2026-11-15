@@ -101,6 +101,14 @@ describe('curate', () => {
     expect(additionsOf(JSON.stringify({ candidates: [{ is: 'keep', memory: { text: 'A note.', kind: 'reference', anchors: [] } }] }), { sessionId: 's1', root: '/repo', existing: [], now: 0 }).map(i => i.kind)).toEqual(['fact'])
   })
 
+  test('a kept memory never replaces a permanent entry or one of importance 0.9, and may still name them as related', () => {
+    // The daemon retires whatever a memory replaces, with no check of its own.
+    const weighty = { ...memory('w'), importance: 0.9 }
+    const text = JSON.stringify({ candidates: [{ is: 'keep', memory: { text: 'A new rule.', supersedes: ['p', 'w', 'b'], related: ['p', 'w'] } }] })
+    const [kept] = additionsOf(text, { sessionId: 's1', root: '/repo', existing: [...SHOWN, weighty], now: 0 })
+    expect([kept?.supersedes, kept?.related]).toEqual([['b'], ['p', 'w']])
+  })
+
   test('a kept memory replaces only shown entries of its scope, a state ends on a later date, and the source is one the model may name', () => {
     const now = Date.parse('2026-11-15T00:00:00Z')
     const user = { ...memory('u'), scope: 'user' as const }

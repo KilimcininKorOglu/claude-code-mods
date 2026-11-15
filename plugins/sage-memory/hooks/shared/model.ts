@@ -158,6 +158,11 @@ export type Memory = {
   ownerSessionId?: string
 }
 
+/** A memory no automatic job retires (replaces, merges away, rewrites or deletes): permanent, or importance 0.9 or more. */
+export function isProtected(memory: Pick<Memory, 'persistence' | 'importance'>): boolean {
+  return memory.persistence === 'permanent' || memory.importance >= 0.9
+}
+
 export type RememberInput = {
   text: string
   scope?: Scope

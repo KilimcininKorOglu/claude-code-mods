@@ -5,7 +5,7 @@
  * phase 5 turns the verdicts into patches and review proposals. Pure code; `register.tsx` asks the
  * model and applies the result.
  */
-import type { Candidate, Memory, SuggestedAction, UpdatePatch } from './shared/model.ts'
+import { isProtected, type Candidate, type Memory, type SuggestedAction, type UpdatePatch } from './shared/model.ts'
 import { textKey, tokenize } from './shared/text.ts'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -273,11 +273,6 @@ export function mergeVerdictOf(raw: string): MergeVerdict | undefined {
 
 function keeperScore(m: Memory): number {
   return Math.min(Math.log2(m.text.length + 1) * 5, 50) + Math.min(m.anchors.length * 5, 25) + m.confidence * 15 + Math.min(m.tags.length, 5) + Math.min((m.revision - 1) * 0.5, 5)
-}
-
-/** A memory that never loses a merge: permanent, or importance ≥ 0.9. */
-function isProtected(m: Memory): boolean {
-  return m.persistence === 'permanent' || m.importance >= 0.9
 }
 
 export type Merge = { keeper: Memory; loser: Memory }
