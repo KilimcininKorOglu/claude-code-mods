@@ -40,9 +40,9 @@ function world(on: On): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('process.run', (_, e) => {
     w.argv.push(e.argv.join(' '))
-    if (!w.mmdc) return { value: { exitCode: 127, stdout: '', stderr: 'command not found: mmdc' } }
+    if (!w.mmdc) return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 127, stdout: '', stderr: 'command not found: mmdc' } }
     const bad = e.argv.includes('-i') && (w.written.get(e.argv[2] ?? '') ?? '').trimEnd().endsWith('-->')
-    return { value: bad ? { exitCode: 1, stdout: '', stderr: 'Error: Parse error on line 2:' } : { exitCode: 0, stdout: '11.4.0', stderr: '' } }
+    return { value: bad ? { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 1, stdout: '', stderr: 'Error: Parse error on line 2:' } : { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '11.4.0', stderr: '' } }
   })
   on('ui.render', { component: 'AssistantMessage' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
