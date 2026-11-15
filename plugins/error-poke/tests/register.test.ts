@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionRateLimit } from 'claude-code'
 
-import { DEFAULT_MAX_POKES, RESET_MARGIN_MS, decide, limitWait, eventLines, limitLines, limitLog, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLines, pokeLog, statusText } from '../hooks/poke.ts'
+import { DEFAULT_MAX_POKES, RESET_MARGIN_MS, decide, limitWait, eventLines, limitLines, limitLog, limitOf, MAX_DELAY_MS, POKE_TEXT, pokeDelay, pokeLines, pokeLog, statusText } from '../hooks/poke'
 
 tier('user')
 
