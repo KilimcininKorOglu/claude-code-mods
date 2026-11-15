@@ -73,6 +73,8 @@ describe('triage', () => {
   test('an empty reply is no verdict, and a protected or older memory keeps its place', () => {
     expect(mergeVerdictOf('  ')).toBe(undefined)
     expect(mergeVerdictOf('overlap, related')).toBe('OVERLAP')
+    expect(mergeVerdictOf('**YES**')).toBe('YES')
+    expect(mergeVerdictOf('**')).toBe(undefined)
     const older = memory('old', { createdAt: '2026-01-01T00:00:00Z' })
     const newer = memory('new', { createdAt: '2026-06-01T00:00:00Z', text: older.text })
     expect(mergeOf({ a: newer, b: older })).toMatchObject({ keeper: { id: 'old' }, loser: { id: 'new' } })

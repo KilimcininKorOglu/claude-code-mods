@@ -268,9 +268,14 @@ export function textPairPrompt(a: string, b: string): string {
 
 export type MergeVerdict = 'YES' | 'NO' | 'OVERLAP'
 
+/** A reply's text from its first letter on, upper case: haiku sometimes wraps its verdict in markdown, as in `**NO**`. */
+function verdictText(raw: string): string {
+  return raw.replace(/^[^\p{L}]+/u, '').toUpperCase()
+}
+
 /** The verdict in a reply, or undefined for an empty one: an empty reply is no verdict, not a NO. */
 export function mergeVerdictOf(raw: string): MergeVerdict | undefined {
-  const text = raw.trim().toUpperCase()
+  const text = verdictText(raw)
   if (text === '') return undefined
   if (text.startsWith('YES')) return 'YES'
   return text.startsWith('OVERLAP') ? 'OVERLAP' : 'NO'
