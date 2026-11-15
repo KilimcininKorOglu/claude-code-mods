@@ -69,11 +69,11 @@ function world(on: On, graphics = true): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('process.run', (_, e) => {
     w.argv.push(e.argv.join(' '))
-    if (w.failNext) return { value: { exitCode: 1, stdout: '', stderr: 'sips: not found' } }
+    if (w.failNext) return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 1, stdout: '', stderr: 'sips: not found' } }
     const out = e.argv.includes('--out') ? (e.argv.at(-1) ?? '') : ''
     if (out.endsWith('.bmp')) w.files.set(out, { base64: bmp24(Number(e.argv[3] ?? 1), Number(e.argv[2] ?? 1)), size: 1 })
     else if (out !== '') w.files.set(out, { base64: '', size: 1 })
-    return { value: { exitCode: 0, stdout: 'pixelWidth: 640\npixelHeight: 480\n', stderr: '' } }
+    return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: 'pixelWidth: 640\npixelHeight: 480\n', stderr: '' } }
   })
   on('tool.call', { tool: 'Read' }, () => ({ result: 'image' }) as never)
   on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
