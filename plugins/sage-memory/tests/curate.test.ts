@@ -24,6 +24,18 @@ describe('curate', () => {
     expect(steps([{ action: 'supersede', targetId: 'b' }, { action: 'recalibrate', targetId: 'a', status: 'archived' }]).map(s => (s.kind === 'delete' ? s.id : s.kind))).toEqual(['b', 'a'])
   })
 
+  test('a memory of importance 0.9 or more is protected like a permanent one: never deleted, rewritten, merged away or split', () => {
+    const shown = [memory('a'), { ...memory('w'), importance: 0.9 }]
+    const run = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), shown, { sessionId: 's1', root: '/repo' })
+    expect(run([
+      { action: 'delete', targetId: 'w' },
+      { action: 'update', targetId: 'w', text: 'x' },
+      { action: 'split', targetId: 'w', items: [{ text: 'Rule.' }] },
+      { action: 'recalibrate', targetId: 'w', status: 'archived' },
+    ])).toEqual([])
+    expect(run([{ action: 'merge', targetIds: ['a', 'w'], text: 'One fact.' }])).toMatchObject([{ kind: 'replace', replaced: ['a'] }])
+  })
+
   test('a memory whose value changed is rewritten, and a permanent one is not', () => {
     expect(steps([{ action: 'update', targetId: 'a', text: ' The limit is 20. ' }, { action: 'update', targetId: 'p', text: 'x' }, { action: 'update', targetId: 'b', text: '' }])).toEqual([
       { kind: 'update', id: 'a', patch: { text: 'The limit is 20.' }, count: 'rewritten' },

@@ -3,11 +3,12 @@
  * those files, and the memories pending candidates name, against what the turn changed. The prompt
  * is SAGE's with one change the user chose: a memory the turn made wrong is rewritten when the new
  * value is known, else deleted, never kept as superseded or archived. Only the ids it was shown are
- * touched, and a permanent memory is never rewritten or deleted. Pure code; `register.tsx` makes every call.
+ * touched, and a protected memory (permanent, or importance 0.9 or more) is never rewritten or deleted.
+ * Pure code; `register.tsx` makes every call.
  */
 import { anchorsOf, confidenceOf, importanceOf, keptKind, kindOf, operationsOf } from './consolidate.ts'
 import { faint, listed, partsLine, type Line } from './link.ts'
-import type { Memory, RememberInput, UpdatePatch } from './shared/model.ts'
+import { isProtected, type Memory, type RememberInput, type UpdatePatch } from './shared/model.ts'
 
 /** 2.1.288 enforces this timeout on a timer-launched call; 30 s cut the curator's answer as aborted. */
 export const CURATE_MS = 180_000
@@ -74,7 +75,7 @@ export type Step =
 type Op = Record<string, unknown>
 
 /**
- * The shown memories an operation may touch: any of them to keep or strengthen, and only a non-permanent
+ * The shown memories an operation may touch: any of them to keep or strengthen, and only an unprotected
  * one to retire. A link step writes its new `related` list back, so a second link on the same memory adds to it.
  */
 type Shown = { all: Map<string, Memory>; retirable: (id: unknown) => id is string }
@@ -87,7 +88,10 @@ function relatedStep(shown: Shown, memory: Memory, related: string[], count: 'li
 
 function shownOf(targets: readonly Memory[]): Shown {
   const all = new Map(targets.map(memory => [memory.id, memory]))
-  const retirable = (id: unknown): id is string => typeof id === 'string' && all.get(id) !== undefined && all.get(id)?.persistence !== 'permanent'
+  const retirable = (id: unknown): id is string => {
+    const memory = typeof id === 'string' ? all.get(id) : undefined
+    return memory !== undefined && !isProtected(memory)
+  }
   return { all, retirable }
 }
 
