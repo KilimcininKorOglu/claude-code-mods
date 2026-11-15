@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { doneLog, emptyHistory, findingsFor, isFlaky, listText, noteText, readHistory, record, sectionKey, verdictOf, WINDOW_MS, type History } from '../hooks/history.ts'
+import { doneLog, emptyHistory, findingsFor, isFlaky, listText, noteText, readHistory, record, sectionKey, verdictOf, WINDOW_MS, type History } from '../hooks/history'
 
 /** The notes for the tests one run failed, as the hooks module builds them. */
 const notesFor = (h: History, failed: string[], now: number): string[] => findingsFor(h, failed, now).map(f => noteText(f.id, f.v))

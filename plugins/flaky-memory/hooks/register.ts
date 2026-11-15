@@ -1,7 +1,8 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { fingerprintOf, type TreeState } from './fingerprint.ts'
-import { doneLines, doneLog, emptyHistory, findingsFor, isFlaky, listText, logText, noteText, readHistory, record, sectionKey, sidebarLines, type History, type Line } from './history.ts'
-import { isTestCommand, parseOutput } from './parse.ts'
+import { fingerprintOf, type TreeState } from './fingerprint'
+import { doneLines, doneLog, emptyHistory, findingsFor, isFlaky, listText, logText, noteText, readHistory, record, sectionKey, sidebarLines, type History, type Line } from './history'
+import { isTestCommand, parseOutput } from './parse'
 
 const ENABLED_KEY = 'enabled'
 

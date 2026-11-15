@@ -1,5 +1,5 @@
 /** Each test's recent runs, and whether one of them passed and failed on the same code. */
-import type { Outcome } from './parse.ts'
+import type { Outcome } from './parse'
 
 export const WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 export const MAX_RUNS = 50

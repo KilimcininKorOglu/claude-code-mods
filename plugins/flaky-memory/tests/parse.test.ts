@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { fingerprintOf, fnv1a, MAX_DIFF_CHARS } from '../hooks/fingerprint.ts'
-import { isTestCommand, parseOutput } from '../hooks/parse.ts'
+import { fingerprintOf, fnv1a, MAX_DIFF_CHARS } from '../hooks/fingerprint'
+import { isTestCommand, parseOutput } from '../hooks/parse'
 
 tier('user')
 

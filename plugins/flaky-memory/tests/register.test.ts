@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { WINDOW_MS } from '../hooks/history.ts'
+import { WINDOW_MS } from '../hooks/history'
 
 tier('user')
 
