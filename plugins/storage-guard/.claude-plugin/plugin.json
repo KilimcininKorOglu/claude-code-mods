@@ -1,6 +1,6 @@
 {
   "name": "storage-guard",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "After an edit that keeps browser data in localStorage or sessionStorage, names each line, so the model stores the data in a cookie instead.",
   "author": {
     "name": "Kerem Gok",
