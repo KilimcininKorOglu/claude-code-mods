@@ -1,6 +1,6 @@
 {
   "name": "sql-concat-watch",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "description": "After an edit that builds SQL by joining or interpolating strings, names each line, so the model passes the values as query parameters.",
   "author": {
     "name": "Kerem Gok",
