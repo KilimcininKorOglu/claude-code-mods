@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register } from 'claude-code'
 import {
   addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
