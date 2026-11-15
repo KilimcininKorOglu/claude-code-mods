@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type MockClock } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { requestOf } from '../hooks/commands.ts'
+import { requestOf } from '../hooks/commands'
 
 tier('user')
 

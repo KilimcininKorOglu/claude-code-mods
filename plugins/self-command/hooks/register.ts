@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { INPUT_SCHEMA, queuedText, reportText, requestOf, TOOL_DESCRIPTION, TOOL_NAME, type Request } from './commands.ts'
+import { INPUT_SCHEMA, queuedText, reportText, requestOf, TOOL_DESCRIPTION, TOOL_NAME, type Request } from './commands'
 
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
