@@ -152,6 +152,17 @@ describe('hygiene reviews', () => {
     w.close()
   })
 
+  test('with embeddings ready the word rule flags nothing, because triage asks the job model about close pairs', async () => {
+    const w = world()
+    await remembered(w, { text: 'The deploy job runs the migrations before the web servers start' })
+    await remembered(w, { text: 'The deploy job does not run the migrations before the web servers start', distinct: true })
+    const embeddings = createEmbeddings(fakeRuntime())
+    await embeddings.load(false, () => undefined)
+    const report = await hygieneAt(w, 0, {}, { embeddings })
+    assert.deepEqual([report.embedded, report.contradictions, report.reviewsOpened], [2, 0, 0])
+    w.close()
+  })
+
   test('a stale memory and a doubtful one get a review each; reminders without a counted use open none', async () => {
     const w = world()
     const reminded = await remembered(w, { text: 'The cache layer keeps sessions for an hour' })

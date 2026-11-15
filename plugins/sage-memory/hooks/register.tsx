@@ -101,6 +101,8 @@ import {
   containsPrompt,
   containsVerdictOf,
   containedMerge,
+  CONFLICT_SYSTEM,
+  conflictProposal,
   discardDeletion,
   judgedOf,
   judgedTimes,
@@ -1417,16 +1419,28 @@ async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number
   return rated
 }
 
-/** What the model said of one pair: the merge it implies, whether it is an overlap, or no verdict. */
-type Compared = { merge?: Merge; overlap: boolean } | undefined
+/** What the model said of one pair: the merge it implies, whether it is an overlap, a review it asks for, or no verdict. */
+type Compared = { merge?: Merge; overlap: boolean; proposal?: Proposal } | undefined
 
-/** A close pair: whether each memory states the other whole, asked both ways on the whole texts. */
+/** Whether the two memories cannot both hold, by the job model's answer; undefined when it gave none. */
+async function conflicts($: EngineInterface, pair: Pair): Promise<boolean | undefined> {
+  const raw = await answerOf($, CONFLICT_SYSTEM, containsPrompt(pair.a.text, pair.b.text))
+  return raw === undefined ? undefined : containsVerdictOf(raw)
+}
+
+/**
+ * A close pair: whether each memory states the other whole, asked both ways on the whole texts;
+ * when neither does, whether both can hold, and a review of the newer one when they cannot.
+ */
 async function compareClose($: EngineInterface, pair: Pair): Promise<Compared> {
   const aInB = await states($, pair.a.text, pair.b.text)
   const bInA = aInB === undefined ? undefined : await states($, pair.b.text, pair.a.text)
   if (aInB === undefined || bInA === undefined) return undefined
   const merge = containedMerge(pair, aInB, bInA)
-  return { merge, overlap: merge === undefined }
+  if (merge !== undefined) return { merge, overlap: false }
+  const conflict = await conflicts($, pair)
+  if (conflict === undefined) return undefined
+  return { overlap: !conflict, proposal: conflict ? conflictProposal(pair) : undefined }
 }
 
 /** A cluster pair: the merge question on the opening of both texts. */
@@ -1452,6 +1466,7 @@ async function comparePairs($: EngineInterface, pairs: readonly Pair[], report: 
     }
     compared.push(pairKey(pair))
     if (result.merge !== undefined) merges.push(result.merge)
+    if (result.proposal !== undefined) report.proposals.push(result.proposal)
     if (result.overlap) report.overlaps.push(pair)
   }
   report.pairs = pairs.length

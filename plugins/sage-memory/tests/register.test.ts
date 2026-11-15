@@ -59,6 +59,7 @@ type World = {
   mergeText?: string
   /** The containment answer for one prompt, which names the two texts in order. */
   contains?: (prompt: string) => string | undefined
+  conflictText?: string
   files: Map<string, string>
   panes: UiPane[]
   buttons: unknown[]
@@ -80,6 +81,7 @@ function lostAnswer(lost: World['lost']): { value: unknown } | undefined {
 function modelAnswer(w: World, system: string): string | undefined {
   if (system.startsWith('Rate one memory')) return w.rateText
   if (system.startsWith('Do these two')) return w.mergeText
+  if (system.startsWith('Two project memories, A and B, follow. Do they give')) return w.conflictText
   return system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
 }
 
@@ -130,7 +132,7 @@ function world(on: On): World {
       return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
     }
     const system = e.system ?? ''
-    const text = system.startsWith('Two project memories') ? w.contains?.(e.prompt) : modelAnswer(w, system)
+    const text = system.startsWith('Two project memories, A and B, follow. Does B') ? w.contains?.(e.prompt) : modelAnswer(w, system)
     return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
   })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
@@ -1127,6 +1129,20 @@ describe('triage, compact and capture', () => {
     ])
     expect(text).toContain(`merge: ${GRAY.id} into ${KEEPER.id}`)
     expect(text).toContain('from 2 compared pair(s)')
+  })
+
+  withSidebar('a close pair neither memory states whole asks whether both can hold, and a conflict files a review of the newer one', async ($, on) => {
+    const w = triageWorld(on)
+    w.routes.set('/memory/close-pairs', [{ a: GRAY.id, b: TWIN.id, cosine: 0.78 }])
+    w.rateText = '4 | a build fact a later session needs'
+    w.mergeText = 'NO'
+    w.contains = () => 'NO'
+    w.conflictText = 'YES'
+    await $.session.start(START)
+    const text = String((await $.command.run(run('triage apply'))).text)
+    expect(w.asked.filter(a => a.system.startsWith('Two project memories, A and B, follow. Do they give')).map(a => a.prompt)).toEqual([`A: "${GRAY.text}"\nB: "${TWIN.text}"`])
+    expect(bodiesOf(w, '/candidates/propose').map(b => b.input)).toMatchObject([{ kind: 'memory_review', targetMemoryId: GRAY.id }])
+    expect(text).toContain('1 review proposal(s) filed')
   })
 
   withSidebar('a rating the model does not give changes nothing', async ($, on) => {

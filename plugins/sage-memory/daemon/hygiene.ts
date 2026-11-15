@@ -13,7 +13,8 @@ import { verifyMemories, type VerifyScope } from './verify.ts'
 
 /**
  * One hygiene run over one store, in SAGE's order: verify the anchors, merge memories with the
- * same text (near pairs go to the triage's merge question), flag contradictions, open reviews and delete expired session memories, drop the
+ * same text (near pairs go to the triage's questions), embed what lacks a vector, flag contradictions
+ * by the word rule while embeddings are not ready, open reviews and delete expired session memories, drop the
  * reminder records of the sessions Claude Code no longer keeps, remove old tombstones, and record
  * the report. Each step writes in transactions of its own, so requests run between them, and the
  * run stops between steps once the daemon closes.
@@ -72,7 +73,13 @@ const embedStep: Step = async (job, report) => {
   report.embedded = await job.embeddings.fill(job.op.store)
 }
 
+/**
+ * The word rule's contradiction flags, only while embeddings are not ready: with them, triage asks
+ * the job model about every close pair, because the word rule flagged 40 of the 59 close sentence
+ * pairs of a real store and none of them conflicted.
+ */
 const contradictionStep: Step = async (job, report) => {
+  if (job.embeddings.state().state === 'ready') return
   const flagged = await transaction(job.op.store, () => flagContradictions(job.op))
   report.contradictions = flagged.contradictions
   report.reviewsOpened += flagged.reviews

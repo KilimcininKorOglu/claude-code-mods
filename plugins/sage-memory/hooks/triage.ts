@@ -286,6 +286,21 @@ export function pairPrompt(pair: Pair): string {
  */
 export const CONTAINS_SYSTEM = 'Two project memories, A and B, follow. Does B already state everything A states, possibly in other words, in another language, or as one part of a longer text? Reply YES or NO. Reply NO when A states any fact B does not state, gives a different number, name or value, or says the opposite of B.'
 
+/**
+ * The question for a close pair neither memory states whole: can both hold? Hygiene's word rule
+ * (other numbers or a negation in two sentences) flagged 40 of the 59 close sentence pairs of a
+ * real store and none of them conflicted, so a close pair goes to the job model instead. Measured
+ * with haiku, 2 runs per pair: YES to 20 of 20 changed or negated facts, NO to 109 of 122 pairs
+ * that can both hold. A YES only opens a review a person decides.
+ */
+export const CONFLICT_SYSTEM = 'Two project memories, A and B, follow. Do they give different values for the same setting, number, limit or behaviour, or does one say the opposite of the other, so that both cannot be true at the same time? Reply YES or NO. Reply NO when they state different facts that can both be true, even when they share a topic or numbers.'
+
+/** The review a conflicting close pair opens: of the newer memory, naming the older one, as hygiene's flag does. */
+export function conflictProposal(pair: Pair): Proposal {
+  const [newer, older] = pair.a.createdAt >= pair.b.createdAt ? [pair.a, pair.b] : [pair.b, pair.a]
+  return { memory: newer, suggestedAction: 'investigate', reason: `the job model found it cannot hold together with memory ${older.id}: a person decides which one holds` }
+}
+
 /** A memory's text is at most this long in the containment prompt; the daemon takes texts up to 20,000 characters. */
 const CONTAINS_TEXT = 4000
 
