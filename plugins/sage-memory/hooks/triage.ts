@@ -258,12 +258,32 @@ export function judgedTimes(previous: Record<string, number>, live: readonly str
 }
 
 export function pairPrompt(pair: Pair): string {
-  return textPairPrompt(pair.a.text, pair.b.text)
+  return `A: "${cut(pair.a.text, 250)}"\nB: "${cut(pair.b.text, 250)}"`
 }
 
-/** The merge question's prompt for two texts, one of which may not be stored yet. */
-export function textPairPrompt(a: string, b: string): string {
-  return `A: "${cut(a, 250)}"\nB: "${cut(b, 250)}"`
+/**
+ * The question for a memory the daemon held back as close to a stored one. The merge question
+ * above called a fact one sentence of a long memory states OVERLAP in 11 of 12 such pairs, so the
+ * fact would be written again. This one, measured with haiku on whole texts, 3 runs per pair: NO
+ * to 36 of 36 pairs where A adds a fact, changes a number or says the opposite, and to 18 of 18
+ * with a long memory as A and its fact as B; YES to 24 of 36 facts the long memory states, and 9 of
+ * the 12 misses were facts that add a detail the memory lacks. A miss writes the fact as distinct,
+ * so a wrong answer never drops or replaces a memory.
+ */
+export const CONTAINS_SYSTEM = 'Two project memories, A and B, follow. Does B already state everything A states, possibly in other words, in another language, or as one part of a longer text? Reply YES or NO. Reply NO when A states any fact B does not state, gives a different number, name or value, or says the opposite of B.'
+
+/** A memory's text is at most this long in the containment prompt; the daemon takes texts up to 20,000 characters. */
+const CONTAINS_TEXT = 4000
+
+/** The containment question's prompt: does `b` state everything `a` states? Both texts whole up to `CONTAINS_TEXT`. */
+export function containsPrompt(a: string, b: string): string {
+  return `A: "${cut(a, CONTAINS_TEXT)}"\nB: "${cut(b, CONTAINS_TEXT)}"`
+}
+
+/** Whether a reply says YES, or undefined for an empty one. */
+export function containsVerdictOf(raw: string): boolean | undefined {
+  const text = verdictText(raw)
+  return text === '' ? undefined : text.startsWith('YES')
 }
 
 export type MergeVerdict = 'YES' | 'NO' | 'OVERLAP'

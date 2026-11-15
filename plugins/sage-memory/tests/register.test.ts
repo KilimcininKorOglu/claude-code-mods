@@ -57,6 +57,8 @@ type World = {
   curatorText?: string
   rateText?: string
   mergeText?: string
+  /** The containment answer for one prompt, which names the two texts in order. */
+  contains?: (prompt: string) => string | undefined
   files: Map<string, string>
   panes: UiPane[]
   buttons: unknown[]
@@ -72,6 +74,13 @@ function lostAnswer(lost: World['lost']): { value: unknown } | undefined {
   if (lost === 'closing') return { value: { status: 503, ok: false, headers: {}, text: JSON.stringify({ ok: false, error: 'the daemon is closing' }) } }
   if (lost === 'token') return { value: { status: 401, ok: false, headers: {}, text: JSON.stringify({ ok: false, error: 'unauthorized' }) } }
   return undefined
+}
+
+/** The world's answer to a job model call by the system prompt it names. */
+function modelAnswer(w: World, system: string): string | undefined {
+  if (system.startsWith('Rate one memory')) return w.rateText
+  if (system.startsWith('Do these two')) return w.mergeText
+  return system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
 }
 
 function world(on: On): World {
@@ -121,7 +130,7 @@ function world(on: On): World {
       return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
     }
     const system = e.system ?? ''
-    const text = system.startsWith('Rate one memory') ? w.rateText : system.startsWith('Do these two') ? w.mergeText : system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
+    const text = system.startsWith('Two project memories') ? w.contains?.(e.prompt) : modelAnswer(w, system)
     return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
   })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
@@ -754,49 +763,65 @@ describe('consolidator', () => {
     expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).not.toContain('…')
   })
 
-  withSidebar('a held consolidator memory updates the memory the merge question calls the same fact, or is written as distinct', async ($, on) => {
+  /** A world whose daemon holds every plain write back as close to `DAEMON` and adds every distinct one as m5. */
+  function heldWorld(on: On, text: string): World {
     const w = readyWorld(on)
-    const SAME = 'Der Daemon schließt sich fünf Minuten nach der letzten Anfrage.'
-    const OTHER = 'The daemon writes its log to daemon.log beside the socket.'
     w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
     w.routes.set('/memory/remember', (body: Record<string, unknown>) => {
       const input = body.input as { text: string; distinct?: boolean }
       return input.distinct === true ? { memory: memory('m5', input.text), outcome: 'added' } : { outcome: 'similar', similar: [{ id: DAEMON.id, kind: 'fact', text: DAEMON.text, cosine: 0.86 }] }
     })
     w.routes.set('/memory/get', DAEMON)
-    w.routes.set('/memory/update', { memory: DAEMON })
-    w.modelText = JSON.stringify({ candidates: [{ text: 'idle', is: 'keep', memory: { text: SAME, kind: 'fact' } }] })
-    w.mergeText = 'YES'
+    w.modelText = JSON.stringify({ candidates: [{ text: 'idle', is: 'keep', memory: { text, kind: 'fact' } }] })
+    return w
+  }
+
+  async function consolidate($: Parameters<TestBody>[0], w: World): Promise<void> {
     await $.session.start(START)
     await $.prompt.submit(typed('Keep the idle timeout at five minutes, because a reload otherwise spawns a second daemon.'))
     await $.turn.complete(answered('The idle timeout stays at five minutes.'))
     await settled(w)
-    expect(w.asked.find(a => a.system.startsWith('Do these two'))?.prompt).toBe(`A: "${SAME}"\nB: "${DAEMON.text}"`)
-    // The new text is the longer one, so it is written and supersedes the stored memory, which stays recoverable.
-    expect(bodiesOf(w, '/memory/remember').map(body => body.input)).toMatchObject([{ text: SAME }, { text: SAME, distinct: true, supersedes: [DAEMON.id] }])
+  }
+
+  withSidebar('a held consolidator memory a stored memory already states is not written again', async ($, on) => {
+    const SAME = 'Der Daemon schließt sich fünf Minuten nach der letzten Anfrage.'
+    const w = heldWorld(on, SAME)
+    w.contains = prompt => (prompt.startsWith(`A: "${SAME}"`) ? 'YES' : 'NO')
+    await consolidate($, w)
+    expect(w.asked.filter(a => a.system.startsWith('Two project memories')).map(a => a.prompt)).toEqual([`A: "${SAME}"\nB: "${DAEMON.text}"`])
+    expect(bodiesOf(w, '/memory/remember')).toHaveLength(1)
+    expect(streamOf(w, 'consolidator')).toEqual([])
+  })
+
+  withSidebar('a held consolidator memory that states all of a stored one and more supersedes it, and one that adds a fact is written as distinct', async ($, on) => {
+    const LONGER = `${DAEMON.text} A request that lands while it closes gets a 503, and the hook starts it again.`
+    const w = heldWorld(on, LONGER)
+    w.contains = prompt => (prompt.startsWith(`A: "${DAEMON.text}"`) ? 'YES' : '**NO**')
+    await consolidate($, w)
+    // The new text holds the stored one, so it is written and supersedes it; the old text stays recoverable.
+    expect(bodiesOf(w, '/memory/remember').map(body => body.input)).toMatchObject([{ text: LONGER }, { text: LONGER, distinct: true, supersedes: [DAEMON.id] }])
+    expect(streamOf(w, 'consolidator')).toEqual([`replaced ${DAEMON.id} with m5: ${LONGER.slice(0, 80)}`])
+    const OTHER = 'The daemon writes its log to daemon.log beside the socket.'
     w.modelText = JSON.stringify({ candidates: [{ text: 'log', is: 'keep', memory: { text: OTHER, kind: 'fact' } }] })
-    w.mergeText = 'OVERLAP'
+    w.contains = () => 'NO'
     await $.prompt.submit(typed('Write the daemon log beside the socket, because the person reads both from one directory.'))
     await $.turn.complete(answered('The log sits beside the socket.'))
     await settled(w)
-    expect(bodiesOf(w, '/memory/remember').map(body => (body.input as { distinct?: boolean }).distinct)).toEqual([undefined, true, undefined, true])
-    expect(bodiesOf(w, '/memory/update')).toEqual([])
-    expect(streamOf(w, 'consolidator')).toEqual([`replaced ${DAEMON.id} with m5: ${SAME}`, `added (project): ${OTHER}`])
+    expect(bodiesOf(w, '/memory/remember').slice(2).map(body => body.input)).toMatchObject([{ text: OTHER }, { text: OTHER, distinct: true }])
+    expect(streamOf(w, 'consolidator').at(-1)).toBe(`added (project): ${OTHER}`)
   })
 
-  withSidebar('a short consolidator memory the merge question matches to a longer stored one writes nothing over it', async ($, on) => {
-    const w = readyWorld(on)
-    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
-    w.routes.set('/memory/remember', { outcome: 'similar', similar: [{ id: DAEMON.id, kind: 'fact', text: DAEMON.text, cosine: 0.8 }] })
-    w.routes.set('/memory/get', DAEMON)
-    w.modelText = JSON.stringify({ candidates: [{ text: 'idle', is: 'keep', memory: { text: 'Daemon idles out at 5 min.', kind: 'fact' } }] })
-    w.mergeText = 'YES'
-    await $.session.start(START)
-    await $.prompt.submit(typed('Keep the idle timeout at five minutes, because a reload otherwise spawns a second daemon.'))
-    await $.turn.complete(answered('The idle timeout stays at five minutes.'))
-    await settled(w)
-    expect(bodiesOf(w, '/memory/remember')).toHaveLength(1)
-    expect(bodiesOf(w, '/memory/update')).toEqual([])
+  withSidebar('a held consolidator memory that holds a protected memory is written beside it, never over it', async ($, on) => {
+    const LONGER = `${DAEMON.text} A request that lands while it closes gets a 503.`
+    const w = heldWorld(on, LONGER)
+    w.routes.set('/memory/get', { ...DAEMON, persistence: 'permanent' })
+    w.contains = prompt => (prompt.startsWith(`A: "${DAEMON.text}"`) ? 'YES' : 'NO')
+    await consolidate($, w)
+    const second = bodiesOf(w, '/memory/remember')[1]?.input as { distinct?: boolean; supersedes?: string[] }
+    expect(second).toMatchObject({ text: LONGER, distinct: true })
+    expect(second.supersedes).toBe(undefined)
+    // The added line shows the opening sentence of the new text.
+    expect(streamOf(w, 'consolidator')).toEqual([`added (project): ${DAEMON.text}`])
   })
 
   withSidebar('a held consolidator memory with no verdict is not written and named in red', async ($, on) => {

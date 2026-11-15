@@ -97,6 +97,9 @@ import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture'
 import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact'
 import {
   actionOf,
+  CONTAINS_SYSTEM,
+  containsPrompt,
+  containsVerdictOf,
   discardDeletion,
   judgedOf,
   judgedTimes,
@@ -117,7 +120,6 @@ import {
   ratedDeletion,
   ratingOf,
   reportText,
-  textPairPrompt,
   valueScore,
   type Deletion,
   type Judged,
@@ -1062,33 +1064,49 @@ async function topOf($: EngineInterface, state: State, scope: 'project' | 'user'
   return topByImportance(page.memories, limit)
 }
 
+/** Whether `b` states everything `a` states, by the job model's containment answer; undefined when it gave none. */
+async function states($: EngineInterface, a: string, b: string): Promise<boolean | undefined> {
+  const raw = await answerOf($, CONTAINS_SYSTEM, containsPrompt(a, b))
+  return raw === undefined ? undefined : containsVerdictOf(raw)
+}
+
+/** What a held memory does about one close memory: nothing is written, it replaces that memory, or the next one is asked. */
+type Settled = 'stated' | 'replaces' | 'next' | 'unknown'
+
+async function settleOne($: EngineInterface, input: RememberInput, memory: SimilarMemory): Promise<Settled> {
+  const stated = await states($, input.text, memory.text)
+  if (stated !== false) return stated === true ? 'stated' : 'unknown'
+  const covers = await states($, memory.text, input.text)
+  if (covers === undefined) return 'unknown'
+  return covers ? 'replaces' : 'next'
+}
+
 /**
- * The consolidator's memory that memories close in meaning held back, settled by the merge question
- * the job model answers for each, closest first: the first `YES` gets the new text through `update`
- * (a protected memory keeps its own, and the write is dropped), and a memory no `YES` matched is
- * written as distinct. A pair with no verdict leaves the memory unwritten with a red line.
+ * The consolidator's memory that memories close in meaning held back, settled by the containment
+ * question the job model answers for each, closest first: a memory that already states the new text
+ * drops the write; a new text that states everything a memory states, and more, supersedes it (a
+ * protected memory is never replaced, so the new text is written beside it); and a text no memory
+ * holds is written as distinct. A missing answer leaves the memory unwritten with a red line.
  */
 async function settleSimilar($: EngineInterface, state: State, input: RememberInput, similar: readonly SimilarMemory[]): Promise<void> {
   for (const memory of similar) {
-    const raw = await answerOf($, MERGE_SYSTEM, textPairPrompt(input.text, memory.text))
-    const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
-    if (verdict === undefined) return toStream($, 'error', { text: `the consolidator's memory was not written: no verdict on its likeness to ${memory.id}`, kind: 'error' })
-    if (verdict === 'YES') return updateSame($, state, input, memory.id)
+    const settled = await settleOne($, input, memory)
+    if (settled === 'unknown') return toStream($, 'error', { text: `the consolidator's memory was not written: no verdict on its likeness to ${memory.id}`, kind: 'error' })
+    if (settled === 'stated') return
+    if (settled === 'replaces') return replaceWithLonger($, state, input, memory.id)
   }
   const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true } })
   if (result.outcome === 'added') await countAdded($, state, result.memory)
 }
 
-/**
- * The memory the merge question called the same fact keeps the richer text, as the daemon's own
- * merges do: a stored text at least as long already states it, and a longer new text is written and
- * supersedes it, so the old text stays recoverable. A protected memory is never replaced.
- */
-async function updateSame($: EngineInterface, state: State, input: RememberInput, id: string): Promise<void> {
+/** Writes a new text that states everything memory `id` states and supersedes that memory, so the old text stays recoverable; a protected memory stays beside it. */
+async function replaceWithLonger($: EngineInterface, state: State, input: RememberInput, id: string): Promise<void> {
   const memory = await ask<Memory | undefined>($, state, '/memory/get', { id })
-  if (memory === undefined || memory === null || isProtected(memory) || memory.text.length >= input.text.length) return
-  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true, supersedes: [id] } })
-  if (result.outcome !== 'similar') await toStream($, 'consolidator', { text: `replaced ${id} with ${result.memory.id}: ${input.text.slice(0, 80)}`, kind: 'warn' })
+  const keep = memory === undefined || memory === null || isProtected(memory)
+  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true, ...(keep ? {} : { supersedes: [id] }) } })
+  if (result.outcome !== 'added') return
+  if (keep) return countAdded($, state, result.memory)
+  await toStream($, 'consolidator', { text: `replaced ${id} with ${result.memory.id}: ${input.text.slice(0, 80)}`, kind: 'warn' })
 }
 
 async function countAdded($: EngineInterface, state: State, memory: Memory): Promise<void> {
