@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { countEdit, logText, noteText, sectionKey, shownPath, sidebarLines, THRESHOLD, WARN_THRESHOLD, type Counts, type Line } from './loop.ts'
+import { countEdit, logText, noteText, sectionKey, shownPath, sidebarLines, THRESHOLD, WARN_THRESHOLD, type Counts, type Line } from './loop'
 
 const ENABLED_KEY = 'enabled'
 
