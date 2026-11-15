@@ -13,6 +13,12 @@ help:
 validate:
 	claude plugin validate --strict .
 	@set -e; for p in $(PLUGINS); do claude plugin validate --strict $$p; done
+	@set -e; for f in plugins/*/types/sidebar.d.ts; do \
+		cmp -s plugins/sidebar/types/index.d.ts $$f || { echo "$$f differs from plugins/sidebar/types/index.d.ts"; exit 1; }; \
+	done
+	@set -e; for f in plugins/*/types/gemini.d.ts; do \
+		cmp -s plugins/gemini-core/types/index.d.ts $$f || { echo "$$f differs from plugins/gemini-core/types/index.d.ts"; exit 1; }; \
+	done
 
 test:
 	@set -e; for p in $(PLUGINS); do \
