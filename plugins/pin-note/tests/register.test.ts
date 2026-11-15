@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { parseArgs } from '../hooks/pins.ts'
+import { parseArgs } from '../hooks/pins'
 
 tier('user')
 

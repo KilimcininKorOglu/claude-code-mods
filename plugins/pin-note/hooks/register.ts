@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { addedText, contextText, droppedText, listText, noSuchText, OFF_TEXT, parseArgs, pinsKey, sentText, type Action } from './pins.ts'
+import { addedText, contextText, droppedText, listText, noSuchText, OFF_TEXT, parseArgs, pinsKey, sentText, type Action } from './pins'
 
 const ENABLED_KEY = 'enabled'
 
