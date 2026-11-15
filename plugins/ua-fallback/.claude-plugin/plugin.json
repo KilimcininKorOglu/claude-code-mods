@@ -1,6 +1,6 @@
 {
   "name": "ua-fallback",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "After a curl or wget an automated-client filter answered 403 or 429, gives the model the browser User-Agent to retry with, and the two cases where it must not.",
   "author": {
     "name": "Kerem Gok",
