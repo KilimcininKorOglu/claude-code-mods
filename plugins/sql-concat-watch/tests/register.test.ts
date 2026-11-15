@@ -94,7 +94,7 @@ describe('sql-concat-watch', () => {
 
   test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
     const w = world(on)
-    on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
+    on('process.run', (_, e) => ({ value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
     await started($)
     w.file = `${QUERY}\n`
     await $.tool.call({ tool: 'Edit', file_path: '/Users/u/lib/q.ts', old_string: 'const q = ""', new_string: QUERY } as never)
@@ -189,7 +189,7 @@ describe('sql-concat-watch', () => {
     on('process.run', (_, e) => {
       const cmd = e.argv.join(' ')
       const out = cmd.includes('--show-toplevel') ? `${ROOT}\n` : staged.join('\0')
-      return { value: { exitCode: 0, stdout: out, stderr: '' } }
+      return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: out, stderr: '' } }
     })
     await started($)
     w.file = `${QUERY}\n`
