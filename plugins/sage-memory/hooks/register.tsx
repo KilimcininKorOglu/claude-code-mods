@@ -55,7 +55,8 @@ import {
   completedTasks,
   consolidatorPrompt,
   MAX_EXISTING,
-  QUERY_CHARS,
+  queryPieces,
+  takeInTurn,
   DEFAULT_MODEL,
   MAX_ASKED,
   MAX_JUDGED,
@@ -1191,10 +1192,15 @@ async function consolidatorAnswer(
   return r
 }
 
+/** How many entries one search over a turn's words returns: the whole turn in one piece, or each of several pieces. */
+const SEARCH_LIMIT = 10
+const PIECE_LIMIT = 5
+
 /**
  * The entries the consolidator compares a turn with, at most `MAX_EXISTING`: the ones about the files
- * the turn touched, the ones its words find, then the weightiest of each store. Before, it saw only
- * the weightiest 25, so a fact on a topic the store already held became a second entry beside it.
+ * the turn touched, the ones each piece of its words finds, then the weightiest of each store. Before,
+ * it saw only the weightiest 25, so a fact on a topic the store already held became a second entry
+ * beside it.
  */
 async function existingFor($: EngineInterface, state: State, since: Since, answer: string): Promise<Memory[]> {
   const found = new Map<string, Memory>()
@@ -1204,8 +1210,10 @@ async function existingFor($: EngineInterface, state: State, since: Since, answe
   const root = state.project?.root ?? ''
   const paths = [...new Set([...since.turn.written, ...since.turn.read].map(path => relativeTo(root, path)))]
   for (const path of paths.slice(0, CURATED_FILES)) add(await ask<Memory[]>($, state, '/memory/for-path', { path, limit: PER_FILE }))
-  const query = [...since.asked, answer].join(' ').slice(0, QUERY_CHARS).trim()
-  if (query !== '') add(await ask<Memory[]>($, state, '/memory/search', { query, limit: 10 }))
+  // The answer comes first: three long prompts alone would fill every piece.
+  const pieces = queryPieces([answer, ...since.asked].join(' '))
+  const limit = pieces.length === 1 ? SEARCH_LIMIT : PIECE_LIMIT
+  add(takeInTurn(await Promise.all(pieces.map(query => ask<Memory[]>($, state, '/memory/search', { query, limit })))))
   add([...(await topOf($, state, 'project', 5)), ...(await topOf($, state, 'user', 5))])
   return [...found.values()]
 }

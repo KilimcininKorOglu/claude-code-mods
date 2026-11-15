@@ -411,9 +411,33 @@ export function keptKind(kind: Kind, anchors: readonly Anchor[]): Kind {
 const MAX_RELATED = 3
 const MAX_SUPERSEDED = 3
 
-/** How many existing entries the consolidator compares a turn with, and how much of the turn's words searches for them. */
+/** How many existing entries the consolidator compares a turn with, and the length of each search over the turn's words. */
 export const MAX_EXISTING = 30
 export const QUERY_CHARS = 500
+/** At most this many searches cover one turn's words, so a 4000-character turn is searched whole. */
+const QUERY_PIECES = 8
+
+/**
+ * The turn's words in pieces of `QUERY_CHARS`, each searched on its own. One search over the first
+ * 500 characters missed a stored memory the end of a 2196-character turn restated (cosine 0.63), so
+ * the consolidator never saw it and wrote a second memory beside it; the piece from 1500 found it.
+ */
+export function queryPieces(text: string): string[] {
+  const pieces: string[] = []
+  for (let start = 0; start < text.length && pieces.length < QUERY_PIECES; start += QUERY_CHARS) {
+    const piece = text.slice(start, start + QUERY_CHARS).trim()
+    if (piece !== '') pieces.push(piece)
+  }
+  return pieces
+}
+
+/** The lists one after another, taking one item of each in turn, so every list's best come first. */
+export function takeInTurn<T>(lists: readonly (readonly T[])[]): T[] {
+  const out: T[] = []
+  const longest = Math.max(0, ...lists.map(list => list.length))
+  for (let index = 0; index < longest; index++) for (const list of lists) if (index < list.length) out.push(list[index] as T)
+  return out
+}
 
 /**
  * The existing entries a kept memory names, as related or as replaced: only ids the model was shown, of

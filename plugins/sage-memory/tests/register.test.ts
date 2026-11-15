@@ -765,6 +765,22 @@ describe('consolidator', () => {
     expect(w.lines.filter(line => line.startsWith('daemon ready')).at(-1)).not.toContain('…')
   })
 
+  withSidebar('the consolidator is shown a stored memory that only the end of a long turn is about', async ($, on) => {
+    const w = readyWorld(on)
+    const TRIAGE = memory('m7', 'Triage rating sees only the first 300 characters of a note, so its deletions are guesses.')
+    // The daemon finds the stored memory only for words from the end of the turn, as the real search did.
+    w.routes.set('/memory/search', (body: Record<string, unknown>) => (String(body.query).includes('300 characters') ? [TRIAGE] : []))
+    w.modelText = JSON.stringify({ candidates: [] })
+    const opening = 'The sentence vectors now cover every store, and every live memory has its vectors. '.repeat(20)
+    await $.session.start(START)
+    // Three long prompts, as the consolidator keeps, must not push the answer out of the searched words.
+    for (const n of [1, 2, 3]) await $.prompt.submit(typed(`Prompt ${n}: ${'Check the vectors of every store again, please. '.repeat(30)}`))
+    await $.turn.complete(answered(`${opening}Triage deletion reasons are judged from only the first 300 characters of a note.`))
+    await settled(w)
+    expect(w.asked[0]?.prompt).toContain(`m7 [`)
+    expect(w.asked[0]?.prompt).toContain(TRIAGE.text)
+  })
+
   /** A world whose daemon holds every plain write back as close to `DAEMON` and adds every distinct one as m5. */
   function heldWorld(on: On, text: string): World {
     const w = readyWorld(on)
