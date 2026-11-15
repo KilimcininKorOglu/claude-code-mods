@@ -51,16 +51,16 @@ type World = {
 }
 
 /** git answers the repository root, and the index its own staged paths, NUL separated as the mod reads them. */
-function gitAnswer(w: World, argv: readonly string[]): { value: { exitCode: number; stdout: string; stderr: string } } {
-  if (argv.includes('diff')) return { value: { exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
-  return { value: { exitCode: 0, stdout: '/src/app\n', stderr: '' } }
+function gitAnswer(w: World, argv: readonly string[]): { value: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false } } {
+  if (argv.includes('diff')) return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
+  return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '/src/app\n', stderr: '' } }
 }
 
 /** A narrowed run (`--doc-drift=<doc>`) is a re-measure; a whole-repository run is a commit's own check. */
-function ripwireAnswer(w: World, argv: readonly string[]): { value: { exitCode: number; stdout: string; stderr: string } } {
-  if (w.ripwireFails) return { value: { exitCode: 127, stdout: '', stderr: 'ripwire: command not found' } }
+function ripwireAnswer(w: World, argv: readonly string[]): { value: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false } } {
+  if (w.ripwireFails) return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 127, stdout: '', stderr: 'ripwire: command not found' } }
   const narrowed = argv.some(a => a.startsWith('--doc-drift='))
-  return { value: { exitCode: 0, stdout: (narrowed ? w.rechecks.shift() : w.outputs.shift()) ?? '', stderr: '' } }
+  return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: (narrowed ? w.rechecks.shift() : w.outputs.shift()) ?? '', stderr: '' } }
 }
 
 function world(on: On): World {
