@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { addedBy, commitDir, isCommit, noteText, parseDrift, sidebarLines } from '../hooks/drift.ts'
+import { addedBy, commitDir, isCommit, noteText, parseDrift, sidebarLines } from '../hooks/drift'
 
 tier('user')
 

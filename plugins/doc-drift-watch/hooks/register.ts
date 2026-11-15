@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { addedBy, byDoc, commitDir, denyText, doneLines, doneLog, identity, isCommit, isGuarded, isNarrowable, logText, modeOf, noteText, openNote, parseDrift, sectionKey, sidebarLines, type Closing, type Line, type Mode, type Stale } from './drift.ts'
+import { addedBy, byDoc, commitDir, denyText, doneLines, doneLog, identity, isCommit, isGuarded, isNarrowable, logText, modeOf, noteText, openNote, parseDrift, sectionKey, sidebarLines, type Closing, type Line, type Mode, type Stale } from './drift'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'
