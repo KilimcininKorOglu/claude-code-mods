@@ -1,6 +1,7 @@
+/// <reference path="../types/index.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import type { Sidebar, SidebarSection } from '../types/index.d.ts'
-import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropConsumers, dropTurn, offConsumers, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, scrolledTo, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board.ts'
+import type { Sidebar, SidebarSection } from '../types/index.d'
+import { clearLineOf, drawn, snapshotText, SNAPSHOT_COLUMNS, dropConsumers, dropTurn, offConsumers, appendLog, isLogOf, logFileAt, logLineOf, projectOf, pushed, readLive, readLog, readSection, scrolledTo, sectionId, tailText, type Board, type Drawn, type Kept, type Logged, type Row, EMPTY_TEXT, LOG_RESTORE, MAX_BOARD_LINES } from './board'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 

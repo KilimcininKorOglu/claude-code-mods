@@ -3,7 +3,7 @@
  * keep one mod from filling the pane.
  */
 
-import type { SidebarButton, SidebarKind, SidebarLine, SidebarPart, SidebarSection, SidebarUntil } from '../types/index.d.ts'
+import type { SidebarButton, SidebarKind, SidebarLine, SidebarPart, SidebarSection, SidebarUntil } from '../types/index.d'
 
 /** Lines one section may draw; the rest are counted. */
 export const MAX_SECTION_LINES = 50

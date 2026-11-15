@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 
-import { EMPTY_TEXT } from '../hooks/board.ts'
+import { EMPTY_TEXT } from '../hooks/board'
 
 tier('user')
 

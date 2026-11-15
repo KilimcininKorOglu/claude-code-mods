@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import type { SidebarSection } from '../types/index.d.ts'
+import type { SidebarSection } from '../types/index.d'
 
-import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropConsumers, dropTurn, headText, offConsumers, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, scrolledTo, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board.ts'
-import { createSidebar, type State } from '../hooks/register.tsx'
+import { appendLog, type LogFs, clearLineOf, cut, dayOf, DIVIDER_ID, dividerText, drawn, dropConsumers, dropTurn, headText, offConsumers, wrapped, MAX_WRAP_ROWS, isLogOf, logFileAt, logKept, logLineOf, logName, projectOf, readLive, readLog, tailText, MAX_BOARD_LINES, MAX_BUTTONS, MAX_SECTION_LINES, MAX_STREAM, MAX_STREAM_PER_CONSUMER, ordered, pushed, readSection, scrolledTo, snapshotText, SNAPSHOT_COLUMNS, EMPTY_TEXT, stamp, type Board, type Kept } from '../hooks/board'
+import { createSidebar, type State } from '../hooks/register'
 
 tier('user')
 
