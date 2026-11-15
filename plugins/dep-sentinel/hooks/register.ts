@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse'
 import { cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl, type Info } from './registry'
