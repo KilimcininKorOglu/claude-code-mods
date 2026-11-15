@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { minutesOf, pickedLine, pickedLog, picksOf, waitsLine, waitsLog } from '../hooks/pick.ts'
+import { minutesOf, pickedLine, pickedLog, picksOf, waitsLine, waitsLog } from '../hooks/pick'
 
 tier('user')
 
