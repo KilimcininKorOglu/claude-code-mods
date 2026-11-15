@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { commitDir, denyText, diffReads, doneLines, isCommit, isGuarded, lineReads, listedNames, modeOf, noteText, sidebarLines } from '../hooks/env.ts'
+import { commitDir, denyText, diffReads, doneLines, isCommit, isGuarded, lineReads, listedNames, modeOf, noteText, sidebarLines } from '../hooks/env'
 
 tier('user')
 
