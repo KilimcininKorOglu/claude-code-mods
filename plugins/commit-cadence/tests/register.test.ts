@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, PromptSubmitInput, TurnCompleteInput } from 'claude-code'
 
-import { logText, noteText, openOf, pathsOf, statusText } from '../hooks/cadence.ts'
+import { logText, noteText, openOf, pathsOf, statusText } from '../hooks/cadence'
 
 tier('user')
 

@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import { doneLines, doneText, logText, noteText, openKey, openOf, pathsOf, sectionKey, sidebarLines, statusText } from './cadence.ts'
+import { doneLines, doneText, logText, noteText, openKey, openOf, pathsOf, sectionKey, sidebarLines, statusText } from './cadence'
 
 const ENABLED_KEY = 'enabled'
 
