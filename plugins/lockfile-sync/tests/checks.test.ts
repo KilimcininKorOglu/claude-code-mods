@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { checkFor, gemCore, lockDir, type Ran } from '../hooks/checks.ts'
-import { doneLines, doneLog, sidebarLines } from '../hooks/pairs.ts'
+import { checkFor, gemCore, lockDir, type Ran } from '../hooks/checks'
+import { doneLines, doneLog, sidebarLines } from '../hooks/pairs'
 
 tier('user')
 

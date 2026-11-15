@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { changedFiles, commitDir, denyText, isGuarded, isManifest, lockCandidates, modeOf, noteText, touchesDependencies } from '../hooks/pairs.ts'
+import { changedFiles, commitDir, denyText, isGuarded, isManifest, lockCandidates, modeOf, noteText, touchesDependencies } from '../hooks/pairs'
 
 tier('user')
 
