@@ -1,6 +1,6 @@
 {
   "name": "effort-auto",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Has a small model rate how hard each prompt is and runs that turn and its subagents at the matching effort, within the levels you allow, on the models whose prompt cache survives an effort change.",
   "author": {
     "name": "Kerem Gok",
