@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { DEFAULT_LIMIT, HEAD, MIN_LIMIT, fileName, head, isLong, limitOf, logText, offloadText } from '../hooks/offload.ts'
+import { DEFAULT_LIMIT, HEAD, MIN_LIMIT, fileName, head, isLong, limitOf, logText, offloadText } from '../hooks/offload'
 
 tier('user')
 

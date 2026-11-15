@@ -1,5 +1,5 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { DEFAULT_LIMIT, MIN_LIMIT, fileName, isLong, limitOf, logText, offloadText } from './offload.ts'
+import { DEFAULT_LIMIT, MIN_LIMIT, fileName, isLong, limitOf, logText, offloadText } from './offload'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
