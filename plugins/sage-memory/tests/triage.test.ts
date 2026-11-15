@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actionOf, judgedOf, judgedTimes, mergeOf, mergesOf, mergeVerdictOf, oldestFirst, pairsOf, patchOf, preFilter, proposalsToFile, ratingOf, valueScore } from '../hooks/triage.ts'
-import type { Candidate, Memory } from '../hooks/shared/model.ts'
+import { actionOf, judgedOf, judgedTimes, mergeOf, mergesOf, mergeVerdictOf, oldestFirst, pairsOf, patchOf, preFilter, proposalsToFile, ratingOf, valueScore } from '../hooks/triage'
+import type { Candidate, Memory } from '../hooks/shared/model'
 
 tier('user')
 

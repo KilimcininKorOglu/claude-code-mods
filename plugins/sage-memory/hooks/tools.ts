@@ -4,8 +4,8 @@
  * what the tool does, when to call it and the rule the daemon holds it to, and nothing more. Pure
  * code; `register.tsx` makes every call.
  */
-import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model.ts'
+import { openingOf, scopeLabel, wordLine, type Line } from './link'
+import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model'
 
 type Schema = Record<string, unknown>
 

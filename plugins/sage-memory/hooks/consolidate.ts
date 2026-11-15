@@ -6,8 +6,8 @@
  * keep carry a memory. SAGE's session digest, the answer's opening kept for 14 days, is not written:
  * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
-import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, isProtected, KIND_MEANINGS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
+import { openingOf, scopeLabel, wordLine, type Line } from './link'
+import { ANCHOR_TYPES, isProtected, KIND_MEANINGS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model'
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
 export const DEFAULT_MODEL = 'haiku'

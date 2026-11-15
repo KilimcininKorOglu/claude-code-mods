@@ -5,8 +5,8 @@
  * phase 5 turns the verdicts into patches and review proposals. Pure code; `register.tsx` asks the
  * model and applies the result.
  */
-import { isProtected, type Candidate, type Memory, type SuggestedAction, type UpdatePatch } from './shared/model.ts'
-import { textKey, tokenize } from './shared/text.ts'
+import { isProtected, type Candidate, type Memory, type SuggestedAction, type UpdatePatch } from './shared/model'
+import { textKey, tokenize } from './shared/text'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

@@ -1,8 +1,8 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
-import type { Memory } from '../hooks/shared/model.ts'
-import { TOOLS } from '../hooks/tools.ts'
-import { countsLine, stateLines, storedLine } from '../hooks/link.ts'
+import type { Memory } from '../hooks/shared/model'
+import { TOOLS } from '../hooks/tools'
+import { countsLine, stateLines, storedLine } from '../hooks/link'
 
 tier('user')
 

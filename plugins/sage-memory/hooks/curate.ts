@@ -6,9 +6,9 @@
  * touched, and a protected memory (permanent, or importance 0.9 or more) is never rewritten or deleted.
  * Pure code; `register.tsx` makes every call.
  */
-import { anchorsOf, confidenceOf, importanceOf, keptKind, kindOf, operationsOf } from './consolidate.ts'
-import { faint, listed, partsLine, type Line } from './link.ts'
-import { isProtected, type Memory, type RememberInput, type UpdatePatch } from './shared/model.ts'
+import { anchorsOf, confidenceOf, importanceOf, keptKind, kindOf, operationsOf } from './consolidate'
+import { faint, listed, partsLine, type Line } from './link'
+import { isProtected, type Memory, type RememberInput, type UpdatePatch } from './shared/model'
 
 /** 2.1.288 enforces this timeout on a timer-launched call; 30 s cut the curator's answer as aborted. */
 export const CURATE_MS = 180_000

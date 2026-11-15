@@ -5,8 +5,8 @@
  * importance 0.9 or more) is never deleted or merged away, a merge supersedes the others with the first, a delete is a tombstone,
  * and the counts are of memories. Pure code; `register.tsx` asks the model and applies the plan.
  */
-import { operationsOf } from './consolidate.ts'
-import { isProtected, type Memory } from './shared/model.ts'
+import { operationsOf } from './consolidate'
+import { isProtected, type Memory } from './shared/model'
 
 export const COMPACT_MS = 120_000
 export const COMPACT_TOKENS = 16_000

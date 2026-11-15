@@ -4,8 +4,8 @@
  * handlers come from `register.tsx`, which asks the daemon.
  */
 import type { Elements } from 'claude-code'
-import { candidatesText, detailText } from './commands.ts'
-import type { Candidate, Memory, Scope, Status } from './shared/model.ts'
+import { candidatesText, detailText } from './commands'
+import type { Candidate, Memory, Scope, Status } from './shared/model'
 
 export const PANE_ID = 'sage-memory'
 export const PAGE_SIZE = 30

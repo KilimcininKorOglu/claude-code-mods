@@ -2,7 +2,7 @@
  * The hooks module's side of the daemon link: the Node check, the launcher's answer, the daemon's
  * reply envelope and the lines the person reads. Pure code; `register.tsx` makes every call.
  */
-import type { EmbedState, Launch, Reply, SetupJob } from './shared/protocol.ts'
+import type { EmbedState, Launch, Reply, SetupJob } from './shared/protocol'
 
 /** The Node the daemon needs: TypeScript type stripping by default (22.18) and `node:sqlite` without a flag (22.13). */
 export const MIN_NODE = '22.18'

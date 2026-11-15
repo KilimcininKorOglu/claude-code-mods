@@ -25,7 +25,7 @@ import {
   type StoreStats,
   type UpdatePatch,
   type VerifyReport,
-} from './shared/model.ts'
+} from './shared/model'
 
 /** Splits an argument into words; a word in double or single quotes keeps its spaces. */
 export function wordsOf(args: string): string[] {

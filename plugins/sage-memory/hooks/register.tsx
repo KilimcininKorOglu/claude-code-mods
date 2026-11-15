@@ -1,3 +1,4 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
 import {
   countsLine,
@@ -22,8 +23,8 @@ import {
   type Part,
   type SessionCounts,
   type StoredCounts,
-} from './link.ts'
-import { hexOf, keySource, projectKey, projectNameFrom } from './project.ts'
+} from './link'
+import { hexOf, keySource, projectKey, projectNameFrom } from './project'
 import {
   actedOn,
   CHANGE_TOOLS,
@@ -44,7 +45,7 @@ import {
   toolReminder,
   usedBy,
   type ToolCall,
-} from './remind.ts'
+} from './remind'
 import {
   additionsOf,
   addedLine,
@@ -70,8 +71,8 @@ import {
   safeCommand,
   topByImportance,
   type TurnEvidence,
-} from './consolidate.ts'
-import { CURATE_MS, CURATE_TOKENS, CURATED_FILES, CURATOR_SYSTEM, curatorPrompt, emptyTally, MAX_TARGETS, PER_FILE, stepsOf, tallyLine, type Step, type Tally } from './curate.ts'
+} from './consolidate'
+import { CURATE_MS, CURATE_TOKENS, CURATED_FILES, CURATOR_SYSTEM, curatorPrompt, emptyTally, MAX_TARGETS, PER_FILE, stepsOf, tallyLine, type Step, type Tally } from './curate'
 import {
   auditText,
   bulletsOf,
@@ -91,9 +92,9 @@ import {
   statsText,
   verifyText,
   wordsOf,
-} from './commands.ts'
-import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture.ts'
-import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact.ts'
+} from './commands'
+import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture'
+import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact'
 import {
   actionOf,
   discardDeletion,
@@ -124,12 +125,12 @@ import {
   type Proposal,
   type Report,
   type Score,
-} from './triage.ts'
-import { addedBy, callOf, editLine, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools.ts'
-import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane.tsx'
-import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model.ts'
-import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout.ts'
-import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol.ts'
+} from './triage'
+import { addedBy, callOf, editLine, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools'
+import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
+import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model'
+import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
+import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol'
 
 const ENABLED_KEY = 'enabled'
 const SECTION = { consumer: 'sage-memory', key: 'state' }

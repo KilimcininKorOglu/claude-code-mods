@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { planOf } from '../hooks/compact.ts'
-import { additionsOf } from '../hooks/consolidate.ts'
-import { stepsOf, tallyLine } from '../hooks/curate.ts'
-import type { Memory } from '../hooks/shared/model.ts'
+import { planOf } from '../hooks/compact'
+import { additionsOf } from '../hooks/consolidate'
+import { stepsOf, tallyLine } from '../hooks/curate'
+import type { Memory } from '../hooks/shared/model'
 
 tier('user')
 

@@ -3,8 +3,8 @@
  * successful one (`tool_outcome`), at most 20 distinct commands an hour and each once an hour.
  * Pure code; `register.tsx` writes the memory.
  */
-import { safeCommand } from './consolidate.ts'
-import type { RememberInput } from './shared/model.ts'
+import { safeCommand } from './consolidate'
+import type { RememberInput } from './shared/model'
 
 export const HOUR_MS = 60 * 60 * 1000
 const PER_HOUR = 20

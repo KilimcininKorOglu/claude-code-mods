@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, queryOf, reminderBlock, toolBudget, usedBy } from '../hooks/remind.ts'
-import type { Kind, Memory } from '../hooks/shared/model.ts'
+import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, queryOf, reminderBlock, toolBudget, usedBy } from '../hooks/remind'
+import type { Kind, Memory } from '../hooks/shared/model'
 
 tier('user')
 

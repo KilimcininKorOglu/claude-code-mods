@@ -3,9 +3,9 @@
  * give the daemon, the budget the context leaves, the pick that fits it, the text the model reads,
  * and whether an answer used what it was reminded of. Pure code; `register.tsx` makes every call.
  */
-import { wordLine, type Line } from './link.ts'
-import type { Anchor, Memory, Ranked } from './shared/model.ts'
-import { collapseSpace, textKey } from './shared/text.ts'
+import { wordLine, type Line } from './link'
+import type { Anchor, Memory, Ranked } from './shared/model'
+import { collapseSpace, textKey } from './shared/text'
 
 /** Tools that read a file; each one's result carries the active memories about it. */
 const READ_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LSP'])
