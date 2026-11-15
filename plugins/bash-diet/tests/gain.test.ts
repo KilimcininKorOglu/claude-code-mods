@@ -53,6 +53,18 @@ describe('cost', () => {
     expect(priceOf('gpt-9')).toBe(undefined)
   })
 
+  test('each model id the transcripts of November 2026 carry takes its own row, never a general one', () => {
+    // claude-fable-5-2 once fell to the fable-5 row (read 1, five times its price) and claude-haiku-5-5 to the Haiku 3.5 row.
+    expect(priceOf('claude-fable-5-2[1m]')).toEqual({ read: 0.2, write: 16 })
+    expect(priceOf('claude-haiku-5-5')).toEqual({ read: 0.01, write: 0.2, long: { read: 0.05, write: 1 } })
+    expect(priceOf('claude-sonnet-5-5')).toEqual({ read: 0.1, write: 4 })
+    expect(priceOf('glm-5.3-flash')).toBe(undefined)
+  })
+
+  test('a model that bills a long prompt higher names both amounts, because one request size is not known', () => {
+    expect(costText('claude-haiku-5-5', 1_000_000, 1)).toBe('this session (claude-haiku-5-5): $1.00 so far\n~1.0M tokens kept out of the context: $0.20 ($1.00 in a prompt over 100k tokens) saved on the cache write when they would have entered,\nand $0.01 ($0.05 in a prompt over 100k tokens) on every later request that reads the context back from the cache')
+  })
+
   test('the saving is priced at the cache write and at each later cache read', () => {
     expect(costText('claude-opus-5-5', 1_000_000, 12.3)).toBe('this session (claude-opus-5-5): $12.30 so far\n~1.0M tokens kept out of the context: $8.00 saved on the cache write when they would have entered,\nand $0.20 on every later request that reads the context back from the cache')
     expect(costText('gpt-9', 500, undefined)).toBe('this session (gpt-9): no cost ledger in this host\n~500 tokens kept out of the context; no price is known for gpt-9')

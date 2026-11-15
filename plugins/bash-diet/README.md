@@ -161,7 +161,7 @@ A file with a mistake still keeps its good rules, and one transcript line names 
     /bash-diet learn [days] [write]          commands that failed on a CLI mistake and the form that worked after them
 
 - `gain` reads the records in `~/.claude/bash-diet/gain/`, one file per session and day, kept for 90 days. Each report gives the measured characters before and after. The token figure is an estimate at four characters per token; `history` and `graph` give characters only.
-- `cost` prices the tokens kept out of the context at the model's list prices of September 2026: once at the cache write rate, and again at the cache read rate for each later request.
+- `cost` prices the tokens kept out of the context at the model's list prices of November 2026: once at the cache write rate, and again at the cache read rate for each later request. Haiku 5.5 bills a prompt over 100,000 tokens higher, and the mod does not know each request's size, so it names both amounts for it.
 - `discover` and `learn` read this project's transcripts of the last 30 days by default. `discover all` reads every project's; it answers at once, and its report follows as a transcript line.
 - `learn` counts only a single command that failed on an unknown flag, a missing command, a missing argument or a syntax error, followed within three calls by a similar command that worked. `learn write` writes the pairs to `.claude/rules/cli-corrections.md` in the repository, which the model reads in later sessions. A command that may carry a credential is never written.
 

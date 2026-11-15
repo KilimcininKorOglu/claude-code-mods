@@ -161,7 +161,7 @@ Hatası olan bir dosya, iyi kurallarını yine de çalıştırır ve tek bir tra
     /bash-diet learn [days] [write]          bir CLI hatasıyla başarısız olan komutlar ve arkasından işe yarayan biçimleri
 
 - `gain`, `~/.claude/bash-diet/gain/` içindeki kayıtları okur; session ve gün başına bir dosya, 90 gün tutulur. Her rapor, karakterleri önce ve sonra olarak ölçer. Token rakamı, token başına dört karakterle yapılan bir tahmindir; `history` ve `graph` yalnız karakter verir.
-- `cost`, context'ten tutulan token'ları Eylül 2026 model liste fiyatlarıyla fiyatlar: bir kez cache write oranıyla, sonraki her istek için bir kez cache read oranıyla.
+- `cost`, context'ten tutulan token'ları Kasım 2026 model liste fiyatlarıyla fiyatlar: bir kez cache write oranıyla, sonraki her istek için bir kez cache read oranıyla. Haiku 5.5, 100.000 token'ı aşan bir prompt'u daha yüksek fiyatlandırır; mod her isteğin boyutunu bilmediği için bu model için iki tutarı da yazar.
 - `discover` ve `learn`, varsayılan olarak bu projenin son 30 günün transcript'lerini okur. `discover all` her projeninkini okur; tek seferde cevap verir ve raporu arkasından bir transcript satırı olarak gelir.
 - `learn` yalnız şunu sayar: bilinmeyen bir flag, bulunamayan bir komut, eksik bir argument ya da syntax hatası yüzünden başarısız olan tek bir komut ve onu üç çağrı içinde izleyen, işe yarayan benzer bir komut. `learn write` çiftleri repository'deki `.claude/rules/cli-corrections.md`'ye yazar; model sonraki session'larda o dosyayı okur. Credential taşıyabilecek bir komut hiç yazılmaz.
 

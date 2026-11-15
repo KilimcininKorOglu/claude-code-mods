@@ -5,14 +5,19 @@
 
 import { fmtTokens } from './text'
 
-/** List prices in dollars per million tokens: the cache read, and the 1-hour cache write. */
-export type Price = { read: number; write: number }
+/**
+ * List prices in dollars per million tokens: the cache read, and the 1-hour cache write; `long` holds
+ * the rates of a request whose prompt is over 100,000 tokens, which Haiku 5.5 bills higher.
+ */
+export type Price = { read: number; write: number; long?: { read: number; write: number } }
 
 /**
- * Model pricing from platform.claude.com/docs/en/about-claude/pricing, read in September 2026. A model
+ * Model pricing from platform.claude.com/docs/en/about-claude/pricing, read in November 2026. A model
  * id takes the first row whose family it contains, so the specific families come before the general ones.
  */
 const PRICES: ReadonlyArray<readonly [family: string, price: Price]> = [
+  ['fable-5-2', { read: 0.2, write: 16 }],
+  ['mythos-5-2', { read: 0.2, write: 16 }],
   ['fable-5-1', { read: 0.25, write: 20 }],
   ['mythos-5-1', { read: 0.25, write: 20 }],
   ['fable-5', { read: 1, write: 20 }],
@@ -24,9 +29,10 @@ const PRICES: ReadonlyArray<readonly [family: string, price: Price]> = [
   ['opus-4-7', { read: 0.5, write: 10 }],
   ['opus-4-8', { read: 0.5, write: 10 }],
   ['opus-4', { read: 1.5, write: 30 }],
-  ['sonnet-5-5', { read: 0.2, write: 4 }],
+  ['sonnet-5-5', { read: 0.1, write: 4 }],
   ['sonnet-5', { read: 0.2, write: 4 }],
   ['sonnet', { read: 0.3, write: 6 }],
+  ['haiku-5-5', { read: 0.01, write: 0.2, long: { read: 0.05, write: 1 } }],
   ['haiku-4-5', { read: 0.1, write: 2 }],
   ['haiku', { read: 0.08, write: 1.6 }],
 ]
@@ -50,7 +56,16 @@ export function costText(model: string, savedTokens: number, sessionUsd: number 
   if (price === undefined) return `${head}\n${kept}; no price is known for ${model}`
   return [
     head,
-    `${kept}: ${usd((savedTokens * price.write) / MTOK)} saved on the cache write when they would have entered,`,
-    `and ${usd((savedTokens * price.read) / MTOK)} on every later request that reads the context back from the cache`,
+    `${kept}: ${amount(savedTokens, price, 'write')} saved on the cache write when they would have entered,`,
+    `and ${amount(savedTokens, price, 'read')} on every later request that reads the context back from the cache`,
   ].join('\n')
+}
+
+/**
+ * What the tokens cost at one rate. The mod does not know each request's prompt size, so a model that
+ * bills a prompt over 100,000 tokens higher names both amounts.
+ */
+function amount(tokens: number, price: Price, rate: 'read' | 'write'): string {
+  const base = usd((tokens * price[rate]) / MTOK)
+  return price.long ? `${base} (${usd((tokens * price.long[rate]) / MTOK)} in a prompt over 100k tokens)` : base
 }
