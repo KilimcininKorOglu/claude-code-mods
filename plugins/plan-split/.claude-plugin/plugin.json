@@ -1,6 +1,6 @@
 {
   "name": "plan-split",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Runs the main loop on one model in plan mode and on another in every other mode, switched by itself, set with /plan-split and off until /plan-split on.",
   "author": {
     "name": "Kerem Gok",
