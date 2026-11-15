@@ -107,8 +107,8 @@ plugins/<mod>/                    one directory per mod
   skills/<name>/SKILL.md          a skill the mod ships (git-commit)
   daemon/                         a long-lived Node process the hooks reach over a Unix socket (sage-memory)
   tests/register.test.ts          tests with claude-code/testing
-  Makefile, package.json          make install, lint, typecheck, validate, test, check
-  eslint.config.js, tsconfig.json lint with a complexity limit of 10, type check
+  Makefile, package.json          make install, lint, validate, test, check
+  eslint.config.js, tsconfig.json lint with a complexity limit of 10, editor types
   README.md                       validator output and threat model
   README.tr.md                    the same README in Turkish, kept in step with it
 templates/mod/                    the template that make new-mod copies
@@ -128,7 +128,7 @@ Load a mod for one session:
 claude --plugin-dir plugins/<mod>
 ```
 
-Run `/plugin-types` inside that session to write `.claude/types/` for type checking. The directory is version-specific and git-ignored. Then run the checks of one mod from its directory:
+Run the checks of one mod from its directory:
 
 ```sh
 cd plugins/<mod>
@@ -136,7 +136,7 @@ make install
 make check
 ```
 
-`make check` runs eslint (complexity limit 10), `tsc`, `claude plugin validate` and `claude plugin test`.
+`make check` runs eslint (complexity limit 10), `claude plugin validate --strict` and `claude plugin test`. The strict validator type-checks `hooks/` and `tests/` against the types of the installed Claude Code build. The root `make validate` also type-checks the mods that declare `dependencies`, which the validator skips, in a temporary copy (`scripts/validate-dependents.sh`).
 
 ## License
 
