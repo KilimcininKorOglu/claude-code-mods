@@ -1,8 +1,9 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
 import {
   addSplit, endFile, failedGit, otherSessionOf, thinkingOf, usageOf, valueOf, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, sumSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Effort, type GitState, type OtherSession, type Reading, type Split, type Usage, type UsageScanner,
-} from './watch.ts'
+} from './watch'
 
 /** The totals of each session, counted from its transcripts on. */
 const TOTALS_KEY = 'totals'

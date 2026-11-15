@@ -3,7 +3,7 @@ import { describe, expect, test, tier } from 'claude-code/testing'
 import {
   addSplit, cacheHit, otherSessionOf, sessionsLines, cacheHitTone, contextTone, effortTone, endFile, failedGit, fmtTok, gitLine, modelTone, NO_SPLIT, parseStatus, scanUsage, sentEffort, settingsEffort, lastEffortOf, lastSplitOf, sidebarLines, statusText, storedSplits, transcriptDir, usageScannerOf, usageTotal, withSplit,
   type Reading,
-} from '../hooks/watch.ts'
+} from '../hooks/watch'
 
 tier('user')
 
