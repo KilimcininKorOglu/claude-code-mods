@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { callsOf, etimeMs, isSame, labelOf, listenersOf, matchOf, patternsOf, procsOf, sidebarLines, stillLine, tailOf, timeRegexOf, type Proc } from '../hooks/orphans.ts'
+import { callsOf, etimeMs, isSame, labelOf, listenersOf, matchOf, patternsOf, procsOf, sidebarLines, stillLine, tailOf, timeRegexOf, type Proc } from '../hooks/orphans'
 
 tier('user')
 

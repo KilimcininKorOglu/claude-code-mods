@@ -1,8 +1,9 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
 import {
   byAge, callsOf, changedText, configDirOf, cwdsOf, isInside, isSame, listenersOf, listText, logText, matchOf, procsOf,
   sectionKey, sidebarButtons, sidebarLines, SLACK, stillLine, stoppedLine, timeRegexOf, transcriptDir, type Listener, type Orphan, type Proc,
-} from './orphans.ts'
+} from './orphans'
 
 const ENABLED_KEY = 'enabled'
 const CONSUMER = 'orphan-server'
