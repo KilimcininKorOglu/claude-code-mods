@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { adviceFor, fmtKb, limitOf, logText, sidebarLines, sizeOf, statusText } from '../hooks/flood.ts'
+import { adviceFor, fmtKb, limitOf, logText, sidebarLines, sizeOf, statusText } from '../hooks/flood'
 
 tier('user')
 

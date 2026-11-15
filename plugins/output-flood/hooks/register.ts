@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import { DEFAULT_LIMIT_KB, limitOf, limitText, logText, noteText, sectionKey, shownCommand, sidebarLines, sizeOf, statusText } from './flood.ts'
+import { DEFAULT_LIMIT_KB, limitOf, limitText, logText, noteText, sectionKey, shownCommand, sidebarLines, sizeOf, statusText } from './flood'
 
 const ENABLED_KEY = 'enabled'
 const LIMIT_KEY = 'limit'
