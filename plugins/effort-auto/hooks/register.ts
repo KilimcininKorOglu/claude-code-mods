@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, TurnStepInput } from 'claude-code'
 import { allowedLine, effortLine, keepsCacheAcrossEffort, levelFor, levelsOf, parseLevels, RATE_TIMEOUT_MS, RATER_MODEL, RATER_SYSTEM, raterPrompt, ratingOf, type Level, type Line, type Rating, type TurnEffort } from './effort'
 
