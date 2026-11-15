@@ -1,6 +1,6 @@
 /** Widely used package names per ecosystem, and the one a new name looks like. */
 
-import type { Ecosystem } from './parse.ts'
+import type { Ecosystem } from './parse'
 
 const NPM = `
 react react-dom next vue nuxt svelte angular @angular/core @angular/cli preact solid-js lodash lodash-es underscore ramda

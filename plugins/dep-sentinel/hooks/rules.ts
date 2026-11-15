@@ -1,8 +1,8 @@
 /** Why an install is stopped, from what the registry and OSV.dev said, and the texts the model reads. */
 
-import type { Install } from './parse.ts'
-import { lookAlike } from './popular.ts'
-import { compareVersions, latestInMajor, type Info, type Vulns } from './registry.ts'
+import type { Install } from './parse'
+import { lookAlike } from './popular'
+import { compareVersions, latestInMajor, type Info, type Vulns } from './registry'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 

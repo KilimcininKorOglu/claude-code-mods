@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { distance, lookAlike } from '../hooks/popular.ts'
-import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry.ts'
-import { denyText, failureLines, gateText, isGuarded, modeOf, reasonLines, registryReasonParts, registryReasons, skippedLines, targetVersion, vulnParts, vulnReason } from '../hooks/rules.ts'
+import { distance, lookAlike } from '../hooks/popular'
+import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry'
+import { denyText, failureLines, gateText, isGuarded, modeOf, reasonLines, registryReasonParts, registryReasons, skippedLines, targetVersion, vulnParts, vulnReason } from '../hooks/rules'
 
 tier('user')
 

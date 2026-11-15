@@ -1,6 +1,6 @@
 /** What each registry and OSV.dev answer about a package, read into one shape. */
 
-import type { Ecosystem, Install } from './parse.ts'
+import type { Ecosystem, Install } from './parse'
 
 /** A package as its registry lists it: the latest stable version, every published version, and when it was first published. */
 export type Info = { latest: string; versions: string[]; created?: number }

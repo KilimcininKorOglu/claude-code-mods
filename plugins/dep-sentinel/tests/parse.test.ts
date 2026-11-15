@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { planOf } from '../hooks/parse.ts'
+import { planOf } from '../hooks/parse'
 
 tier('user')
 
