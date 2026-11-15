@@ -75,9 +75,9 @@ Load it from a local checkout for one session:
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.322:
+Validated with `claude plugin validate` on Claude Code 2.1.325:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane}
+    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane} (default matcher key: plugin)
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.http.fetch (via fetchScoped), $.session.authorize (via fetchScoped), $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
 Reach L3, network.
