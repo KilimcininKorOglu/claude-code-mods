@@ -982,6 +982,32 @@ describe('triage, compact and capture', () => {
     expect(bodiesOf(w, '/memory/update')).toEqual([])
   })
 
+  withSidebar('triage rates the memory judged longest ago first and stores its progress only when it applies', async ($, on) => {
+    const w = triageWorld(on)
+    const other = memory('g2', 'The release job uploads the archive after the checksum step passes.')
+    w.routes.set('/memory/list', { memories: [GRAY, other, WIP, KEEPER, TWIN], nextCursor: null, total: 5, statusCounts: {} })
+    w.rateText = '4 | a build fact a later session needs'
+    await $.session.start(START)
+    const own = (): string => [...w.store.keys()].find(k => k.startsWith('triaged:')) ?? ''
+    await $.command.run(run('triage'))
+    expect(own()).toBe('')
+    // The first apply writes the progress under the project's own key.
+    await $.command.run(run('triage apply'))
+    const stored = own()
+    expect(stored).not.toBe('')
+    // g1 was rated an hour ago and g2 never, so g2 goes first although the list holds g1 first.
+    const earlier = Date.parse('2026-09-28T11:00:00Z')
+    w.store.set(stored, { notes: { g1: earlier, gone: earlier }, pairs: {} })
+    w.asked = []
+    await $.command.run(run('triage apply'))
+    const rated = w.asked.filter(a => a.system.startsWith('Rate one memory')).map(a => /TEXT: "([^"]+)"/.exec(a.prompt)?.[1] ?? '')
+    expect(rated[0]).toBe(other.text)
+    const progress = w.store.get(stored) as { notes: Record<string, number>; pairs: Record<string, number> }
+    // Both are rated now, and a memory that is gone leaves the record.
+    expect(progress.notes).toEqual({ g1: Date.parse('2026-09-28T12:00:00Z'), g2: Date.parse('2026-09-28T12:00:00Z') })
+    expect(Object.keys(progress.pairs)).toEqual(['k1|t1'])
+  })
+
   withSidebar('compact proposes, touches only shown ids, keeps a permanent memory, and applies the proposal', async ($, on) => {
     const w = triageWorld(on)
     w.routes.set('/memory/get', (body: Record<string, unknown>) => (body.id === 'g1' ? GRAY : { ...WIP, revision: 2 }))

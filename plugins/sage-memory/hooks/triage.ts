@@ -187,22 +187,61 @@ function tagClusters(memories: readonly Memory[]): Memory[][] {
   return clusters
 }
 
+/** The key of a pair, the same whichever memory comes first. */
+export function pairKey(pair: Pair): string {
+  return [pair.a.id, pair.b.id].sort().join('|')
+}
+
 /** The pairs to compare: every pair inside a cluster of 2 to 5 members, each pair once. */
-export function pairsOf(memories: readonly Memory[], max: number): Pair[] {
+export function pairsOf(memories: readonly Memory[]): Pair[] {
   const pairs: Pair[] = []
   const seen = new Set<string>()
   const clusters = [...anchorClusters(memories), ...tagClusters(memories)].filter(c => c.length >= 2 && c.length <= MAX_CLUSTER)
   for (const cluster of clusters) {
     for (const [i, a] of cluster.entries()) {
       for (const b of cluster.slice(i + 1)) {
-        const key = [a.id, b.id].sort().join('|')
+        const key = pairKey({ a, b })
         if (seen.has(key)) continue
         seen.add(key)
         pairs.push({ a, b })
       }
     }
   }
-  return pairs.slice(0, max)
+  return pairs
+}
+
+// ── Progress ───────────────────────────────────────────────────────────
+
+/**
+ * When triage last judged each memory and each pair, by memory id and pair key. A bounded run takes
+ * the ones judged longest ago first, so the next run goes on where the last stopped instead of
+ * judging the same first ones again.
+ */
+export type Judged = { notes: Record<string, number>; pairs: Record<string, number> }
+
+function timesOf(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null) return {}
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, number] => typeof entry[1] === 'number'))
+}
+
+/** The progress a store value holds; anything else is no progress yet. */
+export function judgedOf(value: unknown): Judged {
+  const raw = typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
+  return { notes: timesOf(raw.notes), pairs: timesOf(raw.pairs) }
+}
+
+/** The items never judged first, then the ones judged longest ago; equal times keep their order. */
+export function oldestFirst<T>(items: readonly T[], keyOf: (item: T) => string, times: Record<string, number>): T[] {
+  return items
+    .map((item, index) => ({ item, index, at: times[keyOf(item)] ?? 0 }))
+    .sort((left, right) => left.at - right.at || left.index - right.index)
+    .map(entry => entry.item)
+}
+
+/** The times of the live keys alone, the ones judged now set to `now`, so the record never outgrows the store. */
+export function judgedTimes(previous: Record<string, number>, live: readonly string[], judgedNow: readonly string[], now: number): Record<string, number> {
+  const fresh = new Set(judgedNow)
+  return Object.fromEntries(live.filter(key => fresh.has(key) || previous[key] !== undefined).map(key => [key, fresh.has(key) ? now : (previous[key] ?? 0)]))
 }
 
 export function pairPrompt(pair: Pair): string {
@@ -348,6 +387,8 @@ export type Report = {
   overlaps: Pair[]
   pairs: number
   unjudged: number
+  /** The progress after this run, stored once the run is applied. */
+  judged: Judged
 }
 
 const quoted = (m: Memory): string => `${m.id}: "${m.text.slice(0, 60)}"`

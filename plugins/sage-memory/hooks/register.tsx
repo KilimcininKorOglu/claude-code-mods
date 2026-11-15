@@ -95,9 +95,13 @@ import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, 
 import {
   actionOf,
   discardDeletion,
+  judgedOf,
+  judgedTimes,
   MERGE_SYSTEM,
   mergesOf,
   mergeVerdictOf,
+  oldestFirst,
+  pairKey,
   pairPrompt,
   pairsOf,
   patchOf,
@@ -112,6 +116,7 @@ import {
   reportText,
   valueScore,
   type Deletion,
+  type Judged,
   type Merge,
   type Pair,
   type Proposal,
@@ -1302,8 +1307,12 @@ function classify(memories: readonly Memory[], now: number): { kept: number; dis
   return result
 }
 
-/** Phase 3: the model rates each gray memory, and each rating becomes a patch and perhaps a proposal. */
-async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number, now: number, report: Report): Promise<void> {
+/**
+ * Phase 3: the model rates the gray memories judged longest ago, and each rating becomes a patch and
+ * perhaps a proposal; answers the ids it rated. A memory without a rating stays first for the next run.
+ */
+async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number, now: number, report: Report): Promise<string[]> {
+  const rated: string[] = []
   for (const { memory, score } of gray.slice(0, limit)) {
     const raw = await answerOf($, RATE_SYSTEM, ratePrompt(memory, score, now))
     const rating = raw === undefined ? undefined : ratingOf(raw)
@@ -1312,6 +1321,7 @@ async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number
       continue
     }
     report.rated += 1
+    rated.push(memory.id)
     const action = actionOf(memory, score, rating)
     if (action === 'delete') report.deletions.push(ratedDeletion(memory, rating))
     const patch = patchOf(memory, action, rating)
@@ -1320,32 +1330,53 @@ async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number
     if (proposal !== undefined) report.proposals.push(proposal)
   }
   report.unrated += Math.max(0, gray.length - limit)
+  return rated
 }
 
-/** Phase 4: the model compares each clustered pair. */
-async function comparePairs($: EngineInterface, memories: readonly Memory[], limit: number, report: Report): Promise<void> {
-  const pairs = pairsOf(memories, limit)
+/** Phase 4: the model compares the clustered pairs; answers the keys of the pairs it gave a verdict. */
+async function comparePairs($: EngineInterface, pairs: readonly Pair[], report: Report): Promise<string[]> {
   const yes: Pair[] = []
+  const compared: string[] = []
   for (const pair of pairs) {
     const raw = await answerOf($, MERGE_SYSTEM, pairPrompt(pair))
     const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
     if (verdict === undefined) report.unjudged += 1
+    else compared.push(pairKey(pair))
     if (verdict === 'YES') yes.push(pair)
     if (verdict === 'OVERLAP') report.overlaps.push(pair)
   }
   report.pairs = pairs.length
   report.merges = mergesOf(yes)
+  return compared
 }
 
-/** Runs phases 1 to 5 and writes nothing. */
-async function triageReport($: EngineInterface, state: State, limits: Limits): Promise<Report> {
+/** Runs phases 1 to 5 and writes nothing; the memories and pairs judged longest ago go first. */
+async function triageReport($: EngineInterface, state: State, limits: Limits, judged: Judged): Promise<Report> {
   const memories = await allMemories($, state)
   const now = await $.clock.now()
   const classified = classify(memories, now)
-  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], deletions: [...classified.discards], proposals: [], merges: [], overlaps: [], pairs: 0, unjudged: 0 }
-  await rateGray($, classified.gray, limits.calls, now, report)
-  await comparePairs($, memories, limits.pairs, report)
+  const gray = oldestFirst(classified.gray, entry => entry.memory.id, judged.notes)
+  const pairs = oldestFirst(pairsOf(memories), pairKey, judged.pairs)
+  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], deletions: [...classified.discards], proposals: [], merges: [], overlaps: [], pairs: 0, unjudged: 0, judged }
+  const rated = await rateGray($, gray, limits.calls, now, report)
+  const compared = await comparePairs($, pairs.slice(0, limits.pairs), report)
+  report.judged = {
+    notes: judgedTimes(judged.notes, classified.gray.map(entry => entry.memory.id), rated, now),
+    pairs: judgedTimes(judged.pairs, pairs.map(pairKey), compared, now),
+  }
   return report
+}
+
+/** The store key of a project's triage progress; one store file serves every project. */
+const triagedKey = (state: State): string => `triaged:${state.project?.key ?? ''}`
+
+/** A triage of this project, ordered by its stored progress; the progress is stored when `apply` writes the result. */
+async function triageRun($: EngineInterface, state: State, limits: Limits, apply: boolean): Promise<{ report: Report; applied: string | undefined }> {
+  const report = await triageReport($, state, limits, judgedOf(await $.store.get(triagedKey(state))))
+  if (!apply) return { report, applied: undefined }
+  const applied = await applyTriage($, state, report)
+  await $.store.set(triagedKey(state), report.judged)
+  return { report, applied }
 }
 
 /** Files each proposal a pending or recent review does not already cover. */
@@ -1397,8 +1428,7 @@ async function applyTriage($: EngineInterface, state: State, report: Report): Pr
 
 async function triageCommand($: EngineInterface, state: State, rest: string): Promise<string> {
   if (!(await isReady(state))) return `the daemon is not ready: ${statusText(state.enabled, state.link, state.project?.name ?? '')}`
-  const report = await triageReport($, state, TRIAGE_LIMITS)
-  const applied = rest.trim().toLowerCase() === 'apply' ? await applyTriage($, state, report) : undefined
+  const { report, applied } = await triageRun($, state, TRIAGE_LIMITS, rest.trim().toLowerCase() === 'apply')
   return reportText(report, applied)
 }
 
@@ -1426,8 +1456,7 @@ async function dailyRun($: EngineInterface, state: State): Promise<void> {
   if (typeof last === 'number' && now - last < DAY_MS) return scheduleDaily($, state)
   await $.store.set(dailyKey(state), now)
   await ask($, state, '/memory/hygiene', { automatic: true })
-  const report = await triageReport($, state, DAILY_LIMITS)
-  const applied = await applyTriage($, state, report)
+  const { report, applied = '' } = await triageRun($, state, DAILY_LIMITS, true)
   await toStream($, 'triage', { text: `daily cleanup of ${report.total} memories: ${applied}`, kind: applied.includes('failed:') ? 'error' : 'ok' })
   await scheduleDaily($, state)
 }

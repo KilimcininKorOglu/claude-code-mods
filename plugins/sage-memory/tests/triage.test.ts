@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actionOf, mergeOf, mergesOf, mergeVerdictOf, pairsOf, patchOf, preFilter, proposalsToFile, ratingOf, valueScore } from '../hooks/triage.ts'
+import { actionOf, judgedOf, judgedTimes, mergeOf, mergesOf, mergeVerdictOf, oldestFirst, pairsOf, patchOf, preFilter, proposalsToFile, ratingOf, valueScore } from '../hooks/triage.ts'
 import type { Candidate, Memory } from '../hooks/shared/model.ts'
 
 tier('user')
@@ -46,7 +46,14 @@ describe('triage', () => {
     const a = memory('a', { anchors: [{ type: 'file', path: 'x.ts' }], tags: ['p', 'q', 'r'] })
     const b = memory('b', { anchors: [{ type: 'file', path: 'x.ts' }], tags: ['p', 'q', 'r'] })
     const c = memory('c', { tags: ['p', 'q'] })
-    expect(pairsOf([a, b, c], 50).map(pair => `${pair.a.id}${pair.b.id}`)).toEqual(['ab'])
+    expect(pairsOf([a, b, c]).map(pair => `${pair.a.id}${pair.b.id}`)).toEqual(['ab'])
+  })
+
+  test('a bounded run takes what was never judged, then what was judged longest ago, and the record keeps only live keys', () => {
+    expect(oldestFirst(['a', 'b', 'c', 'd'], id => id, { a: 30, b: 10, d: 10 })).toEqual(['c', 'b', 'd', 'a'])
+    expect(judgedTimes({ a: 30, b: 10, gone: 5 }, ['a', 'b', 'c'], ['b', 'c'], 99)).toEqual({ a: 30, b: 99, c: 99 })
+    expect(judgedOf({ notes: { a: 1, bad: 'x' } })).toEqual({ notes: { a: 1 }, pairs: {} })
+    expect(judgedOf(undefined)).toEqual({ notes: {}, pairs: {} })
   })
 
   test('an empty reply is no verdict, and a protected or older memory keeps its place', () => {
