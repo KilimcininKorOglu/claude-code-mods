@@ -353,6 +353,9 @@ function readyWorld(on: On): World {
   w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
   for (const path of ['/remind/prompt', '/remind/tools']) w.routes.set(path, { candidates: [], rejected: [] })
   w.routes.set('/remind/global', [])
+  // The consolidator looks up the entries about the turn's files and words.
+  w.routes.set('/memory/for-path', [])
+  w.routes.set('/memory/search', [])
   return w
 }
 

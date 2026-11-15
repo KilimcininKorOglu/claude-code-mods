@@ -105,6 +105,19 @@ export type Anchor = {
 export const SOURCE_TYPES = ['user', 'session', 'tool_result', 'project_instruction', 'file', 'test', 'command', 'legacy_memory'] as const
 export type SourceType = (typeof SOURCE_TYPES)[number]
 
+/** The sources a memory writer names for a fact; a fact it concluded itself is from its session. */
+export const MODEL_SOURCES = ['user', 'tool_result', 'file', 'test', 'command', 'project_instruction'] as const satisfies readonly SourceType[]
+
+/** `value` when it is one of `allowed`, else `fallback`: how a model's free-form answer maps onto a closed list. */
+export function oneOf<T extends string>(allowed: readonly T[], value: unknown, fallback: T): T {
+  return (allowed as readonly unknown[]).includes(value) ? (value as T) : fallback
+}
+
+/** The source a writer named, or `session` for anything else. */
+export function sourceTypeOf(value: unknown): SourceType {
+  return oneOf<SourceType>(MODEL_SOURCES, value, 'session')
+}
+
 export type Source = { type: SourceType; sessionId?: string; toolUseId?: string; path?: string; command?: string; excerptHash?: string }
 
 /** Who gets a memory automatically: subagent types (`roles`) and permission modes (`modes`). */

@@ -7,7 +7,7 @@
  * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, KINDS, PATH_ANCHOR_TYPES, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
+import { ANCHOR_TYPES, KIND_MEANINGS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model.ts'
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
 export const DEFAULT_MODEL = 'haiku'
@@ -86,6 +86,11 @@ export function evidenceText(root: string, turn: TurnEvidence, completed: readon
   return JSON.stringify(evidence, null, 2).slice(0, EVIDENCE_CHARS)
 }
 
+/** The kinds the consolidator may write, one `- "kind": meaning` line each, from the meanings the remember tool shows. */
+const KIND_LINES = Object.entries(KIND_MEANINGS)
+  .map(([kind, meaning]) => `- "${kind}": ${meaning}`)
+  .join('\n')
+
 export const CONSOLIDATOR_SYSTEM = `You are a memory consolidator. Extract only durable, reusable project or user
 knowledge from the supplied session record. Most turns teach nothing durable,
 and {"candidates":[]} is the usual answer.
@@ -110,8 +115,8 @@ Drop a candidate that only says:
 - what this turn did: created, added, changed, moved, committed, ran,
   verified, or tested something;
 - what the assistant is doing now or will do next;
-- a status or a number measured in this turn: counts, percentages, sizes,
-  durations, test results, costs;
+- a number measured in this turn: counts, percentages, sizes, durations,
+  test results, costs;
 - what a file, function, or directory contains, or which tools and languages
   the project uses, because the code already shows it;
 - a convention or a workflow inferred from one action of this turn;
@@ -135,6 +140,19 @@ Examples, none of them from this project:
 - "Token refresh failed when the server clock ran ahead; the client now pads
   the expiry by 60 s." Keep: the cause of a bug.
 - "The user wants commit messages in English." Keep: a standing preference.
+- "Staging still runs 3.4.1 until the migration is done." Keep as a state:
+  short_lived, with the date it is expected to end.
+
+A state is a fact a later session needs that holds now and will change: a
+version a server runs, a service that is down, a workaround until a fix. Keep
+it with "persistence": "short_lived" and "expiresAt", the ISO date it is
+expected to end; when the record gives no date, use 30 days after today.
+Everything else is "long_lived".
+
+When the record shows that an existing entry no longer holds (a value, a
+decision or a state changed), keep the new fact and name the old entry's id
+in "supersedes"; the old entry is then retired. Use only ids of the existing
+entries.
 
 Return one JSON object with a "candidates" array: every candidate you
 considered, each as
@@ -154,9 +172,12 @@ the code already shows, and keep durable knowledge. Only a candidate marked
     "scope": "project",
     "priority": "<priority>",
     "confidence": 0.5,
+    "persistence": "long_lived",
+    "source": "user",
     "tags": ["tag"],
     "anchors": [{"type":"file","path":"path/from/evidence"}],
-    "related": ["<id of an existing entry>"]
+    "related": ["<id of an existing entry>"],
+    "supersedes": ["<id of an existing entry this replaces>"]
   }
 }
 
@@ -165,19 +186,13 @@ session must read together with the new one: the same decision, the same bug,
 or the same rule seen from another side. Touching the same file is not enough.
 Use only ids from the existing entries, and leave the list out when none fits.
 
-Memory kinds:
-- "fact": verified objective project fact
-- "decision": durable choice and its continuing consequence
-- "convention": recurring project standard
-- "preference": explicit, reusable user or team preference
-- "reference": stable pointer to a relevant location
-- "anti_pattern": established behavior to avoid
-- "warning": durable operational or safety warning
-- "workflow": repeatable project procedure
-- "bug_root_cause": verified cause of a recurring or important bug
-- "file_note": durable responsibility of a file or package
-- "symbol_note": durable contract of a function, class, or symbol
-- "command_note": useful command and what it verifies or changes
+"source" says where the fact comes from: "user" when the person stated it,
+"file", "test", "command" or "tool_result" when the evidence shows it,
+"project_instruction" when an instruction file says it. Leave it out when the
+answer concluded it.
+
+Memory kinds, pick the most specific:
+${KIND_LINES}
 
 Scope is "project" for knowledge about this project, and "user" for a
 preference of the user that holds in every project. A "user" entry takes no
@@ -188,8 +203,8 @@ Confidence must be a number from 0.5 to 1.0 and reflect evidence strength.
 
 Rules:
 1. Do not mark "keep" a candidate that an existing entry already covers, even
-   if phrased differently. Do not emit edits, deletions, corrections, or
-   duplicates.
+   if phrased differently. A candidate that changes an existing entry is kept
+   with that entry's id in "supersedes", never as a second entry beside it.
 2. Use one concise sentence per entry, written in English whatever the
    language of the session, and keep the reason in it. Add 1-3 lowercase tags
    without "#".
@@ -263,10 +278,11 @@ function remindedBlock(reminded: readonly Memory[]): string {
  * and the memories reminded by relevance, whose use the model judges. The global rules are not among
  * them: they go to every context whatever it asks, so following one says nothing about its relevance.
  */
-export function consolidatorPrompt(asked: readonly string[], answer: string, evidence: string, existing: readonly Memory[], reminded: readonly Memory[] = []): string {
+export function consolidatorPrompt(asked: readonly string[], answer: string, evidence: string, existing: readonly Memory[], reminded: readonly Memory[] = [], now = Date.now()): string {
   const task = reminded.length === 0 ? 'the candidates' : 'the candidates and the judged memories'
   const answerBlock = answer.trim() === '' ? '' : `Answer that ended the turn:\n${answer.slice(0, SUMMARY_CHARS)}\n\n`
-  return `${askedBlock(asked)}${answerBlock}Grounding evidence from this turn:\n${evidence}${existingBlock(existing)}${remindedBlock(reminded)}\n\nReview the turn and return ${task} as JSON.`
+  const today = `Today: ${new Date(now).toISOString().slice(0, 10)}\n\n`
+  return `${today}${askedBlock(asked)}${answerBlock}Grounding evidence from this turn:\n${evidence}${existingBlock(existing)}${remindedBlock(reminded)}\n\nReview the turn and return ${task} as JSON.`
 }
 
 /** An entry the model labelled applied with evidence, on an id it was shown. */
@@ -306,12 +322,9 @@ export function operationsOf(text: string): Op[] {
   return Array.isArray(operations) ? operations.filter((op): op is Op => typeof op === 'object' && op !== null) : []
 }
 
-const ACCEPTED_KINDS = new Set<Kind>(['fact', 'decision', 'convention', 'preference', 'anti_pattern', 'warning', 'workflow', 'bug_root_cause', 'file_note', 'symbol_note', 'command_note'])
-
-/** A kind the model named, `reference` as a file note, anything else a fact (SAGE's mapping). */
+/** A kind the model named from the kinds it was shown, anything else a fact. */
 export function kindOf(value: unknown): Kind {
-  if (value === 'reference') return 'file_note'
-  return typeof value === 'string' && ACCEPTED_KINDS.has(value as Kind) && KINDS.includes(value as Kind) ? (value as Kind) : 'fact'
+  return oneOf<Kind>(MODEL_KINDS, value, 'fact')
 }
 
 const PRIORITY: Record<string, number> = { critical: 0.95, high: 0.8, medium: 0.55, low: 0.25 }
@@ -396,46 +409,72 @@ export function keptKind(kind: Kind, anchors: readonly Anchor[]): Kind {
 }
 
 const MAX_RELATED = 3
+const MAX_SUPERSEDED = 3
+
+/** How many existing entries the consolidator compares a turn with, and how much of the turn's words searches for them. */
+export const MAX_EXISTING = 30
+export const QUERY_CHARS = 500
 
 /**
- * The existing entries a kept memory names as related: only ids the model was shown, of the memory's
- * own scope, because the daemon refuses a link into the other store and would drop the memory with it.
+ * The existing entries a kept memory names, as related or as replaced: only ids the model was shown, of
+ * the memory's own scope, because the daemon refuses a link into the other store and would drop the
+ * memory with it.
  */
-function relatedOf(value: unknown, scope: 'project' | 'user', existing: readonly Memory[]): string[] | undefined {
+function shownIdsOf(value: unknown, scope: 'project' | 'user', existing: readonly Memory[], max: number): string[] | undefined {
   if (!Array.isArray(value)) return undefined
   const allowed = new Set(existing.filter(memory => memory.scope === scope).map(memory => memory.id))
-  const related = [...new Set(value.filter((id): id is string => typeof id === 'string' && allowed.has(id)))].slice(0, MAX_RELATED)
-  return related.length > 0 ? related : undefined
+  const ids = [...new Set(value.filter((id): id is string => typeof id === 'string' && allowed.has(id)))].slice(0, max)
+  return ids.length > 0 ? ids : undefined
 }
 
+const DAY_MS = 86_400_000
+/** How long a state lasts when the model gave no usable end date: the 30 days the prompt names. */
+export const STATE_DAYS = 30
+
+/**
+ * A state the model kept ends on the date it named when that date is later than now, else 30 days
+ * from now; any other memory is long_lived, with no end date.
+ */
+export function lifetimeOf(op: Op, now: number): Pick<RememberInput, 'persistence' | 'expiresAt'> {
+  if (op.persistence !== 'short_lived') return { persistence: 'long_lived' }
+  const named = typeof op.expiresAt === 'string' ? Date.parse(op.expiresAt) : Number.NaN
+  const end = Number.isFinite(named) && named > now ? named : now + STATE_DAYS * DAY_MS
+  return { persistence: 'short_lived', expiresAt: new Date(end).toISOString() }
+}
+
+/** What a kept memory is and where it ends; `now` dates a state the model gave no end for. */
+type Context = { sessionId: string; root: string; existing: readonly Memory[]; now: number }
+
 /** One memory the model kept, as the input `remember` takes, or nothing without a text. */
-export function additionOf(op: Op, sessionId: string, root: string, existing: readonly Memory[] = []): RememberInput | undefined {
+export function additionOf(op: Op, context: Context): RememberInput | undefined {
   const text = trimmed(op.text, 2000)
   if (text === undefined) return undefined
   const scope = op.scope === 'user' ? 'user' : 'project'
-  const anchors = anchorsOf(op.anchors, scope, root)
+  const anchors = anchorsOf(op.anchors, scope, context.root)
   return {
-    related: relatedOf(op.related, scope, existing),
+    related: shownIdsOf(op.related, scope, context.existing, MAX_RELATED),
+    supersedes: shownIdsOf(op.supersedes, scope, context.existing, MAX_SUPERSEDED),
     text,
     scope,
     kind: keptKind(kindOf(op.kind ?? op.type), anchors),
     tags: tagsOf(op.tags),
     importance: importanceOf(op.priority),
     confidence: confidenceOf(op.confidence),
-    persistence: 'long_lived',
+    ...lifetimeOf(op, context.now),
     anchors,
-    sources: [{ type: 'session', sessionId }],
+    sources: [{ type: sourceTypeOf(op.source), sessionId: context.sessionId }],
   }
 }
 
 /**
  * The memories an answer kept, at most five; `root` is the project's, which each path anchor must lie
- * under, and `existing` the entries the model was shown, the only ones a memory may name as related.
+ * under, and `existing` the entries the model was shown, the only ones a memory may name as related or
+ * replace.
  */
-export function additionsOf(text: string, sessionId: string, root: string, existing: readonly Memory[] = []): RememberInput[] {
+export function additionsOf(text: string, context: Context): RememberInput[] {
   return keptOf(text)
     .slice(0, MAX_ADDS)
-    .map(op => additionOf(op, sessionId, root, existing))
+    .map(op => additionOf(op, context))
     .filter((input): input is RememberInput => input !== undefined)
 }
 

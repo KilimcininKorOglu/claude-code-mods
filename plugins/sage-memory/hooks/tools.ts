@@ -5,7 +5,7 @@
  * code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS, type RememberResult, type SourceType } from './shared/model.ts'
+import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model.ts'
 
 type Schema = Record<string, unknown>
 
@@ -55,9 +55,6 @@ const SCOPE = choice(
   SCOPES,
   'project (default): this repository; user: holds in every project; session: this session only, deleted after 7 days; file: one file only, needs a file anchor; symbol: one function or class only, needs a symbol anchor.',
 )
-
-/** Where a fact comes from, for the model to name; a memory it writes is from this session otherwise. */
-export const MODEL_SOURCES = ['user', 'tool_result', 'file', 'test', 'command', 'project_instruction'] as const
 
 const SOURCE = choice(MODEL_SOURCES, 'Where the fact comes from: user (the person said it), tool_result, file, test, command, project_instruction (CLAUDE.md or another instruction file). Leave it out for what you concluded yourself.')
 
@@ -293,16 +290,11 @@ const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', '
 const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'expiresAt', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
 const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 
-/** The source the model named, or this session for a fact it concluded itself. */
-function sourceOf(input: Input): SourceType {
-  return (MODEL_SOURCES as readonly unknown[]).includes(input.source) ? (input.source as SourceType) : 'session'
-}
-
 /** A memory the model writes: a session memory belongs to this session, and each carries its source and this session. */
 function rememberCall(input: Input, sessionId: string): Call {
   const memory = picked(input, REMEMBER_KEYS)
   const owner = memory.scope === 'session' ? { ownerSessionId: sessionId } : {}
-  return { path: '/memory/remember', body: { input: { ...memory, ...owner, sources: [{ type: sourceOf(input), sessionId }] } } }
+  return { path: '/memory/remember', body: { input: { ...memory, ...owner, sources: [{ type: sourceTypeOf(input.source), sessionId }] } } }
 }
 
 function updateCall(input: Input): Call {

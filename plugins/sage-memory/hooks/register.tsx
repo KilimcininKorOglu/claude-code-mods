@@ -53,6 +53,8 @@ import {
   CONSOLIDATOR_SYSTEM,
   completedTasks,
   consolidatorPrompt,
+  MAX_EXISTING,
+  QUERY_CHARS,
   DEFAULT_MODEL,
   MAX_ASKED,
   MAX_JUDGED,
@@ -1129,18 +1131,38 @@ async function consolidatorAnswer(
   return r
 }
 
+/**
+ * The entries the consolidator compares a turn with, at most `MAX_EXISTING`: the ones about the files
+ * the turn touched, the ones its words find, then the weightiest of each store. Before, it saw only
+ * the weightiest 25, so a fact on a topic the store already held became a second entry beside it.
+ */
+async function existingFor($: EngineInterface, state: State, since: Since, answer: string): Promise<Memory[]> {
+  const found = new Map<string, Memory>()
+  const add = (memories: readonly Memory[]): void => {
+    for (const memory of memories) if (found.size < MAX_EXISTING && memory.status === 'active') found.set(memory.id, memory)
+  }
+  const root = state.project?.root ?? ''
+  const paths = [...new Set([...since.turn.written, ...since.turn.read].map(path => relativeTo(root, path)))]
+  for (const path of paths.slice(0, CURATED_FILES)) add(await ask<Memory[]>($, state, '/memory/for-path', { path, limit: PER_FILE }))
+  const query = [...since.asked, answer].join(' ').slice(0, QUERY_CHARS).trim()
+  if (query !== '') add(await ask<Memory[]>($, state, '/memory/search', { query, limit: 10 }))
+  add([...(await topOf($, state, 'project', 5)), ...(await topOf($, state, 'user', 5))])
+  return [...found.values()]
+}
+
 async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
   if (!(await isReady(state))) return handBack(state, since)
   if ((await $.store.get('consolidate')) === false) return
   await working($, state, 'consolidating…')
   const root = state.project?.root ?? ''
-  const existing = [...(await topOf($, state, 'project', 15)), ...(await topOf($, state, 'user', 10))]
-  const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant)
+  const existing = await existingFor($, state, since, answer)
+  const now = await $.clock.now()
+  const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant, now)
   const r = await consolidatorAnswer($, state, prompt, since)
   if (!r.isAnswered) return
   const sessionId = await $.session.id()
   if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant) })
-  const additions = additionsOf(r.text, sessionId, root, existing)
+  const additions = additionsOf(r.text, { sessionId, root, existing, now })
   if (additions.length > 0) await working($, state, jobText('saving', additions.length))
   for (const input of additions) await writeOne($, state, input)
 }

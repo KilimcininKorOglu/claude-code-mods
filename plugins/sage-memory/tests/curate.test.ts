@@ -98,7 +98,24 @@ describe('curate', () => {
     ])
     expect(merge?.kind === 'replace' ? merge.inputs.map(i => i.kind) : []).toEqual(['fact'])
     expect(split?.kind === 'replace' ? split.inputs.map(i => i.kind) : []).toEqual(['fact', 'file_note'])
-    expect(additionsOf(JSON.stringify({ candidates: [{ is: 'keep', memory: { text: 'A note.', kind: 'reference', anchors: [] } }] }), 's1', '/repo').map(i => i.kind)).toEqual(['fact'])
+    expect(additionsOf(JSON.stringify({ candidates: [{ is: 'keep', memory: { text: 'A note.', kind: 'reference', anchors: [] } }] }), { sessionId: 's1', root: '/repo', existing: [], now: 0 }).map(i => i.kind)).toEqual(['fact'])
+  })
+
+  test('a kept memory replaces only shown entries of its scope, a state ends on a later date, and the source is one the model may name', () => {
+    const now = Date.parse('2026-11-15T00:00:00Z')
+    const user = { ...memory('u'), scope: 'user' as const }
+    const kept = (memory: Record<string, unknown>) =>
+      additionsOf(JSON.stringify({ candidates: [{ is: 'keep', memory: { text: 'Staging runs 3.4.1 until the migration.', ...memory } }] }), { sessionId: 's1', root: '/repo', existing: [...SHOWN, user], now })[0]
+    expect(kept({ supersedes: ['a', 'zz', 'u'] })?.supersedes).toEqual(['a'])
+    expect(kept({ persistence: 'short_lived', expiresAt: '2026-12-01' })).toMatchObject({ persistence: 'short_lived', expiresAt: '2026-12-01T00:00:00.000Z' })
+    // A past or unreadable end date gives the 30 days the prompt names.
+    expect(kept({ persistence: 'short_lived', expiresAt: '2020-01-01' })?.expiresAt).toBe('2026-12-15T00:00:00.000Z')
+    const durable = kept({ expiresAt: '2026-12-01' })
+    expect([durable?.persistence, durable?.expiresAt]).toEqual(['long_lived', undefined])
+    expect(kept({ source: 'user' })?.sources).toEqual([{ type: 'user', sessionId: 's1' }])
+    expect(kept({ source: 'legacy_memory' })?.sources).toEqual([{ type: 'session', sessionId: 's1' }])
+    expect(kept({ kind: 'security_signal' })?.kind).toBe('security_signal')
+    expect(kept({ kind: 'memory_review' })?.kind).toBe('fact')
   })
 
   test('the line names only the counts that moved, a deletion red and any other change yellow', () => {
