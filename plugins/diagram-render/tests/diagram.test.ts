@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { blockHash, cells, failureLine, mermaidBlocks } from '../hooks/diagram.ts'
+import { blockHash, cells, failureLine, mermaidBlocks } from '../hooks/diagram'
 
 tier('user')
 

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { blockHash, cells, failureLine, mermaidBlocks, pngSize, type Size } from './diagram.ts'
+import { blockHash, cells, failureLine, mermaidBlocks, pngSize, type Size } from './diagram'
 
 const ENABLED_KEY = 'enabled'
 
