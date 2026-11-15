@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText } from '../hooks/classify.ts'
-import { deletedShort } from '../hooks/report.ts'
+import { classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText } from '../hooks/classify'
+import { deletedShort } from '../hooks/report'
 
 tier('user')
 

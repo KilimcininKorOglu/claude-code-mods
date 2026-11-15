@@ -1,5 +1,5 @@
 /** What a scan of one repository finds. The functions that run it take `$`, so they live in register.tsx. */
-import type { Class } from './classify.ts'
+import type { Class } from './classify'
 
 /** An artifact directory, relative to the repository root. */
 export type Found = { path: string; cls: Exclude<Class, 'data'> }

@@ -1,7 +1,8 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusLine, type Class, type Line } from './classify.ts'
-import { carriedSelection, deletedShort, listText, reportText, rowText, totalKb, type Outcome } from './report.ts'
-import { MAX_FOUND, type Found, type Scan } from './scan.ts'
+import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusLine, type Class, type Line } from './classify'
+import { carriedSelection, deletedShort, listText, reportText, rowText, totalKb, type Outcome } from './report'
+import { MAX_FOUND, type Found, type Scan } from './scan'
 
 const PANE_ID = 'disk-janitor'
 

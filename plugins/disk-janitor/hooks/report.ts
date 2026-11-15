@@ -1,6 +1,6 @@
 /** The lines the user reads about a scan and a deletion. */
-import { part, partsLine, sizeText, type Line } from './classify.ts'
-import type { Found, Scan } from './scan.ts'
+import { part, partsLine, sizeText, type Line } from './classify'
+import type { Found, Scan } from './scan'
 
 export function totalKb(scan: Scan): number {
   let total = 0
