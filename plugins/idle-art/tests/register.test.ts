@@ -56,7 +56,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
 
 const run = (args: string): CommandRunInput => ({ command: 'idle-art', args, origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 } })
 
-const BAND_PROPS = { hasSurvey: false, isWorking: true, maxRows: 20, bodyColumns: 120, scroll: { offset: 0, bodyRows: 20 }, view: {} }
+const BAND_PROPS = { hasSurvey: false, isCollapsed: false, isWorking: true, maxRows: 20, bodyColumns: 120, scroll: { offset: 0, bodyRows: 20 }, view: {} }
 
 type Band = { isWorking?: boolean; hasSurvey?: boolean; maxRows?: number; surface?: 'terminal' | 'desktop' }
 
@@ -65,7 +65,7 @@ async function band($: Engine, b: Band = {}): Promise<string> {
     surface: b.surface ?? 'terminal',
     component: 'AbovePrompt',
     requestId: 'band',
-    props: { hasSurvey: b.hasSurvey ?? false, isWorking: b.isWorking ?? true, maxRows: b.maxRows ?? 20, bodyColumns: 120, scroll: { offset: 0, bodyRows: 20 }, view: {} },
+    props: { hasSurvey: b.hasSurvey ?? false, isCollapsed: false, isWorking: b.isWorking ?? true, maxRows: b.maxRows ?? 20, bodyColumns: 120, scroll: { offset: 0, bodyRows: 20 }, view: {} },
   })
   return JSON.stringify(tree ?? null)
 }
