@@ -16,6 +16,17 @@ type Verdict = { deny?: string; context?: string }
 /** What ExitPlanMode's call carries of the plan. */
 type PlanInput = { plan?: string; planFilePath?: string }
 
+/**
+ * What the call carries of the plan, with the plan mode note's file when the call names none. The engine
+ * adds `plan` and `planFilePath` to the model's input (measured on 2.1.278), but the tool's declared input
+ * holds neither, so both are read from the call as it arrived.
+ */
+function planInputOf(e: object, planFile: string | undefined): PlanInput {
+  const plan = 'plan' in e && typeof e.plan === 'string' ? e.plan : undefined
+  const planFilePath = 'planFilePath' in e && typeof e.planFilePath === 'string' ? e.planFilePath : planFile
+  return { plan, planFilePath }
+}
+
 /** Gemini's answer and the tier it went to, or why there is none. */
 type Asked = { answer: Answer; tier: 'free' | 'paid' } | { error: string }
 
@@ -153,7 +164,7 @@ export const register: Register = (on, options) => {
   on('tool.call', { tool: 'ExitPlanMode' }, async ($, e, next) => {
     // A subagent's plan does not reach the user's approval dialog.
     if (e.agentId !== undefined || !(await isEnabled($))) return next(e)
-    const verdict = await review($, state, config, { plan: e.plan, planFilePath: e.planFilePath ?? state.planFile })
+    const verdict = await review($, state, config, planInputOf(e, state.planFile))
     if (verdict.deny !== undefined) {
       state.rounds++
       return { deny: verdict.deny }

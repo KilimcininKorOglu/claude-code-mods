@@ -117,7 +117,8 @@ function world(on: On, opts: Core & { store?: [string, unknown][] } = {}): World
   return w
 }
 
-const exitPlan = (plan = PLAN) => ({ tool: 'ExitPlanMode' as const, plan })
+/** An ExitPlanMode call with the `plan` and `planFilePath` the engine adds to the model's input. */
+const exitPlan = (plan = PLAN, planFilePath?: string) => ({ tool: 'ExitPlanMode' as const, plan, ...(planFilePath === undefined ? {} : { planFilePath }) })
 const reviewText = (w: World, i = 0) => JSON.parse(w.requests[i]?.body ?? '{}').contents[0].parts[0].text as string
 
 describe('gemini-plan-review', () => {
@@ -192,10 +193,10 @@ describe('gemini-plan-review', () => {
   it('reads the plan file over the plan the call carries, and lets a call with neither through', async ($, on) => {
     const w = world(on, { key: 'KEY' })
     w.replies.push({ status: 200, text: reply([]) })
-    await $.tool.call({ ...exitPlan('# An older version'), planFilePath: '/Users/u/.claude/plans/p.md' })
+    await $.tool.call(exitPlan('# An older version', '/Users/u/.claude/plans/p.md'))
     expect(w.files).toEqual(['/Users/u/.claude/plans/p.md'])
     expect(reviewText(w)).toContain('The plan:\n\n# From the file')
-    const bare = await $.tool.call({ tool: 'ExitPlanMode', plan: '' })
+    const bare = await $.tool.call(exitPlan(''))
     expect(bare.context).toEqual(['gemini-plan-review could not review this plan and let it reach the user: the call carries no plan text'])
     expect(w.requests).toHaveLength(1)
   })
