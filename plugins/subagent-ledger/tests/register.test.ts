@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput, TurnUsage } from 'claude-code'
 
-import { addSplit, fmtDuration, fmtTok, limitOf, modelTone, NO_SPLIT, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger.ts'
+import { addSplit, fmtDuration, fmtTok, limitOf, modelTone, NO_SPLIT, rowText, shortModel, sidebarLines, statusAfter, tokensOf, totalText, type Run } from '../hooks/ledger'
 
 tier('user')
 
