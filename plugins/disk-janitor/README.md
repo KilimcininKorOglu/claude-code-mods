@@ -70,9 +70,9 @@ Function hooks are early access. Claude Code 2.1.288 and later load them by defa
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.288:
+Validated with `claude plugin validate` on Claude Code 2.1.325:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane}, ui.close
+    ❯ ./register.tsx hooks: session.start, turn.complete, command.run{command=disk-janitor}, ui.render{component=Pane} (default matcher key: plugin), ui.close
     ❯ ./register.tsx calls: $.clock.after (via refreshInBackground), $.clock.every, $.clock.now, $.command.register, $.fs.exists (via hasAnyMarker), $.fs.list (via insideData), $.fs.stat (via staleReason), $.process.run (via findArtifacts, measure, removeDir, repoRoot, staleReason), $.session.cwd (via refresh), $.sidebar.clear (via toSidebar), $.sidebar.isOpen (via toSidebar), $.sidebar.set (via toSidebar), $.ui.close (via openPane), $.ui.invalidate (via pressDelete, refresh, toggle), $.ui.log (via pressDelete, refreshInBackground), $.ui.open (via openPane), $.ui.panes (via openPane), $.ui.resolve, $.ui.status (via showTotal)
 
 Reach L2: it runs processes and deletes directories.
