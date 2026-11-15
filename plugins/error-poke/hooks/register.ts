@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 import { DEFAULT_MAX_POKES, decide, eventLines, limitLines, limitOf, limitText, limitWait, limitWaitLines, POKE_TEXT, pokeDelay, pokeLines, statusText, type LimitWait, type Line } from './poke'
 
