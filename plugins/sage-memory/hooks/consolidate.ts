@@ -38,93 +38,11 @@ const EVIDENCE_CHARS = 6000
 const MAX_ADDS = 5
 const MAX_ANCHORS = 5
 
-/** Where one edit landed: its file and the first line of its new text, which locates it in the file afterwards. */
-export type EditSpot = { path: string; line: string }
-
-/** What one main-loop turn touched: the files it read and wrote, where its edits landed, and the commands it ran. */
-export type TurnEvidence = { read: string[]; written: string[]; edits: EditSpot[]; commands: string[] }
+/** What one main-loop turn touched: the files it read and wrote, and the commands it ran. */
+export type TurnEvidence = { read: string[]; written: string[]; commands: string[] }
 
 export function emptyEvidence(): TurnEvidence {
-  return { read: [], written: [], edits: [], commands: [] }
-}
-
-/** How many edit spots a turn keeps, the newest first to go, and how many changed symbols the evidence lists. */
-export const MAX_EDITS = 20
-const MAX_SYMBOLS = 10
-const SPOT_CHARS = 200
-
-/** The first non-empty line of a text, trimmed and cut, or nothing for an empty text. */
-function firstLine(text: unknown): string | undefined {
-  if (typeof text !== 'string') return undefined
-  const line = text.split('\n').map(part => part.trim()).find(part => part !== '')
-  return line?.slice(0, SPOT_CHARS)
-}
-
-/** The new texts of an Edit or MultiEdit input: an Edit's `new_string`, each `edits[].new_string` of a MultiEdit. */
-function newTexts(input: Record<string, unknown>): unknown[] {
-  return Array.isArray(input.edits) ? input.edits.map(edit => (edit as Record<string, unknown> | null)?.new_string) : [input.new_string]
-}
-
-/** Where an Edit or MultiEdit call's edits landed; any other call has none. */
-export function editSpotsOf(toolName: string, input: unknown, path: string): EditSpot[] {
-  if ((toolName !== 'Edit' && toolName !== 'MultiEdit') || typeof input !== 'object' || input === null) return []
-  return newTexts(input as Record<string, unknown>)
-    .map(firstLine)
-    .filter((line): line is string => line !== undefined)
-    .map(line => ({ path, line }))
-}
-
-/**
- * A definition line's name: a function, method, class, interface, type, enum, struct or trait in the
- * languages the projects here use (TypeScript, JavaScript, Python, Go, Rust, Swift, Kotlin, Java's
- * class line), or an arrow function bound to a name.
- */
-const DEFINITION = [
-  /^(?:export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:function\*?|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/,
-  /^(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*(?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*(?::[^=]*)?=>/,
-  /^(?:async\s+)?def\s+([A-Za-z_]\w*)/,
-  /^func\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)/,
-  /^(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?(?:unsafe\s+)?(?:fn|struct|enum|trait)\s+([A-Za-z_]\w*)/,
-  /^(?:(?:public|private|internal|open|fileprivate|static|final|override|suspend)\s+)*(?:func|fun|class|struct|protocol)\s+([A-Za-z_]\w*)/,
-  /^(?:(?:public|private|protected|static|async|readonly|override)\s+)*([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{\s*$/,
-]
-
-/** Words a method-shaped line can start with that open a block, not a definition. */
-const BLOCK_WORDS = new Set(['if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'function'])
-
-/** The name a line defines, or nothing when it defines none. */
-export function definedName(line: string): string | undefined {
-  const text = line.trim()
-  for (const pattern of DEFINITION) {
-    const name = pattern.exec(text)?.[1]
-    if (name !== undefined && !BLOCK_WORDS.has(name)) return name
-  }
-  return undefined
-}
-
-/**
- * The definition an edit landed in: the nearest definition line at or above the edit's first line in
- * the file as it reads now, or nothing when the line is gone or no definition stands above it.
- */
-export function enclosingName(content: string, spot: string): string | undefined {
-  const lines = content.split('\n')
-  const at = lines.findIndex(line => line.trim().startsWith(spot))
-  if (at < 0) return undefined
-  for (let i = at; i >= 0; i--) {
-    const name = definedName(lines[i] ?? '')
-    if (name !== undefined) return name
-  }
-  return undefined
-}
-
-/** A changed function or class, by its project-relative file and its name. */
-export type ChangedSymbol = { path: string; symbol: string }
-
-/** Each changed symbol once, the first `MAX_SYMBOLS`. */
-export function changedSymbolsOf(found: readonly ChangedSymbol[]): ChangedSymbol[] {
-  const unique = new Map<string, ChangedSymbol>()
-  for (const item of found) if (!unique.has(`${item.path}#${item.symbol}`)) unique.set(`${item.path}#${item.symbol}`, item)
-  return [...unique.values()].slice(0, MAX_SYMBOLS)
+  return { read: [], written: [], commands: [] }
 }
 
 /** Adds a value to the end of a list once, keeping the newest `max`. */
@@ -156,16 +74,12 @@ export function completedTasks(result: unknown): string[] {
     .map(row => row.subject)
 }
 
-/**
- * The evidence block the model reads: this turn's files, the functions and classes its edits landed
- * in, its commands and the tasks completed, cut at 6000 characters.
- */
-export function evidenceText(root: string, turn: TurnEvidence, completed: readonly string[], changed: readonly ChangedSymbol[] = []): string {
+/** The evidence block the model reads: this turn's files and commands and the tasks completed, cut at 6000 characters. */
+export function evidenceText(root: string, turn: TurnEvidence, completed: readonly string[]): string {
   const evidence = {
     projectRoot: root,
     readFiles: turn.read.map(path => relativeTo(root, path)),
     writtenFiles: turn.written.map(path => relativeTo(root, path)),
-    changedSymbols: changed.map(item => ({ path: relativeTo(root, item.path), symbol: item.symbol })),
     commands: turn.commands.slice(-10),
     completedTasks: completed.slice(-10).map(task => task.slice(0, 240)),
   }
@@ -296,10 +210,7 @@ Rules:
    without "#".
 3. Add 1-3 concrete anchors when supported. Allowed anchor types are "file",
    "directory", "symbol", "package", "command", "test", and "git". Never invent
-   a path, symbol, command, package, test, or revision. Name the narrowest:
-   when a fact is about one function or class listed in changedSymbols,
-   anchor it as {"type":"symbol","path":"<its path>","symbol":"<its name>"}
-   rather than to the whole file.
+   a path, symbol, command, package, test, or revision.
 4. Never persist credentials, tokens, personal data, raw secrets, or sensitive
    command arguments.
 5. Mark at most five candidates "keep"; prefer none over weak memory.
