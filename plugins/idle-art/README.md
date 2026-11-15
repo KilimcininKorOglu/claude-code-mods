@@ -90,9 +90,9 @@ Restart Claude Code, or run `/reload-plugins` in an open session. The mod is on 
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.325:
 
-    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt}, ui.message, turn.start, turn.complete, command.run{command=idle-art}
+    ❯ ./register.tsx hooks: session.start, ui.render{component=AbovePrompt} (default matcher key: plugin), ui.message, turn.start, turn.complete, command.run{command=idle-art}
     ❯ ./register.tsx calls: $.clock.after (via beginTurn), $.clock.every (via beginTurn), $.clock.now (via sceneFor), $.command.register, $.env.get (via resolvePath), $.fs.exists (via readGifBytes), $.fs.read (via readGifBytes), $.fs.stat (via readGifBytes), $.process.spawn (via streamedStdout), $.session.cwd (via resolvePath), $.store.delete (via removeClip), $.store.get (via clipsMark, loadClips, loadConfig, writeClipNames), $.store.set (via importGif, removeClip, setting, writeClipNames), $.ui.invalidate (via beginTurn, setting, sync), $.ui.log (via rereadOrStop), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: HOME
