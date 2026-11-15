@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register } from 'claude-code'
 import { DEFAULT_CODE, DEFAULT_PLAN, mainLoopMode, parseModel, resolved, routeFor, sectionLines, storedModel, switchText, type Line, type Route } from './split'
 
