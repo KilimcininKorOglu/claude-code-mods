@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, doneLines, isGuarded, lineOf, modeOf, noteText, placesOf, sidebarLines, sqlLines, stillBuilt } from '../hooks/sql.ts'
+import { denyText, doneLines, isGuarded, lineOf, modeOf, noteText, placesOf, sidebarLines, sqlLines, stillBuilt } from '../hooks/sql'
 
 tier('user')
 
