@@ -1,5 +1,5 @@
 /** The review Gemini is asked for, its answer, and what the model and the user read. */
-import { SKIP_VARIABLE } from './commit.ts'
+import { SKIP_VARIABLE } from './commit'
 import type { EngineInterface } from 'claude-code'
 
 /** Gemini's answer as gemini-core reads it. */

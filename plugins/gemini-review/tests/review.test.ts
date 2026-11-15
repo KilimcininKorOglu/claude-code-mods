@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { parseCommand } from '../hooks/command.ts'
-import { configFrom } from '../hooks/config.ts'
-import { buildReviewBody, denyText, failedContext, minorContext, parseFindings, REVIEW_TASK, summaryText } from '../hooks/review.ts'
+import { parseCommand } from '../hooks/command'
+import { configFrom } from '../hooks/config'
+import { buildReviewBody, denyText, failedContext, minorContext, parseFindings, REVIEW_TASK, summaryText } from '../hooks/review'
 
 tier('user')
 

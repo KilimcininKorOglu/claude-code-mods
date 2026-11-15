@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, splitCommand, stripHeredocs } from '../hooks/commit.ts'
+import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, splitCommand, stripHeredocs } from '../hooks/commit'
 
 tier('user')
 

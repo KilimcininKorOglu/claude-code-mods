@@ -1,9 +1,9 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command.ts'
-import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit.ts'
-import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config.ts'
-import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, passedLog, summaryText, type Answer, type Finding } from './review.ts'
-import { renderTranscript } from './transcript.ts'
+import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command'
+import { combinedText, diffCommands, fileCount, findCommit, newFileDiff, SKIP_VARIABLE, type CommitPlan } from './commit'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, type Config } from './config'
+import { buildReviewBody, cleanContext, denyText, failedContext, minorContext, parseFindings, passedLog, summaryText, type Answer, type Finding } from './review'
+import { renderTranscript } from './transcript'
 
 /** The last review's line, for the status. */
 type State = { last?: string }
