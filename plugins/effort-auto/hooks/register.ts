@@ -47,7 +47,7 @@ async function toPerson($: EngineInterface, state: State, lines: Line[], log: st
 }
 
 /** The effort line once a request told the session's effort, and the allowed levels under it. */
-function sectionLines(state: State): Line[] {
+function sectionLines(state: State): [Line, ...Line[]] {
   const known = state.current !== undefined || state.last !== undefined || state.session !== undefined
   const allowed = allowedLine(state.allowed)
   return known ? [effortLine(state.current, state.last, state.session), allowed] : [allowed]
