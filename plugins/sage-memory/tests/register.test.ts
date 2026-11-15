@@ -1,6 +1,7 @@
 import { describe, expect, mock, test, tier, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 import type { Memory } from '../hooks/shared/model.ts'
+import { TOOLS } from '../hooks/tools.ts'
 import { countsLine, stateLines, storedLine } from '../hooks/link.ts'
 
 tier('user')
@@ -614,6 +615,27 @@ describe('memory tools', () => {
     })
   })
 
+  withSidebar('remember carries the source and end date the model names, and its schema says what every kind means', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: PNPM, outcome: 'added' })
+    await $.session.start(START)
+    await $.tool.call({ tool: TOOL('remember'), text: PNPM.text, persistence: 'short_lived', expiresAt: '2026-12-01', source: 'user' } as never)
+    await $.tool.call({ tool: TOOL('remember'), text: PNPM.text, source: 'rumor' } as never)
+    const [named, unknown] = bodiesOf(w, '/memory/remember')
+    expect(named?.input).toMatchObject({ persistence: 'short_lived', expiresAt: '2026-12-01', sources: [{ type: 'user', sessionId: 'sess-1' }] })
+    expect(unknown?.input).toMatchObject({ sources: [{ type: 'session', sessionId: 'sess-1' }] })
+  })
+
+  test('the remember schema says what every kind means and explains every field a memory is judged by', () => {
+    const schema = TOOLS.find(tool => tool.name === 'remember')?.inputSchema as { properties: Record<string, { description?: string; enum?: string[] }> }
+    const kinds = schema.properties.kind
+    expect(kinds?.enum).not.toContain('memory_review')
+    const described = (kinds?.enum ?? []).filter(kind => kinds?.description?.includes(`${kind}: `) === true)
+    expect(described).toEqual(kinds?.enum ?? [])
+    const fields = ['expiresAt', 'source', 'importance', 'confidence', 'scope', 'persistence', 'anchors']
+    expect(fields.filter(field => (schema.properties[field]?.description ?? '') === '')).toEqual([])
+  })
+
   withSidebar('a delete without force and a two-letter forget are refused before the daemon is asked', async ($, on) => {
     const w = readyWorld(on)
     await $.session.start(START)
@@ -1088,6 +1110,9 @@ describe('commands', () => {
       importance: 0.9, ownerSessionId: 'sess-1', sources: [{ type: 'user', sessionId: 'sess-1' }],
     })
     expect(String((await $.command.run(run('remember --importance 2 x'))).text)).toBe('--importance must be a number from 0 to 1 (got "2")')
+    await $.command.run(run('remember --persistence short_lived --expires 2026-12-01 The staging server runs 3.4.1'))
+    expect(bodiesOf(w, '/memory/remember')[1]?.input).toMatchObject({ persistence: 'short_lived', expiresAt: '2026-12-01' })
+    expect(String((await $.command.run(run('remember --expires soon x'))).text)).toBe('--expires must be an ISO date such as 2026-12-01 (got "soon")')
   })
 
   withSidebar('update, delete, forget and recover reach their routes; the person authorizes a delete', async ($, on) => {

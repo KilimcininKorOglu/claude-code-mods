@@ -5,7 +5,7 @@
  */
 import {
   CONTEXT_POLICIES,
-  KINDS,
+  MODEL_KINDS,
   PERSISTENCES,
   SCOPES,
   STATUSES,
@@ -49,13 +49,20 @@ export type Flags = {
   importance?: number
   confidence?: number
   freshness?: number
+  expiresAt?: string
   supersedes?: string[]
   contradicts?: string[]
   errors: string[]
 }
 
 const DECIMAL = /^(?:\d+(?:\.\d*)?|\.\d+)$/
-const PERSON_KINDS = KINDS.filter(kind => kind !== 'memory_review')
+
+/** An end date: an ISO date or time, kept as the person wrote it. */
+function endDate(flags: Flags, value: string): string | undefined {
+  if (/^\d{4}-\d{2}-\d{2}/.test(value) && Number.isFinite(Date.parse(value))) return value
+  flags.errors.push(`--expires must be an ISO date such as 2026-12-01 (got "${value}")`)
+  return undefined
+}
 
 const csv = (value: string): string[] =>
   value
@@ -88,7 +95,8 @@ function addAnchor(flags: Flags, anchor: Anchor | undefined): void {
 }
 
 const FLAG_READERS: Record<string, (flags: Flags, value: string) => void> = {
-  kind: (f, v) => (f.kind = choice(f, 'kind', PERSON_KINDS, v)),
+  kind: (f, v) => (f.kind = choice(f, 'kind', MODEL_KINDS, v)),
+  expires: (f, v) => (f.expiresAt = endDate(f, v)),
   scope: (f, v) => (f.scope = choice(f, 'scope', SCOPES, v)),
   status: (f, v) => (f.status = choice(f, 'status', STATUSES, v)),
   persistence: (f, v) => (f.persistence = choice(f, 'persistence', PERSISTENCES, v)),
@@ -158,6 +166,7 @@ export function rememberInputOf(flags: Flags, sessionId: string): RememberInput 
     importance: flags.importance,
     confidence: flags.confidence,
     freshness: flags.freshness,
+    expiresAt: flags.expiresAt,
     supersedes: flags.supersedes,
     contradicts: flags.contradicts,
     ownerSessionId: flags.scope === 'session' ? sessionId : undefined,
@@ -181,6 +190,7 @@ export function patchOf(flags: Flags): UpdatePatch {
     importance: flags.importance,
     confidence: flags.confidence,
     freshness: flags.freshness,
+    expiresAt: flags.expiresAt,
     supersedes: flags.supersedes,
     contradicts: flags.contradicts,
   }

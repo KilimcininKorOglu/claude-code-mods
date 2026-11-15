@@ -1,4 +1,4 @@
-import { CONTEXT_POLICIES, KINDS, PERSISTENCES, STATUSES, STRUCTURAL_KINDS, type Memory, type UpdatePatch, type UpdateResult } from '../hooks/shared/model.ts'
+import { CONTEXT_POLICIES, KINDS, PERSISTENCES, STATUSES, type Memory, type UpdatePatch, type UpdateResult } from '../hooks/shared/model.ts'
 import { collapseSpace, normalizeTags } from '../hooks/shared/text.ts'
 import { normalizeAnchors } from './anchors.ts'
 import { conflict, refused } from './errors.ts'
@@ -7,7 +7,7 @@ import { checkOwner, mustRead, storeLabel, type Op } from './op.ts'
 import { checkRelations, supersede } from './remember.ts'
 import { checkGrant, tombstone } from './remove.ts'
 import { audit, readMemory, writeMemory } from './rows.ts'
-import { checkAnchors, checkedText, checkIds, checkScore, checkTags, clamp01, EPHEMERAL_REFUSAL, isEphemeral, MAX_ITEMS, normalizeAudience, rejectSecrets } from './rules.ts'
+import { checkAnchors, checkedText, checkExpiresAt, checkIds, checkRequirements, checkScore, checkTags, clamp01, EPHEMERAL_REFUSAL, isEphemeral, MAX_ITEMS, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
 
 /**
  * Changing one memory: only the fields the patch names change, the revision moves on, and the
@@ -28,6 +28,7 @@ const PATCH_KEYS = new Set([
   'importance',
   'confidence',
   'freshness',
+  'expiresAt',
   'status',
   'staleReason',
   'supersedes',
@@ -76,6 +77,7 @@ export function checkPatch(patch: UpdatePatch): void {
   if (patch.supersededBy !== undefined && typeof patch.supersededBy !== 'string') throw refused('supersededBy must be a memory id')
   checkLists(patch)
   for (const name of ['importance', 'confidence', 'freshness'] as const) checkScore(patch[name], name)
+  checkExpiresAt(patch.expiresAt)
   normalizeAudience(patch.audience)
 }
 
@@ -89,12 +91,28 @@ function checkSuccessor(op: Op, existing: Memory, patch: UpdatePatch): void {
   if (successor.supersededBy === existing.id) throw refused(`${patch.supersededBy} is itself superseded by ${existing.id}`)
 }
 
-/** The record can change this way: it is no tombstone, the text is no chatter, a structural kind keeps an anchor. */
+/**
+ * The record can change this way: it is no tombstone, the text is no chatter, and the memory the
+ * patch leaves still has what its kind, scope and persistence need.
+ */
 function checkEditable(existing: Memory, patch: UpdatePatch): void {
   if (existing.status === 'deleted') throw conflict(`${existing.id} is deleted; recover it before changing it`)
   if (patch.text !== undefined && existing.scope !== 'session' && isEphemeral(collapseSpace(patch.text))) throw refused(EPHEMERAL_REFUSAL)
-  const kind = patch.kind ?? existing.kind
-  if (STRUCTURAL_KINDS.includes(kind) && (patch.anchors ?? existing.anchors).length === 0) throw refused(`a ${kind} needs at least one anchor`)
+  checkRequirements({
+    scope: existing.scope,
+    kind: patch.kind ?? existing.kind,
+    anchors: patch.anchors ?? existing.anchors,
+    persistence: patch.persistence ?? existing.persistence,
+    expiresAt: patchedExpiresAt(existing, patch),
+    audience: patch.audience === undefined ? existing.audience : normalizeAudience(patch.audience),
+  })
+}
+
+/** The end date after the patch: a memory made durable drops the one it had, so it is not deleted with the state it left. */
+function patchedExpiresAt(existing: Memory, patch: UpdatePatch): string | undefined {
+  if (patch.expiresAt !== undefined) return patch.expiresAt
+  const persistence = patch.persistence ?? existing.persistence
+  return takesEndDate({ scope: existing.scope, persistence }) ? existing.expiresAt : undefined
 }
 
 /** Every relationship the patch names points at another live memory of the store `op` writes. */
@@ -184,6 +202,7 @@ export function updateMemory(op: Op, request: UpdateRequest): UpdateResult {
     ...existing,
     ...describingFields(op, existing, patch),
     ...weighingFields(patch),
+    expiresAt: patchedExpiresAt(existing, patch),
     ...statusFields(patch),
     ...relationFields(patch),
     revision: existing.revision + 1,

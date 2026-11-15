@@ -5,7 +5,7 @@
  * code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link.ts'
-import { ANCHOR_TYPES, KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model.ts'
+import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, PERSISTENCES, SCOPES, STATUSES, VERIFY_DEPTHS, type RememberResult, type SourceType } from './shared/model.ts'
 
 type Schema = Record<string, unknown>
 
@@ -23,7 +23,8 @@ const yes = (description: string): Schema => ({ type: 'boolean', description })
 
 const ANCHORS: Schema = {
   type: 'array',
-  description: 'The code the memory is about; it is verified and reminded through these.',
+  description:
+    'The code the memory is about; it is verified and reminded through these, and a memory without one is never checked against the code. Name the narrowest: symbol for a function or class, file for one file, directory for a module, command for a CLI command, test for a test file, package for a dependency, git for a branch or commit, agent for a subagent type.',
   items: object(
     {
       type: choice(ANCHOR_TYPES),
@@ -37,11 +38,31 @@ const ANCHORS: Schema = {
 }
 
 const AUDIENCE: Schema = object({
-  roles: texts('Subagent types that get the memory when they start; it then stays out of search and reminders.'),
-  modes: texts('Permission modes, such as default or plan.'),
+  roles: texts('Subagent types that get the memory when they start, such as Explore for a rule only a search agent needs; it then stays out of search and reminders.'),
+  modes: texts('Permission modes the memory is for, such as plan for a rule that holds only while planning.'),
 })
 
-const PERSISTENCE = choice(PERSISTENCES, 'long_lived by default; permanent only for an explicit invariant.')
+const PERSISTENCE = choice(
+  PERSISTENCES,
+  'permanent: an invariant that never changes; long_lived (default): durable knowledge; short_lived: a state that holds now (a running version, a broken service, a workaround) and needs expiresAt.',
+)
+
+const EXPIRES_AT = text('ISO date the state a short_lived memory describes is expected to end; the daily cleanup deletes it then. Required with short_lived.')
+
+const KIND = choice(MODEL_KINDS, `The most specific kind. ${kindGuide()}.`)
+
+const SCOPE = choice(
+  SCOPES,
+  'project (default): this repository; user: holds in every project; session: this session only, deleted after 7 days; file: one file only, needs a file anchor; symbol: one function or class only, needs a symbol anchor.',
+)
+
+/** Where a fact comes from, for the model to name; a memory it writes is from this session otherwise. */
+export const MODEL_SOURCES = ['user', 'tool_result', 'file', 'test', 'command', 'project_instruction'] as const
+
+const SOURCE = choice(MODEL_SOURCES, 'Where the fact comes from: user (the person said it), tool_result, file, test, command, project_instruction (CLAUDE.md or another instruction file). Leave it out for what you concluded yourself.')
+
+const IMPORTANCE = number(0, 1, '0.9 or more: breaking it causes damage; 0.6: default; 0.3: rarely needed.')
+const CONFIDENCE = number(0, 1, '1: verified in code or output; 0.8: default; 0.5: inferred.')
 
 const REMEMBER_DESCRIPTION = [
   'Save one durable fact for later sessions: a convention, a decision with its reason, a warning, a bug root cause, a command, or a user preference.',
@@ -57,15 +78,17 @@ export const TOOLS: readonly ToolDef[] = [
     inputSchema: object(
       {
         text: text('The fact, in English.'),
-        kind: choice(KINDS, 'The most specific kind.'),
-        scope: choice(SCOPES, 'project (default), user (every project), session, file or symbol.'),
+        kind: KIND,
+        scope: SCOPE,
         tags: texts('1-3 stable tags, without #.'),
         anchors: ANCHORS,
         audience: AUDIENCE,
-        importance: number(0, 1),
-        confidence: number(0, 1),
+        importance: IMPORTANCE,
+        confidence: CONFIDENCE,
         persistence: PERSISTENCE,
-        supersedes: texts('Ids this replaces.'),
+        expiresAt: EXPIRES_AT,
+        source: SOURCE,
+        supersedes: texts('Ids of older memories this one replaces; they become superseded.'),
         contradicts: texts('Ids this contradicts.'),
       },
       ['text'],
@@ -135,13 +158,14 @@ export const TOOLS: readonly ToolDef[] = [
         scope: choice(['project', 'user'], 'Move it to this scope; the id stays. A move to user drops path anchors, so a file_note or symbol_note left without one needs a new kind in the same call.'),
         text: text('Replacement text.'),
         tags: texts('Replacement tags, without #.'),
-        kind: choice(KINDS),
+        kind: KIND,
         anchors: ANCHORS,
         audience: AUDIENCE,
-        importance: number(0, 1),
-        confidence: number(0, 1),
+        importance: IMPORTANCE,
+        confidence: CONFIDENCE,
         freshness: number(0, 1),
         persistence: PERSISTENCE,
+        expiresAt: EXPIRES_AT,
         contextPolicy: choice(['never', 'auto'], 'never: no automatic reminder; auto: when relevant.'),
         status: choice(STATUSES),
         supersedes: texts('Ids this replaces.'),
@@ -230,12 +254,12 @@ export const TOOLS: readonly ToolDef[] = [
       reason: text('The rejection reason, the review reason (propose) or the resolution note (resolve).'),
       include_resolved: yes('List resolved reviews too.'),
       text: text('For propose.'),
-      kind: choice(KINDS, 'For propose.'),
-      scope: choice(SCOPES, 'For propose.'),
+      kind: choice(MODEL_KINDS, 'For propose; the kinds are those of remember.'),
+      scope: choice(SCOPES, 'For propose; the scopes are those of remember.'),
       tags: texts('For propose.'),
       anchors: ANCHORS,
-      importance: number(0, 1),
-      confidence: number(0, 1),
+      importance: IMPORTANCE,
+      confidence: CONFIDENCE,
       suggested_action: choice(['delete', 'archive', 'investigate', 'update'], 'For propose.'),
       memory_id: text('The memory the review is about (propose).'),
       decision: choice(['delete', 'archive', 'keep'], 'For resolve.'),
@@ -265,15 +289,20 @@ function picked(input: Input, keys: readonly string[]): Record<string, unknown> 
   return Object.fromEntries(keys.filter(key => input[key] !== undefined).map(key => [key, input[key]]))
 }
 
-const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'supersedes', 'contradicts']
-const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
+const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'expiresAt', 'supersedes', 'contradicts']
+const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'expiresAt', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
 const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 
-/** A memory the model writes: a session memory belongs to this session, and each carries this session as its source. */
+/** The source the model named, or this session for a fact it concluded itself. */
+function sourceOf(input: Input): SourceType {
+  return (MODEL_SOURCES as readonly unknown[]).includes(input.source) ? (input.source as SourceType) : 'session'
+}
+
+/** A memory the model writes: a session memory belongs to this session, and each carries its source and this session. */
 function rememberCall(input: Input, sessionId: string): Call {
   const memory = picked(input, REMEMBER_KEYS)
   const owner = memory.scope === 'session' ? { ownerSessionId: sessionId } : {}
-  return { path: '/memory/remember', body: { input: { ...memory, ...owner, sources: [{ type: 'session', sessionId }] } } }
+  return { path: '/memory/remember', body: { input: { ...memory, ...owner, sources: [{ type: sourceOf(input), sessionId }] } } }
 }
 
 function updateCall(input: Input): Call {

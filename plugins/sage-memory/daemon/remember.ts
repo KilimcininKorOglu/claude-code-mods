@@ -5,7 +5,7 @@ import { refused } from './errors.ts'
 import { ftsTerms } from './fts.ts'
 import { syncEdges } from './graph.ts'
 import { storeLabel, type Op } from './op.ts'
-import { assessQuality, checkRemember, clamp01, isNearDuplicate, isPossiblyContradictory, normalizeAudience, rejectSecrets } from './rules.ts'
+import { assessQuality, checkRemember, clamp01, isNearDuplicate, isPossiblyContradictory, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
 import { audienceKey, readMemory, selectMemories, writeMemory } from './rows.ts'
 import { ulid } from './ulid.ts'
 
@@ -164,6 +164,9 @@ function mergedLists(existing: Memory, draft: Draft): Pick<Memory, 'tags' | 'anc
 function merged(op: Op, existing: Memory, draft: Draft, exact: boolean): Memory {
   const preferIncoming = !exact && allTerms(draft.text).length > allTerms(existing.text).length && draft.text.length > existing.text.length
   const reactivated = existing.status === 'stale'
+  const persistence = mergedPersistence(existing.persistence, draft.persistence)
+  // A durable memory that took a state's write keeps no end date, so it is never deleted with the state.
+  const expiresAt = takesEndDate({ scope: existing.scope, persistence }) ? (draft.expiresAt ?? existing.expiresAt) : undefined
   return {
     ...existing,
     ...mergedLists(existing, draft),
@@ -174,9 +177,9 @@ function merged(op: Op, existing: Memory, draft: Draft, exact: boolean): Memory 
     importance: Math.max(existing.importance, draft.importance),
     confidence: Math.max(existing.confidence, draft.confidence),
     freshness: Math.max(existing.freshness, draft.freshness),
-    persistence: mergedPersistence(existing.persistence, draft.persistence),
+    persistence,
     contextPolicy: draft.contextPolicy ?? existing.contextPolicy,
-    expiresAt: draft.expiresAt ?? existing.expiresAt,
+    expiresAt,
     revision: existing.revision + 1,
     updatedAt: op.now,
   }

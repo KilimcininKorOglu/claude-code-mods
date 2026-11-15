@@ -27,6 +27,39 @@ export const KINDS = [
 ] as const
 export type Kind = (typeof KINDS)[number]
 
+/**
+ * What each kind a writer may choose means, in the words the model reads in the remember tool and
+ * the consolidator prompt. `memory_review` is left out: only a review candidate carries it.
+ */
+export const KIND_MEANINGS: Readonly<Record<Exclude<Kind, 'memory_review'>, string>> = {
+  fact: 'a verified fact about the project or its environment that lasts',
+  decision: 'a choice that was made, with its reason',
+  convention: 'a standard every change in this project follows',
+  preference: 'how the user wants something done',
+  warning: 'what causes damage or a failure when done wrong',
+  anti_pattern: 'an approach that failed and must not be repeated, with why',
+  workflow: 'the ordered steps of a task that recurs',
+  bug_root_cause: 'the verified cause of a bug, with its symptom',
+  file_note: 'the job or contract of one file or directory; needs a file or directory anchor',
+  symbol_note: 'the contract of one function, class or other symbol; needs a symbol anchor',
+  command_note: 'what a command does or verifies; needs a command anchor',
+  tool_outcome: 'what the successful output of a command showed',
+  error_pattern: 'an error message and what it means in this project',
+  role_operational: 'knowledge only one subagent type needs; needs audience.roles',
+  security_signal: 'a security finding: an exposed secret, an unsafe pattern or an open risk',
+  fleet_convention: 'a rule every agent of a multi-agent team follows',
+}
+
+/** The kinds a memory writer may choose. */
+export const MODEL_KINDS = Object.keys(KIND_MEANINGS) as Exclude<Kind, 'memory_review'>[]
+
+/** The kinds as `kind: meaning` lines. */
+export function kindGuide(): string {
+  return Object.entries(KIND_MEANINGS)
+    .map(([kind, meaning]) => `${kind}: ${meaning}`)
+    .join('; ')
+}
+
 /** Kinds that mean nothing without an anchor to bind them. */
 export const STRUCTURAL_KINDS: readonly Kind[] = ['file_note', 'symbol_note', 'command_note']
 
@@ -157,6 +190,8 @@ export type UpdatePatch = {
   importance?: number
   confidence?: number
   freshness?: number
+  /** The ISO date a short_lived memory's state is expected to end. */
+  expiresAt?: string
   status?: Status
   /** Why a move to `stale` happened: `manual` (the default) or `review`. */
   staleReason?: 'manual' | 'review'

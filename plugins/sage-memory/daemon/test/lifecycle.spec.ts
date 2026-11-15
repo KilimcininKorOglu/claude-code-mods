@@ -35,6 +35,18 @@ describe('update', () => {
     w.close()
   })
 
+  test('a patch sets an end date only on a state, and a state made durable drops its end date', async () => {
+    const w = world()
+    const [id] = await three(w)
+    await assert.rejects(w.run(op => updateMemory(op, { id, patch: { expiresAt: '2026-12-01T00:00:00Z' } })), /expiresAt goes with a short_lived or session memory/)
+    await assert.rejects(w.run(op => updateMemory(op, { id, patch: { persistence: 'short_lived' } })), /short_lived memory needs expiresAt/)
+    const state = await w.run(op => updateMemory(op, { id, patch: { persistence: 'short_lived', expiresAt: '2026-12-01T00:00:00Z' } }))
+    assert.equal(state.memory.expiresAt, '2026-12-01T00:00:00Z')
+    const durable = await w.run(op => updateMemory(op, { id, patch: { persistence: 'long_lived' } }))
+    assert.equal(durable.memory.expiresAt, undefined)
+    w.close()
+  })
+
   test('a status set by a patch is a decision: stale is manual or review, and leaving superseded drops the successor', async () => {
     const w = world()
     const [a, b] = await three(w)

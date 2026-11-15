@@ -141,7 +141,7 @@ const USAGE = [
   '  import <path> [--section <heading>] [--kind <kind>] [--scope project|user] [--policy <p>] [--tag <t>] [--importance <n>] [--confidence <n>]',
   '  pane (the memory manager)',
   '  model [name] · remind tools|prompt|subagent [on|off] · consolidate|curate [on|off] · daily [on|off] · capture outcomes|errors [on|off]',
-  'flags: --kind --scope --status --persistence --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
+  'flags: --kind --scope --status --persistence --expires YYYY-MM-DD --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
 ].join('\n')
 
 /** How long each kind of call may take before the mod names it late. */

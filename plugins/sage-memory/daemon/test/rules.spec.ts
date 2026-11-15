@@ -55,6 +55,21 @@ describe('what remember refuses', () => {
     assert.match(message({ anchors: [{ type: 'url' as 'file', path: 'x' }] }), /anchor type must be one of/)
   })
 
+  test('a state ends on a date, and a narrow scope or a role kind names what it is about', () => {
+    const END = '2026-12-01T00:00:00Z'
+    assert.match(message({ persistence: 'short_lived' }), /short_lived memory needs expiresAt/)
+    assert.equal(message({ persistence: 'short_lived', expiresAt: END }), '')
+    assert.match(message({ expiresAt: END }), /expiresAt goes with a short_lived or session memory, not a long_lived one/)
+    assert.match(message({ persistence: 'permanent', expiresAt: END }), /not a permanent one/)
+    assert.equal(message({ scope: 'session', ownerSessionId: 's1', expiresAt: END }), '')
+    assert.match(message({ scope: 'file' }), /file memory needs a file anchor/)
+    assert.match(message({ scope: 'file', anchors: [{ type: 'directory', path: 'src' }] }), /file memory needs a file anchor/)
+    assert.equal(message({ scope: 'file', anchors: [{ type: 'file', path: 'src/app.ts' }] }), '')
+    assert.match(message({ scope: 'symbol', anchors: [{ type: 'file', path: 'src/app.ts' }] }), /symbol memory needs a symbol anchor/)
+    assert.match(message({ kind: 'role_operational' }), /needs audience.roles/)
+    assert.equal(message({ kind: 'role_operational', audience: { roles: ['explore'] } }), '')
+  })
+
   test('enums, lists, scores and times are checked', () => {
     assert.match(message({ scope: 'team' as 'project' }), /scope must be one of/)
     assert.match(message({ kind: 'rumor' as 'fact' }), /kind must be one of/)

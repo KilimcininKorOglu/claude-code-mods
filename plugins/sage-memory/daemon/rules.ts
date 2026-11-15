@@ -214,17 +214,51 @@ function checkShape(input: RememberInput): void {
   checkIds(input.contradicts, 'contradicts')
   checkIds(input.related, 'related')
   for (const name of ['importance', 'confidence', 'freshness'] as const) checkScore(input[name], name)
-  if (input.expiresAt !== undefined && (typeof input.expiresAt !== 'string' || !Number.isFinite(Date.parse(input.expiresAt)))) {
-    throw refused('expiresAt must be an ISO-8601 time')
+  checkExpiresAt(input.expiresAt)
+}
+
+/** An end date is an ISO-8601 time. */
+export function checkExpiresAt(value: unknown): void {
+  if (value !== undefined && (typeof value !== 'string' || !Number.isFinite(Date.parse(value)))) throw refused('expiresAt must be an ISO-8601 time')
+}
+
+/** What a memory needs besides its text, read as it will be stored. */
+export type Requirements = { scope: Scope; kind: Kind; anchors: readonly Anchor[]; persistence?: string; expiresAt?: string; audience?: Audience }
+
+/** Only a short_lived memory and a session memory end on a date; any other one is deleted by a person or a review. */
+export function takesEndDate(memory: { scope: Scope; persistence?: string }): boolean {
+  return memory.persistence === 'short_lived' || memory.scope === 'session'
+}
+
+/** The anchor type a scope narrower than the project names: a file memory a file, a symbol memory a symbol. */
+const SCOPE_ANCHOR: Partial<Record<Scope, Anchor['type']>> = { file: 'file', symbol: 'symbol' }
+
+const REQUIREMENTS: readonly ((memory: Requirements) => string | undefined)[] = [
+  memory => (STRUCTURAL_KINDS.includes(memory.kind) && memory.anchors.length === 0 ? `a ${memory.kind} needs at least one anchor` : undefined),
+  memory => {
+    const type = SCOPE_ANCHOR[memory.scope]
+    return type !== undefined && !memory.anchors.some(anchor => anchor.type === type) ? `a ${memory.scope} memory needs a ${type} anchor: the ${memory.scope} it is about` : undefined
+  },
+  memory =>
+    memory.persistence === 'short_lived' && memory.expiresAt === undefined
+      ? 'a short_lived memory needs expiresAt: the ISO date the state it describes is expected to end, after which it is deleted'
+      : undefined,
+  memory => (memory.expiresAt !== undefined && !takesEndDate(memory) ? `expiresAt goes with a short_lived or session memory, not a ${memory.persistence ?? 'long_lived'} one` : undefined),
+  memory => (memory.kind === 'role_operational' && (memory.audience?.roles ?? []).length === 0 ? 'a role_operational memory needs audience.roles: the subagent types it is for' : undefined),
+]
+
+/** Refuses a memory whose kind, scope or persistence lacks what it needs: an anchor, an end date or an audience. */
+export function checkRequirements(memory: Requirements): void {
+  for (const rule of REQUIREMENTS) {
+    const reason = rule(memory)
+    if (reason !== undefined) throw refused(reason)
   }
 }
 
 function checkMeaning(input: RememberInput, text: string): void {
   const scope: Scope = input.scope ?? 'project'
   if (scope === 'session' && !input.ownerSessionId) throw refused('a session memory needs ownerSessionId, the session it belongs to')
-  if (input.kind && STRUCTURAL_KINDS.includes(input.kind) && !(input.anchors && input.anchors.length > 0)) {
-    throw refused(`a ${input.kind} needs at least one anchor`)
-  }
+  checkRequirements({ scope, kind: input.kind ?? 'fact', anchors: input.anchors ?? [], persistence: input.persistence, expiresAt: input.expiresAt, audience: input.audience })
   if (scope !== 'session' && isEphemeral(text)) throw refused(EPHEMERAL_REFUSAL)
 }
 
