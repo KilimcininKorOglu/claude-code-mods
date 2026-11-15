@@ -1,4 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
+import { planOf } from '../hooks/compact.ts'
 import { additionsOf } from '../hooks/consolidate.ts'
 import { stepsOf, tallyLine } from '../hooks/curate.ts'
 import type { Memory } from '../hooks/shared/model.ts'
@@ -34,6 +35,13 @@ describe('curate', () => {
       { action: 'recalibrate', targetId: 'w', status: 'archived' },
     ])).toEqual([])
     expect(run([{ action: 'merge', targetIds: ['a', 'w'], text: 'One fact.' }])).toMatchObject([{ kind: 'replace', replaced: ['a'] }])
+  })
+
+  test('a compact plan never deletes or merges away a memory of importance 0.9 or more', () => {
+    const shown = [memory('a'), { ...memory('w'), importance: 0.9 }]
+    const plan = planOf(JSON.stringify({ operations: [{ action: 'delete', targets: ['w'] }, { action: 'merge', targets: ['a', 'w'], newText: 'One fact.' }] }), shown)
+    expect(plan.changes).toEqual([{ kind: 'merge', id: 'a', revision: 1, text: 'One fact.', others: [], reason: '' }])
+    expect(plan.skipped).toEqual(['w is of importance 0.9 and is not deleted', 'w is of importance 0.9 and is not merged away'])
   })
 
   test('a memory whose value changed is rewritten, and a permanent one is not', () => {

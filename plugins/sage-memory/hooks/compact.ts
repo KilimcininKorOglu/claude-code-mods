@@ -1,12 +1,12 @@
 /**
  * `/sage-memory compact`: a model reviews the active and stale project memories and proposes to
  * keep, rewrite, merge or delete each; `/sage-memory compact apply` writes the last proposal. The
- * prompt is SAGE's. Only the ids the model was shown are touched, a permanent memory is never
- * deleted or merged away, a merge supersedes the others with the first, a delete is a tombstone,
+ * prompt is SAGE's. Only the ids the model was shown are touched, a protected memory (permanent, or
+ * importance 0.9 or more) is never deleted or merged away, a merge supersedes the others with the first, a delete is a tombstone,
  * and the counts are of memories. Pure code; `register.tsx` asks the model and applies the plan.
  */
 import { operationsOf } from './consolidate.ts'
-import type { Memory } from './shared/model.ts'
+import { isProtected, type Memory } from './shared/model.ts'
 
 export const COMPACT_MS = 120_000
 export const COMPACT_TOKENS = 16_000
@@ -92,8 +92,8 @@ function newTextOf(op: Op): string | undefined {
 }
 
 function removable(m: Memory, skipped: string[], what: string): boolean {
-  if (m.persistence !== 'permanent') return true
-  skipped.push(`${m.id} is permanent and is not ${what}`)
+  if (!isProtected(m)) return true
+  skipped.push(`${m.id} is ${m.persistence === 'permanent' ? 'permanent' : `of importance ${m.importance}`} and is not ${what}`)
   return false
 }
 
