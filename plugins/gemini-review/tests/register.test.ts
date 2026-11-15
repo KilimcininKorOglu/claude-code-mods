@@ -82,8 +82,8 @@ function seatCore(on: On, core: Core, enrolled: string[]): void {
 type Repo = { hasHead?: boolean; staged?: string; untracked?: string[] }
 
 /** The git answers of a repository: the index diff, HEAD and new files. */
-function gitAnswer(repo: Repo, argv: readonly string[]): { exitCode: number; stdout: string; stderr: string } {
-  const out = (stdout: string, exitCode = 0) => ({ exitCode, stdout, stderr: '' })
+function gitAnswer(repo: Repo, argv: readonly string[]): { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false } {
+  const out = (stdout: string, exitCode = 0) => ({ exitCode, stdout, stderr: '', isStdoutTruncated: false as const, isStderrTruncated: false as const })
   if (argv[1] === 'rev-parse') return out('', repo.hasHead === false ? 1 : 0)
   if (argv[1] === 'ls-files') return out((repo.untracked ?? []).join('\n'))
   if (argv.includes('--no-index')) return out(NEW_FILE, 1)
