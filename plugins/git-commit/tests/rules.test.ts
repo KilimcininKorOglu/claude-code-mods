@@ -1,9 +1,9 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { gitCalls } from '../hooks/command.ts'
-import { addArgs, commitArgs, pushArgs } from '../hooks/gitargs.ts'
-import { addFlagFindings, argumentsOf, blanketReason, commitFlagFindings, denyText, hookSkipFindings, ignoreHits, ignoredFindings, noteText, optionsOf, pushFindings, spreadFindings, typedSkill } from '../hooks/rules.ts'
-import type { Finding } from '../hooks/finding.ts'
+import { gitCalls } from '../hooks/command'
+import { addArgs, commitArgs, pushArgs } from '../hooks/gitargs'
+import { addFlagFindings, argumentsOf, blanketReason, commitFlagFindings, denyText, hookSkipFindings, ignoreHits, ignoredFindings, noteText, optionsOf, pushFindings, spreadFindings, typedSkill } from '../hooks/rules'
+import type { Finding } from '../hooks/finding'
 
 tier('user')
 

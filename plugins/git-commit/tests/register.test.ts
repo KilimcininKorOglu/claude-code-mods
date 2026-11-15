@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, ProcessRunResult } from 'claude-code'
 
-import { joinPath } from '../hooks/command.ts'
+import { joinPath } from '../hooks/command'
 
 tier('user')
 

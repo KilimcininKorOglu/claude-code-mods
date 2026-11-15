@@ -2,9 +2,9 @@
  * The message a `git commit` records, read from the command, and the skill's
  * rules for it measured against the repository's own style.
  */
-import type { Heredoc } from './command.ts'
-import { deny, note, type Finding } from './finding.ts'
-import type { Parsed } from './gitargs.ts'
+import type { Heredoc } from './command'
+import { deny, note, type Finding } from './finding'
+import type { Parsed } from './gitargs'
 
 /** The message the commit records, or why the command does not say it. */
 export type Message = { text: string } | { unknown: string }

@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { parseStatus, readNumstat, stateBlock, styleLine } from '../hooks/context.ts'
-import { styleOf } from '../hooks/message.ts'
+import { parseStatus, readNumstat, stateBlock, styleLine } from '../hooks/context'
+import { styleOf } from '../hooks/message'
 
 tier('user')
 

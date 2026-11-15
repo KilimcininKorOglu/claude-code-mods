@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { gitCalls, heredocsOf, joinPath, splitCommand } from '../hooks/command.ts'
+import { gitCalls, heredocsOf, joinPath, splitCommand } from '../hooks/command'
 
 tier('user')
 

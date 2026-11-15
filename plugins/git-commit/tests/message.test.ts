@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { gitCalls, heredocsOf } from '../hooks/command.ts'
-import { commitArgs } from '../hooks/gitargs.ts'
-import { messageFindings, messageOf, signatureLine, styleOf, type Message } from '../hooks/message.ts'
+import { gitCalls, heredocsOf } from '../hooks/command'
+import { commitArgs } from '../hooks/gitargs'
+import { messageFindings, messageOf, signatureLine, styleOf, type Message } from '../hooks/message'
 
 tier('user')
 

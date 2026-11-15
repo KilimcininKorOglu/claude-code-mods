@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { addArgs, checkoutKind, commitArgs, isBranchChange, isConfigWrite, isDryCommit, isInteractiveRebase, pushArgs } from '../hooks/gitargs.ts'
+import { addArgs, checkoutKind, commitArgs, isBranchChange, isConfigWrite, isDryCommit, isInteractiveRebase, pushArgs } from '../hooks/gitargs'
 
 tier('user')
 

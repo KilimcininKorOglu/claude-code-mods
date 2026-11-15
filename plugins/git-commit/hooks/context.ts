@@ -2,7 +2,7 @@
  * The repository state the mod appends to the skill's text, so the model
  * starts from the branch, the status and the style without running them.
  */
-import type { Style } from './message.ts'
+import type { Style } from './message'
 
 /** The paths of `git status`, by what the commit would do with them. */
 export type Status = { branch: string; staged: string[]; unstaged: string[]; untracked: string[]; conflicted: string[] }

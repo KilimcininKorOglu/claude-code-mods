@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { isSecretName, secretKind, secretLines } from '../hooks/secrets.ts'
+import { isSecretName, secretKind, secretLines } from '../hooks/secrets'
 
 tier('user')
 

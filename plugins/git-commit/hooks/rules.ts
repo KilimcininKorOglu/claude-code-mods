@@ -2,10 +2,10 @@
  * The skill's rules as findings: what each git call broke, given what the
  * command names and what the caller measured in the repository.
  */
-import type { GitCall } from './command.ts'
-import { deny, note, type Finding } from './finding.ts'
-import type { Parsed } from './gitargs.ts'
-import type { SecretHit } from './secrets.ts'
+import type { GitCall } from './command'
+import { deny, note, type Finding } from './finding'
+import type { Parsed } from './gitargs'
+import type { SecretHit } from './secrets'
 
 /** The skill as the model calls it. */
 export const SKILL = 'git-commit:commit'
