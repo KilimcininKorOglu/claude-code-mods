@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { callKey, errorOf } from '../hooks/coach.ts'
+import { callKey, errorOf } from '../hooks/coach'
 
 tier('user')
 

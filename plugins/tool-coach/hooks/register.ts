@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
-import { callKey, CHANGING, denyText, errorOf, sectionKey, stoppedLines, UNWATCHED, type Failures, type Line } from './coach.ts'
+import { callKey, CHANGING, denyText, errorOf, sectionKey, stoppedLines, UNWATCHED, type Failures, type Line } from './coach'
 
 const ENABLED_KEY = 'enabled'
 
