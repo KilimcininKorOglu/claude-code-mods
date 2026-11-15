@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, doneLines, isGuarded, isSource, lineOf, modeOf, noteText, placesOf, sidebarLines, stillUsed, storageLines } from '../hooks/storage.ts'
+import { denyText, doneLines, isGuarded, isSource, lineOf, modeOf, noteText, placesOf, sidebarLines, stillUsed, storageLines } from '../hooks/storage'
 
 tier('user')
 
