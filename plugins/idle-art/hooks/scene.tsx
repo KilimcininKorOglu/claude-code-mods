@@ -1,8 +1,8 @@
 import type { ClientModule, ClientSurface, RenderElement } from 'claude-code'
-import { isStyle, sceneOf } from './config.ts'
-import { rngOf, runsOf, sceneDone, type Animation, type Frame } from './art/grid.ts'
-import { SCENES } from './art/scenes.ts'
-import { playClip, type Clip } from './clip.ts'
+import { isStyle, sceneOf } from './config'
+import { rngOf, runsOf, sceneDone, type Animation, type Frame } from './art/grid'
+import { SCENES } from './art/scenes'
+import { playClip, type Clip } from './clip'
 
 /**
  * What the hooks module hands this instance: the scene's style and seed, the region, a saved clip's frames,

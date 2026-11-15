@@ -1,4 +1,4 @@
-import { below, blankFrame, pick, put, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
+import { below, blankFrame, pick, put, unitsOf, type Animation, type Frame, type Rng } from './grid'
 
 /** Each fish as it looks swimming right, and the same fish swimming left. */
 const SHAPES: readonly { right: string; left: string }[] = [

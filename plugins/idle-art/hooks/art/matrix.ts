@@ -1,4 +1,4 @@
-import { below, blankFrame, everyStep, pick, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
+import { below, blankFrame, everyStep, pick, unitsOf, type Animation, type Frame, type Rng } from './grid'
 
 /** Half-width katakana and digits: one cell wide each. */
 const GLYPHS = [...'ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789']

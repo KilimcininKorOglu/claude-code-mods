@@ -1,8 +1,8 @@
-import { aquarium } from './aquarium.ts'
-import { cat } from './cat.ts'
-import { fire } from './fire.ts'
-import type { Maker } from './grid.ts'
-import { matrix } from './matrix.ts'
-import type { Style } from '../config.ts'
+import { aquarium } from './aquarium'
+import { cat } from './cat'
+import { fire } from './fire'
+import type { Maker } from './grid'
+import { matrix } from './matrix'
+import type { Style } from '../config'
 
 export const SCENES: Record<Style, Maker> = { matrix, fire, aquarium, cat }

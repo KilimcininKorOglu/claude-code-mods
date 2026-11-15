@@ -1,4 +1,4 @@
-import { below, blankFrame, everyStep, type Animation, type Frame, type Rng } from './grid.ts'
+import { below, blankFrame, everyStep, type Animation, type Frame, type Rng } from './grid'
 
 /** Glyphs and colours from the coolest visible heat to the hottest. */
 const GLYPHS = [...'.,:;+*oO#@']

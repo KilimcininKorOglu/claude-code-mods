@@ -1,4 +1,4 @@
-import { blankFrame, put, unitsOf, type Animation, type Frame, type Rng } from './grid.ts'
+import { blankFrame, put, unitsOf, type Animation, type Frame, type Rng } from './grid'
 
 const FUR = '#ffb86b'
 const KITTEN_FUR = ['#e9ecef', '#adb5bd']

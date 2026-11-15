@@ -1,11 +1,11 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { SCENES } from '../hooks/art/scenes.ts'
-import { mirrored } from '../hooks/art/cat.ts'
-import { rngOf, runsOf, sceneDone, textOf } from '../hooks/art/grid.ts'
-import { configOf, parseArgs, pickStyle, STYLES } from '../hooks/config.ts'
-import { bytesOf, decodeGif } from '../hooks/gif.ts'
-import { MAX_CLIP_CHARS, playClip, toClip } from '../hooks/clip.ts'
-import { TWO_FRAMES } from './fixtures.ts'
+import { SCENES } from '../hooks/art/scenes'
+import { mirrored } from '../hooks/art/cat'
+import { rngOf, runsOf, sceneDone, textOf } from '../hooks/art/grid'
+import { configOf, parseArgs, pickStyle, STYLES } from '../hooks/config'
+import { bytesOf, decodeGif } from '../hooks/gif'
+import { MAX_CLIP_CHARS, playClip, toClip } from '../hooks/clip'
+import { TWO_FRAMES } from './fixtures'
 
 tier('user')
 

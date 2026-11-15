@@ -1,8 +1,8 @@
 import type { EngineInterface, Register, Timer } from 'claude-code'
-import { BAND_ROWS, CLIP_COLUMNS, clipNames, configOf, editNames, helpText, isStyle, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config.ts'
-import { clipFromGif, isClip, type Clip } from './clip.ts'
-import { bytesOf } from './gif.ts'
-import type { NextMessage, SceneProps } from './scene.tsx'
+import { BAND_ROWS, CLIP_COLUMNS, clipNames, configOf, editNames, helpText, isStyle, parseArgs, pickStyle, sceneOf, statusText, STYLES, unknownText, type Action, type Config } from './config'
+import { clipFromGif, isClip, type Clip } from './clip'
+import { bytesOf } from './gif'
+import type { NextMessage, SceneProps } from './scene'
 
 interface State {
   cfg: Config

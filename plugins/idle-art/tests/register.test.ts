@@ -1,6 +1,6 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
-import { BIG_GIF, TWO_FRAMES } from './fixtures.ts'
+import { BIG_GIF, TWO_FRAMES } from './fixtures'
 
 tier('user')
 

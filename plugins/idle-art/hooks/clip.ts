@@ -1,5 +1,5 @@
-import { readGif, type Gif } from './gif.ts'
-import { BLANK, blankFrame, runsOf, type Animation, type Cell, type Frame } from './art/grid.ts'
+import { readGif, type Gif } from './gif'
+import { BLANK, blankFrame, runsOf, type Animation, type Cell, type Frame } from './art/grid'
 
 /** A run of one colour in a stored row: its text and its colour ('' for none). */
 export type ClipRun = [string, string]
