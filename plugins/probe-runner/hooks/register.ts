@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { INPUT_SCHEMA, parseArgs, pluginDir, probeOf, scriptArgv, TOOL_DESCRIPTION, TOOL_NAME, type Probe } from './probe.ts'
+import { INPUT_SCHEMA, parseArgs, pluginDir, probeOf, scriptArgv, TOOL_DESCRIPTION, TOOL_NAME, type Probe } from './probe'
 
 /** A probe ends at ten minutes, the most `$.process.run` waits. */
 const PROBE_MS = 600_000

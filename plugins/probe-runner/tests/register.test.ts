@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { parseArgs, pluginDir, probeOf, scriptArgv, USAGE } from '../hooks/probe.ts'
+import { parseArgs, pluginDir, probeOf, scriptArgv, USAGE } from '../hooks/probe'
 
 tier('user')
 
