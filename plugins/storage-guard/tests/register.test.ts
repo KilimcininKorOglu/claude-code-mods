@@ -86,7 +86,7 @@ describe('storage-guard', () => {
 
   test('a file outside the session directory is shown against the git repository the session started in', async ($, on) => {
     const w = world(on)
-    on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
+    on('process.run', (_, e) => ({ value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u\n' : '', stderr: '' } }))
     await started($)
     w.file = `${SAVE}\n`
     await $.tool.call({ tool: 'Edit', file_path: '/Users/u/web/auth.ts', old_string: 'save(token)', new_string: SAVE } as never)
@@ -191,7 +191,7 @@ describe('storage-guard', () => {
     const staged: string[] = ['src/other.ts']
     on('process.run', (_, e) => {
       const out = e.argv.includes('--show-toplevel') ? `${ROOT}\n` : staged.join('\0')
-      return { value: { exitCode: 0, stdout: out, stderr: '' } }
+      return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: out, stderr: '' } }
     })
     await started($)
     w.file = `${SAVE}\n`
