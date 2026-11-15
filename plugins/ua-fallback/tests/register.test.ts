@@ -1,7 +1,7 @@
 import { describe, expect, test, tier, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { hasUserAgent, hostOf, isFetch, logText, sidebarLines, statusIn, statusText, urlOf } from '../hooks/fetch.ts'
+import { hasUserAgent, hostOf, isFetch, logText, sidebarLines, statusIn, statusText, urlOf } from '../hooks/fetch'
 
 tier('user')
 
