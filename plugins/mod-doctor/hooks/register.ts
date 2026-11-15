@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import { ALL, configDirOf, installedOf, isNewer, logText, marketplaceOf, marketplaceText, missingText, sidebarLines, sourcesOf, statusText, versionOf, type Installed, type Mod } from './doctor.ts'
+import { ALL, configDirOf, installedOf, isNewer, logText, marketplaceOf, marketplaceText, missingText, sidebarLines, sourcesOf, statusText, versionOf, type Installed, type Mod } from './doctor'
 
 const ENABLED_KEY = 'enabled'
 const MARKETPLACE_KEY = 'marketplace'

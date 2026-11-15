@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, TurnCompleteInput } from 'claude-code'
 
-import { installedOf, isNewer, jumpTone, marketplaceOf, rowText, sidebarLines, sourcesOf, statusText, versionOf } from '../hooks/doctor.ts'
+import { installedOf, isNewer, jumpTone, marketplaceOf, rowText, sidebarLines, sourcesOf, statusText, versionOf } from '../hooks/doctor'
 
 tier('user')
 
