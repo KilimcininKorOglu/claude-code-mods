@@ -64,6 +64,5 @@ Reach L0, no network, no files, no processes.
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity limit 10, the build fails above it
-    make typecheck   # needs the /plugin-types output in .claude/types/
     make validate
     make test        # claude plugin test
