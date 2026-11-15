@@ -30,7 +30,7 @@ function world(on: On): World {
   on('env.get', () => ({ value: '/tmp/t/' }))
   on('process.run', (_, e) => {
     w.argv.push(e.argv.join(' '))
-    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: '', stderr: '' } }
   })
   on('fs.write', (_, e) => {
     if (w.failWrite) throw new Error('read-only file system')
