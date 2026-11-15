@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isCommit, isGuarded, isNarrowable, isNotIndexed, isReported, logText, modeOf, notIndexedLine, noteText, openNote, parseCheck, sectionKey, sidebarLines, type Check, type Line, type Mode } from './signature'
 
