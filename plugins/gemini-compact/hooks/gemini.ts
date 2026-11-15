@@ -1,7 +1,7 @@
 /** The generateContent bodies this mod sends; gemini-core builds the request around them and reads the answer. */
 import type { EngineInterface } from 'claude-code'
-import { ACTIONS } from './prune.ts'
-import { SUMMARY_TASK } from './summary.ts'
+import { ACTIONS } from './prune'
+import { SUMMARY_TASK } from './summary'
 
 /** Gemini's answer as gemini-core reads it; `finishReason` is Gemini's, such as `STOP` or `MAX_TOKENS`. */
 export type Answer = Extract<Awaited<ReturnType<EngineInterface['gemini']['read']>>, { answer: unknown }>['answer']

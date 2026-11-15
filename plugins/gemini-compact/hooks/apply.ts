@@ -3,7 +3,7 @@
  * do not touch is returned as the same object, so it keeps the engine's handle.
  */
 import type { SessionMessage, ToolResultSummary, ToolUseSummary } from 'claude-code'
-import type { Action, Call } from './prune.ts'
+import type { Action, Call } from './prune'
 
 /** The action for each tool_use_id; a call without one is kept. */
 export function actionsByUse(calls: readonly Call[], decisions: ReadonlyMap<string, Action>): Map<string, Action> {

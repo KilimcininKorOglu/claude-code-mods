@@ -1,10 +1,10 @@
 import type { EngineInterface, Register, SessionCompactInput, SessionMessage } from 'claude-code'
-import { actionsByUse, applyActions, sizeOf } from './apply.ts'
-import { changeText, NO_KEY_ON, parseCommand, RESET_TEXT, STORE_KEYS, statusText, storedValue, type Patch, type Settings } from './command.ts'
-import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, outcomeText, summaryOutcomeText, type Config } from './config.ts'
-import { buildPruneBody, buildSummaryBody, type Answer } from './gemini.ts'
-import { collectCalls, parseDecisions, renderTranscript } from './prune.ts'
-import { parseSummary, summaryMessage, tailStart } from './summary.ts'
+import { actionsByUse, applyActions, sizeOf } from './apply'
+import { changeText, NO_KEY_ON, parseCommand, RESET_TEXT, STORE_KEYS, statusText, storedValue, type Patch, type Settings } from './command'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, outcomeText, summaryOutcomeText, type Config } from './config'
+import { buildPruneBody, buildSummaryBody, type Answer } from './gemini'
+import { collectCalls, parseDecisions, renderTranscript } from './prune'
+import { parseSummary, summaryMessage, tailStart } from './summary'
 
 /**
  * What the hooks share: whether a compaction this mod started runs, whether

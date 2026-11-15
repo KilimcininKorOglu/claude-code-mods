@@ -1,9 +1,9 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { changeText, parseCommand, statusText, storedValue } from '../hooks/command.ts'
-import { configFrom, DEFAULTS, outcomeText, summaryOutcomeText } from '../hooks/config.ts'
-import { buildPruneBody, buildSummaryBody } from '../hooks/gemini.ts'
-import { SUMMARY_TASK } from '../hooks/summary.ts'
+import { changeText, parseCommand, statusText, storedValue } from '../hooks/command'
+import { configFrom, DEFAULTS, outcomeText, summaryOutcomeText } from '../hooks/config'
+import { buildPruneBody, buildSummaryBody } from '../hooks/gemini'
+import { SUMMARY_TASK } from '../hooks/summary'
 
 tier('user')
 

@@ -1,7 +1,7 @@
 /** The plugin options with their defaults, and the line a compaction reports. */
 import type { PluginOptions } from 'claude-code'
-import { storedValue, type Settings } from './command.ts'
-import type { Action } from './prune.ts'
+import { storedValue, type Settings } from './command'
+import type { Action } from './prune'
 
 export type Config = Settings & {
   keepRecent: number

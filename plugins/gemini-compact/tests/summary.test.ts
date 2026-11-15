@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 
-import { parseSummary, SUMMARY_NOTE, summaryMessage, tailStart } from '../hooks/summary.ts'
+import { parseSummary, SUMMARY_NOTE, summaryMessage, tailStart } from '../hooks/summary'
 
 tier('user')
 

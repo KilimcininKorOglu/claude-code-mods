@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 
-import { actionsByUse, applyActions, callLabel, removedNote, sizeOf, truncated } from '../hooks/apply.ts'
-import { clip, collectCalls, parseDecisions, renderTranscript } from '../hooks/prune.ts'
+import { actionsByUse, applyActions, callLabel, removedNote, sizeOf, truncated } from '../hooks/apply'
+import { clip, collectCalls, parseDecisions, renderTranscript } from '../hooks/prune'
 
 tier('user')
 
