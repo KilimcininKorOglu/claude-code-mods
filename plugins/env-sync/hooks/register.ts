@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { commitDir, denyText, diffReads, doneLines, doneLog, doneTitle, fileReads, isCommit, isGuarded, isNarrowable, listedNames, logText, modeOf, noteText, openNote, openReads, REFERENCE_FILES, sectionKey, sidebarLines, type Line, type Mode, type Open } from './env'
 
