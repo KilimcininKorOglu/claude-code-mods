@@ -63,6 +63,5 @@ Reach L2, it drives Claude: it runs the `/mcp reconnect` command.
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity limit 10, the build fails above it
-    make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
