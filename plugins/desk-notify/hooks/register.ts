@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { argvFor, askNotice, EVENTS, failNotice, planNotice, platformOf, projectNameOf, settingOf, statusText, stopNotice, USAGE, type Event, type Notice, type Platform } from './notice.ts'
+import { argvFor, askNotice, EVENTS, failNotice, planNotice, platformOf, projectNameOf, settingOf, statusText, stopNotice, USAGE, type Event, type Notice, type Platform } from './notice'
 
 /** A notification command that runs longer than this is killed, so a hung daemon holds nothing up. */
 const NOTIFY_TIMEOUT_MS = 5_000

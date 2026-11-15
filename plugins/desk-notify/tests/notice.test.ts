@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { argvFor, escapeApplescript, failNotice, platformOf, projectNameOf, settingOf, summarize, utf16Base64 } from '../hooks/notice.ts'
+import { argvFor, escapeApplescript, failNotice, platformOf, projectNameOf, settingOf, summarize, utf16Base64 } from '../hooks/notice'
 
 tier('user')
 
