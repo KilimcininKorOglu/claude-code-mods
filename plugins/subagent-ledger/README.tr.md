@@ -68,6 +68,5 @@ Reach L0: çizer ve hatırlar.
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity sınırı 10; aşılırsa build kırılır
-    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
