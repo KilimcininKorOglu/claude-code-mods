@@ -1,6 +1,6 @@
 {
   "name": "flaky-memory",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Remembers which tests failed on which code, and tells the model when a failing test has both passed and failed on the same code, so it runs the test again instead of changing code.",
   "author": {
     "name": "Kerem Gok",
