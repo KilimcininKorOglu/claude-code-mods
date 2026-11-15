@@ -82,10 +82,10 @@ Function hooks are early access. Claude Code 2.1.288 and later load them by defa
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.322:
+Validated with `claude plugin validate` on Claude Code 2.1.325:
 
     ❯ types ./types/index.d.ts declares on $: $.sidebar
-    ❯ ./register.tsx hooks: engine.create, session.start, tool.describe{tool=/"^mcp__sidebar__read$"/}, tool.call{tool=/"^mcp__sidebar__read$"/}, command.run{command=sidebar}, ui.render{component=Pane}, ui.scroll{component=Pane, requestId=sidebar}, ui.close, turn.start, turn.complete
+    ❯ ./register.tsx hooks: engine.create, session.start, tool.describe{tool=/"^mcp__sidebar__read$"/}, tool.call{tool=/"^mcp__sidebar__read$"/}, command.run{command=sidebar}, ui.render{component=Pane} (default matcher key: plugin), ui.scroll{component=Pane, requestId=sidebar}, ui.close, turn.start, turn.complete
     ❯ ./register.tsx calls: $.clock.after (via setOpen), $.clock.now, $.command.list (via dropOff), $.command.register, $.command.run (via pressButton, switchToFullscreen), $.env.get (via openLog), $.fs.exists, $.fs.list (via logFiles), $.fs.read, $.fs.write, $.session.cwd (via openLog), $.settings.read (via dropOff), $.store.get, $.store.set (via setOpen), $.tool.register, $.ui.close (via closePane), $.ui.invalidate, $.ui.log (via switchToFullscreen), $.ui.open (via showPane), $.ui.panes (via closePane), $.ui.resolve
     ❯ ./register.tsx env writes: nothing
     ❯ ./register.tsx env reads: HOME
