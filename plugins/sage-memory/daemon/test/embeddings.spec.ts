@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
 import type { Memory, RememberInput } from '../../hooks/shared/model.ts'
 import type { ProjectRef } from '../../hooks/shared/protocol.ts'
+import { closePairs } from '../close-pairs.ts'
 import { createEmbeddings } from '../embeddings.ts'
 import { fuse, lexicalHits } from '../fusion.ts'
 import { hitRelevance, memorySemanticRelevance } from '../relevance.ts'
@@ -280,6 +281,18 @@ describe('sentence vectors', () => {
     fake.vectors.set(renamed, toward(6, 1))
     const query = await embeddings.semantic(FACT, [])
     assert.equal((await w.run(op => remember(op, { text: FACT }, query))).outcome, 'added', 'the old sentence vectors are skipped')
+    w.close()
+  })
+
+  test('triage gets the pair whose sentences are close, never a pair of another audience or a far one', async () => {
+    const { w, long, fake, embeddings } = await seededLong()
+    const fact = (await w.remember({ text: FACT, distinct: true })).memory
+    const hidden = (await w.remember({ text: `${FACT} for the explore agent`, audience: { roles: ['explore'] }, distinct: true })).memory
+    fake.vectors.set(hidden.text, toward(0, 0.95))
+    const far = (await w.remember({ text: 'Credit notes carry their own counter', distinct: true })).memory
+    await embeddings.afterWrite(w.project, [fact, hidden, far])
+    const pairs = await closePairs(w.project.db, 'fake/model')
+    assert.deepEqual(pairs.map(pair => [[pair.a, pair.b].sort(), pair.cosine]), [[[long.id, fact.id].sort(), 0.9]], 'ids made in one millisecond sort in no fixed order')
     w.close()
   })
 

@@ -1,4 +1,5 @@
-import { STATUSES, type FileMemories, type GatheredPage, type GraphEdge, type Memory, type Scope, type SearchHit, type Status } from '../hooks/shared/model.ts'
+import { STATUSES, type ClosePair, type FileMemories, type GatheredPage, type GraphEdge, type Memory, type Scope, type SearchHit, type Status } from '../hooks/shared/model.ts'
+import { closePairs } from './close-pairs.ts'
 import type { Embeddings } from './embeddings.ts'
 import { refused } from './errors.ts'
 import { fileMatches, groupFileMatches } from './for-file.ts'
@@ -38,6 +39,20 @@ async function search(stores: Stores, embeddings: Embeddings, body: Body): Promi
   const visibility = readerVisibility(body, flag(body, 'includeStale') ? ['active', 'stale'] : ['active'])
   const semantic = await embeddings.semantic(query, [places.project, places.global])
   return searchHybrid([places.project.db, places.global.db], query, visibility, limit, semantic)
+}
+
+/**
+ * The close pairs of both stores for triage, after a fill that embeds what each store lacks; none
+ * while embeddings are not set up, so triage keeps its anchor and tag pairs alone.
+ */
+async function closePairsOf(stores: Stores, embeddings: Embeddings, body: Body): Promise<ClosePair[]> {
+  const places = placesOf(stores, body)
+  const both = [places.project, places.global]
+  for (const store of both) await embeddings.fill(store)
+  const state = embeddings.state()
+  if (state.state !== 'ready') return []
+  const pairs = await Promise.all(both.map(store => closePairs(store.db, state.modelId)))
+  return pairs.flat()
 }
 
 function forPath(stores: Stores, body: Body): Memory[] {
@@ -131,6 +146,7 @@ export function readRoutes(stores: Stores, embeddings: Embeddings): Routes {
   return {
     '/memory/search': post(async body => (await search(stores, embeddings, body)).map(hit => hit.memory)),
     '/memory/explain': post(body => search(stores, embeddings, body)),
+    '/memory/close-pairs': post(body => closePairsOf(stores, embeddings, body)),
     '/memory/for-path': post(body => forPath(stores, body)),
     '/memory/for-file': post(body => forFile(stores, body)),
     '/memory/graph': post(body => graph(stores, body)),

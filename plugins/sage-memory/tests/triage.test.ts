@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actionOf, judgedOf, judgedTimes, mergeOf, mergesOf, mergeVerdictOf, oldestFirst, pairsOf, patchOf, preFilter, proposalsToFile, ratingOf, valueScore } from '../hooks/triage'
+import { actionOf, containedMerge, judgedOf, judgedTimes, mergeOf, mergesOf, mergeVerdictOf, oldestFirst, pairKey, pairsOf, patchOf, preFilter, proposalsToFile, ratingOf, valueScore } from '../hooks/triage'
 import type { Candidate, Memory } from '../hooks/shared/model'
 
 tier('user')
@@ -86,6 +86,22 @@ describe('triage', () => {
   test('a memory loses at most once, so no merge cycle forms', () => {
     const [a, b, c] = [memory('a', { createdAt: '2026-01-01T00:00:00Z' }), memory('b', { createdAt: '2026-02-01T00:00:00Z' }), memory('c', { createdAt: '2026-03-01T00:00:00Z' })]
     expect(mergesOf([{ a, b }, { a: b, b: c }, { a: c, b: a }]).map(m => `${m.loser.id}>${m.keeper.id}`)).toEqual(['b>a', 'c>a'])
+  })
+
+  test('the close pairs come first and once, and a pair of a memory not in the list is dropped', () => {
+    const [a, b, c] = [memory('a'), memory('b'), memory('c')]
+    const pairs = pairsOf([a, b, c], [{ a: 'b', b: 'c', cosine: 0.8 }, { a: 'a', b: 'gone', cosine: 0.9 }])
+    expect(pairs.map(pair => [pairKey(pair), pair.close])).toEqual([['b|c', true]])
+  })
+
+  test('the memory the other states whole loses to it, never a protected one, and two that state each other merge by keeper score', () => {
+    const fact = memory('fact', { createdAt: '2026-03-01T00:00:00Z' })
+    const long = memory('long', { createdAt: '2026-01-01T00:00:00Z' })
+    expect(containedMerge({ a: fact, b: long, close: true }, true, false)).toEqual({ keeper: long, loser: fact })
+    expect(containedMerge({ a: fact, b: long, close: true }, false, true)).toEqual({ keeper: fact, loser: long })
+    expect(containedMerge({ a: memory('pin', { persistence: 'permanent' }), b: long, close: true }, true, false)).toBe(undefined)
+    expect(containedMerge({ a: fact, b: long, close: true }, false, false)).toBe(undefined)
+    expect(containedMerge({ a: fact, b: long, close: true }, true, true)).toMatchObject({ keeper: { id: 'long' } })
   })
 
   test('a proposal is not filed twice, nor for an unchanged memory a person reviewed within 90 days', () => {

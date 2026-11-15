@@ -52,7 +52,7 @@ function toBlob(vector: Float32Array): Uint8Array {
 }
 
 /** A stored vector, copied so its bytes start on a 4-byte boundary. */
-function fromBlob(blob: Uint8Array): Float32Array {
+export function fromBlob(blob: Uint8Array): Float32Array {
   const bytes = new Uint8Array(blob)
   return new Float32Array(bytes.buffer, 0, bytes.byteLength / 4)
 }
@@ -75,7 +75,7 @@ export function dropVectors(db: DatabaseSync, memoryId: string): void {
 }
 
 /** The vectors are normalized, so their dot product is their cosine. */
-function dot(a: Float32Array, b: Float32Array): number {
+export function dot(a: Float32Array, b: Float32Array): number {
   let sum = 0
   for (let i = 0; i < a.length; i++) sum += (a[i] ?? 0) * (b[i] ?? 0)
   return sum
@@ -92,7 +92,7 @@ type VectorRow = { id: string; data: string; vector: Uint8Array; text_hash: stri
 type SentenceRow = { memory_id: string; vector: Uint8Array; text_hash: string }
 
 /** The sentence vectors of `modelId`, by memory id, each tagged with the hash of the text it was made from. */
-function sentenceVectors(db: DatabaseSync, modelId: string): Map<string, Array<{ vector: Float32Array; hash: string }>> {
+export function sentenceVectors(db: DatabaseSync, modelId: string): Map<string, Array<{ vector: Float32Array; hash: string }>> {
   const rows = sql(db, 'SELECT memory_id, vector, text_hash FROM sentence_vectors WHERE model_id = ?').all(modelId) as SentenceRow[]
   const byMemory = new Map<string, Array<{ vector: Float32Array; hash: string }>>()
   for (const row of rows) byMemory.set(row.memory_id, [...(byMemory.get(row.memory_id) ?? []), { vector: fromBlob(row.vector), hash: row.text_hash }])

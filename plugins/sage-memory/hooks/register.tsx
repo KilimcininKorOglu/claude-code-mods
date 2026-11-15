@@ -100,11 +100,12 @@ import {
   CONTAINS_SYSTEM,
   containsPrompt,
   containsVerdictOf,
+  containedMerge,
   discardDeletion,
   judgedOf,
   judgedTimes,
   MERGE_SYSTEM,
-  mergesOf,
+  mergeOf,
   mergeVerdictOf,
   oldestFirst,
   pairKey,
@@ -120,6 +121,7 @@ import {
   ratedDeletion,
   ratingOf,
   reportText,
+  uniqueMerges,
   valueScore,
   type Deletion,
   type Judged,
@@ -131,7 +133,7 @@ import {
 } from './triage'
 import { addedBy, answerText, callOf, editLine, OFF_TEXT, similarText, toolName, TOOLS, type Input } from './tools'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
-import { isProtected, type AuditEntry, type Candidate, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
+import { isProtected, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol'
 
@@ -1415,20 +1417,45 @@ async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number
   return rated
 }
 
-/** Phase 4: the model compares the clustered pairs; answers the keys of the pairs it gave a verdict. */
+/** What the model said of one pair: the merge it implies, whether it is an overlap, or no verdict. */
+type Compared = { merge?: Merge; overlap: boolean } | undefined
+
+/** A close pair: whether each memory states the other whole, asked both ways on the whole texts. */
+async function compareClose($: EngineInterface, pair: Pair): Promise<Compared> {
+  const aInB = await states($, pair.a.text, pair.b.text)
+  const bInA = aInB === undefined ? undefined : await states($, pair.b.text, pair.a.text)
+  if (aInB === undefined || bInA === undefined) return undefined
+  const merge = containedMerge(pair, aInB, bInA)
+  return { merge, overlap: merge === undefined }
+}
+
+/** A cluster pair: the merge question on the opening of both texts. */
+async function compareCluster($: EngineInterface, pair: Pair): Promise<Compared> {
+  const raw = await answerOf($, MERGE_SYSTEM, pairPrompt(pair))
+  const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
+  if (verdict === undefined) return undefined
+  return { merge: verdict === 'YES' ? mergeOf(pair) : undefined, overlap: verdict === 'OVERLAP' }
+}
+
+/**
+ * Phase 4: the model compares the pairs, a close pair by the containment question and a cluster
+ * pair by the merge question; answers the keys of the pairs it gave a verdict.
+ */
 async function comparePairs($: EngineInterface, pairs: readonly Pair[], report: Report): Promise<string[]> {
-  const yes: Pair[] = []
+  const merges: Merge[] = []
   const compared: string[] = []
   for (const pair of pairs) {
-    const raw = await answerOf($, MERGE_SYSTEM, pairPrompt(pair))
-    const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
-    if (verdict === undefined) report.unjudged += 1
-    else compared.push(pairKey(pair))
-    if (verdict === 'YES') yes.push(pair)
-    if (verdict === 'OVERLAP') report.overlaps.push(pair)
+    const result = pair.close === true ? await compareClose($, pair) : await compareCluster($, pair)
+    if (result === undefined) {
+      report.unjudged += 1
+      continue
+    }
+    compared.push(pairKey(pair))
+    if (result.merge !== undefined) merges.push(result.merge)
+    if (result.overlap) report.overlaps.push(pair)
   }
   report.pairs = pairs.length
-  report.merges = mergesOf(yes)
+  report.merges = uniqueMerges(merges)
   return compared
 }
 
@@ -1438,7 +1465,8 @@ async function triageReport($: EngineInterface, state: State, limits: Limits, ju
   const now = await $.clock.now()
   const classified = classify(memories, now)
   const gray = oldestFirst(classified.gray, entry => entry.memory.id, judged.notes)
-  const pairs = oldestFirst(pairsOf(memories), pairKey, judged.pairs)
+  const close = await ask<ClosePair[]>($, state, '/memory/close-pairs', {})
+  const pairs = oldestFirst(pairsOf(memories, close), pairKey, judged.pairs)
   const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], deletions: [...classified.discards], proposals: [], merges: [], overlaps: [], pairs: 0, unjudged: 0, judged }
   const rated = await rateGray($, gray, limits.calls, now, report)
   const compared = await comparePairs($, pairs.slice(0, limits.pairs), report)

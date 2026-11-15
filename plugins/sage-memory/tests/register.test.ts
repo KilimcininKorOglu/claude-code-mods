@@ -84,7 +84,7 @@ function modelAnswer(w: World, system: string): string | undefined {
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -1111,6 +1111,22 @@ describe('triage, compact and capture', () => {
     expect(bodiesOf(w, '/memory/update').map(b => ({ id: b.id, patch: b.patch }))).toEqual([{ id: 'k1', patch: { supersedes: ['t1'] } }])
     expect(bodiesOf(w, '/candidates/propose')).toEqual([])
     expect(text).toContain('applied: 2 deletion(s), 0 patch(es), 1 merge(s), 0 review proposal(s) filed')
+  })
+
+  withSidebar('triage asks the containment question both ways about a pair the embeddings found, and the memory the other states whole loses to it', async ($, on) => {
+    const w = triageWorld(on)
+    w.routes.set('/memory/close-pairs', [{ a: GRAY.id, b: KEEPER.id, cosine: 0.81 }])
+    w.rateText = '4 | a build fact a later session needs'
+    w.mergeText = 'NO'
+    w.contains = prompt => (prompt.startsWith(`A: "${GRAY.text}"`) ? 'YES' : 'NO')
+    await $.session.start(START)
+    const text = String((await $.command.run(run('triage'))).text)
+    expect(w.asked.filter(a => a.system.startsWith('Two project memories')).map(a => a.prompt)).toEqual([
+      `A: "${GRAY.text}"\nB: "${KEEPER.text}"`,
+      `A: "${KEEPER.text}"\nB: "${GRAY.text}"`,
+    ])
+    expect(text).toContain(`merge: ${GRAY.id} into ${KEEPER.id}`)
+    expect(text).toContain('from 2 compared pair(s)')
   })
 
   withSidebar('a rating the model does not give changes nothing', async ($, on) => {

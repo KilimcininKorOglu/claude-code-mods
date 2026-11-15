@@ -5,7 +5,7 @@
  * phase 5 turns the verdicts into patches and review proposals. Pure code; `register.tsx` asks the
  * model and applies the result.
  */
-import { isProtected, type Candidate, type Memory, type SuggestedAction, type UpdatePatch } from './shared/model'
+import { isProtected, type Candidate, type ClosePair, type Memory, type SuggestedAction, type UpdatePatch } from './shared/model'
 import { textKey, tokenize } from './shared/text'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -153,7 +153,8 @@ export function actionOf(m: Memory, score: Score, rating: Rating): Action {
 
 export const MERGE_SYSTEM = 'Do these two project memories describe the same fact? Reply: YES | NO | OVERLAP. OVERLAP means related but distinct — do not merge.'
 
-export type Pair = { a: Memory; b: Memory }
+/** Two memories to compare; `close` marks a pair the embeddings found, which the containment question judges. */
+export type Pair = { a: Memory; b: Memory; close?: true }
 
 const MAX_CLUSTER = 5
 const MIN_SHARED_TAGS = 3
@@ -210,11 +211,24 @@ function clusterPairs(cluster: readonly Memory[]): Pair[] {
   return cluster.length <= MAX_CLUSTER ? pairs : pairs.filter(pair => overlapOf(pair.a, pair.b) >= BIG_CLUSTER_OVERLAP)
 }
 
-/** The pairs to compare: the pairs of every cluster of two or more members, each pair once. */
-export function pairsOf(memories: readonly Memory[]): Pair[] {
+/** The close pairs whose two memories are in the list, as pairs of memories. */
+function closeOf(memories: readonly Memory[], close: readonly ClosePair[]): Pair[] {
+  const byId = new Map(memories.map(m => [m.id, m]))
+  return close.flatMap(({ a, b }) => {
+    const left = byId.get(a)
+    const right = byId.get(b)
+    return left === undefined || right === undefined ? [] : [{ a: left, b: right, close: true as const }]
+  })
+}
+
+/**
+ * The pairs to compare, each once: the pairs the embeddings found close first, then the pairs of
+ * every anchor or tag cluster of two or more members.
+ */
+export function pairsOf(memories: readonly Memory[], close: readonly ClosePair[] = []): Pair[] {
   const seen = new Set<string>()
   const pairs: Pair[] = []
-  for (const pair of [...anchorClusters(memories), ...tagClusters(memories)].flatMap(clusterPairs)) {
+  for (const pair of [...closeOf(memories, close), ...[...anchorClusters(memories), ...tagClusters(memories)].flatMap(clusterPairs)]) {
     const key = pairKey(pair)
     if (seen.has(key)) continue
     seen.add(key)
@@ -317,18 +331,33 @@ export function mergeOf(pair: Pair): Merge | undefined {
   return a.createdAt <= b.createdAt ? { keeper: a, loser: b } : { keeper: b, loser: a }
 }
 
-/** The merges of the YES pairs; a memory loses at most once and a loser keeps nothing, so no cycle forms. */
-export function mergesOf(yes: readonly Pair[]): Merge[] {
+/**
+ * The merge of a close pair from its two containment answers: a memory the other states whole
+ * loses to it, unless it is protected; two that state each other merge as the merge question's
+ * YES does; otherwise none.
+ */
+export function containedMerge(pair: Pair, aInB: boolean, bInA: boolean): Merge | undefined {
+  if (aInB && bInA) return mergeOf(pair)
+  if (aInB && !isProtected(pair.a)) return { keeper: pair.b, loser: pair.a }
+  if (bInA && !isProtected(pair.b)) return { keeper: pair.a, loser: pair.b }
+  return undefined
+}
+
+/** The merges kept, in order; a memory loses at most once and a loser keeps nothing, so no cycle forms. */
+export function uniqueMerges(candidates: readonly Merge[]): Merge[] {
   const lost = new Set<string>()
   const merges: Merge[] = []
-  for (const pair of yes) {
-    if (lost.has(pair.a.id) || lost.has(pair.b.id)) continue
-    const merge = mergeOf(pair)
-    if (merge === undefined) continue
+  for (const merge of candidates) {
+    if (lost.has(merge.keeper.id) || lost.has(merge.loser.id)) continue
     lost.add(merge.loser.id)
     merges.push(merge)
   }
   return merges
+}
+
+/** The merges of the YES pairs. */
+export function mergesOf(yes: readonly Pair[]): Merge[] {
+  return uniqueMerges(yes.flatMap(pair => mergeOf(pair) ?? []))
 }
 
 // ── Phase 5: dispatch ──────────────────────────────────────────────────

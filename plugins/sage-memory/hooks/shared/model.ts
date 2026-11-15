@@ -200,6 +200,9 @@ export type RememberInput = {
  */
 export type SimilarMemory = { id: string; kind: Kind; text: string; cosine?: number }
 
+/** Two live memories of one store whose meaning is close, by their best whole or sentence cosine. */
+export type ClosePair = { a: string; b: string; cosine: number }
+
 /**
  * What `remember` did: a new memory, a merge into one with the same text, or nothing, because
  * memories close by words or in meaning exist (`similar`): the writer then updates one of them, or
