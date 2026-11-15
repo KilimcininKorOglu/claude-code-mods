@@ -1,8 +1,8 @@
 import type { EngineInterface, PromptOrigin, Register, ToolCallResult } from 'claude-code'
-import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command.ts'
-import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, MAX_ROUNDS, type Config } from './config.ts'
-import { buildPlanBody, bullets, denyText, failedContext, parseFindings, passContext, planFileIn, summaryText, type Answer, type Finding } from './review.ts'
-import { renderTranscript } from './transcript.ts'
+import { changeText, ENABLED_KEY, NO_KEY_ON, parseCommand, RESET_TEXT, statusText } from './command'
+import { CONSUMER, configFrom, DEADLINE_MS, DEFAULT_MODEL, MAX_ROUNDS, type Config } from './config'
+import { buildPlanBody, bullets, denyText, failedContext, parseFindings, passContext, planFileIn, summaryText, type Answer, type Finding } from './review'
+import { renderTranscript } from './transcript'
 
 /**
  * The plans sent back since the user last spoke, the plan file the engine's
