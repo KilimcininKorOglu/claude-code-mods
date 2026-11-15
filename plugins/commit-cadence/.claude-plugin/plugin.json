@@ -1,6 +1,6 @@
 {
   "name": "commit-cadence",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Names the uncommitted files to you at the end of each turn, and tells the model at the next prompt to commit each finished piece as it lands.",
   "author": {
     "name": "Kerem Gok",
