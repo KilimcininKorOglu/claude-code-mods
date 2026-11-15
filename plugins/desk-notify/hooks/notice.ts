@@ -49,7 +49,7 @@ function base64(bytes: readonly number[]): string {
     const [a = 0, b = 0, c = 0] = bytes.slice(i, i + 3)
     const n = (a << 16) | (b << 8) | c
     const left = bytes.length - i
-    out += BASE64[(n >> 18) & 63] + BASE64[(n >> 12) & 63] + (left > 1 ? BASE64[(n >> 6) & 63] : '=') + (left > 2 ? BASE64[n & 63] : '=')
+    out += BASE64.charAt((n >> 18) & 63) + BASE64.charAt((n >> 12) & 63) + (left > 1 ? BASE64.charAt((n >> 6) & 63) : '=') + (left > 2 ? BASE64.charAt(n & 63) : '=')
   }
   return out
 }
