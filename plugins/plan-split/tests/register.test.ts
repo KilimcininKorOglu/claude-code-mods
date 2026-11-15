@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { mainLoopMode, parseModel, resolved, routeFor, sectionLines, storedModel, type Route } from '../hooks/split.ts'
+import { mainLoopMode, parseModel, resolved, routeFor, sectionLines, storedModel, type Route } from '../hooks/split'
 
 tier('user')
 
