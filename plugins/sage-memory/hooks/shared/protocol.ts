@@ -3,8 +3,11 @@
  * by both sides.
  */
 
-/** Raised whenever a route or a payload changes shape; a daemon on another protocol is not used. */
-export const PROTOCOL = 1
+/**
+ * Raised whenever a route or a payload changes shape; a daemon on another protocol is not used.
+ * 2: `remember` answers `similar` without writing, and its answer has no `nearDuplicate`.
+ */
+export const PROTOCOL = 2
 
 /** What `GET /hello` answers without a token: enough to tell that a daemon runs, and which build. */
 export type Hello = {
