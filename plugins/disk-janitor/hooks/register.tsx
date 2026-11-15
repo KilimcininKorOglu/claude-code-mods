@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
 import { baseName, classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusLine, type Class, type Line } from './classify'
 import { carriedSelection, deletedShort, listText, reportText, rowText, totalKb, type Outcome } from './report'
