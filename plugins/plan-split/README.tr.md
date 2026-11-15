@@ -79,6 +79,5 @@ Reach L2: Claude'un kendi isteklerinin modelini değiştirir.
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity sınırı 10; aşılırsa build kırılır
-    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
