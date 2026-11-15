@@ -13,6 +13,7 @@ help:
 validate:
 	claude plugin validate --strict .
 	@set -e; for p in $(PLUGINS); do claude plugin validate --strict $$p; done
+	sh scripts/validate-dependents.sh
 	@set -e; for f in plugins/*/types/sidebar.d.ts; do \
 		cmp -s plugins/sidebar/types/index.d.ts $$f || { echo "$$f differs from plugins/sidebar/types/index.d.ts"; exit 1; }; \
 	done
