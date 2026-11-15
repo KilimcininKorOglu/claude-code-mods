@@ -136,28 +136,17 @@ describe('prompt-deck', () => {
     expect(w.store['counts:/Users/u/app']).not.toBe(undefined)
   })
 
-  test('a deck kept under the project name alone moves to the root once, and a second checkout of that name starts empty', async ($, on) => {
-    const w = world(on, { 'counts:app': { 'devam et': { n: 4, last: 5 } }, 'pins:app': ['commitle'] })
+  test('each checkout keeps its own deck by its full path, also two checkouts of the same name', async ($, on) => {
+    const w = world(on, { 'counts:/Users/u/app': { 'devam et': { n: 4, last: 5 } }, 'pins:/Users/u/app': ['commitle'] })
     await started($)
     expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. commitle (pinned)\n2. devam et (4)')
-    expect(w.store['counts:app']).toBe(undefined)
-    expect(w.store['pins:app']).toBe(undefined)
-    expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 4, last: 5 } })
-    expect(w.store['pins:/Users/u/app']).toEqual(['commitle'])
     // Another checkout of the same name starts its own deck, and the first keeps its own.
     w.root = '/Users/u/other/app'
     await $.session.start({ surface: null, isInteractive: true, cwd: w.root })
     expect((await $.command.run(run('list'))).text).toContain('no prompt counted yet')
     for (let i = 0; i < 3; i++) await $.prompt.submit(typed('başka'))
     expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 4, last: 5 } })
-  })
-
-  test('the counts of the one shared deck move into this project once, and other projects start empty', async ($, on) => {
-    const w = world(on, { counts: { 'devam et': { n: 7, last: 5 } } })
-    await started($)
-    expect((await $.command.run(run('list'))).text).toBe('on · project app\n1. devam et (7)')
-    expect(w.store['counts']).toBe(undefined)
-    expect(w.store['counts:/Users/u/app']).toEqual({ 'devam et': { n: 7, last: 5 } })
+    expect(w.store['counts:/Users/u/other/app']).toEqual({ başka: { n: 3, last: expect.any(Number) } })
   })
 
   test('a setting another window stored applies here at the next hook that acts on it', async ($, on) => {

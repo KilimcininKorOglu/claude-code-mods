@@ -1,8 +1,6 @@
 import type { EngineInterface, PromptOrigin, Register } from 'claude-code'
-import { BAND_SIZE, band, countsKey, fit, listText, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from './deck'
+import { BAND_SIZE, band, countsKey, fit, listText, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from './deck'
 
-/** The key the mod used before the counts were split per project. */
-const LEGACY_KEY = 'counts'
 const ENABLED_KEY = 'enabled'
 
 /** The mod's markdown command (`commands/send.md`), whose body is its arguments alone. */
@@ -65,34 +63,6 @@ async function addCommand($: EngineInterface, state: State, text: string): Promi
   if (state.pins.length >= BAND_SIZE) return `the band holds ${BAND_SIZE} prompts and all of them are pinned; remove one first`
   await savePins($, state, [...state.pins, pin])
   return `pinned at ${state.pins.length} of ${BAND_SIZE}`
-}
-
-/**
- * Moves the counts of the one shared deck into this project, once. The first project that loads the mod
- * after the update takes them, because the mod cannot tell where each of them was typed.
- */
-async function adoptLegacy($: EngineInterface, state: State): Promise<void> {
-  const legacy = (await $.store.get(LEGACY_KEY)) as Counts | undefined
-  if (legacy === undefined) return
-  await saveCounts($, state, mergeCounts(state.counts, legacy))
-  await $.store.delete(LEGACY_KEY)
-  $.ui.log(`the shared deck of ${Object.keys(legacy).length} prompt(s) is now this project's (${state.project}); each project counts its own prompts from here on`)
-}
-
-/**
- * Moves the deck kept under the project's name alone (up to 0.4) to the key of its root, once. The first
- * checkout of that name that loads the mod takes it, because the mod cannot tell which checkout it came
- * from; counts already under the root key are joined with it, and pins already there stay.
- */
-async function adoptNamed($: EngineInterface, state: State): Promise<void> {
-  const counts = (await $.store.get(countsKey(state.project))) as Counts | undefined
-  const pins = (await $.store.get(pinsKey(state.project))) as string[] | undefined
-  if (counts === undefined && pins === undefined) return
-  if (counts !== undefined) await saveCounts($, state, mergeCounts(state.counts, counts))
-  if (pins !== undefined && state.pins.length === 0) await savePins($, state, pins)
-  await $.store.delete(countsKey(state.project))
-  await $.store.delete(pinsKey(state.project))
-  $.ui.log(`the deck of ${state.project} is now kept for ${state.root}; another checkout named ${state.project} starts its own`)
 }
 
 /** Counts one use, from the stored counts, so another session of the same project is kept. */
@@ -191,8 +161,6 @@ export const register: Register = on => {
     state.root = await resolveRoot($)
     state.project = projectName(state.root)
     await loadDeck($, state)
-    await adoptNamed($, state)
-    await adoptLegacy($, state)
     $.ui.invalidate('ui.render')
     return r
   })

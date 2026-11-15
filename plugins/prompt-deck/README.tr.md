@@ -10,9 +10,6 @@
 4. Prompt kutusu boşken bir rakam tuşu o prompt'u anında gönderir. Bir tıklama ya da ctrl+x tab ve Enter da gönderir. Bir basış bir kullanım daha sayılır.
 5. Bant alanını bir anket tutarken, bir turn çalışırken ya da bir agent'ın transcript'i ekrandayken bant çizilmez.
 6. Sayımlar ve sabitlenmiş prompt'lar plugin store'da durur: proje başına bir deck, o projenin bütün session'ları ortak kullanır. Proje, session'ın git top level'ıdır; yoksa çalışma dizini. Deck bu tam path ile key'lenir, yani `app` adlı iki checkout iki ayrı deck tutar; status projeyi path'inin son parçasıyla adlandırır. Proje başına en fazla 200 prompt tutulur; en az kullanılan ve en eski olan önce gider.
-7. 0.2.0 öncesi bir sürümün deck'i her projeyi tek bir yerde sayıyordu. 0.2.0'ı yükleyen ilk proje o sayımları bir kere alır ve bunu bir satırda söyler; diğer her proje boş başlar.
-8. 0.5.0 öncesi bir sürümün deck'i yalnız proje adıyla key'leniyordu. 0.5.0'ı yükleyen o addaki ilk checkout onu bir kere kendi path'inin key'ine taşır ve bunu bir satırda söyler; aynı addaki başka bir checkout boş başlar.
-
 Bir basış mod'un kendi markdown komutunu, `/prompt-deck:send <prompt>` komutunu çalıştırır; bu komutun gövdesi yalnız argümanlarıdır. Transcript o komut satırını gösterir ve model prompt'u yazıldığı gibi, yazılmış bir slash komutu gibi okur (2.1.282 üzerinde ölçüldü). `&& /<name>` içeren bir prompt orada bir komut zinciri olarak okunurdu, bu yüzden bir plugin prompt'u olarak gider. Engine'in komutunu reddettiği bir basış da öyle gider ve bunu söyleyen bir satır yazılır. Model bir plugin prompt'unu `The prompt-deck plugin sent a message:` çerçevesi içinde okur.
 
 Canlı kontrolde sabitlenmiş bir `Yalnız tamam kelimesini yaz.` `1: Yalnız tamam kelimesini yaz.` olarak göründü, `1` tuşu onu `/prompt-deck:send Yalnız tamam kelimesini yaz.` olarak gönderdi ve model prompt'u çerçevesiz okuyup `tamam` cevabını verdi.
@@ -42,10 +39,10 @@ Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzer
 
 ## Nereye uzanır
 
-Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.325 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, command.run{command=prompt-deck}, prompt.submit, ui.render{component=AbovePrompt}
-    ❯ ./register.tsx calls: $.clock.after (via sendPrompt), $.clock.now (via countUse), $.command.register, $.command.run (via sendPrompt), $.process.run (via resolveRoot), $.prompt.submit (via submitPrompt), $.session.cwd (via resolveRoot), $.store.delete (via adoptLegacy, adoptNamed), $.store.get (via adoptLegacy, adoptNamed, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy, adoptNamed, sendPrompt, submitPrompt), $.ui.resolve
+    ❯ ./register.tsx hooks: session.start, command.run{command=prompt-deck}, prompt.submit, ui.render{component=AbovePrompt} (default matcher key: plugin)
+    ❯ ./register.tsx calls: $.clock.after (via sendPrompt), $.clock.now (via countUse), $.command.register, $.command.run (via sendPrompt), $.process.run (via resolveRoot), $.prompt.submit (via submitPrompt), $.session.cwd (via resolveRoot), $.store.get (via countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via sendPrompt, submitPrompt), $.ui.resolve
 
 Reach L2: git çalıştırır ve Claude'u yönlendirir; bir basış bir prompt gönderir.
 

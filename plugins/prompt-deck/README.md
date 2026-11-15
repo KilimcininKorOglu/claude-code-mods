@@ -10,9 +10,6 @@ You type the same short prompts again and again every day: "go on", "commit it",
 4. With the prompt box empty, a digit key sends that prompt at once. A click, or ctrl+x tab and Enter, sends it too. A press counts as one more use.
 5. The band is not drawn while a survey holds it, while a turn runs, or while an agent's transcript is in view.
 6. The counts and the pinned prompts live in the plugin store, one deck per project, shared by every session of it. The project is the session's git top level, else its working directory, and the deck is keyed by that full path, so two checkouts named `app` keep two decks; the status names the project by its last path part. At most 200 prompts are kept per project; the least used and oldest go first.
-7. The deck of a version before 0.2.0 counted every project into one. The first project that loads 0.2.0 takes those counts, once, and says so in one line; every other project starts empty.
-8. A deck of a version before 0.5.0 was keyed by the project's name alone. The first checkout of that name that loads 0.5.0 takes it to the key of its path, once, and says so in one line; another checkout of the same name starts empty.
-
 A press runs the mod's own markdown command `/prompt-deck:send <prompt>`, whose body is its arguments alone. The transcript shows that command line, and the model reads the prompt as it is written, as it reads a typed slash command (measured on 2.1.282). A prompt that holds `&& /<name>` would read as a command chain there, so it goes out as a plugin prompt instead, and so does a press whose command the engine refuses, with one line that says so. The model reads a plugin prompt inside a `The prompt-deck plugin sent a message:` frame.
 
 In the live check a pinned `Yalnız tamam kelimesini yaz.` appeared as `1: Yalnız tamam kelimesini yaz.`, the `1` key sent it as `/prompt-deck:send Yalnız tamam kelimesini yaz.`, and the model read the prompt without the frame and answered `tamam`.
@@ -42,10 +39,10 @@ Function hooks are early access. Claude Code 2.1.288 and later load them by defa
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.325:
 
-    ❯ ./register.tsx hooks: session.start, command.run{command=prompt-deck}, prompt.submit, ui.render{component=AbovePrompt}
-    ❯ ./register.tsx calls: $.clock.after (via sendPrompt), $.clock.now (via countUse), $.command.register, $.command.run (via sendPrompt), $.process.run (via resolveRoot), $.prompt.submit (via submitPrompt), $.session.cwd (via resolveRoot), $.store.delete (via adoptLegacy, adoptNamed), $.store.get (via adoptLegacy, adoptNamed, countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via adoptLegacy, adoptNamed, sendPrompt, submitPrompt), $.ui.resolve
+    ❯ ./register.tsx hooks: session.start, command.run{command=prompt-deck}, prompt.submit, ui.render{component=AbovePrompt} (default matcher key: plugin)
+    ❯ ./register.tsx calls: $.clock.after (via sendPrompt), $.clock.now (via countUse), $.command.register, $.command.run (via sendPrompt), $.process.run (via resolveRoot), $.prompt.submit (via submitPrompt), $.session.cwd (via resolveRoot), $.store.get (via countUse, loadDeck), $.store.set (via saveCounts, savePins, setEnabled), $.ui.invalidate, $.ui.log (via sendPrompt, submitPrompt), $.ui.resolve
 
 Reach L2, runs git and drives Claude: a press submits a prompt.
 

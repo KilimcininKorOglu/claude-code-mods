@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { band, countsKey, fit, listText, MAX_KEPT, mergeCounts, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from '../hooks/deck'
+import { band, countsKey, fit, listText, MAX_KEPT, normalize, normalizePin, pinsKey, projectName, readsAsChain, record, removeAt, type Counts } from '../hooks/deck'
 
 tier('user')
 
@@ -69,14 +69,5 @@ describe('deck', () => {
     expect(projectName('/Users/u/app')).toBe('app')
     expect(projectName('/Users/u/app/')).toBe('app')
     expect(projectName('app')).toBe('app')
-  })
-
-  test('merges two decks, keeping the higher count and the later use', async () => {
-    const merged = mergeCounts(uses([['a', 2], ['b', 5]]), { a: { n: 4, last: 9 }, c: { n: 1, last: 3 } })
-    expect(merged).toEqual({ b: { n: 5, last: 1 }, a: { n: 4, last: 9 }, c: { n: 1, last: 3 } })
-    expect(Object.keys(merged)).toEqual(['b', 'a', 'c'])
-    let big: Counts = {}
-    for (let i = 0; i < MAX_KEPT; i++) big = record(big, `p${i}`, i)
-    expect(Object.keys(mergeCounts(big, { extra: { n: 1, last: 0 } }))).toHaveLength(MAX_KEPT)
   })
 })

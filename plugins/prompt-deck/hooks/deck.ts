@@ -56,16 +56,6 @@ export function projectName(path: string): string {
   return path.replace(/\/+$/, '').split('/').at(-1) ?? path
 }
 
-/** Both sets of counts in one: a prompt in both keeps the higher count and the later use. */
-export function mergeCounts(a: Counts, b: Counts): Counts {
-  const out: Counts = { ...a }
-  for (const [text, use] of Object.entries(b)) {
-    const had = out[text]
-    out[text] = had === undefined ? use : { n: Math.max(had.n, use.n), last: Math.max(had.last, use.last) }
-  }
-  return Object.fromEntries(Object.entries(out).sort(byUse).slice(0, MAX_KEPT))
-}
-
 /** The counts after one more use of `text`, trimmed to MAX_KEPT. */
 export function record(counts: Counts, text: string, now: number): Counts {
   const next: Counts = { ...counts, [text]: { n: (counts[text]?.n ?? 0) + 1, last: now } }
