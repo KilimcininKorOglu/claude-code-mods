@@ -68,10 +68,10 @@ function world(on: On): World {
   on('process.run', (_, e) => {
     const cmd = e.argv.join(' ')
     w.argv.push(cmd)
-    if (cmd === 'git rev-parse --show-toplevel') return { value: w.notRepo ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : { exitCode: 0, stdout: `${ROOT}\n`, stderr: '' } }
-    if (cmd === 'git rev-parse HEAD') return { value: w.head === '' ? { exitCode: 128, stdout: '', stderr: 'unknown revision' } : { exitCode: 0, stdout: `${w.head}\n`, stderr: '' } }
-    if (cmd.startsWith('git diff --cached')) return { value: { exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
-    return { value: w.showFails ? { exitCode: 128, stdout: '', stderr: 'bad' } : { exitCode: 0, stdout: DIFF, stderr: '' } }
+    if (cmd === 'git rev-parse --show-toplevel') return { value: w.notRepo ? { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 128, stdout: '', stderr: 'not a git repository' } : { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: `${ROOT}\n`, stderr: '' } }
+    if (cmd === 'git rev-parse HEAD') return { value: w.head === '' ? { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 128, stdout: '', stderr: 'unknown revision' } : { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: `${w.head}\n`, stderr: '' } }
+    if (cmd.startsWith('git diff --cached')) return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: w.staged.join('\0'), stderr: '' } }
+    return { value: w.showFails ? { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 128, stdout: '', stderr: 'bad' } : { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: DIFF, stderr: '' } }
   })
   on('tool.call', { tool: 'Bash' }, (_, e) => {
     if (w.commitFails) return { result: 'Error: Exit code 1', text: 'Exit code 1', isError: true } as never
