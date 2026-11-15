@@ -3,7 +3,7 @@
  * written to the prompt cache, and every later request of the session reads it back from the cache.
  */
 
-import { fmtTokens } from './text.ts'
+import { fmtTokens } from './text'
 
 /** List prices in dollars per million tokens: the cache read, and the 1-hour cache write. */
 export type Price = { read: number; write: number }

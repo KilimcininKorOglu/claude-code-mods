@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import type { FilterResult } from '../hooks/filters/common.ts'
-import { JS } from '../hooks/filters/js.ts'
-import { planFor, runFilter } from '../hooks/pipeline.ts'
+import type { FilterResult } from '../hooks/filters/common'
+import { JS } from '../hooks/filters/js'
+import { planFor, runFilter } from '../hooks/pipeline'
 
 tier('user')
 

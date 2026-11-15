@@ -1,6 +1,6 @@
-import { plural } from './blocks.ts'
-import { CAP_ERRORS, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { plural } from './blocks'
+import { CAP_ERRORS, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** One event of `go test -json`. */
 type Event = { Action?: string; Package?: string; Test?: string; Output?: string; Elapsed?: number }

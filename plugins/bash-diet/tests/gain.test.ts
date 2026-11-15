@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { dailyText, dayOf, gainFileName, graphText, historyText, recordsOf, staleGainFiles, summaryText, type GainRecord } from '../hooks/gain.ts'
-import { costText, priceOf } from '../hooks/pricing.ts'
+import { dailyText, dayOf, gainFileName, graphText, historyText, recordsOf, staleGainFiles, summaryText, type GainRecord } from '../hooks/gain'
+import { costText, priceOf } from '../hooks/pricing'
 
 tier('user')
 

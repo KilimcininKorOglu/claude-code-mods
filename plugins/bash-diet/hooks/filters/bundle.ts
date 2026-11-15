@@ -1,5 +1,5 @@
-import { plural } from './blocks.ts'
-import { collapseBlanks, linesOf, type FilterResult, type FilterTable } from './common.ts'
+import { plural } from './blocks'
+import { collapseBlanks, linesOf, type FilterResult, type FilterTable } from './common'
 
 /**
  * Bundlers: webpack, vite, rollup and esbuild. A build prints a row per emitted file and, for webpack,

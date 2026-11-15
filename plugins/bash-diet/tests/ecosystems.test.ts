@@ -1,14 +1,14 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import type { FilterResult, FilterTable } from '../hooks/filters/common.ts'
-import { DOTNET } from '../hooks/filters/dotnet.ts'
-import { filterFor } from '../hooks/filters/index.ts'
-import { JVM } from '../hooks/filters/jvm.ts'
-import { PHP } from '../hooks/filters/php.ts'
-import { RUBY } from '../hooks/filters/ruby.ts'
-import { read, withFlags } from '../hooks/command.ts'
-import { planFor } from '../hooks/pipeline.ts'
-import { classify } from '../hooks/rules.ts'
+import type { FilterResult, FilterTable } from '../hooks/filters/common'
+import { DOTNET } from '../hooks/filters/dotnet'
+import { filterFor } from '../hooks/filters/index'
+import { JVM } from '../hooks/filters/jvm'
+import { PHP } from '../hooks/filters/php'
+import { RUBY } from '../hooks/filters/ruby'
+import { read, withFlags } from '../hooks/command'
+import { planFor } from '../hooks/pipeline'
+import { classify } from '../hooks/rules'
 
 tier('user')
 

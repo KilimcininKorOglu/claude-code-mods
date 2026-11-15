@@ -1,6 +1,6 @@
-import { byRule, plural, type Issue } from './blocks.ts'
-import { CAP_ERRORS, CAP_INVENTORY, CAP_LIST, capped, collapseBlanks, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { byRule, plural, type Issue } from './blocks'
+import { CAP_ERRORS, CAP_INVENTORY, CAP_LIST, capped, collapseBlanks, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** npm's own chatter: notices, the `> pkg@1.0.0 script` header, and funding and audit nags. */
 const NPM_NOISE = /^npm (notice|verb|http|timing|sill)\b|^> \S+@\S+ \S+|^> |^\d+ packages? (are|is) looking for funding|^\s*run `npm fund`|^Run `npm audit` for details|^npm warn (config|using --force)/

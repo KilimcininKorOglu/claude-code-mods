@@ -1,5 +1,5 @@
-import { CAP_LIST, capped, collapseBlanks, cutLine, hasArg, linesOf, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { CAP_LIST, capped, collapseBlanks, cutLine, hasArg, linesOf, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** Options after which gh prints the fields the caller asked for; the filter leaves them alone. */
 const OWN_FORMAT = ['--json', '--jq', '-q', '--template', '-t', '--web', '-w']

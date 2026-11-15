@@ -4,7 +4,7 @@
  * each test runner writes for a passing test. Every failure, summary and line of another shape stays.
  */
 
-import { collapseBlanks, linesOf, type FilterResult, type FilterTable } from './common.ts'
+import { collapseBlanks, linesOf, type FilterResult, type FilterTable } from './common'
 
 /** make's own lines about the directories it enters and the targets with nothing to do. */
 const MAKE_NOISE = /^g?make(\[\d+\])?: ((Entering|Leaving) directory|Nothing to be done for)/

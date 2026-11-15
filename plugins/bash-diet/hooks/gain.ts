@@ -3,7 +3,7 @@
  * reports `/bash-diet gain` draws from them.
  */
 
-import { charsText, fmtTokens, savingText } from './text.ts'
+import { charsText, fmtTokens, savingText } from './text'
 
 /** One shrunk result: when, in which project, which command family, and its size before and after. */
 export type GainRecord = { at: number; project: string; family: string; raw: number; shown: number }

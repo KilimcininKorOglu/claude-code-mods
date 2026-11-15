@@ -1,6 +1,6 @@
-import { plural } from './blocks.ts'
-import { CAP_ERRORS, CAP_INVENTORY, CAP_WARNINGS, capped, collapseBlanks, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { plural } from './blocks'
+import { CAP_ERRORS, CAP_INVENTORY, CAP_WARNINGS, capped, collapseBlanks, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 // ----------------------------------------------------------------------------------------------- php -l
 

@@ -1,9 +1,9 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import type { FilterResult } from '../hooks/filters/common.ts'
-import { GH, markdownBody } from '../hooks/filters/gh.ts'
-import { GIT } from '../hooks/filters/git.ts'
-import { planFor, runFilter } from '../hooks/pipeline.ts'
+import type { FilterResult } from '../hooks/filters/common'
+import { GH, markdownBody } from '../hooks/filters/gh'
+import { GIT } from '../hooks/filters/git'
+import { planFor, runFilter } from '../hooks/pipeline'
 
 tier('user')
 

@@ -1,5 +1,5 @@
-import { CAP_INVENTORY, capped, linesOf, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { CAP_INVENTORY, capped, linesOf, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** A Swift or clang diagnostic: `path:12:5: error: message`, the column absent in XCTest's lines. */
 const DIAGNOSTIC = /^\S.*:\d+(:\d+)?: (error|warning): /

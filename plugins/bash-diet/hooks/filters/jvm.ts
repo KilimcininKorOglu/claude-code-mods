@@ -1,5 +1,5 @@
-import { CAP_WARNINGS, collapseBlanks, collapseRepeats, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { CAP_WARNINGS, collapseBlanks, collapseRepeats, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** A stack frame of the test framework, the JDK or the build tool: it names none of the project's code. */
 const FRAMEWORK_FRAME = /^\s*at (org\.junit\.|org\.opentest4j\.|org\.testng\.|org\.apache\.maven\.|org\.gradle\.|java\.|javax\.|jdk\.internal\.|sun\.|kotlin\.coroutines\.|scala\.|sbt\.|munit\.|org\.scalatest\.)/

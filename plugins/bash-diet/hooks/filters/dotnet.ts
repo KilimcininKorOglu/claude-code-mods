@@ -1,5 +1,5 @@
-import { plural } from './blocks.ts'
-import { CAP_ERRORS, CAP_WARNINGS, capped, linesOf, type FilterResult, type FilterTable } from './common.ts'
+import { plural } from './blocks'
+import { CAP_ERRORS, CAP_WARNINGS, capped, linesOf, type FilterResult, type FilterTable } from './common'
 
 /** `path(12,5): error CS0029: message [project]` */
 const DIAGNOSTIC = /^(.+?\(\d+,\d+\)): (error|warning) (\w+): (.*?)(?: \[[^\]]+\])?$/

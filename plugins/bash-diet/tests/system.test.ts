@@ -1,9 +1,9 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { CLOUD, logs } from '../hooks/filters/cloud.ts'
-import type { FilterResult, FilterTable } from '../hooks/filters/common.ts'
-import { SYSTEM } from '../hooks/filters/system.ts'
-import { planFor, runFilter } from '../hooks/pipeline.ts'
+import { CLOUD, logs } from '../hooks/filters/cloud'
+import type { FilterResult, FilterTable } from '../hooks/filters/common'
+import { SYSTEM } from '../hooks/filters/system'
+import { planFor, runFilter } from '../hooks/pipeline'
 
 tier('user')
 

@@ -1,7 +1,7 @@
-import { plural } from './blocks.ts'
-import { CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, stripAnsi, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
-import { pickColumns } from './table.ts'
+import { plural } from './blocks'
+import { CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, stripAnsi, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
+import { pickColumns } from './table'
 
 /** How many log lines a log command keeps: the newest ones, after repeats are folded. */
 const LOG_TAIL = 200

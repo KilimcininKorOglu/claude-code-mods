@@ -1,6 +1,6 @@
-import { CAP_INVENTORY, CAP_LIST, CAP_WARNINGS, capped, collapseBlanks, cutLine, hasArg, linesOf, orOk, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
-import { compactDiff, splitAtDiff } from './diff.ts'
+import { CAP_INVENTORY, CAP_LIST, CAP_WARNINGS, capped, collapseBlanks, cutLine, hasArg, linesOf, orOk, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
+import { compactDiff, splitAtDiff } from './diff'
 
 /** Options after which git prints its own compact or machine format; the filter leaves it alone. */
 const STATUS_OWN_FORMAT = ['-s', '--short', '--porcelain', '-z', '--null']

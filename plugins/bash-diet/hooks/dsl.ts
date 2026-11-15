@@ -6,7 +6,7 @@
  * `keep_lines_matching`, `truncate_lines_at`, `head_lines` and `tail_lines`, `max_lines`, `on_empty`.
  */
 
-import { cutLine, stripAnsi, type FilterResult } from './filters/common.ts'
+import { cutLine, stripAnsi, type FilterResult } from './filters/common'
 
 /** Where a rule came from; a project rule runs only while its file is trusted. */
 export type RuleSource = 'project' | 'global' | 'builtin'

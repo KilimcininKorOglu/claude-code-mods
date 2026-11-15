@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { planFor, runFilter } from '../hooks/pipeline.ts'
+import { planFor, runFilter } from '../hooks/pipeline'
 
 tier('user')
 

@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { PLAYWRIGHT_TOOL, withoutEcho } from '../hooks/playwright.ts'
+import { PLAYWRIGHT_TOOL, withoutEcho } from '../hooks/playwright'
 
 tier('user')
 

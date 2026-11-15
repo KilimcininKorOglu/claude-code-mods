@@ -1,6 +1,6 @@
-import { plural } from './blocks.ts'
-import { CAP_LIST, capped, linesOf, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { plural } from './blocks'
+import { CAP_LIST, capped, linesOf, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /**
  * Code formatters: gofmt, rustfmt, cargo fmt and black. A check prints a diff of every change, whose fix

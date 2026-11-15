@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { BUILTIN_RULES, BUILTIN_SPECS } from '../hooks/builtin-rules.ts'
-import { applyRule, ruleFor, ruleOf, rulesOf, type Rule, type RuleSpec } from '../hooks/dsl.ts'
-import { planFor, runFilter } from '../hooks/pipeline.ts'
+import { BUILTIN_RULES, BUILTIN_SPECS } from '../hooks/builtin-rules'
+import { applyRule, ruleFor, ruleOf, rulesOf, type Rule, type RuleSpec } from '../hooks/dsl'
+import { planFor, runFilter } from '../hooks/pipeline'
 
 tier('user')
 

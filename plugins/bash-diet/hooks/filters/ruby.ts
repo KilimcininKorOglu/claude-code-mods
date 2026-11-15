@@ -1,6 +1,6 @@
-import { byRule, plural, type Issue } from './blocks.ts'
-import { CAP_WARNINGS, collapseBlanks, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { byRule, plural, type Issue } from './blocks'
+import { CAP_WARNINGS, collapseBlanks, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** A backtrace line inside an installed gem: it names none of the project's code. */
 const GEM_FRAME = /\/(gems|rubygems)\/|\/lib\/ruby\/\d/

@@ -1,13 +1,13 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { read, withFlags } from '../hooks/command.ts'
-import { cleanup } from '../hooks/filters/generic.ts'
-import { capped, collapseRepeats, stripAnsi } from '../hooks/filters/common.ts'
-import { failureOf, joined, persistedPathOf, planFor, replaces } from '../hooks/pipeline.ts'
-import { hashOf, needsFile, staleFiles } from '../hooks/recall.ts'
-import { classify } from '../hooks/rules.ts'
-import { lex, parse } from '../hooks/shell.ts'
-import { fmtTokens, isExcluded, patternError, sessionLine, sessionText } from '../hooks/text.ts'
+import { read, withFlags } from '../hooks/command'
+import { cleanup } from '../hooks/filters/generic'
+import { capped, collapseRepeats, stripAnsi } from '../hooks/filters/common'
+import { failureOf, joined, persistedPathOf, planFor, replaces } from '../hooks/pipeline'
+import { hashOf, needsFile, staleFiles } from '../hooks/recall'
+import { classify } from '../hooks/rules'
+import { lex, parse } from '../hooks/shell'
+import { fmtTokens, isExcluded, patternError, sessionLine, sessionText } from '../hooks/text'
 
 tier('user')
 

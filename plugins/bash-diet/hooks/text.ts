@@ -1,4 +1,4 @@
-import { RAW_VARIABLE } from './command.ts'
+import { RAW_VARIABLE } from './command'
 
 /**
  * The note the model reads at the session's start, after /clear and after a compaction, so it knows a

@@ -3,7 +3,7 @@
  * parsing. A command with a filter in `filters/` never reaches these; the person's rules come first.
  */
 
-import { ruleOf, type Rule, type RuleSpec } from './dsl.ts'
+import { ruleOf, type Rule, type RuleSpec } from './dsl'
 
 /** A clang or gcc source excerpt under a diagnostic: `   12 | code` and the `  |   ^` marker line. */
 const EXCERPT = ['^\\s*\\d+ \\| ', '^\\s+\\| ']

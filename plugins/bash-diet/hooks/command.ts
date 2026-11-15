@@ -1,5 +1,5 @@
-import { asksVerbose } from './filters/common.ts'
-import { hidesStdout, isAssignment, parse, type Segment, type Stage, type Token } from './shell.ts'
+import { asksVerbose } from './filters/common'
+import { hidesStdout, isAssignment, parse, type Segment, type Stage, type Token } from './shell'
 
 /** The variable that leaves one call's output as it is: `BASH_DIET_RAW=1 git diff`. */
 export const RAW_VARIABLE = 'BASH_DIET_RAW'

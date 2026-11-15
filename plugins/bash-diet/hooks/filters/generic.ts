@@ -1,4 +1,4 @@
-import { collapseBlanks, collapseRepeats, linesOf, type Filter, type FilterResult } from './common.ts'
+import { collapseBlanks, collapseRepeats, linesOf, type Filter, type FilterResult } from './common'
 
 /**
  * The filter for a command no table names, and for a chain of several commands: it removes terminal

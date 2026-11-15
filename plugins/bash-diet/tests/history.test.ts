@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { correctionsOf, discoverText, finish, learnFile, learnText, scan, scannerOf, type BashCall } from '../hooks/history.ts'
-import { callRows } from './transcript.ts'
+import { correctionsOf, discoverText, finish, learnFile, learnText, scan, scannerOf, type BashCall } from '../hooks/history'
+import { callRows } from './transcript'
 
 tier('user')
 

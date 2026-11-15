@@ -1,6 +1,6 @@
-import { blocksOf, plural, shownBlocks } from './blocks.ts'
-import { CAP_ERRORS, CAP_WARNINGS, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { blocksOf, plural, shownBlocks } from './blocks'
+import { CAP_ERRORS, CAP_WARNINGS, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /**
  * Cargo's own progress lines: which crates it fetched, locked and compiled. Cargo right-aligns the verb

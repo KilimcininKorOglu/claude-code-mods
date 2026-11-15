@@ -1,10 +1,10 @@
-import { BUILTIN_RULES } from './builtin-rules.ts'
-import { read, type Target } from './command.ts'
-import { applyRule, ruleFor, type Rule } from './dsl.ts'
-import type { Filter, FilterResult } from './filters/common.ts'
-import { GENERIC } from './filters/generic.ts'
-import { filterFor } from './filters/index.ts'
-import { classify, type Classified } from './rules.ts'
+import { BUILTIN_RULES } from './builtin-rules'
+import { read, type Target } from './command'
+import { applyRule, ruleFor, type Rule } from './dsl'
+import type { Filter, FilterResult } from './filters/common'
+import { GENERIC } from './filters/generic'
+import { filterFor } from './filters/index'
+import { classify, type Classified } from './rules'
 
 /** What to do with one Bash call: which filter reads its output, and the flags it asks for. */
 export type Plan = {

@@ -1,10 +1,10 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import type { FilterResult, FilterTable } from '../hooks/filters/common.ts'
-import { GO } from '../hooks/filters/go.ts'
-import { PYTHON } from '../hooks/filters/python.ts'
-import { RUST } from '../hooks/filters/rust.ts'
-import { planFor, runFilter } from '../hooks/pipeline.ts'
+import type { FilterResult, FilterTable } from '../hooks/filters/common'
+import { GO } from '../hooks/filters/go'
+import { PYTHON } from '../hooks/filters/python'
+import { RUST } from '../hooks/filters/rust'
+import { planFor, runFilter } from '../hooks/pipeline'
 
 tier('user')
 

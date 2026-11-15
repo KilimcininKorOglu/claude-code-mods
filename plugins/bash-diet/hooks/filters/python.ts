@@ -1,6 +1,6 @@
-import { byRule, plural, type Issue } from './blocks.ts'
-import { CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { byRule, plural, type Issue } from './blocks'
+import { CAP_INVENTORY, CAP_LIST, capped, hasArg, linesOf, whole, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 // ---------------------------------------------------------------------------------------------- pytest
 

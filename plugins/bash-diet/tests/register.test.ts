@@ -1,6 +1,6 @@
 import { describe, expect, mock, test, tier, type Engine } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
-import { callRows } from './transcript.ts'
+import { callRows } from './transcript'
 
 tier('user')
 

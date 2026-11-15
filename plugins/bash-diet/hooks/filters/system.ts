@@ -1,6 +1,6 @@
-import { plural } from './blocks.ts'
-import { asksVerbose, CAP_ERRORS, CAP_INVENTORY, capped, cutLine, hasArg, linesOf, type FilterInput, type FilterResult, type FilterTable } from './common.ts'
-import { cleanup } from './generic.ts'
+import { plural } from './blocks'
+import { asksVerbose, CAP_ERRORS, CAP_INVENTORY, capped, cutLine, hasArg, linesOf, type FilterInput, type FilterResult, type FilterTable } from './common'
+import { cleanup } from './generic'
 
 /** Directories whose contents are generated or vendored; a listing names them without their size or rows. */
 export const NOISE_DIRS = new Set(['node_modules', '.git', 'target', 'dist', 'build', '.next', '.nuxt', '__pycache__', '.venv', 'venv', '.pytest_cache', '.mypy_cache', '.ruff_cache', '.turbo', '.parcel-cache', '.gradle', 'DerivedData', 'Pods', 'coverage', '.cache'])

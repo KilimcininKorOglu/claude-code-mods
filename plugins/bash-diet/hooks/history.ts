@@ -3,11 +3,11 @@
  * and have no filter (`discover`), and which failed commands the model corrected (`learn`).
  */
 
-import { read } from './command.ts'
-import { planFor } from './pipeline.ts'
-import { classify } from './rules.ts'
-import { parse } from './shell.ts'
-import { fmtTokens, tokensOf } from './text.ts'
+import { read } from './command'
+import { planFor } from './pipeline'
+import { classify } from './rules'
+import { parse } from './shell'
+import { fmtTokens, tokensOf } from './text'
 
 /** One Bash call of a transcript: the command, the text the model read, and how it ended. */
 export type BashCall = { session: string; command: string; output: string; exitCode?: number }
