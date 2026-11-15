@@ -1,6 +1,6 @@
 {
   "name": "output-flood",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Measures how much context each Bash command spent and tells the model, past a size limit, which narrower command would have answered the same question.",
   "author": {
     "name": "Kerem Gok",
