@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 
-import { doneLine, doneTitle, durationText, endedTasks, labelOf, statusText } from '../hooks/tasks.ts'
+import { doneLine, doneTitle, durationText, endedTasks, labelOf, statusText } from '../hooks/tasks'
 
 tier('user')
 

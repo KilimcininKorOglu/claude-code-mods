@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { byAge, doneLine, doneTitle, endedTasks, endingWith, hasAgentTask, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks.ts'
+import { byAge, doneLine, doneTitle, endedTasks, endingWith, hasAgentTask, labelOf, listText, rowText, sectionKey, sidebarButtons, sidebarLines, statusText, type Task } from './tasks'
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
