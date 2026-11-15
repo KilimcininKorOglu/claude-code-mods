@@ -247,7 +247,8 @@ describe('read and reminder routes', () => {
     withDaemon(async d => {
       const texts = Array.from({ length: 60 }, (_, i) => `Global rule number ${i} holds in every project the user opens`)
       const rules = []
-      for (const [i, text] of texts.entries()) rules.push(await d.remember(d.alpha, { text, scope: 'user', importance: i === 59 ? 0.99 : 0.5 }))
+      // The 60 texts differ only in their number, so each is written as distinct.
+      for (const [i, text] of texts.entries()) rules.push(await d.remember(d.alpha, { text, scope: 'user', importance: i === 59 ? 0.99 : 0.5, distinct: true }))
       await d.remember(d.alpha, { text: MIGRATIONS })
       await d.remember(d.alpha, { text: 'Answer the reviewer agent in short bullet lines', scope: 'user', audience: { roles: ['reviewer'] } })
       await d.remember(d.alpha, { text: 'Never remind this rule without a reason to', scope: 'user' }).then(m => d.value('/memory/update', { project: d.alpha, id: m.id, patch: { contextPolicy: 'never' } }))

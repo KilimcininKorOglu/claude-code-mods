@@ -278,7 +278,7 @@ export function verifyText(report: VerifyReport): string {
 }
 
 export function hygieneText(report: HygieneReport): string {
-  const counts = `${report.checked} checked, ${report.staled} staled, ${report.reactivated} reactivated, ${report.merged + report.nearMerged} merged, ${report.contradictions} contradiction(s), ${report.reviewsOpened} review(s) opened, ${report.sessionDeleted} session memory(ies) deleted, ${report.purged} purged`
+  const counts = `${report.checked} checked, ${report.staled} staled, ${report.reactivated} reactivated, ${report.merged} merged, ${report.embedded} embedded, ${report.contradictions} contradiction(s), ${report.reviewsOpened} review(s) opened, ${report.sessionDeleted} session memory(ies) deleted, ${report.purged} purged`
   return [`${report.store}: ${counts}`, ...report.notes.map(note => `  ${note}`)].join('\n')
 }
 
@@ -376,15 +376,12 @@ export function importInput(text: string, flags: ImportFlags, sessionId: string)
   }
 }
 
-/** What an import did with its bullets: written anew, folded into an equal memory, folded into a near one, refused. */
-export type ImportTally = { added: number; exact: number; near: string[]; similar: string[]; refused: string[] }
+/** What an import did with its bullets: written anew, folded into a memory with the same text, held back by a close one, refused. */
+export type ImportTally = { added: number; exact: number; similar: string[]; refused: string[] }
 
-/**
- * The report of an import; each near-duplicate fold is named, because it kept one of two texts, and
- * each bullet held back by a memory close in meaning, because it was not written.
- */
+/** The report of an import; each bullet held back by a close memory is named, because it was not written. */
 export function importReport(path: string, total: number, t: ImportTally): string {
   const done = total - t.refused.length - t.similar.length
-  const head = `imported ${done} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.exact} already there, ${t.near.length} folded into a near-duplicate, ${t.similar.length} held back by a memory close in meaning, ${t.refused.length} refused`
-  return [head, ...t.near.map(line => `  folded: ${line}`), ...t.similar.map(line => `  held back: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
+  const head = `imported ${done} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.exact} already there, ${t.similar.length} held back by a close memory, ${t.refused.length} refused`
+  return [head, ...t.similar.map(line => `  held back: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
 }

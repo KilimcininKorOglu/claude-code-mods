@@ -628,7 +628,7 @@ describe('memory tools', () => {
       [
         'Not saved: these memories are close in meaning to yours.',
         `- m1 (convention, cosine 0.88): ${PNPM.text}`,
-        'If one states the same fact, call update on it with the current text. If yours is a different fact, call remember again with distinct: true.',
+        'If one states the same fact, call update on it with a text that keeps everything else it states and holds your current value. If yours is a different fact, call remember again with distinct: true.',
       ].join('\n'),
     )
     await $.tool.call({ tool: TOOL('remember'), text: 'Bu depoda paketleri npm ile değil pnpm ile kurun.', distinct: true } as never)
@@ -772,16 +772,31 @@ describe('consolidator', () => {
     await $.turn.complete(answered('The idle timeout stays at five minutes.'))
     await settled(w)
     expect(w.asked.find(a => a.system.startsWith('Do these two'))?.prompt).toBe(`A: "${SAME}"\nB: "${DAEMON.text}"`)
-    expect(bodiesOf(w, '/memory/update')).toMatchObject([{ id: DAEMON.id, patch: { text: SAME } }])
-    expect(bodiesOf(w, '/memory/remember')).toHaveLength(1)
+    // The new text is the longer one, so it is written and supersedes the stored memory, which stays recoverable.
+    expect(bodiesOf(w, '/memory/remember').map(body => body.input)).toMatchObject([{ text: SAME }, { text: SAME, distinct: true, supersedes: [DAEMON.id] }])
     w.modelText = JSON.stringify({ candidates: [{ text: 'log', is: 'keep', memory: { text: OTHER, kind: 'fact' } }] })
     w.mergeText = 'OVERLAP'
     await $.prompt.submit(typed('Write the daemon log beside the socket, because the person reads both from one directory.'))
     await $.turn.complete(answered('The log sits beside the socket.'))
     await settled(w)
-    expect(bodiesOf(w, '/memory/remember').map(body => (body.input as { distinct?: boolean }).distinct)).toEqual([undefined, undefined, true])
-    expect(bodiesOf(w, '/memory/update')).toHaveLength(1)
-    expect(streamOf(w, 'consolidator')).toEqual([`updated ${DAEMON.id}: ${SAME}`, `added (project): ${OTHER}`])
+    expect(bodiesOf(w, '/memory/remember').map(body => (body.input as { distinct?: boolean }).distinct)).toEqual([undefined, true, undefined, true])
+    expect(bodiesOf(w, '/memory/update')).toEqual([])
+    expect(streamOf(w, 'consolidator')).toEqual([`replaced ${DAEMON.id} with m5: ${SAME}`, `added (project): ${OTHER}`])
+  })
+
+  withSidebar('a short consolidator memory the merge question matches to a longer stored one writes nothing over it', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+    w.routes.set('/memory/remember', { outcome: 'similar', similar: [{ id: DAEMON.id, kind: 'fact', text: DAEMON.text, cosine: 0.8 }] })
+    w.routes.set('/memory/get', DAEMON)
+    w.modelText = JSON.stringify({ candidates: [{ text: 'idle', is: 'keep', memory: { text: 'Daemon idles out at 5 min.', kind: 'fact' } }] })
+    w.mergeText = 'YES'
+    await $.session.start(START)
+    await $.prompt.submit(typed('Keep the idle timeout at five minutes, because a reload otherwise spawns a second daemon.'))
+    await $.turn.complete(answered('The idle timeout stays at five minutes.'))
+    await settled(w)
+    expect(bodiesOf(w, '/memory/remember')).toHaveLength(1)
+    expect(bodiesOf(w, '/memory/update')).toEqual([])
   })
 
   withSidebar('a held consolidator memory with no verdict is not written and named in red', async ($, on) => {
@@ -1219,7 +1234,7 @@ describe('commands', () => {
     w.files.set('/notes/MEMORY.md', '# Project\n\n## CRITICAL RULES\n\n- Use pnpm.\n- Run the tests\n  with the cache off.\n\n## Other\n\n- Not this one.\n')
     await $.session.start(START)
     const r = await $.command.run(run('import /notes/MEMORY.md --section "CRITICAL RULES" --scope user --policy never --tag rules'))
-    expect(r.text).toBe('imported 2 of 2 bullet(s) from /notes/MEMORY.md: 2 added, 0 already there, 0 folded into a near-duplicate, 0 held back by a memory close in meaning, 0 refused')
+    expect(r.text).toBe('imported 2 of 2 bullet(s) from /notes/MEMORY.md: 2 added, 0 already there, 0 held back by a close memory, 0 refused')
     const source = [{ type: 'legacy_memory', path: '/notes/MEMORY.md', sessionId: 'sess-1' }]
     expect(bodiesOf(w, '/memory/remember').map(b => b.input)).toEqual([
       { text: 'Use pnpm.', scope: 'user', kind: 'convention', persistence: 'long_lived', contextPolicy: 'never', tags: ['rules'], importance: 0.8, confidence: 0.9, sources: source },
@@ -1228,22 +1243,21 @@ describe('commands', () => {
     expect((await $.command.run(run('import /notes/MEMORY.md --section Missing'))).text).toBe('/notes/MEMORY.md has no heading "Missing"')
   })
 
-  withSidebar('a whole-file import leaves out retired sections and names every near-duplicate fold and refusal', async ($, on) => {
+  withSidebar('a whole-file import leaves out retired sections and names every bullet held back or refused', async ($, on) => {
     const w = readyWorld(on)
-    // The daemon adds the first bullet, folds the second into a near-duplicate, holds the third back
-    // for a memory close in meaning and refuses the fourth.
+    // The daemon adds the first bullet, folds the second into the same text, holds the third back for
+    // a close memory and refuses the fourth.
     w.files.set('/notes/history.md', '# History\n\n- Kept one.\n\n## Retired CRITICAL RULES\n\n- Old rule.\n\n### Detail\n\n- Old detail.\n\n## Later\n\n- Kept two.\n- Kept two and a half.\n- Kept three.\n')
     const answers = [
-      { memory: PNPM, outcome: 'added', nearDuplicate: false },
-      { memory: PNPM, outcome: 'merged', nearDuplicate: true },
+      { memory: PNPM, outcome: 'added' },
+      { memory: PNPM, outcome: 'merged' },
       { outcome: 'similar', similar: [{ id: 'm7', kind: 'fact', text: 'Kept 2.5.', cosine: 0.91 }] },
       undefined,
     ]
     w.routes.set('/memory/remember', () => answers.shift())
     await $.session.start(START)
     const text = String((await $.command.run(run('import /notes/history.md'))).text)
-    expect(text.split('\n')[0]).toBe('imported 2 of 4 bullet(s) from /notes/history.md: 1 added, 0 already there, 1 folded into a near-duplicate, 1 held back by a memory close in meaning, 1 refused')
-    expect(text).toContain(`folded: "Kept two." into ${PNPM.id}`)
+    expect(text.split('\n')[0]).toBe('imported 2 of 4 bullet(s) from /notes/history.md: 1 added, 1 already there, 1 held back by a close memory, 1 refused')
     expect(text).toContain('held back: "Kept two and a half." close to m7')
     expect(text).toMatch(/refused: Kept three\.: .*no such route/)
     expect(text).not.toContain('Old')

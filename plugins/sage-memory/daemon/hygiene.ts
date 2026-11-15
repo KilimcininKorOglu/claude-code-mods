@@ -1,7 +1,7 @@
 import { VERIFY_DEPTHS, type HygieneOptions, type HygieneReport } from '../hooks/shared/model.ts'
 import { keptTranscripts } from './claude-dirs.ts'
 import { forgetSessions, recordedSessions } from './contexts.ts'
-import { mergeExact, mergeNear } from './dedupe.ts'
+import { mergeExact } from './dedupe.ts'
 import type { Embeddings } from './embeddings.ts'
 import { refused } from './errors.ts'
 import { storeLabel, type Op } from './op.ts'
@@ -12,8 +12,8 @@ import { writeVerifications } from './verdicts.ts'
 import { verifyMemories, type VerifyScope } from './verify.ts'
 
 /**
- * One hygiene run over one store, in SAGE's order: verify the anchors, merge exact and near
- * duplicates, flag contradictions, open reviews and delete expired session memories, drop the
+ * One hygiene run over one store, in SAGE's order: verify the anchors, merge memories with the
+ * same text (near pairs go to the triage's merge question), flag contradictions, open reviews and delete expired session memories, drop the
  * reminder records of the sessions Claude Code no longer keeps, remove old tombstones, and record
  * the report. Each step writes in transactions of its own, so requests run between them, and the
  * run stops between steps once the daemon closes.
@@ -64,13 +64,12 @@ const exactStep: Step = async (job, report) => {
   report.merged = await transaction(job.op.store, () => mergeExact(job.op))
 }
 
-/** A survivor that took a longer text is embedded again once the merge committed. */
-const nearStep: Step = async (job, report) => {
-  if (job.options.nearDedup === false) return
-  const near = await transaction(job.op.store, () => mergeNear(job.op))
-  report.nearMerged = near.merged
-  report.rewritten = near.rewritten.length
-  await job.embeddings.afterWrite(job.op.store, near.rewritten)
+/**
+ * Embeds every live memory that lacks a current vector, so the meaning checks that follow see the
+ * whole store; while embeddings are not set up it embeds nothing.
+ */
+const embedStep: Step = async (job, report) => {
+  report.embedded = await job.embeddings.fill(job.op.store)
 }
 
 const contradictionStep: Step = async (job, report) => {
@@ -110,7 +109,7 @@ const purgeStep: Step = async (job, report) => {
   report.purged = await transaction(job.op.store, () => purgeDeleted(job.op, cutoff))
 }
 
-const STEPS: readonly Step[] = [verifyStep, exactStep, nearStep, contradictionStep, reviewStep, remindersStep, purgeStep]
+const STEPS: readonly Step[] = [verifyStep, exactStep, embedStep, contradictionStep, reviewStep, remindersStep, purgeStep]
 
 function emptyReport(job: HygieneJob): HygieneReport {
   return {
@@ -124,8 +123,7 @@ function emptyReport(job: HygieneJob): HygieneReport {
     staled: 0,
     reactivated: 0,
     merged: 0,
-    nearMerged: 0,
-    rewritten: 0,
+    embedded: 0,
     contradictions: 0,
     reviewsOpened: 0,
     sessionDeleted: 0,
@@ -152,12 +150,10 @@ export async function runHygiene(job: HygieneJob): Promise<HygieneReport> {
 }
 
 const DAY_FIELDS = ['staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays'] as const
-const OPTION_KEYS: ReadonlySet<string> = new Set([...DAY_FIELDS, 'verify', 'verifyDepth', 'nearDedup'])
+const OPTION_KEYS: ReadonlySet<string> = new Set([...DAY_FIELDS, 'verify', 'verifyDepth'])
 
 function checkFlags(options: Record<string, unknown>): void {
-  for (const key of ['verify', 'nearDedup']) {
-    if (options[key] !== undefined && typeof options[key] !== 'boolean') throw refused(`options.${key} must be true or false`)
-  }
+  if (options.verify !== undefined && typeof options.verify !== 'boolean') throw refused('options.verify must be true or false')
   if (options.verifyDepth !== undefined && !(VERIFY_DEPTHS as readonly unknown[]).includes(options.verifyDepth)) {
     throw refused(`options.verifyDepth must be one of: ${VERIFY_DEPTHS.join(', ')}`)
   }

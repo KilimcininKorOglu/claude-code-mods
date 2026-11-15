@@ -123,31 +123,14 @@ describe('hygiene merges', () => {
     w.close()
   })
 
-  test('a paraphrase of one kind merges into the weightiest memory, which takes the longer text and is embedded again', async () => {
+  test('memories close only by words are never merged, so the opposite preference in the same words survives', async () => {
     const w = world()
-    const fake = fakeRuntime(true)
-    const short = 'Run database migrations with pnpm before starting the dev server'
-    const long = 'Before starting the dev server, run database migrations with pnpm from the repository root'
-    const keeper = await rewritten(w, 'A placeholder about the office plants', short, 0.9)
-    const member = await rewritten(w, 'Another placeholder about the lunch menu', long, 0.5)
-    const report = await runHygiene(job(w, { embeddings: createEmbeddings(fake) }))
-    assert.deepEqual([report.nearMerged, report.rewritten], [1, 1])
-    assert.deepEqual([w.read(keeper.id).text, w.read(member.id).supersededBy], [long, keeper.id])
-    assert.ok(fake.embedded.includes(long))
-    const vector = sql(w.project.db, 'SELECT text_hash FROM vectors WHERE memory_id = ?').get(keeper.id) as { text_hash: string } | undefined
-    assert.equal(vector?.text_hash, textHash(long), 'the survivor is embedded with its new text')
-    w.close()
-  })
-
-  test('a near-duplicate that contradicts the survivor stays, though a third memory links the two', async () => {
-    const w = world()
-    const a = await rewritten(w, 'A placeholder about the office plants', 'The payments worker pool does not reuse compiled assets from the nightly build cache', 0.9)
-    const b = await rewritten(w, 'Another placeholder about the lunch menu', 'The payments worker pool does never reuse compiled assets from the nightly build cache', 0.8)
-    const c = await rewritten(w, 'A third placeholder about the parking rules', 'The payments worker pool does not and cannot reuse compiled assets from the nightly build cache', 0.7)
+    const tabs = await rewritten(w, 'A placeholder about the office plants', 'Prefer tabs over spaces for indentation in every file of this repository', 0.9)
+    const spaces = await rewritten(w, 'Another placeholder about the lunch menu', 'Prefer spaces over tabs for indentation in every file of this repository', 0.5)
     const report = await hygieneAt(w, 0, { verify: false })
-    assert.equal(report.nearMerged, 1)
-    assert.deepEqual([w.read(b.id).status, w.read(b.id).supersededBy], ['superseded', a.id])
-    assert.deepEqual([w.read(c.id).status, w.read(c.id).supersededBy], ['active', undefined], 'SAGE merged it through b')
+    assert.equal(report.merged, 0)
+    assert.deepEqual([w.read(tabs.id).status, w.read(spaces.id).status], ['active', 'active'])
+    assert.deepEqual([w.read(tabs.id).text, w.read(spaces.id).text], [tabs.text, spaces.text])
     w.close()
   })
 })
@@ -156,7 +139,8 @@ describe('hygiene reviews', () => {
   test('a pair that cannot both hold is flagged on the newer memory with one review, and a second run flags nothing', async () => {
     const w = world()
     const older = await remembered(w, { text: 'The deploy job runs the migrations before the web servers start' })
-    const newer = await remembered(w, { text: 'The deploy job does not run the migrations before the web servers start' })
+    // A write close to a stored memory is held back, so the writer states it is another fact.
+    const newer = await remembered(w, { text: 'The deploy job does not run the migrations before the web servers start', distinct: true })
     const first = await hygieneAt(w, 0)
     assert.deepEqual([first.contradictions, first.reviewsOpened], [1, 1])
     assert.deepEqual(w.read(newer.id).contradicts, [older.id])
@@ -273,6 +257,7 @@ describe('hygiene runs', () => {
     assert.throws(() => checkedOptions({ unusedMinReminders: 3 }), /^Error: options take no unusedMinReminders$/)
     assert.throws(() => checkedOptions({ verifyDepth: 'deep' }), /options\.verifyDepth must be one of: existence, content, git/)
     assert.throws(() => checkedOptions({ purgeDeletedAfterDays: 0 }), /options\.purgeDeletedAfterDays must be a number of days above 0/)
-    assert.throws(() => checkedOptions({ nearDedup: 'no' }), /options\.nearDedup must be true or false/)
+    assert.throws(() => checkedOptions({ verify: 'no' }), /options\.verify must be true or false/)
+    assert.throws(() => checkedOptions({ nearDedup: false }), /^Error: options take no nearDedup$/, 'hygiene merges no near pair, so the option is gone')
   })
 })

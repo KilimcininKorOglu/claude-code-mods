@@ -67,7 +67,12 @@ export function world(): World {
     run,
     op,
     readers: (sessionId, loop) => ({ project: op(project), user: op(global), sessionId, loop }),
-    remember: (input, store) => run(next => remember(next, input), store),
+    remember: (input, store) =>
+      run(next => {
+        const result = remember(next, input)
+        if (result.outcome === 'similar') throw new Error(`held back by ${result.similar.map(similar => similar.id).join(', ')}: ${input.text}`)
+        return result
+      }, store),
     read,
     edges,
     close: () => stores.closeAll(),

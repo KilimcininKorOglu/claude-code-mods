@@ -194,19 +194,21 @@ export type RememberInput = {
   distinct?: boolean
 }
 
-/** A live memory whose meaning is close to a new write's, by the cosine of their embeddings. */
-export type SimilarMemory = { id: string; kind: Kind; text: string; cosine: number }
+/**
+ * A live memory close to a new write: in meaning, by the cosine of their embeddings, or by words
+ * alone, when `cosine` is absent.
+ */
+export type SimilarMemory = { id: string; kind: Kind; text: string; cosine?: number }
 
 /**
- * What `remember` did: a new memory, a merge into an equal or near-equal one, or nothing, because
- * memories close in meaning exist (`similar`): the writer then updates one of them, or writes again
- * with `distinct`.
+ * What `remember` did: a new memory, a merge into one with the same text, or nothing, because
+ * memories close by words or in meaning exist (`similar`): the writer then updates one of them, or
+ * writes again with `distinct`.
  */
 export type RememberResult =
   | {
       memory: Memory
       outcome: 'added' | 'merged'
-      nearDuplicate: boolean
       reactivated: boolean
       /** The ids this write moved to `superseded`. */
       superseded: string[]
@@ -403,8 +405,6 @@ export type HygieneOptions = {
   verify?: boolean
   /** Default `existence`. */
   verifyDepth?: VerifyDepth
-  /** Merge memories of one kind that say the same thing in other words. Default true. */
-  nearDedup?: boolean
   /** A stale memory untouched this many days gets a review. Default 90. */
   staleReviewDays?: number
   /** A memory under 0.5 confidence untouched this many days gets a review. Default 30. */
@@ -428,10 +428,8 @@ export type HygieneReport = {
   reactivated: number
   /** Superseded by an active memory of the same text. */
   merged: number
-  /** Superseded by a near-duplicate. */
-  nearMerged: number
-  /** Survivors of a near-duplicate merge that took a longer text, and were embedded again. */
-  rewritten: number
+  /** Embedded because they lacked a current vector; 0 while embeddings are not set up. */
+  embedded: number
   contradictions: number
   reviewsOpened: number
   sessionDeleted: number

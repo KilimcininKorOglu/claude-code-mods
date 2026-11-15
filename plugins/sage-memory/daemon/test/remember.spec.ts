@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import { symlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
+import type { RememberInput, RememberResult } from '../../hooks/shared/model.ts'
 import { recordJudged, recordReminder, recordUse } from '../counters.ts'
+import { remember } from '../remember.ts'
 import { updateMemory } from '../update.ts'
 import { cleanUp, tempDir } from './support.ts'
-import { world } from './world.ts'
+import { world, type World } from './world.ts'
 
 after(cleanUp)
 
@@ -37,7 +39,6 @@ describe('remember', () => {
     const first = await w.remember({ text: MIGRATIONS, tags: ['db'], importance: 0.5 })
     const second = await w.remember({ text: `${MIGRATIONS.toUpperCase()}.`, tags: ['#Dev'], importance: 0.8, confidence: 0.6 })
     assert.equal(second.outcome, 'merged')
-    assert.equal(second.nearDuplicate, false)
     assert.equal(second.memory.id, first.memory.id)
     assert.equal(second.memory.text, MIGRATIONS, 'an exact match keeps the stored wording')
     assert.deepEqual(second.memory.tags, ['db', 'dev'])
@@ -46,35 +47,34 @@ describe('remember', () => {
     w.close()
   })
 
-  test('a paraphrase of the same kind merges and keeps the richer wording', async () => {
-    const w = world()
-    const first = await w.remember({ text: 'Run database migrations with pnpm before starting the dev server' })
-    const richer = 'Before starting the dev server, run database migrations with pnpm from the repository root'
-    const second = await w.remember({ text: richer })
-    assert.equal(second.outcome, 'merged')
-    assert.equal(second.nearDuplicate, true)
-    assert.equal(second.memory.id, first.memory.id)
-    assert.equal(second.memory.text, richer)
-    w.close()
-  })
+  /** A write that may be held back, answered as the daemon answers it. */
+  const attempt = (w: World, input: RememberInput): Promise<RememberResult> => w.run(op => remember(op, input))
 
-  test('a claim and its negation stay two memories', async () => {
+  /** Writes `first`, then tries `second`: it must be held back, naming the first, with the store unchanged. */
+  async function heldBack(first: RememberInput, second: RememberInput): Promise<void> {
     const w = world()
-    const a = await w.remember({ text: 'The payment webhook handler is stable under concurrent retries' })
-    const b = await w.remember({ text: 'The payment webhook handler is not stable under concurrent retries' })
-    assert.equal(b.outcome, 'added')
-    assert.notEqual(a.memory.id, b.memory.id)
+    const stored = (await w.remember(first)).memory
+    const result = await attempt(w, second)
+    assert.deepEqual(result, { outcome: 'similar', similar: [{ id: stored.id, kind: stored.kind, text: stored.text }] })
+    assert.equal(w.read(stored.id).revision, stored.revision, 'the stored memory was not touched')
+    assert.equal((await attempt(w, { ...second, distinct: true })).outcome, 'added', 'a distinct write is written')
     w.close()
-  })
+  }
 
-  test('a claim with another number stays a second memory, and the first keeps its own', async () => {
-    const w = world()
-    const a = await w.remember({ text: 'Retry the upload 3 times before failing the job' })
-    const b = await w.remember({ text: 'Retry the upload 5 times before failing the job' })
-    assert.equal(b.outcome, 'added')
-    assert.deepEqual([w.read(a.memory.id).text, b.memory.text], ['Retry the upload 3 times before failing the job', 'Retry the upload 5 times before failing the job'])
-    w.close()
-  })
+  test('the opposite preference in the same words is held back, never merged into the first', () =>
+    heldBack(
+      { text: 'Prefer tabs over spaces for indentation in every file of this repository', kind: 'preference' },
+      { text: 'Prefer spaces over tabs for indentation in every file of this repository', kind: 'preference' },
+    ))
+
+  test('a paraphrase is held back for the writer, not merged', () =>
+    heldBack({ text: 'Run database migrations with pnpm before starting the dev server' }, { text: 'Before starting the dev server, run database migrations with pnpm from the repository root' }))
+
+  test('a claim and its negation: the second is held back, so the writer sees the conflict', () =>
+    heldBack({ text: 'The payment webhook handler is stable under concurrent retries' }, { text: 'The payment webhook handler is not stable under concurrent retries' }))
+
+  test('a claim with another number is held back, and the first keeps its own', () =>
+    heldBack({ text: 'Retry the upload 3 times before failing the job' }, { text: 'Retry the upload 5 times before failing the job' }))
 
   test('writing a stale memory again makes it active', async () => {
     const w = world()

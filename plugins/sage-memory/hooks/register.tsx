@@ -677,7 +677,6 @@ async function importOne($: EngineInterface, state: State, input: RememberInput,
     const r = await ask<RememberResult>($, state, '/memory/remember', { input })
     if (r.outcome === 'added') tally.added += 1
     else if (r.outcome === 'similar') tally.similar.push(`"${input.text.slice(0, 60)}" close to ${r.similar.map(memory => memory.id).join(', ')}`)
-    else if (r.nearDuplicate) tally.near.push(`"${input.text.slice(0, 60)}" into ${r.memory.id}`)
     else tally.exact += 1
   } catch (err) {
     tally.refused.push(`${input.text.slice(0, 60)}: ${errorText(err)}`)
@@ -691,7 +690,7 @@ async function importCommand($: EngineInterface, state: State, rest: string): Pr
   const bullets = bulletsOf(await $.fs.read(flags.path), flags.section)
   if (bullets === undefined) return `${flags.path} has no heading "${flags.section ?? ''}"`
   const sessionId = await $.session.id()
-  const tally: ImportTally = { added: 0, exact: 0, near: [], similar: [], refused: [] }
+  const tally: ImportTally = { added: 0, exact: 0, similar: [], refused: [] }
   for (const bullet of bullets) await importOne($, state, importInput(bullet, flags, sessionId), tally)
   return importReport(flags.path, bullets.length, tally)
 }
@@ -1080,12 +1079,16 @@ async function settleSimilar($: EngineInterface, state: State, input: RememberIn
   if (result.outcome === 'added') await countAdded($, state, result.memory)
 }
 
-/** Rewrites the memory the merge question called the same fact with the consolidator's newer text. */
+/**
+ * The memory the merge question called the same fact keeps the richer text, as the daemon's own
+ * merges do: a stored text at least as long already states it, and a longer new text is written and
+ * supersedes it, so the old text stays recoverable. A protected memory is never replaced.
+ */
 async function updateSame($: EngineInterface, state: State, input: RememberInput, id: string): Promise<void> {
   const memory = await ask<Memory | undefined>($, state, '/memory/get', { id })
-  if (memory === undefined || memory === null || isProtected(memory) || memory.text === input.text) return
-  await ask($, state, '/memory/update', { id, patch: { text: input.text } })
-  await toStream($, 'consolidator', { text: `updated ${id}: ${input.text.slice(0, 80)}`, kind: 'warn' })
+  if (memory === undefined || memory === null || isProtected(memory) || memory.text.length >= input.text.length) return
+  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true, supersedes: [id] } })
+  if (result.outcome !== 'similar') await toStream($, 'consolidator', { text: `replaced ${id} with ${result.memory.id}: ${input.text.slice(0, 80)}`, kind: 'warn' })
 }
 
 async function countAdded($: EngineInterface, state: State, memory: Memory): Promise<void> {

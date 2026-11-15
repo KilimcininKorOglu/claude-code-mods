@@ -1,11 +1,11 @@
-import type { Anchor, Audience, ContextPolicy, Kind, Memory, Persistence, RememberInput, RememberResult, RememberWritten, Scope, SimilarMemory, Source, Status } from '../hooks/shared/model.ts'
-import { allTerms, canonicalText, normalizeTags } from '../hooks/shared/text.ts'
+import type { Anchor, Audience, ContextPolicy, Kind, Memory, Persistence, RememberInput, RememberResult, Scope, SimilarMemory, Source, Status } from '../hooks/shared/model.ts'
+import { canonicalText, normalizeTags } from '../hooks/shared/text.ts'
 import { distinct, normalizeAnchors, normalizeSources } from './anchors.ts'
 import { refused } from './errors.ts'
 import { ftsTerms } from './fts.ts'
 import { syncEdges } from './graph.ts'
 import { storeLabel, type Op } from './op.ts'
-import { assessQuality, checkRemember, clamp01, isNearDuplicate, isPossiblyContradictory, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
+import { assessQuality, checkRemember, clamp01, isNearDuplicate, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
 import { audienceKey, readMemory, selectMemories, writeMemory } from './rows.ts'
 import { EVERY_POLICY } from './search.ts'
 import { ulid } from './ulid.ts'
@@ -121,11 +121,12 @@ function exactMatch(op: Op, draft: Draft): Memory | undefined {
 }
 
 /**
- * The strongest near-duplicate among the scope's 64 most important memories and the 32 the text
- * search ranks closest. A pair that cannot both hold (other numbers, the opposite polarity) is
- * never one memory.
+ * The near-duplicates by words among the scope's 64 most important memories and the 32 the text
+ * search ranks closest, weightiest first. They are answered, never merged: the same words can state
+ * the opposite fact ("tabs over spaces" and "spaces over tabs" overlap whole), and a pair that cannot
+ * both hold is one the writer most needs to see.
  */
-function nearMatch(op: Op, draft: Draft): Memory | undefined {
+function wordSimilar(op: Op, draft: Draft): Memory[] {
   const owner = draft.ownerSessionId ?? null
   const audience = audienceKey(draft)
   const pool = new Map(selectMemories(op.store.db, BY_IMPORTANCE, draft.scope, audience, owner, owner).map(memory => [memory.id, memory]))
@@ -133,13 +134,8 @@ function nearMatch(op: Op, draft: Draft): Memory | undefined {
   if (terms.length > 0) {
     for (const memory of selectMemories(op.store.db, BY_TEXT, terms.join(' OR '), draft.scope, audience, owner, owner)) pool.set(memory.id, memory)
   }
-  let best: { memory: Memory; score: number } | undefined
-  for (const memory of pool.values()) {
-    if (!isNearDuplicate(draft, memory) || isPossiblyContradictory(draft.text, memory.text)) continue
-    const score = memory.importance * 2 + memory.confidence + memory.freshness
-    if (!best || score > best.score) best = { memory, score }
-  }
-  return best?.memory
+  const weight = (memory: Memory): number => memory.importance * 2 + memory.confidence + memory.freshness
+  return [...pool.values()].filter(memory => !draft.supersedes.includes(memory.id) && isNearDuplicate(draft, memory)).sort((a, b) => weight(b) - weight(a))
 }
 
 function without(list: readonly string[], id: string): string[] | undefined {
@@ -165,12 +161,10 @@ function mergedLists(existing: Memory, draft: Draft): Pick<Memory, 'tags' | 'anc
 }
 
 /**
- * The existing memory with the new write folded in: unions of lists, the larger scores, its own
- * kind and history. A paraphrase keeps the richer wording, its terms counted with repeats as SAGE
- * compares them.
+ * The existing memory with the same text folded in: unions of lists, the larger scores, its own
+ * kind, wording and history.
  */
-function merged(op: Op, existing: Memory, draft: Draft, exact: boolean): Memory {
-  const preferIncoming = !exact && allTerms(draft.text).length > allTerms(existing.text).length && draft.text.length > existing.text.length
+function merged(op: Op, existing: Memory, draft: Draft): Memory {
   const reactivated = existing.status === 'stale'
   const persistence = mergedPersistence(existing.persistence, draft.persistence)
   // A durable memory that took a state's write keeps no end date, so it is never deleted with the state.
@@ -180,7 +174,6 @@ function merged(op: Op, existing: Memory, draft: Draft, exact: boolean): Memory 
     ...mergedLists(existing, draft),
     status: reactivated ? 'active' : existing.status,
     staleReason: reactivated ? undefined : existing.staleReason,
-    text: preferIncoming ? draft.text : existing.text,
     audience: draft.audience ?? existing.audience,
     importance: Math.max(existing.importance, draft.importance),
     confidence: Math.max(existing.confidence, draft.confidence),
@@ -242,40 +235,44 @@ export function supersede(op: Op, memory: Memory, targets: readonly string[]): s
  * while two distinct stored memories reached up to 0.85; so no cosine merges alone, and the writer
  * decides.
  */
-function similarOf(op: Op, draft: Draft, semantic: SemanticQuery): SimilarMemory[] {
+function meaningSimilar(op: Op, draft: Draft, semantic: SemanticQuery | undefined): SimilarMemory[] {
+  if (semantic === undefined) return []
   const visibility = { statuses: LIVE, policies: EVERY_POLICY, audienceScoped: true, allSessions: true, scope: draft.scope }
   const audience = audienceKey(draft)
-  return vectorHits(op.store.db, semantic, visibility, MAX_SIMILAR + draft.supersedes.length)
+  return vectorHits(op.store.db, semantic, visibility, Number.MAX_SAFE_INTEGER)
     .filter(hit => hit.cosine >= SIMILAR_COSINE && !draft.supersedes.includes(hit.memory.id))
     .filter(hit => audienceKey(hit.memory) === audience && (draft.ownerSessionId === undefined || hit.memory.ownerSessionId === draft.ownerSessionId))
-    .slice(0, MAX_SIMILAR)
     .map(hit => ({ id: hit.memory.id, kind: hit.memory.kind, text: hit.memory.text, cosine: Math.round(hit.cosine * 100) / 100 }))
 }
 
+/** The memories close in meaning first, then those close by words alone, each once, at most `MAX_SIMILAR`. */
+function similarOf(op: Op, draft: Draft, semantic: SemanticQuery | undefined): SimilarMemory[] {
+  const found = new Map(meaningSimilar(op, draft, semantic).map(similar => [similar.id, similar]))
+  for (const memory of wordSimilar(op, draft)) if (!found.has(memory.id)) found.set(memory.id, { id: memory.id, kind: memory.kind, text: memory.text })
+  return [...found.values()].slice(0, MAX_SIMILAR)
+}
+
 /**
- * Stores a memory under SAGE's rules. Runs inside the caller's transaction. With the embedding of
- * the text (`semantic`), a write that matches no memory by text but is close in meaning to one is
- * not written: the answer names the similar memories, unless the input says it is `distinct`.
+ * Stores a memory under SAGE's rules. Runs inside the caller's transaction. The same text merges
+ * into the stored memory. A write close to a live memory by words, or by meaning when the text's
+ * embedding is given (`semantic`), is not written: the answer names the similar memories, and the
+ * writer updates one or writes again with `distinct`.
  */
-export function remember(op: Op, input: RememberInput): RememberWritten
-export function remember(op: Op, input: RememberInput, semantic: SemanticQuery | undefined): RememberResult
 export function remember(op: Op, input: RememberInput, semantic?: SemanticQuery): RememberResult {
   rejectSecrets(input)
   const draft = draftOf(op, input, checkRemember(input))
   checkRelations(op, draft)
-  const exact = exactMatch(op, draft)
-  const existing = exact ?? nearMatch(op, draft)
-  if (existing === undefined && semantic !== undefined && input.distinct !== true) {
+  const existing = exactMatch(op, draft)
+  if (existing === undefined && input.distinct !== true) {
     const similar = similarOf(op, draft, semantic)
     if (similar.length > 0) return { outcome: 'similar', similar }
   }
-  const memory = existing ? merged(op, existing, draft, exact !== undefined) : added(op, draft)
+  const memory = existing ? merged(op, existing, draft) : added(op, draft)
   writeMemory(op.store.db, memory)
   syncEdges(op.store.db, memory, op.now)
   return {
     memory,
     outcome: existing ? 'merged' : 'added',
-    nearDuplicate: existing !== undefined && exact === undefined,
     reactivated: existing?.status === 'stale',
     superseded: supersede(op, memory, draft.supersedes),
   }

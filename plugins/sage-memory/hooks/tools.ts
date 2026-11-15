@@ -232,11 +232,10 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'hygiene',
     listed: false,
     description:
-      'Clean the store: check anchors, merge duplicates, mark contradictions, open reviews for stale and low-confidence memories, and remove expired session memories. It never deletes a live project or user memory.',
+      'Clean the store: check anchors, merge memories with the same text, mark contradictions, open reviews for stale and low-confidence memories, and remove expired session memories. It never deletes a live project or user memory.',
     inputSchema: object({
       verify: yes('true by default.'),
       verifyDepth: choice(VERIFY_DEPTHS, 'existence by default.'),
-      nearDedup: yes('true by default.'),
       staleReviewDays: number(0, 3650),
       lowConfidenceReviewDays: number(0, 3650),
       sessionRetentionDays: number(0, 3650),
@@ -290,7 +289,7 @@ function picked(input: Input, keys: readonly string[]): Record<string, unknown> 
 
 const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'expiresAt', 'supersedes', 'contradicts', 'distinct']
 const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'expiresAt', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
-const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
+const HYGIENE_KEYS = ['verify', 'verifyDepth','staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 
 /** A memory the model writes: a session memory belongs to this session, and each carries its source and this session. */
 function rememberCall(input: Input, sessionId: string): Call {
@@ -446,11 +445,11 @@ export function resultText(value: unknown): string {
 
 /** What the model reads when a remember was held: the similar memories and the two ways on. */
 export function similarText(similar: readonly SimilarMemory[]): string {
-  const lines = similar.map(memory => `- ${memory.id} (${memory.kind}, cosine ${memory.cosine.toFixed(2)}): ${memory.text}`)
+  const lines = similar.map(memory => `- ${memory.id} (${memory.kind}, ${memory.cosine === undefined ? 'close by words' : `cosine ${memory.cosine.toFixed(2)}`}): ${memory.text}`)
   return [
     'Not saved: these memories are close in meaning to yours.',
     ...lines,
-    'If one states the same fact, call update on it with the current text. If yours is a different fact, call remember again with distinct: true.',
+    'If one states the same fact, call update on it with a text that keeps everything else it states and holds your current value. If yours is a different fact, call remember again with distinct: true.',
   ].join('\n')
 }
 

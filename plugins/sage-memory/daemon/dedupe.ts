@@ -6,19 +6,16 @@ import type { Op } from './op.ts'
 import { ascending } from './order.ts'
 import { supersede } from './remember.ts'
 import { audienceKey, selectMemories, writeMemory } from './rows.ts'
-import { isNearDuplicate, isPossiblyContradictory } from './rules.ts'
 
 /**
  * Hygiene's merges: active memories of one scope (one session's, for session memories) and one
- * audience that say the same thing become one. The survivor takes the lists of all of them and
- * supersedes the rest. Ported from SAGE's hygiene; a near-duplicate joins the survivor only when
- * the two can both hold, since a third memory may link two that contradict each other.
+ * audience with the same text become one. The survivor takes the lists of all of them and
+ * supersedes the rest. Memories close only by words or in meaning are never merged here, because
+ * neither tells "tabs over spaces" from "spaces over tabs" (word overlap 1.0, cosine 0.961): the
+ * triage's merge question judges such pairs.
  */
 
 const ACTIVE = "SELECT id, data FROM memories WHERE status = 'active' ORDER BY id"
-
-/** How many memories of one bucket the pairwise near-duplicate pass compares, the weightiest first. */
-const NEAR_BUCKET_CAP = 80
 
 /** The key of a bucket: the scope (one session's, for session memories), the parts given, and the audience. */
 export function bucketKey(memory: Memory, ...parts: string[]): string {
@@ -76,53 +73,3 @@ export function mergeExact(op: Op): number {
   return merged
 }
 
-/** The same memory in other words, and the two can both hold. */
-function sameInOtherWords(left: Memory, right: Memory): boolean {
-  return isNearDuplicate(left, right) && !isPossiblyContradictory(left.text, right.text)
-}
-
-/** The groups of two or more memories that pairs of near-duplicates join (union-find). */
-function linkedGroups(memories: readonly Memory[]): Memory[][] {
-  const parent = memories.map((_, index) => index)
-  const find = (index: number): number => {
-    let at = index
-    for (let up = parent[at]; up !== undefined && up !== at; up = parent[at]) at = up
-    return at
-  }
-  memories.forEach((left, i) => {
-    memories.forEach((right, j) => {
-      if (j > i && sameInOtherWords(left, right)) parent[find(j)] = find(i)
-    })
-  })
-  const groups = new Map<number, Memory[]>()
-  memories.forEach((memory, index) => groups.set(find(index), [...(groups.get(find(index)) ?? []), memory]))
-  return [...groups.values()].filter(group => group.length > 1)
-}
-
-export type NearMerge = { merged: number; rewritten: Memory[] }
-
-/** Merges into a group's survivor the members that are near-duplicates of it itself, not only of another member. */
-function mergeGroup(op: Op, group: readonly Memory[], into: NearMerge): void {
-  const [keeper, ...rest] = [...group].sort(keeperFirst)
-  if (keeper === undefined) return
-  const members = rest.filter(member => sameInOtherWords(keeper, member))
-  if (members.length === 0) return
-  const text = members.reduce((longest, member) => (member.text.length > longest.length ? member.text : longest), keeper.text)
-  const { memory, moved } = absorb(op, keeper, members, text)
-  into.merged += moved.length
-  if (text !== keeper.text) into.rewritten.push(memory)
-}
-
-/**
- * Merges active memories of one scope, kind and audience that say the same thing in other words,
- * among the 80 weightiest of each bucket. The survivor takes the longest text of its group; the
- * ones whose text changed are answered, to be embedded again.
- */
-export function mergeNear(op: Op): NearMerge {
-  const merged: NearMerge = { merged: 0, rewritten: [] }
-  for (const bucket of bucketsOf(selectMemories(op.store.db, ACTIVE), memory => bucketKey(memory, memory.kind))) {
-    const compared = [...bucket].sort(byWeight).slice(0, NEAR_BUCKET_CAP)
-    for (const group of linkedGroups(compared)) mergeGroup(op, group, merged)
-  }
-  return merged
-}

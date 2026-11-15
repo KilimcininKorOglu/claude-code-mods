@@ -133,7 +133,9 @@ export function accept(op: Op, id: string): Accepted {
     const resolution = resolve(op, { id, decision: decisionOf(candidate) })
     return { candidate: mustReadCandidate(op, id), resolution, alreadyResolved: false }
   }
-  const { memory } = remember(op, {
+  // The person who accepts a proposal has judged it, so no similar memory holds it back.
+  const result = remember(op, {
+    distinct: true,
     text: candidate.text,
     kind: candidate.kind,
     scope: candidate.scope,
@@ -145,6 +147,8 @@ export function accept(op: Op, id: string): Accepted {
     sources: candidate.sources,
     ownerSessionId: candidate.ownerSessionId,
   })
+  if (result.outcome === 'similar') throw new Error(`a distinct write was held back for ${candidate.id}`)
+  const { memory } = result
   const next = closed(op, candidate, { status: 'accepted', memoryId: memory.id })
   audit(op.store, op.now, 'memory.candidate_accepted', { memoryId: memory.id, detail: { candidateId: id } })
   return { candidate: next, memory, alreadyResolved: false }

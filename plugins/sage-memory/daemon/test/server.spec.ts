@@ -242,22 +242,15 @@ describe('daemon server', () => {
     const started = await startServer({ dir, version: VERSION, idleMs: 150, runtime: fake })
     if (!started.owned) throw new Error(`the daemon of pid ${started.hello.pid} kept the socket`)
     const project = { key: 'repo-0000aaaa', name: 'repo', root: tempDir(), commonDir: '/nowhere/.git' }
-    const write = async (path: string, body: object): Promise<{ memory: { id: string } }> => {
-      const answer = await post(dir, path, started.token, JSON.stringify({ project, ...body }))
-      assert.equal(answer.status, 200, `${path}: ${JSON.stringify(answer.reply)}`)
-      return (answer.reply as { value: { memory: { id: string } } }).value
-    }
-    const kept = await write('/memory/remember', { input: { text: 'A placeholder about the office plants', importance: 0.9 } })
-    const merged = await write('/memory/remember', { input: { text: 'Another placeholder about the lunch menu', importance: 0.5 } })
-    await write('/memory/update', { id: kept.memory.id, patch: { text: 'Run database migrations with pnpm before starting the dev server' } })
-    await write('/memory/update', { id: merged.memory.id, patch: { text: 'Before starting the dev server, run database migrations with pnpm from the repository root' } })
+    // No write has loaded the model yet, so the run's embed step waits for the held load.
     let release = (): void => undefined
-    fake.embedHold = new Promise(resolve => {
+    fake.hold = new Promise(resolve => {
       release = resolve
     })
-    await write('/memory/hygiene', { automatic: true })
+    const answer = await post(dir, '/memory/hygiene', started.token, JSON.stringify({ project, automatic: true }))
+    assert.equal(answer.status, 200, JSON.stringify(answer.reply))
     await sleep(500)
-    assert.equal(existsSync(layoutOf(dir).socket), true, 'the run waits to embed the merged text, and no request marks it')
+    assert.equal(existsSync(layoutOf(dir).socket), true, 'the run waits for the model its embed step loads, and no request marks it')
     release()
     await started.closed
     assert.equal(existsSync(layoutOf(dir).socket), false)
