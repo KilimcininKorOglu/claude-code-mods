@@ -35,7 +35,7 @@ describe('schema', () => {
       assert.equal(db.prepare('PRAGMA busy_timeout').get()?.timeout, 30000)
       assert.equal(versionOf(db), String(SCHEMA_VERSION))
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => String(row.name))
-      for (const name of ['audit_log', 'candidates', 'contexts', 'edges', 'memories', 'memories_fts', 'reminders', 'vectors']) {
+      for (const name of ['audit_log', 'candidates', 'contexts', 'edges', 'memories', 'memories_fts', 'reminders', 'sentence_vectors', 'vectors']) {
         assert.ok(tables.includes(name), `${name} exists`)
       }
     } finally {

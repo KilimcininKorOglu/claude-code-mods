@@ -13,7 +13,9 @@ import { EVERY_POLICY, REMINDED_POLICY, type Visibility } from '../search.ts'
 import { createSetup } from '../setup.ts'
 import { createStores, transaction, type Store } from '../stores.ts'
 import { updateMemory } from '../update.ts'
-import { unembedded, vectorHits, type SemanticQuery } from '../vectors.ts'
+import { dropMemory } from '../move.ts'
+import { sql } from '../rows.ts'
+import { sentencesOf, unembedded, vectorHits, type SemanticQuery } from '../vectors.ts'
 import { fakeRuntime, queryOf, toward } from './fake-runtime.ts'
 import { cleanUp, tempDir, waitFor } from './support.ts'
 import { world, type World } from './world.ts'
@@ -219,6 +221,74 @@ describe('the meaning check of a write', () => {
     const { w, old, query } = await seeded(0.95)
     const result = await w.run(op => remember(op, { text: old.text }, query))
     assert.equal(result.outcome, 'merged')
+    w.close()
+  })
+})
+
+describe('sentence vectors', () => {
+  const FIRST = 'The worker pool keeps twenty sockets for each worker process.'
+  const SECOND = 'Deploys go through the staging branch before they reach production.'
+  const LONG = `${FIRST} ${SECOND}`
+  const FACT = 'Production deploys pass the staging branch first'
+
+  test('a text splits at sentence ends, joins short pieces, and splits before a Turkish upper-case letter', () => {
+    assert.deepEqual(sentencesOf(LONG), [FIRST, SECOND])
+    assert.deepEqual(sentencesOf(`${FIRST} Measured on 2.1.283.`), [], 'a short piece joins the sentence before it, which leaves one sentence')
+    assert.deepEqual(sentencesOf('Havuz her işçi için yirmi soket tutar ve bunu değiştirmez. Çıkışlar staging dalından geçer ve sonra üretime gider.'), [
+      'Havuz her işçi için yirmi soket tutar ve bunu değiştirmez.',
+      'Çıkışlar staging dalından geçer ve sonra üretime gider.',
+    ])
+    assert.deepEqual(sentencesOf(FIRST), [], 'one sentence has no vectors besides the whole text')
+  })
+
+  /** A world whose long memory sits far from `FACT` as a whole and close to it in its second sentence. */
+  async function seededLong(): Promise<{ w: World; long: Memory; fake: ReturnType<typeof fakeRuntime>; embeddings: ReturnType<typeof createEmbeddings> }> {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    fake.vectors.set(LONG, toward(4, 1))
+    fake.vectors.set(FIRST, toward(2, 1))
+    fake.vectors.set(SECOND, toward(0, 1))
+    fake.vectors.set(FACT, toward(0, 0.9))
+    const long = (await w.remember({ text: LONG })).memory
+    await embeddings.afterWrite(w.project, [long])
+    return { w, long, fake, embeddings }
+  }
+
+  test('a fact one sentence of a long memory states holds the write back, while search keeps the whole text', async () => {
+    const { w, long, fake, embeddings } = await seededLong()
+    assert.deepEqual(fake.embedded, [LONG, FIRST, SECOND], 'the whole text and each sentence were embedded together')
+    const query = await embeddings.semantic(FACT, [])
+    const result = await w.run(op => remember(op, { text: FACT }, query))
+    assert.deepEqual(result, { outcome: 'similar', similar: [{ id: long.id, kind: 'fact', text: LONG, cosine: 0.9 }] })
+    assert.deepEqual(
+      vectorHits(w.project.db, query!, SHOWN, 10).map(hit => hit.cosine.toFixed(2)),
+      ['0.00'],
+      'search reads the whole text alone, the scale its relevance was measured on',
+    )
+    w.close()
+  })
+
+  test('a memory without its sentence vectors is filled again, and a changed text makes its sentences stale', async () => {
+    const { w, long, fake, embeddings } = await seededLong()
+    sql(w.project.db, 'DELETE FROM sentence_vectors').run()
+    assert.deepEqual(unembedded(w.project.db, 'fake/model').map(m => m.id), [long.id], 'a store from before sentence vectors gets them')
+    assert.equal(await embeddings.fill(w.project), 1)
+    assert.equal(unembedded(w.project.db, 'fake/model').length, 0)
+    const renamed = `${FIRST} Releases wait for the weekly window and then go out together.`
+    await w.run(op => updateMemory(op, { id: long.id, patch: { text: renamed } }))
+    fake.vectors.set(renamed, toward(6, 1))
+    const query = await embeddings.semantic(FACT, [])
+    assert.equal((await w.run(op => remember(op, { text: FACT }, query))).outcome, 'added', 'the old sentence vectors are skipped')
+    w.close()
+  })
+
+  test('a purged memory and a memory gone from the store leave no sentence vectors', async () => {
+    const { w, long } = await seededLong()
+    const count = (): unknown => sql(w.project.db, 'SELECT COUNT(*) AS n FROM sentence_vectors').get()?.n
+    assert.equal(count(), 2)
+    await w.run(op => dropMemory(op, long.id))
+    assert.equal(count(), 0)
     w.close()
   })
 })

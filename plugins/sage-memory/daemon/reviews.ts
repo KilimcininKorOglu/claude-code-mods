@@ -8,6 +8,7 @@ import { ascending } from './order.ts'
 import { tombstone } from './remove.ts'
 import { audit, readMemory, selectCandidates, selectIds, selectMemories, sql, writeMemory } from './rows.ts'
 import { isPossiblyContradictory } from './rules.ts'
+import { dropVectors } from './vectors.ts'
 
 /**
  * Hygiene's reviews and deletions, ported from SAGE: a pair that cannot both hold is flagged, a
@@ -177,7 +178,7 @@ export function purgeDeleted(op: Op, cutoff: string): number {
   const ids = selectIds(op.store.db, PURGEABLE, cutoff)
   for (const id of ids) {
     dropEdges(op.store.db, id)
-    sql(op.store.db, 'DELETE FROM vectors WHERE memory_id = ?').run(id)
+    dropVectors(op.store.db, id)
     sql(op.store.db, 'DELETE FROM memories WHERE id = ?').run(id)
   }
   if (ids.length > 0) audit(op.store, op.now, 'memory.purge_deleted', { detail: { purged: ids.length, cutoff } })

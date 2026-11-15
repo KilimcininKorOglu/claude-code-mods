@@ -141,6 +141,23 @@ const RETIRE_KINDS = `
   UPDATE candidates SET data = json_set(data, '$.kind', 'fact') WHERE json_extract(data, '$.kind') IN ('session_digest', 'summary', 'task_outcome');
 `
 
+/**
+ * One vector per sentence of a memory of two sentences or more, beside the whole-text vector in
+ * `vectors`, so a fact stated in one sentence of a long memory is found by meaning. The table is
+ * added without a version raise, so a daemon of an older release still opens the database; it
+ * neither reads nor writes the table, and the text hash makes the rows it leaves behind stale.
+ */
+const SENTENCE_VECTORS = `
+  CREATE TABLE IF NOT EXISTS sentence_vectors (
+    memory_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    model_id TEXT NOT NULL,
+    vector BLOB NOT NULL,
+    text_hash TEXT NOT NULL,
+    PRIMARY KEY (memory_id, position)
+  );
+`
+
 function inTransaction(db: DatabaseSync, work: () => void): void {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -152,7 +169,7 @@ function inTransaction(db: DatabaseSync, work: () => void): void {
   }
 }
 
-/** Brings a database to `SCHEMA_VERSION` in one transaction, or throws when it is newer; then retires the unused kinds. */
+/** Brings a database to `SCHEMA_VERSION` in one transaction, or throws when it is newer; then retires the unused kinds and adds the sentence vectors. */
 export function migrate(db: DatabaseSync): void {
   const current = versionOf(db)
   if (current > SCHEMA_VERSION) {
@@ -164,5 +181,5 @@ export function migrate(db: DatabaseSync): void {
       db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION))
     })
   }
-  inTransaction(db, () => db.exec(RETIRE_KINDS))
+  inTransaction(db, () => db.exec(RETIRE_KINDS + SENTENCE_VECTORS))
 }

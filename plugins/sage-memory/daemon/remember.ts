@@ -228,18 +228,20 @@ export function supersede(op: Op, memory: Memory, targets: readonly string[]): s
 }
 
 /**
- * The live memories of the draft's scope, audience and owner whose embedding is at `SIMILAR_COSINE`
- * or closer to the draft's, best first, without the ones the draft replaces. Measured on the mpnet
- * model over 190 real memories: a translation or a paraphrase of a memory reached 0.73 to 0.96 of it,
- * the same memory with another number 0.89 to 0.99, and another fact on the same topic at most 0.64,
- * while two distinct stored memories reached up to 0.85; so no cosine merges alone, and the writer
- * decides.
+ * The live memories of the draft's scope, audience and owner whose whole text or one of whose
+ * sentences is at `SIMILAR_COSINE` or closer to the draft, best first, without the ones the draft
+ * replaces. Measured on the mpnet model over 194 real memories: a translation or a paraphrase of a
+ * memory reached 0.73 to 0.96 of it, and ranked it first in 28 of 28; a fact one sentence of a long
+ * memory states reached 0.49 to 0.86, at the floor in 5 of 12; the same memory with another number
+ * reached 0.89 to 0.99; and the best other memory reached the floor for 7 of those 40 texts. Two
+ * distinct stored memories reached up to 0.85 and opposite preferences 0.96, so no cosine merges
+ * alone, and the writer decides.
  */
 function meaningSimilar(op: Op, draft: Draft, semantic: SemanticQuery | undefined): SimilarMemory[] {
   if (semantic === undefined) return []
   const visibility = { statuses: LIVE, policies: EVERY_POLICY, audienceScoped: true, allSessions: true, scope: draft.scope }
   const audience = audienceKey(draft)
-  return vectorHits(op.store.db, semantic, visibility, Number.MAX_SAFE_INTEGER)
+  return vectorHits(op.store.db, semantic, visibility, Number.MAX_SAFE_INTEGER, true)
     .filter(hit => hit.cosine >= SIMILAR_COSINE && !draft.supersedes.includes(hit.memory.id))
     .filter(hit => audienceKey(hit.memory) === audience && (draft.ownerSessionId === undefined || hit.memory.ownerSessionId === draft.ownerSessionId))
     .map(hit => ({ id: hit.memory.id, kind: hit.memory.kind, text: hit.memory.text, cosine: Math.round(hit.cosine * 100) / 100 }))

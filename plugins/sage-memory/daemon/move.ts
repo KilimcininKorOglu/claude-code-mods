@@ -7,6 +7,7 @@ import { checkOwner, mustRead, storeLabel, type Op } from './op.ts'
 import { audit, readMemory, sql, writeMemory } from './rows.ts'
 import { EPHEMERAL_REFUSAL, isEphemeral, normalizeAudience, rejectSecrets } from './rules.ts'
 import { checkPatch, checkPatchRelations, relationFields, statusFields, weighingFields, type UpdateRequest } from './update.ts'
+import { dropVectors } from './vectors.ts'
 
 /**
  * Moving a memory between the project store and the user store: `update` with the other scope. The
@@ -81,7 +82,7 @@ export function insertMoved(to: Op, memory: Memory, from: string, sessionId: str
 export function dropMemory(op: Op, id: string): void {
   clearReferences(op.store.db, id, op.now)
   dropEdges(op.store.db, id)
-  sql(op.store.db, 'DELETE FROM vectors WHERE memory_id = ?').run(id)
+  dropVectors(op.store.db, id)
   sql(op.store.db, 'DELETE FROM memories WHERE id = ?').run(id)
 }
 

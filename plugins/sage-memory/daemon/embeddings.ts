@@ -3,7 +3,7 @@ import type { EmbedState } from '../hooks/shared/protocol.ts'
 import type { Embedder, Runtime } from './embedder.ts'
 import { log, messageOf } from './log.ts'
 import { transaction, type Store } from './stores.ts'
-import { dropOrphanVectors, storeVectors, textHash, unembedded, type SemanticQuery } from './vectors.ts'
+import { dropOrphanVectors, sentencesOf, storeVectors, textHash, unembedded, type MadeVectors, type SemanticQuery } from './vectors.ts'
 
 /**
  * The daemon's embeddings: the model, loaded at its first use once setup installed it and run one
@@ -42,10 +42,11 @@ type Core = {
   fills: Map<string, Promise<number>>
 }
 
-type Made = { id: string; hash: string; vector: Float32Array }
-
-/** A fill embeds this many memories between two writes, so a query waits one slice at most. */
-const FILL_SLICE = 32
+/**
+ * A fill embeds this many memories, with their sentences, between two writes, so a query waits one
+ * slice at most; 194 real memories held 693 sentences, so a slice holds about 35 texts.
+ */
+const FILL_SLICE = 8
 
 function fail(core: Core, what: string, err: unknown): void {
   core.failed = `${what} failed: ${messageOf(err)}`
@@ -93,11 +94,16 @@ function infer(core: Core, model: Embedder, texts: readonly string[]): Promise<F
   return run
 }
 
+/** Embeds each memory's whole text and its sentences in one inference, and writes them together. */
 async function embedInto(core: Core, store: Store, model: Embedder, memories: readonly Memory[]): Promise<number> {
-  const vectors = await infer(core, model, memories.map(memory => memory.text))
-  const made: Made[] = memories.flatMap((memory, index) => {
-    const vector = vectors[index]
-    return vector === undefined ? [] : [{ id: memory.id, hash: textHash(memory.text), vector }]
+  const parts = memories.map(memory => [memory.text, ...sentencesOf(memory.text)])
+  const vectors = await infer(core, model, parts.flat())
+  let next = 0
+  const made: MadeVectors[] = memories.flatMap((memory, index) => {
+    const own = vectors.slice(next, next + (parts[index]?.length ?? 0))
+    next += own.length
+    const [vector, ...sentences] = own
+    return vector === undefined ? [] : [{ id: memory.id, hash: textHash(memory.text), vector, sentences }]
   })
   return transaction(store, () => storeVectors(store.db, model.modelId, made))
 }
