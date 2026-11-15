@@ -21,7 +21,7 @@ import {
   validate,
   type Op,
   type Reply,
-} from '../hooks/memory.ts'
+} from '../hooks/memory'
 
 tier('user')
 

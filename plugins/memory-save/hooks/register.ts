@@ -1,3 +1,4 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
 import {
   BACKUP,
@@ -22,7 +23,7 @@ import {
   type Part,
   type Reply,
   type TopicAppend,
-} from './memory.ts'
+} from './memory'
 
 /**
  * What the hooks share: the project and its memory directory, the promise that
