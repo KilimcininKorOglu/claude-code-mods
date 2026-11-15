@@ -19,8 +19,10 @@ const MAX_PROMPT_CHARS = 4000
  * The models whose prompt cache survives an effort change. Measured on 2.1.283: on Opus 5.5 an effort
  * change kept the cache read whole; on Sonnet 5 it rewrote the whole conversation. Measured on 2.1.284:
  * Sonnet 5.5 keeps it as Opus 5.5 does. Fable 5.1 keeps it since 2.1.260, as the Claude Code docs say.
+ * Measured on 2.1.325 with headless turns that changed `--effort` between low and high: Fable 5.2 read
+ * 35,127 tokens and wrote 14 after a change, Haiku 5.5 read 34,522 and wrote 63, as at the same effort.
  */
-const CACHE_SAFE = /opus-5-5|fable-5-1|sonnet-5-5/
+const CACHE_SAFE = /opus-5-5|fable-5-1|fable-5-2|sonnet-5-5|haiku-5-5/
 
 export function keepsCacheAcrossEffort(model: string): boolean {
   return CACHE_SAFE.test(model)

@@ -28,7 +28,7 @@ Sonnet 5.5 üzerindeki canlı denemede `levels low medium` ayarlıyken ve sessio
 
 ## Yalnız prompt cache'in korunduğu yerde
 
-Bir effort değişikliği bütün prompt cache'i yeniden yazdırabilir ve uzun bir konuşmayı yeniden yazmak turn'ün kazandırdığından pahalıya gelir. Bu yüzden mod effort'u yalnız effort değişikliğinde cache'i koruyan modellerde değiştirir: Opus 5.5, Sonnet 5.5 ve Fable 5.1. Diğer modellerde hiçbir şeyi değiştirmez; session'ın ilk request'i böyle bir modeli söyleyince de artık hiçbir prompt puanlanmaz. Bir subagent'ın request'i de kendi modeline göre aynı yolla denetlenir. Sonnet 5 üzerindeki bir canlı denemede, subagent'ınkiler de dahil, her request session'ın effort'uyla gitti.
+Bir effort değişikliği bütün prompt cache'i yeniden yazdırabilir ve uzun bir konuşmayı yeniden yazmak turn'ün kazandırdığından pahalıya gelir. Bu yüzden mod effort'u yalnız effort değişikliğinde cache'i koruyan modellerde değiştirir: Opus 5.5, Sonnet 5.5, Fable 5.1, Fable 5.2 ve Haiku 5.5. Diğer modellerde hiçbir şeyi değiştirmez; session'ın ilk request'i böyle bir modeli söyleyince de artık hiçbir prompt puanlanmaz. Bir subagent'ın request'i de kendi modeline göre aynı yolla denetlenir. Sonnet 5 üzerindeki bir canlı denemede, subagent'ınkiler de dahil, her request session'ın effort'uyla gitti.
 
 Claude Code 2.1.283'te, aynı konuşma ve bir turn'den diğerine effort değişikliğiyle ölçüldü:
 
@@ -39,6 +39,11 @@ Claude Code 2.1.284'te aynı yolla, kontrol olarak önce aynı effort'ta bir tur
 
     Sonnet 5.5  medium → high, high → low   cache read 58,417 each time and about 5,500 written, as at the same effort
     Sonnet 5    medium → high               cache read 0, about 73,700 tokens written again
+
+Claude Code 2.1.325'te aynı konuşmanın headless turn'leriyle, kontrol olarak önce iki low turn ile ölçüldü:
+
+    Fable 5.2   low → high, high → low   cache read 35,127 to 35,155 and 14 written each time, as at the same effort
+    Haiku 5.5   low → high, high → low   cache read 34,522 to 34,598 and 63 written each time, as at the same effort
 
 Canlı denemede bir selamlaşma `low`, bir tasarım sorusu `max` puan aldı. `max` turn'ü `low` turn'ünün yazdığı cache'i okudu (74.079 token), yeniden `low`'a dönen sonraki turn de 91.755 okudu.
 
