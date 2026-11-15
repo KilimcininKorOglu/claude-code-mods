@@ -48,20 +48,20 @@ const SUB = `${DIR}/${SID}/subagents/agent-a1.jsonl`
 type Line = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
 
 /** The world: what git prints, what the usage says, the files, the store, and what the person saw. */
-type World = { live: number[]; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string }; gitRuns: number; percent?: number; usageDown: boolean; settings: Record<string, unknown>; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
+type World = { live: number[]; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false }; gitRuns: number; percent?: number; usageDown: boolean; settings: Record<string, unknown>; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
 
 /** One transcript row of a model response, as the engine writes one per content block. */
 const response = (id: string | undefined, input: number, output: number, thinking?: number): string =>
   JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10, ...(thinking === undefined ? {} : { output_tokens_details: { thinking_tokens: thinking } }) } } })
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { live: [], stepUsage: null, git: { exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, settings: {}, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
+  const w: World = { live: [], stepUsage: null, git: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, settings: {}, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
   mock.env(on, { HOME: '/Users/u' })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
   on('store.delete', (_, e) => { delete w.store[e.key]; return { value: undefined } })
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) || [...w.files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
-  on('fs.list', (_, e) => ({ value: [...w.files.keys()].filter(k => k.startsWith(`${e.path}/`)).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file' as const, size: 0, isLink: false })) }))
+  on('fs.list', (_, e) => ({ value: [...w.files.keys()].filter(k => k.startsWith(`${e.path}/`)).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file' as const, size: 0, mtimeMs: 1, isLink: false })) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.files.get(e.path)?.length ?? 0, mtimeMs: 1, isLink: false } }))
   // `head -c <n> <path>`: the file's first n characters, the transcript as it was when the reading began.
   on('process.spawn', async function* (_, e) {
@@ -91,8 +91,8 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   // `ps -o pid= -p <pids>`: the pids that still run.
   on('process.run', (_, e) => {
     // `tail -c <n> <path>`: the transcript's last n characters, for the effort its last response recorded.
-    if (e.argv[0] === 'tail') return { value: { exitCode: 0, stdout: (w.files.get(e.argv[3] ?? '') ?? '').slice(-Number(e.argv[2])), stderr: '' } }
-    if (e.argv[0] === 'ps') return { value: { exitCode: 0, stdout: w.live.map(p => `  ${p}\n`).join(''), stderr: '' } }
+    if (e.argv[0] === 'tail') return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: (w.files.get(e.argv[3] ?? '') ?? '').slice(-Number(e.argv[2])), stderr: '' } }
+    if (e.argv[0] === 'ps') return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: w.live.map(p => `  ${p}\n`).join(''), stderr: '' } }
     if (e.argv.join(' ') !== 'git status --porcelain=v2 --branch') throw new Error(`unexpected ${e.argv.join(' ')}`)
     w.gitRuns += 1
     // A git with a Turkish locale words its message in Turkish unless the run asks for the C locale.
@@ -140,7 +140,7 @@ describe('session-watch', () => {
     const w = world(on)
     await started($, w)
     expect(w.statuses.at(-1)).toBe('ctx 12% · 120k / 1.0M · $0.50 · main')
-    w.git = { exitCode: 0, stdout: DIRTY, stderr: '' }
+    w.git = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: DIRTY, stderr: '' }
     w.percent = 60
     await $.turn.complete(turn())
     expect(w.statuses.at(-1)).toBe('ctx 60% · 600k / 1.0M · $0.50 · main*')
@@ -346,7 +346,7 @@ describe('session-watch', () => {
 
   test('a directory outside git reads as no repository in every locale, and a failed read is said once, not thrown', async ($, on) => {
     const w = world(on)
-    w.git = { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git\n' }
+    w.git = { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git\n' }
     await started($, w)
     expect((await $.command.run(run)).text?.split('\n').at(-1)).toBe('git: this folder is not a git repository')
     w.usageDown = true
