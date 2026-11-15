@@ -62,6 +62,5 @@ Threat model for self-command (reach L2)
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity limit 10, the build fails above it
-    make typecheck   # needs .claude/types/ from /plugin-types
     make validate
     make test        # claude plugin test
