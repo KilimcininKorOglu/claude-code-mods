@@ -120,6 +120,5 @@ Reach L2: bir dosya yazar.
 
     make install     # eslint, typescript, typescript-eslint
     make lint        # complexity sınırı 10; aşılırsa build kırılır
-    make typecheck   # /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test
