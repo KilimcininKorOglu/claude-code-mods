@@ -56,7 +56,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('ui.log', (_, e) => { w.logs.push(e.text); return { value: undefined } })
   on('turn.complete', (_, e) => ({ text: e.answer ?? '' }))
   on('prompt.submit', (_, e) => { w.contexts.push(e.context); return { text: e.text } })
-  on('process.run', () => ({ value: { exitCode: w.exitCode, stdout: w.status, stderr: '' } }))
+  on('process.run', () => ({ value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: w.exitCode, stdout: w.status, stderr: '' } }))
   return w
 }
 
