@@ -49,6 +49,14 @@ describe('triage', () => {
     expect(pairsOf([a, b, c]).map(pair => `${pair.a.id}${pair.b.id}`)).toEqual(['ab'])
   })
 
+  test('a cluster over five members is not skipped: its pairs whose texts overlap are compared', () => {
+    const anchors = [{ type: 'file' as const, path: 'release.yml' }]
+    const twins = ['a', 'b'].map(id => memory(id, { anchors, text: 'The release job signs the archive before it uploads it to the bucket.' }))
+    const others = ['c', 'd', 'e', 'f'].map(id => memory(id, { anchors, text: `Unrelated note ${id} about cache warming and sidebar colours.` }))
+    expect(pairsOf([...twins, ...others]).map(pair => `${pair.a.id}${pair.b.id}`)).toContain('ab')
+    expect(pairsOf([...twins, ...others]).map(pair => `${pair.a.id}${pair.b.id}`)).not.toContain('ac')
+  })
+
   test('a bounded run takes what was never judged, then what was judged longest ago, and the record keeps only live keys', () => {
     expect(oldestFirst(['a', 'b', 'c', 'd'], id => id, { a: 30, b: 10, d: 10 })).toEqual(['c', 'b', 'd', 'a'])
     expect(judgedTimes({ a: 30, b: 10, gone: 5 }, ['a', 'b', 'c'], ['b', 'c'], 99)).toEqual({ a: 30, b: 99, c: 99 })

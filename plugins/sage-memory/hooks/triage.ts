@@ -6,7 +6,7 @@
  * model and applies the result.
  */
 import type { Candidate, Memory, SuggestedAction, UpdatePatch } from './shared/model.ts'
-import { textKey } from './shared/text.ts'
+import { textKey, tokenize } from './shared/text.ts'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -190,20 +190,32 @@ export function pairKey(pair: Pair): string {
   return [pair.a.id, pair.b.id].sort().join('|')
 }
 
-/** The pairs to compare: every pair inside a cluster of 2 to 5 members, each pair once. */
+/** In a cluster larger than `MAX_CLUSTER`, a pair is compared only when its texts share this share of their terms. */
+const BIG_CLUSTER_OVERLAP = 0.5
+
+/** Shared terms over the terms of the shorter text. */
+function overlapOf(a: Memory, b: Memory): number {
+  const left = new Set(tokenize(a.text))
+  const right = new Set(tokenize(b.text))
+  if (left.size === 0 || right.size === 0) return 0
+  return [...left].filter(term => right.has(term)).length / Math.min(left.size, right.size)
+}
+
+/** Every pair of a cluster; in a large one only the pairs whose texts overlap, since the large ones hold the most copies. */
+function clusterPairs(cluster: readonly Memory[]): Pair[] {
+  const pairs = cluster.flatMap((a, i) => cluster.slice(i + 1).map(b => ({ a, b })))
+  return cluster.length <= MAX_CLUSTER ? pairs : pairs.filter(pair => overlapOf(pair.a, pair.b) >= BIG_CLUSTER_OVERLAP)
+}
+
+/** The pairs to compare: the pairs of every cluster of two or more members, each pair once. */
 export function pairsOf(memories: readonly Memory[]): Pair[] {
-  const pairs: Pair[] = []
   const seen = new Set<string>()
-  const clusters = [...anchorClusters(memories), ...tagClusters(memories)].filter(c => c.length >= 2 && c.length <= MAX_CLUSTER)
-  for (const cluster of clusters) {
-    for (const [i, a] of cluster.entries()) {
-      for (const b of cluster.slice(i + 1)) {
-        const key = pairKey({ a, b })
-        if (seen.has(key)) continue
-        seen.add(key)
-        pairs.push({ a, b })
-      }
-    }
+  const pairs: Pair[] = []
+  for (const pair of [...anchorClusters(memories), ...tagClusters(memories)].flatMap(clusterPairs)) {
+    const key = pairKey(pair)
+    if (seen.has(key)) continue
+    seen.add(key)
+    pairs.push(pair)
   }
   return pairs
 }
