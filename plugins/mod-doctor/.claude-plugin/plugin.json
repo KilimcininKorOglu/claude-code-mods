@@ -1,6 +1,6 @@
 {
   "name": "mod-doctor",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Names each installed plugin, of every marketplace, whose local clone already offers a newer version, with the claude plugin update command that closes the gap.",
   "author": {
     "name": "Kerem Gok",
