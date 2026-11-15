@@ -114,10 +114,10 @@ A hook's budget is 10 seconds, and `$.clock.sleep` counts against it while the w
 
 ## What it can reach
 
-Validated with `claude plugin validate` on Claude Code 2.1.283:
+Validated with `claude plugin validate` on Claude Code 2.1.325:
 
     ❯ types ./types/index.d.ts declares on $: $.gemini
-    ❯ ./register.ts hooks: engine.create, session.start, command.run{command=gemini-core}, ui.render{component=Pane}, ui.close
+    ❯ ./register.ts hooks: engine.create, session.start, command.run{command=gemini-core}, ui.render{component=Pane} (default matcher key: plugin), ui.close
     ❯ ./register.ts calls: $.command.register, $.env.get, $.gemini.configure (via applyChange, pickModel), $.gemini.settings (via openPicker, statusOf), $.http.fetch (via listModels), $.store.delete, $.store.get, $.store.set, $.ui.close (via pickModel), $.ui.open (via openPicker), $.ui.resolve, $.ui.toast
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: GEMINI_API_KEY
