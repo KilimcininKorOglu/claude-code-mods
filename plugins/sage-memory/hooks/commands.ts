@@ -52,6 +52,8 @@ export type Flags = {
   expiresAt?: string
   supersedes?: string[]
   contradicts?: string[]
+  /** `--distinct`, a flag with no value: write the memory even when similar ones exist. */
+  distinct?: boolean
   errors: string[]
 }
 
@@ -129,6 +131,10 @@ export function flagsOf(words: readonly string[]): Flags {
       continue
     }
     const name = word.slice(2).toLowerCase()
+    if (name === 'distinct') {
+      flags.distinct = true
+      continue
+    }
     const reader = FLAG_READERS[FLAG_ALIASES[name] ?? name]
     const value = words[i + 1]
     if (reader === undefined) flags.errors.push(`unknown flag ${word}`)
@@ -169,6 +175,7 @@ export function rememberInputOf(flags: Flags, sessionId: string): RememberInput 
     expiresAt: flags.expiresAt,
     supersedes: flags.supersedes,
     contradicts: flags.contradicts,
+    distinct: flags.distinct,
     ownerSessionId: flags.scope === 'session' ? sessionId : undefined,
     sources: [{ type: 'user' as const, sessionId }],
   }
@@ -370,10 +377,14 @@ export function importInput(text: string, flags: ImportFlags, sessionId: string)
 }
 
 /** What an import did with its bullets: written anew, folded into an equal memory, folded into a near one, refused. */
-export type ImportTally = { added: number; exact: number; near: string[]; refused: string[] }
+export type ImportTally = { added: number; exact: number; near: string[]; similar: string[]; refused: string[] }
 
-/** The report of an import; each near-duplicate fold is named, because it kept one of two texts. */
+/**
+ * The report of an import; each near-duplicate fold is named, because it kept one of two texts, and
+ * each bullet held back by a memory close in meaning, because it was not written.
+ */
 export function importReport(path: string, total: number, t: ImportTally): string {
-  const head = `imported ${total - t.refused.length} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.exact} already there, ${t.near.length} folded into a near-duplicate, ${t.refused.length} refused`
-  return [head, ...t.near.map(line => `  folded: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
+  const done = total - t.refused.length - t.similar.length
+  const head = `imported ${done} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.exact} already there, ${t.near.length} folded into a near-duplicate, ${t.similar.length} held back by a memory close in meaning, ${t.refused.length} refused`
+  return [head, ...t.near.map(line => `  folded: ${line}`), ...t.similar.map(line => `  held back: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
 }

@@ -117,6 +117,7 @@ import {
   ratedDeletion,
   ratingOf,
   reportText,
+  textPairPrompt,
   valueScore,
   type Deletion,
   type Judged,
@@ -126,9 +127,9 @@ import {
   type Report,
   type Score,
 } from './triage'
-import { addedBy, callOf, editLine, OFF_TEXT, resultText, toolName, TOOLS, type Input } from './tools'
+import { addedBy, answerText, callOf, editLine, OFF_TEXT, similarText, toolName, TOOLS, type Input } from './tools'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
-import type { AuditEntry, Candidate, FileMemories, GraphEdge, HygieneRun, Memory, MemoryPage, StoreStats, Ranking, RememberInput, RememberResult, RemapReport, SubagentRanking, VerifyReport } from './shared/model'
+import { isProtected, type AuditEntry, type Candidate, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol'
 
@@ -144,7 +145,7 @@ const USAGE = [
   '  import <path> [--section <heading>] [--kind <kind>] [--scope project|user] [--policy <p>] [--tag <t>] [--importance <n>] [--confidence <n>]',
   '  pane (the memory manager)',
   '  model [name] · remind tools|prompt|subagent [on|off] · consolidate|curate [on|off] · daily [on|off] · capture outcomes|errors [on|off]',
-  'flags: --kind --scope --status --persistence --expires YYYY-MM-DD --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts',
+  'flags: --kind --scope --status --persistence --expires YYYY-MM-DD --policy --tag --anchor --directory --symbol path#Name --command --agent --role --mode --importance --confidence --freshness --supersedes --contradicts, and --distinct (no value) to write a memory that similar ones held back',
 ].join('\n')
 
 /** How long each kind of call may take before the mod names it late. */
@@ -556,6 +557,7 @@ async function rememberCommand($: EngineInterface, state: State, rest: string): 
   const flags = flagsOf(wordsOf(rest))
   if (flags.errors.length > 0 || flags.text === '') return [...flags.errors, flags.text === '' ? 'expects remember [flags] <text>' : ''].filter(line => line !== '').join('\n')
   const result = await ask<RememberResult>($, state, '/memory/remember', { input: rememberInputOf(flags, await $.session.id()) })
+  if (result.outcome === 'similar') return `${similarText(result.similar)}\n(as a command: /sage-memory update <id> <text>, or remember --distinct <text>)`
   return `${result.outcome === 'added' ? 'added' : 'merged into'} ${detailText(result.memory)}`
 }
 
@@ -674,6 +676,7 @@ async function importOne($: EngineInterface, state: State, input: RememberInput,
   try {
     const r = await ask<RememberResult>($, state, '/memory/remember', { input })
     if (r.outcome === 'added') tally.added += 1
+    else if (r.outcome === 'similar') tally.similar.push(`"${input.text.slice(0, 60)}" close to ${r.similar.map(memory => memory.id).join(', ')}`)
     else if (r.nearDuplicate) tally.near.push(`"${input.text.slice(0, 60)}" into ${r.memory.id}`)
     else tally.exact += 1
   } catch (err) {
@@ -688,7 +691,7 @@ async function importCommand($: EngineInterface, state: State, rest: string): Pr
   const bullets = bulletsOf(await $.fs.read(flags.path), flags.section)
   if (bullets === undefined) return `${flags.path} has no heading "${flags.section ?? ''}"`
   const sessionId = await $.session.id()
-  const tally: ImportTally = { added: 0, exact: 0, near: [], refused: [] }
+  const tally: ImportTally = { added: 0, exact: 0, near: [], similar: [], refused: [] }
   for (const bullet of bullets) await importOne($, state, importInput(bullet, flags, sessionId), tally)
   return importReport(flags.path, bullets.length, tally)
 }
@@ -1025,7 +1028,7 @@ async function serveTool($: EngineInterface, state: State, name: string, input: 
     const call = callOf(name, input, await $.session.id())
     const value = await ask<unknown>($, state, call.path, { ...call.body, sessionId: await $.session.id() })
     await noteEdit($, state, name, input, value)
-    return { result: resultText(value) }
+    return { result: answerText(name, value) }
   } catch (err) {
     return { result: errorText(err), isError: true }
   }
@@ -1060,15 +1063,43 @@ async function topOf($: EngineInterface, state: State, scope: 'project' | 'user'
   return topByImportance(page.memories, limit)
 }
 
+/**
+ * The consolidator's memory that memories close in meaning held back, settled by the merge question
+ * the job model answers for each, closest first: the first `YES` gets the new text through `update`
+ * (a protected memory keeps its own, and the write is dropped), and a memory no `YES` matched is
+ * written as distinct. A pair with no verdict leaves the memory unwritten with a red line.
+ */
+async function settleSimilar($: EngineInterface, state: State, input: RememberInput, similar: readonly SimilarMemory[]): Promise<void> {
+  for (const memory of similar) {
+    const raw = await answerOf($, MERGE_SYSTEM, textPairPrompt(input.text, memory.text))
+    const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
+    if (verdict === undefined) return toStream($, 'error', { text: `the consolidator's memory was not written: no verdict on its likeness to ${memory.id}`, kind: 'error' })
+    if (verdict === 'YES') return updateSame($, state, input, memory.id)
+  }
+  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true } })
+  if (result.outcome === 'added') await countAdded($, state, result.memory)
+}
+
+/** Rewrites the memory the merge question called the same fact with the consolidator's newer text. */
+async function updateSame($: EngineInterface, state: State, input: RememberInput, id: string): Promise<void> {
+  const memory = await ask<Memory | undefined>($, state, '/memory/get', { id })
+  if (memory === undefined || memory === null || isProtected(memory) || memory.text === input.text) return
+  await ask($, state, '/memory/update', { id, patch: { text: input.text } })
+  await toStream($, 'consolidator', { text: `updated ${id}: ${input.text.slice(0, 80)}`, kind: 'warn' })
+}
+
+async function countAdded($: EngineInterface, state: State, memory: Memory): Promise<void> {
+  state.counts.added += 1
+  await show($, state)
+  await toStream($, 'consolidator', addedLine(memory))
+}
+
 /** Writes one memory; a refusal (a progress note, a secret, a missing anchor) is a red line, and the rest still go. */
 async function writeOne($: EngineInterface, state: State, input: RememberInput): Promise<boolean> {
   try {
     const result = await ask<RememberResult>($, state, '/memory/remember', { input })
-    if (result.outcome === 'added') {
-      state.counts.added += 1
-      await show($, state)
-      await toStream($, 'consolidator', addedLine(result.memory))
-    }
+    if (result.outcome === 'added') await countAdded($, state, result.memory)
+    if (result.outcome === 'similar') await settleSimilar($, state, input, result.similar)
     return true
   } catch (err) {
     await toStream($, 'error', { text: `the consolidator's memory was not written: ${errorText(err)}`, kind: 'error' })
@@ -1183,10 +1214,17 @@ async function curatorTargets($: EngineInterface, state: State, written: readonl
   return [...found.values()]
 }
 
-/** New memories that take the place of old ones: each written, then the old ones a new one did not merge into are deleted. */
+/**
+ * New memories that take the place of old ones: each written, then the old ones a new one did not
+ * merge into are deleted. The curator's model already judged their meaning against the ones they
+ * replace (and the parts of a split are close to each other by design), so each is written as distinct.
+ */
 async function replaceWith($: EngineInterface, state: State, step: Extract<Step, { kind: 'replace' }>): Promise<void> {
   const written: Memory[] = []
-  for (const input of step.inputs) written.push((await ask<RememberResult>($, state, '/memory/remember', { input })).memory)
+  for (const input of step.inputs) {
+    const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true } })
+    if (result.outcome !== 'similar') written.push(result.memory)
+  }
   const replaced = step.replaced.filter(id => !written.some(memory => memory.id === id))
   const reason = `curator: ${step.count} into ${written.map(memory => memory.id).join(', ')}`
   for (const id of replaced) await ask($, state, '/memory/delete', { id, force: true, reason })
@@ -1533,7 +1571,10 @@ async function compactCommand($: EngineInterface, state: State, rest: string): P
 
 // ── Outcome capture ────────────────────────────────────────────────────
 
-/** Writes what a finished Bash command teaches, while the person turned that capture on. */
+/**
+ * Writes what a finished Bash command teaches, while the person turned that capture on. An outcome
+ * a memory close in meaning already states is held back by the daemon and not written again.
+ */
 async function captureOutcome($: EngineInterface, state: State, command: string, result: unknown, failed: boolean): Promise<void> {
   if ((await $.store.get(failed ? 'captureErrors' : 'captureOutcomes')) !== true || !(await isReady(state))) return
   const input = captureOf(command, outputOf(result), failed, await $.session.id())

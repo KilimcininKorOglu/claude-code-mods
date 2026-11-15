@@ -14,6 +14,7 @@ import type {
   Ranking,
   RemapReport,
   RememberResult,
+  RememberWritten,
   Resolution,
   SearchHit,
   StoreStats,
@@ -68,7 +69,7 @@ async function withDaemon(work: (daemon: Daemon) => Promise<void>, runtime?: Run
     assert.equal(reply.status, 200, `${path}: ${reply.error ?? ''}`)
     return reply.value as T
   }
-  const remember = async (project: ProjectRef, input: object): Promise<Memory> => (await value<RememberResult>('/memory/remember', { project, input })).memory
+  const remember = async (project: ProjectRef, input: object): Promise<Memory> => (await value<RememberWritten>('/memory/remember', { project, input })).memory
   try {
     await work({ dir, alpha: projectIn(base, 'alpha'), beta: projectIn(base, 'beta'), ask, value, remember })
   } finally {
@@ -438,6 +439,21 @@ describe('embedding routes', () => {
       const hits = await d.value<SearchHit[]>('/memory/explain', { project: d.alpha, query: question })
       assert.deepEqual(hits.map(hit => [hit.memory.id, hit.source, hit.vectorScore?.toFixed(2)]), [[memory.id, 'vector', '0.62']])
       assert.deepEqual((await d.value<EmbedStatus>('/embed/status', {})).embedding, { state: 'ready', modelId: 'fake/model', dims: 16 })
+    }, fake)
+  })
+
+  test('a write close in meaning to a memory is not written and names it, and a distinct write is written', () => {
+    const fake = fakeRuntime()
+    const translated = 'Geliştirme sunucusunu başlatmadan önce veritabanı migration komutlarını pnpm ile çalıştırın'
+    fake.vectors.set(MIGRATIONS, toward(0, 1))
+    fake.vectors.set(translated, toward(0, 0.9))
+    return withDaemon(async d => {
+      const memory = await d.remember(d.alpha, { text: MIGRATIONS })
+      const similar = await d.value<RememberResult>('/memory/remember', { project: d.alpha, input: { text: translated } })
+      assert.deepEqual(similar, { outcome: 'similar', similar: [{ id: memory.id, kind: 'fact', text: MIGRATIONS, cosine: 0.9 }] })
+      assert.equal((await d.value<MemoryPage>('/memory/list', { project: d.alpha, scope: 'project' })).memories.length, 1, 'nothing was written')
+      const written = await d.value<RememberResult>('/memory/remember', { project: d.alpha, input: { text: translated, distinct: true } })
+      assert.equal(written.outcome, 'added')
     }, fake)
   })
 

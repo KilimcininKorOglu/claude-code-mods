@@ -258,7 +258,12 @@ export function judgedTimes(previous: Record<string, number>, live: readonly str
 }
 
 export function pairPrompt(pair: Pair): string {
-  return `A: "${cut(pair.a.text, 250)}"\nB: "${cut(pair.b.text, 250)}"`
+  return textPairPrompt(pair.a.text, pair.b.text)
+}
+
+/** The merge question's prompt for two texts, one of which may not be stored yet. */
+export function textPairPrompt(a: string, b: string): string {
+  return `A: "${cut(a, 250)}"\nB: "${cut(b, 250)}"`
 }
 
 export type MergeVerdict = 'YES' | 'NO' | 'OVERLAP'

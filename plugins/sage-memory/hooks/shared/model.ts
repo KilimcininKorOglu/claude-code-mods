@@ -187,17 +187,34 @@ export type RememberInput = {
   related?: string[]
   ownerSessionId?: string
   expiresAt?: string
+  /**
+   * The writer read the similar memories an earlier write answered and states a different fact, so
+   * the meaning check is skipped and the memory is written.
+   */
+  distinct?: boolean
 }
 
-/** What `remember` did: a new memory, or a merge into an equal or near-equal one. */
-export type RememberResult = {
-  memory: Memory
-  outcome: 'added' | 'merged'
-  nearDuplicate: boolean
-  reactivated: boolean
-  /** The ids this write moved to `superseded`. */
-  superseded: string[]
-}
+/** A live memory whose meaning is close to a new write's, by the cosine of their embeddings. */
+export type SimilarMemory = { id: string; kind: Kind; text: string; cosine: number }
+
+/**
+ * What `remember` did: a new memory, a merge into an equal or near-equal one, or nothing, because
+ * memories close in meaning exist (`similar`): the writer then updates one of them, or writes again
+ * with `distinct`.
+ */
+export type RememberResult =
+  | {
+      memory: Memory
+      outcome: 'added' | 'merged'
+      nearDuplicate: boolean
+      reactivated: boolean
+      /** The ids this write moved to `superseded`. */
+      superseded: string[]
+    }
+  | { outcome: 'similar'; similar: SimilarMemory[] }
+
+/** A `remember` answer that wrote a memory. */
+export type RememberWritten = Extract<RememberResult, { memory: Memory }>
 
 export type UpdatePatch = {
   /** Moves a project memory to the user store or back, keeping its id; no other scope moves. */

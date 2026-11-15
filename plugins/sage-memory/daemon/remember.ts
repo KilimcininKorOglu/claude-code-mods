@@ -1,4 +1,4 @@
-import type { Anchor, Audience, ContextPolicy, Kind, Memory, Persistence, RememberInput, RememberResult, Scope, Source } from '../hooks/shared/model.ts'
+import type { Anchor, Audience, ContextPolicy, Kind, Memory, Persistence, RememberInput, RememberResult, RememberWritten, Scope, SimilarMemory, Source, Status } from '../hooks/shared/model.ts'
 import { allTerms, canonicalText, normalizeTags } from '../hooks/shared/text.ts'
 import { distinct, normalizeAnchors, normalizeSources } from './anchors.ts'
 import { refused } from './errors.ts'
@@ -7,7 +7,9 @@ import { syncEdges } from './graph.ts'
 import { storeLabel, type Op } from './op.ts'
 import { assessQuality, checkRemember, clamp01, isNearDuplicate, isPossiblyContradictory, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
 import { audienceKey, readMemory, selectMemories, writeMemory } from './rows.ts'
+import { EVERY_POLICY } from './search.ts'
 import { ulid } from './ulid.ts'
+import { vectorHits, type SemanticQuery } from './vectors.ts'
 
 /**
  * Writing a memory: a new record, or a merge into the live memory of the same scope and audience
@@ -18,6 +20,12 @@ import { ulid } from './ulid.ts'
 
 const DEFAULT_IMPORTANCE = 0.6
 const DEFAULT_CONFIDENCE = 0.8
+
+/** The cosine from which a live memory counts as close in meaning to a new write (see `similarOf`). */
+export const SIMILAR_COSINE = 0.72
+/** How many similar memories an answer names. */
+const MAX_SIMILAR = 3
+const LIVE: readonly Status[] = ['active', 'stale']
 
 type Draft = {
   text: string
@@ -226,13 +234,41 @@ export function supersede(op: Op, memory: Memory, targets: readonly string[]): s
   return moved
 }
 
-/** Stores a memory under SAGE's rules. Runs inside the caller's transaction. */
-export function remember(op: Op, input: RememberInput): RememberResult {
+/**
+ * The live memories of the draft's scope, audience and owner whose embedding is at `SIMILAR_COSINE`
+ * or closer to the draft's, best first, without the ones the draft replaces. Measured on the mpnet
+ * model over 190 real memories: a translation or a paraphrase of a memory reached 0.73 to 0.96 of it,
+ * the same memory with another number 0.89 to 0.99, and another fact on the same topic at most 0.64,
+ * while two distinct stored memories reached up to 0.85; so no cosine merges alone, and the writer
+ * decides.
+ */
+function similarOf(op: Op, draft: Draft, semantic: SemanticQuery): SimilarMemory[] {
+  const visibility = { statuses: LIVE, policies: EVERY_POLICY, audienceScoped: true, allSessions: true, scope: draft.scope }
+  const audience = audienceKey(draft)
+  return vectorHits(op.store.db, semantic, visibility, MAX_SIMILAR + draft.supersedes.length)
+    .filter(hit => hit.cosine >= SIMILAR_COSINE && !draft.supersedes.includes(hit.memory.id))
+    .filter(hit => audienceKey(hit.memory) === audience && (draft.ownerSessionId === undefined || hit.memory.ownerSessionId === draft.ownerSessionId))
+    .slice(0, MAX_SIMILAR)
+    .map(hit => ({ id: hit.memory.id, kind: hit.memory.kind, text: hit.memory.text, cosine: Math.round(hit.cosine * 100) / 100 }))
+}
+
+/**
+ * Stores a memory under SAGE's rules. Runs inside the caller's transaction. With the embedding of
+ * the text (`semantic`), a write that matches no memory by text but is close in meaning to one is
+ * not written: the answer names the similar memories, unless the input says it is `distinct`.
+ */
+export function remember(op: Op, input: RememberInput): RememberWritten
+export function remember(op: Op, input: RememberInput, semantic: SemanticQuery | undefined): RememberResult
+export function remember(op: Op, input: RememberInput, semantic?: SemanticQuery): RememberResult {
   rejectSecrets(input)
   const draft = draftOf(op, input, checkRemember(input))
   checkRelations(op, draft)
   const exact = exactMatch(op, draft)
   const existing = exact ?? nearMatch(op, draft)
+  if (existing === undefined && semantic !== undefined && input.distinct !== true) {
+    const similar = similarOf(op, draft, semantic)
+    if (similar.length > 0) return { outcome: 'similar', similar }
+  }
   const memory = existing ? merged(op, existing, draft, exact !== undefined) : added(op, draft)
   writeMemory(op.store.db, memory)
   syncEdges(op.store.db, memory, op.now)

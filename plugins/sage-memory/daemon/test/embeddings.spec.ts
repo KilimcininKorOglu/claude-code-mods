@@ -2,21 +2,21 @@ import assert from 'node:assert/strict'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { after, describe, test } from 'node:test'
-import type { Memory } from '../../hooks/shared/model.ts'
+import type { Memory, RememberInput } from '../../hooks/shared/model.ts'
 import type { ProjectRef } from '../../hooks/shared/protocol.ts'
 import { createEmbeddings } from '../embeddings.ts'
 import { fuse, lexicalHits } from '../fusion.ts'
 import { hitRelevance, memorySemanticRelevance } from '../relevance.ts'
-import { remember } from '../remember.ts'
+import { remember, SIMILAR_COSINE } from '../remember.ts'
 import { rankForPrompt, rankForTools } from '../remind.ts'
 import { EVERY_POLICY, REMINDED_POLICY, type Visibility } from '../search.ts'
 import { createSetup } from '../setup.ts'
 import { createStores, transaction, type Store } from '../stores.ts'
 import { updateMemory } from '../update.ts'
-import { unembedded, vectorHits } from '../vectors.ts'
+import { unembedded, vectorHits, type SemanticQuery } from '../vectors.ts'
 import { fakeRuntime, queryOf, toward } from './fake-runtime.ts'
 import { cleanUp, tempDir, waitFor } from './support.ts'
-import { world } from './world.ts'
+import { world, type World } from './world.ts'
 
 after(cleanUp)
 
@@ -166,6 +166,59 @@ describe('the embeddings service', () => {
     await embeddings.semantic('deploy order', [w.project])
     await waitFor(() => !embeddings.busy(), 2000, 'a second fill')
     assert.deepEqual(fake.embedded, ['pool sizing', DEPLOYS, POOL, 'deploy order'], 'the store was filled once, newest change first')
+    w.close()
+  })
+})
+
+describe('the meaning check of a write', () => {
+  const NEW = 'Bir ödeme numarası her kiracı için ayrı sayılır ve tekrar kullanılmaz'
+
+  /** A world with one embedded memory and a fake model that places `NEW` at `cosine` from it. */
+  async function seeded(cosine: number, input: Partial<RememberInput> = {}): Promise<{ w: World; old: Memory; query: SemanticQuery | undefined }> {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const old = (await w.remember({ text: 'Invoices are numbered per tenant and never reuse a number', ...input })).memory
+    fake.vectors.set(old.text, toward(0, 1))
+    fake.vectors.set(NEW, toward(0, cosine))
+    await embeddings.afterWrite(w.project, [old])
+    return { w, old, query: await embeddings.semantic(NEW, []) }
+  }
+
+  test('a write just above the similarity cosine is not written and names the memory', async () => {
+    const { w, old, query } = await seeded(SIMILAR_COSINE + 0.01)
+    const result = await w.run(op => remember(op, { text: NEW }, query))
+    assert.deepEqual(result, { outcome: 'similar', similar: [{ id: old.id, kind: 'fact', text: old.text, cosine: 0.73 }] })
+    assert.equal(unembedded(w.project.db, 'fake/model').length, 0, 'no memory was added')
+    w.close()
+  })
+
+  test('a write below the similarity cosine is written', async () => {
+    const { w, query } = await seeded(SIMILAR_COSINE - 0.02)
+    assert.equal((await w.run(op => remember(op, { text: NEW }, query))).outcome, 'added')
+    w.close()
+  })
+
+  test('a distinct write, a write that supersedes the memory, and a write without a vector are written', async () => {
+    const { w, old, query } = await seeded(0.95)
+    assert.equal((await w.run(op => remember(op, { text: NEW, distinct: true }, query))).outcome, 'added')
+    const replacing = await w.run(op => remember(op, { text: 'Fatura sırası kiracı başına tutulur, silinen faturanın numarası boş kalır', supersedes: [old.id] }, query))
+    assert.equal(replacing.outcome, 'added')
+    assert.equal(w.read(old.id).status, 'superseded')
+    assert.equal((await w.run(op => remember(op, { text: 'Credit notes carry their own counter beside the invoice sequence' }))).outcome, 'added')
+    w.close()
+  })
+
+  test('a memory of another audience or session is not a similar memory', async () => {
+    const { w, query } = await seeded(0.95, { audience: { roles: ['explore'] } })
+    assert.equal((await w.run(op => remember(op, { text: NEW }, query))).outcome, 'added')
+    w.close()
+  })
+
+  test('the same text merges as before, whatever its vector says', async () => {
+    const { w, old, query } = await seeded(0.95)
+    const result = await w.run(op => remember(op, { text: old.text }, query))
+    assert.equal(result.outcome, 'merged')
     w.close()
   })
 })

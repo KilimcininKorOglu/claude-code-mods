@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http'
-import type { AuditEntry, BackfillFilter, Candidate, Decision, Memory, ProposeInput, RememberInput, UpdatePatch, UpdateResult } from '../hooks/shared/model.ts'
+import type { AuditEntry, BackfillFilter, Candidate, Decision, Memory, ProposeInput, RememberInput, RememberResult, UpdatePatch, UpdateResult } from '../hooks/shared/model.ts'
 import { accept, listCandidates, propose, reject, resolve } from './candidates.ts'
 import { markReminded } from './contexts.ts'
 import { recordJudged, recordReminder, recordUse } from './counters.ts'
@@ -29,11 +29,12 @@ function run<T>(stores: Stores, body: Body, pick: (places: Places) => Store, wor
 }
 
 /** Runs `work` as `run` does, then embeds the memory it answers, after the commit and outside the transaction. */
-async function write<T extends { memory?: Memory }>(stores: Stores, embeddings: Embeddings, body: Body, pick: (places: Places) => Store, work: (op: Op) => T): Promise<T> {
+async function write<T extends object>(stores: Stores, embeddings: Embeddings, body: Body, pick: (places: Places) => Store, work: (op: Op) => T): Promise<T> {
   const places = placesOf(stores, body)
   const store = pick(places)
   const result = await transaction(store, () => work(opFor(places, store)))
-  if (result.memory !== undefined) await embeddings.afterWrite(store, [result.memory])
+  const memory = (result as { memory?: Memory }).memory
+  if (memory !== undefined) await embeddings.afterWrite(store, [memory])
   return result
 }
 
@@ -81,12 +82,22 @@ function updateOrMove(stores: Stores, embeddings: Embeddings, body: Body): Promi
   return write(stores, embeddings, body, () => from, op => updateMemory(op, request))
 }
 
+/**
+ * A remember with its meaning check: the text is embedded before the transaction, because an
+ * inference cannot run inside one, and while embeddings are not ready the check is skipped.
+ */
+async function rememberRoute(stores: Stores, embeddings: Embeddings, body: Body): Promise<RememberResult> {
+  const input = requiredObject<RememberInput>(body, 'input')
+  const pick = (places: Places): Store => storeForScope(places, input.scope)
+  const semantic = input.distinct === true || typeof input.text !== 'string' ? undefined : await embeddings.semantic(input.text, [pick(placesOf(stores, body))])
+  return write(stores, embeddings, body, pick, op => remember(op, input, semantic))
+}
+
 export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
   const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
-  const input = <T>(body: Body): T => requiredObject<T>(body, 'input')
   const byId = (body: Body): ((places: Places) => Store) => places => memoryStore(places, requiredString(body, 'id'))
   return {
-    '/memory/remember': post(body => write(stores, embeddings, body, places => storeForScope(places, input<RememberInput>(body).scope), op => remember(op, input<RememberInput>(body)))),
+    '/memory/remember': post(body => rememberRoute(stores, embeddings, body)),
     '/memory/get': post(body => run(stores, body, byId(body), op => readMemory(op.store.db, requiredString(body, 'id')))),
     '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
     '/memory/delete': post(body =>

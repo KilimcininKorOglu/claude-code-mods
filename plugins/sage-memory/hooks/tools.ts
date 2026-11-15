@@ -5,7 +5,7 @@
  * code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link'
-import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type RememberResult } from './shared/model'
+import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type Memory, type RememberResult, type SimilarMemory } from './shared/model'
 
 type Schema = Record<string, unknown>
 
@@ -65,6 +65,7 @@ const REMEMBER_DESCRIPTION = [
   'Save one durable fact for later sessions: a convention, a decision with its reason, a warning, a bug root cause, a command, or a user preference.',
   'Write it in English, in 1-4 self-contained sentences with the exact paths, symbols or commands, and anchor it to them; file_note, symbol_note and command_note need an anchor.',
   'Not for task progress (WIP or TODO text is refused), one-off debugging, or what the code already shows. To change a memory, call update instead of saving a near-duplicate.',
+  'A memory close in meaning, in any language, stops the write and is answered: update it, or call remember again with distinct: true when yours is another fact.',
 ].join(' ')
 
 export const TOOLS: readonly ToolDef[] = [
@@ -87,6 +88,7 @@ export const TOOLS: readonly ToolDef[] = [
         source: SOURCE,
         supersedes: texts('Ids of older memories this one replaces; they become superseded.'),
         contradicts: texts('Ids this contradicts.'),
+        distinct: yes('You read the similar memories an earlier remember answered, and this is a different fact.'),
       },
       ['text'],
     ),
@@ -286,7 +288,7 @@ function picked(input: Input, keys: readonly string[]): Record<string, unknown> 
   return Object.fromEntries(keys.filter(key => input[key] !== undefined).map(key => [key, input[key]]))
 }
 
-const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'expiresAt', 'supersedes', 'contradicts']
+const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'expiresAt', 'supersedes', 'contradicts', 'distinct']
 const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'expiresAt', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
 const HYGIENE_KEYS = ['verify', 'verifyDepth', 'nearDedup', 'staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 
@@ -390,8 +392,16 @@ export function addedBy(name: string, value: unknown): boolean {
   return name === 'remember' && (value as Partial<RememberResult>).outcome === 'added'
 }
 
-function rememberedLine(value: unknown): Line | undefined {
-  const memory = (value as Partial<RememberResult>).memory
+/** The similar memories a remember answered instead of writing, or undefined for any other answer. */
+function similarOf(value: unknown): SimilarMemory[] | undefined {
+  const result = value as Partial<{ outcome: string; similar: SimilarMemory[] }>
+  return result.outcome === 'similar' && Array.isArray(result.similar) ? result.similar : undefined
+}
+
+function rememberedLine(input: Input, value: unknown): Line | undefined {
+  const similar = similarOf(value)
+  if (similar !== undefined) return modelLine('held', 'warn', ` a memory close to ${similar.map(memory => memory.id).join(', ')}: ${openingOf(String(input.text ?? ''))}`)
+  const memory = (value as { memory?: Memory }).memory
   if (memory === undefined) return undefined
   const opening = openingOf(memory.text)
   return addedBy('remember', value) ? modelLine('added', 'ok', ` (${scopeLabel(memory.scope)}): ${opening}`) : modelLine('merged', 'warn', ` into ${memory.id}: ${opening}`)
@@ -409,7 +419,7 @@ function forgotLine(input: Input, value: unknown): Line | undefined {
 }
 
 const EDIT_LINES: Record<string, (input: Input, value: unknown) => Line | undefined> = {
-  remember: (_input, value) => rememberedLine(value),
+  remember: rememberedLine,
   update: input => modelLine('updated', 'warn', ` ${String(input.id)}${typeof input.text === 'string' ? `: "${input.text.slice(0, 80)}"` : ''}`),
   delete: input => modelLine('deleted', 'error', ` ${String(input.id)}${reasonOf(input)}`),
   forget: forgotLine,
@@ -432,6 +442,22 @@ const MAX_RESULT = 60_000
 export function resultText(value: unknown): string {
   const text = JSON.stringify(value, null, 1) ?? 'null'
   return text.length <= MAX_RESULT ? text : `${text.slice(0, MAX_RESULT)}\n[cut at ${MAX_RESULT} of ${text.length} characters; narrow the request with limit or a filter]`
+}
+
+/** What the model reads when a remember was held: the similar memories and the two ways on. */
+export function similarText(similar: readonly SimilarMemory[]): string {
+  const lines = similar.map(memory => `- ${memory.id} (${memory.kind}, cosine ${memory.cosine.toFixed(2)}): ${memory.text}`)
+  return [
+    'Not saved: these memories are close in meaning to yours.',
+    ...lines,
+    'If one states the same fact, call update on it with the current text. If yours is a different fact, call remember again with distinct: true.',
+  ].join('\n')
+}
+
+/** A tool's answer as the model reads it: a held remember as its instruction, anything else as JSON. */
+export function answerText(name: string, value: unknown): string {
+  const similar = name === 'remember' ? similarOf(value) : undefined
+  return similar === undefined ? resultText(value) : similarText(similar)
 }
 
 /** The answer a call gets while the mod is off. */

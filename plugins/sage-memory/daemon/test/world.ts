@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
-import type { Memory, RememberInput, RememberResult } from '../../hooks/shared/model.ts'
+import type { Memory, RememberInput, RememberWritten } from '../../hooks/shared/model.ts'
 import type { ProjectRef } from '../../hooks/shared/protocol.ts'
 import type { Op } from '../op.ts'
 import { remember } from '../remember.ts'
@@ -26,7 +26,7 @@ export type World = {
   op: (store?: Store) => Op
   /** Both stores as a reminder reads them. */
   readers: (sessionId?: string, loop?: string) => Readers
-  remember: (input: RememberInput, store?: Store) => Promise<RememberResult>
+  remember: (input: RememberInput, store?: Store) => Promise<RememberWritten>
   read: (id: string, store?: Store) => Memory
   edges: (store?: Store) => string[]
   close: () => void
