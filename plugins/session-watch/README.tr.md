@@ -61,10 +61,11 @@ Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzer
 
 ## Nereye uzanır
 
-Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
+Claude Code 2.1.325 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, turn.step, turn.complete, model.fork, model.complete, session.compact, tool.call{tool=Bash}, command.run{command=session-watch}
-    ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf, readTail), $.fs.exists (via readOthers, readTail, transcriptsOf), $.fs.list (via readOthers, transcriptsOf), $.fs.read (via readOthers), $.fs.stat (via tailWithResponse, transcriptsOf), $.process.run (via livePids, readGit, tailWithResponse), $.process.spawn (via followOne, readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.settings.read (via readTail), $.sidebar.set (via show), $.store.delete (via startTotals), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals), $.ui.log (via refresh, seedFromTail, seedTotals, startTotals, tryFollow), $.ui.status (via show)
+    ❯ ./register.ts calls: $.clock.after (via countCall, startTotals), $.clock.every, $.command.register, $.env.get (via configDirOf, readTail), $.fs.exists (via readOthers, readTail, transcriptsOf), $.fs.list (via readOthers, transcriptsOf), $.fs.read (via readOthers), $.fs.stat (via tailWithResponse, transcriptsOf), $.process.run (via livePids, readGit, tailWithResponse), $.process.spawn (via followOne, readTotals), $.session.id, $.session.model (via readNow), $.session.root, $.session.usage (via readNow), $.session.version, $.settings.read (via readTail), $.sidebar.set (via show), $.store.get (via keepTotals, startTotals), $.store.set (via keepTotals)
+    ❯ ./register.ts calls: $.ui.log (via refresh, seedFromTail, seedTotals, startTotals, tryFollow), $.ui.status (via show)
     ❯ ./register.ts env writes: nothing
     ❯ ./register.ts env reads: CLAUDE_CODE_EFFORT_LEVEL, CLAUDE_CONFIG_DIR, HOME
 

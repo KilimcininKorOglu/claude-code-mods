@@ -194,8 +194,7 @@ describe('session-watch', () => {
   })
 
   test('a session with no kept totals reads them from its transcripts, each response once, and counts later turns on top', async ($, on) => {
-    // 0.1.0 counted from the module's load under `tokens`; that value is dropped and read again.
-    const w = world(on, { tokens: { [SID]: { input: 1, output: 1, cacheRead: 1, cacheWrite: 1, thinking: 0 } } })
+    const w = world(on)
     // One response written as two content-block rows, a second response, a row of another kind, and a subagent's response.
     w.files.set(MAIN, [response('msg_1', 3, 40), response('msg_1', 3, 40), response('msg_2', 2, 60), JSON.stringify({ type: 'user', message: { content: 'hi' } })].join('\n') + '\n')
     w.files.set(SUB, `${response(undefined, 7, 7)}\n`)
@@ -206,7 +205,6 @@ describe('session-watch', () => {
     await $.turn.complete(turn())
     expect(w.store.totals).toBeUndefined()
     await w.clock.advance(0)
-    expect(w.store.tokens).toBeUndefined()
     expect(w.store.totals).toEqual({ [SID]: { input: 1012, output: 607, cacheRead: 8300, cacheWrite: 530, thinking: 0 } })
     expect(w.logs).toEqual([])
   })
@@ -250,16 +248,16 @@ describe('session-watch', () => {
     expect(lines.at(-2)).toEqual({ text: '  cors-fix', kind: 'dim' })
   })
 
-  test('totals kept before thinking was counted keep their counts and take the thinking alone; another session keeps its own', async ($, on) => {
+  test('kept totals stand without a reading of the transcripts; another session keeps its own, and a value missing a count reads as none', async ($, on) => {
     // The kept counts hold plugin model calls no transcript records, so they stand.
-    const w = world(on, { totals: { other: { input: 9, output: 9, cacheRead: 9, cacheWrite: 9 }, [SID]: { input: 500_000, output: 700, cacheRead: 9000, cacheWrite: 800 } } })
+    const kept = { input: 500_000, output: 700, cacheRead: 9000, cacheWrite: 800, thinking: 30 }
+    const other = { input: 9, output: 9, cacheRead: 9, cacheWrite: 9, thinking: 1 }
+    const w = world(on, { totals: { other, broken: { input: 9, output: 9, cacheRead: 9, cacheWrite: 9 }, [SID]: kept } })
     w.files.set(MAIN, `${response('msg_1', 3, 40, 25)}\n`)
     await $.session.start({ surface: null, isInteractive: false, cwd: '/work' })
     await w.clock.advance(0)
-    expect(w.store.totals).toEqual({
-      other: { input: 9, output: 9, cacheRead: 9, cacheWrite: 9, thinking: 0, noThinking: true },
-      [SID]: { input: 500_000, output: 700, cacheRead: 9000, cacheWrite: 800, thinking: 25 },
-    })
+    await $.turn.complete(turn())
+    expect(w.store.totals).toEqual({ other, [SID]: { input: 501_000, output: 1200, cacheRead: 17_000, cacheWrite: 1300, thinking: 30 } })
     expect(w.logs).toEqual([])
   })
 

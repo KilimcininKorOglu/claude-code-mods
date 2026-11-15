@@ -7,8 +7,6 @@ import {
 
 /** The totals of each session, counted from its transcripts on. */
 const TOTALS_KEY = 'totals'
-/** Where 0.1.0 kept totals counted from the module's first load; they are read again from the transcripts. */
-const OLD_KEY = 'tokens'
 const TICK_MS = 10_000
 const GIT_MS = 10_000
 /** A Bash command that may move the branch or the working tree. */
@@ -113,11 +111,9 @@ async function keepTotals($: EngineInterface, state: State): Promise<void> {
 }
 
 /** Adds the transcripts' totals under the turns counted while they were read, then keeps and draws them. */
-async function seedTotals($: EngineInterface, state: State, files: readonly Transcript[], thinkingOnly: boolean): Promise<void> {
+async function seedTotals($: EngineInterface, state: State, files: readonly Transcript[]): Promise<void> {
   try {
-    const read = await readTotals($, files)
-    // Totals kept before thinking was counted keep their counts and take the thinking alone.
-    state.split = thinkingOnly ? { ...state.split, thinking: state.split.thinking + read.thinking } : sumSplits(read, state.split)
+    state.split = sumSplits(await readTotals($, files), state.split)
   } catch (err) {
     $.ui.log(`the token totals count from the module's load, because the transcripts were not read: ${err instanceof Error ? err.message : String(err)}`)
   }
@@ -132,16 +128,14 @@ async function seedTotals($: EngineInterface, state: State, files: readonly Tran
  */
 async function startTotals($: EngineInterface, state: State): Promise<void> {
   const kept = storedSplits(await $.store.get(TOTALS_KEY))[state.sid]
-  await $.store.delete(OLD_KEY)
-  const thinkingOnly = kept?.noThinking === true
-  state.split = kept === undefined ? NO_SPLIT : { input: kept.input, output: kept.output, cacheRead: kept.cacheRead, cacheWrite: kept.cacheWrite, thinking: kept.thinking }
+  state.split = kept ?? NO_SPLIT
   try {
     const files = await transcriptsOf($, state)
     startFollow(state, files)
-    if (kept !== undefined && !thinkingOnly) return
+    if (kept !== undefined) return
     state.seeding = true
     // The reading outlives the session.start dispatch, so it runs from a timer.
-    $.clock.after(0, () => void seedTotals($, state, files, thinkingOnly))
+    $.clock.after(0, () => void seedTotals($, state, files))
   } catch (err) {
     $.ui.log(`the token totals count from the module's load, because the transcripts were not found: ${err instanceof Error ? err.message : String(err)}`)
   }
