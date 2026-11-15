@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { buildHttp, parseResponse, readResponse, retryDelay, withThinking } from '../hooks/api.ts'
-import { parseCommand, resolveConsumer, statusText } from '../hooks/settings.ts'
+import { buildHttp, parseResponse, readResponse, retryDelay, withThinking } from '../hooks/api'
+import { parseCommand, resolveConsumer, statusText } from '../hooks/settings'
 
 tier('user')
 

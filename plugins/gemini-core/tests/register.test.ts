@@ -1,8 +1,8 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { CommandRunInput, On, RenderPropsOf } from 'claude-code'
-import type { Gemini } from '../types/index.d.ts'
+import type { Gemini } from '../types/index.d'
 
-import { configFrom, createGemini, type Host } from '../hooks/register.ts'
+import { configFrom, createGemini, type Host } from '../hooks/register'
 
 tier('user')
 

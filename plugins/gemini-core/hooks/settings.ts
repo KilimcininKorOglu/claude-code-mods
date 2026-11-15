@@ -1,6 +1,6 @@
 /** The settings /gemini-core changes, their store keys, and the lines it prints. */
-import type { GeminiChange, GeminiThinking, GeminiTier } from '../types/index.d.ts'
-import { MODEL_ID } from './api.ts'
+import type { GeminiChange, GeminiThinking, GeminiTier } from '../types/index.d'
+import { MODEL_ID } from './api'
 
 export const THINKING: readonly GeminiThinking[] = ['minimal', 'low', 'medium', 'high']
 

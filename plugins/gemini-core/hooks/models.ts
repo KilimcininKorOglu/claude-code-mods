@@ -1,5 +1,5 @@
 /** The Gemini models a key can use, as Google lists them, and the text /gemini-core prints of them. */
-import { MODEL_ID } from './api.ts'
+import { MODEL_ID } from './api'
 
 /** One model a mod can be set to. */
 export type ModelInfo = { id: string; displayName: string; thinking: boolean; inputTokenLimit: number }

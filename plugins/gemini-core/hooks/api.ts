@@ -1,5 +1,5 @@
 /** The Gemini generateContent request and the reading of its response. */
-import type { GeminiAnswer, GeminiHttp, GeminiRead, GeminiResponse, GeminiThinking } from '../types/index.d.ts'
+import type { GeminiAnswer, GeminiHttp, GeminiRead, GeminiResponse, GeminiThinking } from '../types/index.d'
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models'
 

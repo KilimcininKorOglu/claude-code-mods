@@ -1,6 +1,6 @@
 /** The pane /gemini-core model <mod> opens: the models the key lists, to pick one for a mod. */
 import type { Elements } from 'claude-code'
-import type { ModelInfo } from './models.ts'
+import type { ModelInfo } from './models'
 
 /** The pick the pane is open for. */
 export type Pick = { consumer: string; models: readonly ModelInfo[]; current: string }

@@ -1,6 +1,6 @@
 /** Several Gemini keys, tried in turn: which failures move to the next key, and the reading that does it. */
-import type { GeminiHttp, GeminiRead, GeminiResponse } from '../types/index.d.ts'
-import { readResponse, RETRY } from './api.ts'
+import type { GeminiHttp, GeminiRead, GeminiResponse } from '../types/index.d'
+import { readResponse, RETRY } from './api'
 
 /** The keys of a comma-separated list, trimmed, without blanks or repeats, in order. */
 export function parseKeys(text: string | undefined): string[] {

@@ -1,10 +1,11 @@
+/// <reference path="../types/index.d.ts" />
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
-import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiRequest, GeminiSettings, GeminiTier } from '../types/index.d.ts'
-import { buildHttp, MODEL_ID, withThinking } from './api.ts'
-import { parseKeys, readWithKeys, type KeyState } from './keys.ts'
-import { modelsRequest, modelsText, parseModels, unknownModel, type ModelInfo } from './models.ts'
-import { listTree, PANE_ID, paneRows, pickerTree, type Pick } from './picker.tsx'
-import { consumersOf, FREE_WARNING, isThinking, isTier, KEYS, ownModelsText, parseCommand, resolveConsumer, statusText, type ConsumerLine } from './settings.ts'
+import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiRequest, GeminiSettings, GeminiTier } from '../types/index.d'
+import { buildHttp, MODEL_ID, withThinking } from './api'
+import { parseKeys, readWithKeys, type KeyState } from './keys'
+import { modelsRequest, modelsText, parseModels, unknownModel, type ModelInfo } from './models'
+import { listTree, PANE_ID, paneRows, pickerTree, type Pick } from './picker'
+import { consumersOf, FREE_WARNING, isThinking, isTier, KEYS, ownModelsText, parseCommand, resolveConsumer, statusText, type ConsumerLine } from './settings'
 
 /**
  * The store and environment the methods of `$.gemini` run on. The validator

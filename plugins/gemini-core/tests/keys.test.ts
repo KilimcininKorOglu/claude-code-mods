@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { buildHttp } from '../hooks/api.ts'
-import { isKeyFailure, parseKeys, readWithKeys, type KeyState } from '../hooks/keys.ts'
+import { buildHttp } from '../hooks/api'
+import { isKeyFailure, parseKeys, readWithKeys, type KeyState } from '../hooks/keys'
 
 tier('user')
 
