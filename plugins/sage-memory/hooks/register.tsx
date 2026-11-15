@@ -1054,7 +1054,7 @@ async function completedOf($: EngineInterface): Promise<string[]> {
 /** The active memories of one store, most important first. */
 async function topOf($: EngineInterface, state: State, scope: 'project' | 'user', limit: number): Promise<Memory[]> {
   const page = await ask<MemoryPage>($, state, '/memory/list', { scope, statuses: ['active'], limit: 200 })
-  return topByImportance(page.memories.filter(memory => memory.kind !== 'session_digest'), limit)
+  return topByImportance(page.memories, limit)
 }
 
 /** Writes one memory; a refusal (a progress note, a secret, a missing anchor) is a red line, and the rest still go. */

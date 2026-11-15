@@ -75,6 +75,30 @@ describe('schema', () => {
     }
   })
 
+  test('opening a store turns a memory and a candidate of a retired kind into a fact and leaves the rest', () => {
+    const file = join(tempDir(), 'r.db')
+    const db = openDatabase(file)
+    const now = new Date().toISOString()
+    const rows: [string, string][] = [['m1', 'summary'], ['m2', 'task_outcome'], ['m3', 'session_digest'], ['m4', 'decision']]
+    for (const [id, kind] of rows) {
+      db.prepare(
+        `INSERT INTO memories (id, data, text, status, kind, scope, persistence, context_policy, importance, confidence, freshness, tags, canonical_text, created_at, updated_at)
+         VALUES (?, ?, 'text', 'active', ?, 'project', 'long_lived', 'auto', 0.5, 0.8, 1, '', 'text', ?, ?)`,
+      ).run(id, JSON.stringify({ id, kind }), kind, now, now)
+    }
+    db.prepare("INSERT INTO candidates (id, data, status, canonical_text, created_at, updated_at) VALUES ('c1', ?, 'pending', 'text', ?, ?)").run(JSON.stringify({ kind: 'summary' }), now, now)
+    db.close()
+    const again = openDatabase(file)
+    try {
+      const rows = again.prepare("SELECT id, kind, json_extract(data, '$.kind') AS stored FROM memories ORDER BY id").all()
+      assert.deepEqual(rows.map(row => `${String(row.id)}:${String(row.kind)}:${String(row.stored)}`), ['m1:fact:fact', 'm2:fact:fact', 'm3:fact:fact', 'm4:decision:decision'])
+      assert.equal(again.prepare("SELECT json_extract(data, '$.kind') AS kind FROM candidates").get()?.kind, 'fact')
+      assert.equal(versionOf(again), String(SCHEMA_VERSION), 'the schema version stays, so an older daemon still opens it')
+    } finally {
+      again.close()
+    }
+  })
+
   test('a database of a newer schema is refused, not downgraded', () => {
     const file = join(tempDir(), 'd.db')
     const db = openDatabase(file)

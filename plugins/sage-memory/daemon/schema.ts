@@ -130,20 +130,39 @@ function versionOf(db: DatabaseSync): number {
   return row ? Number(row.value) : 0
 }
 
-/** Brings a database to `SCHEMA_VERSION` in one transaction, or throws when it is newer. */
-export function migrate(db: DatabaseSync): void {
-  const current = versionOf(db)
-  if (current > SCHEMA_VERSION) {
-    throw new Error(`the database is at schema ${current}, newer than this daemon's ${SCHEMA_VERSION}`)
-  }
-  if (current === SCHEMA_VERSION) return
+/**
+ * Kinds no writer uses any more: a session digest, a summary and a task outcome report one turn's
+ * work, which the store does not keep. A memory or candidate still of one becomes a fact. The
+ * rewrite is idempotent and keeps the schema version, so a daemon of an older release still opens
+ * the database.
+ */
+const RETIRE_KINDS = `
+  UPDATE memories SET kind = 'fact', data = json_set(data, '$.kind', 'fact') WHERE kind IN ('session_digest', 'summary', 'task_outcome');
+  UPDATE candidates SET data = json_set(data, '$.kind', 'fact') WHERE json_extract(data, '$.kind') IN ('session_digest', 'summary', 'task_outcome');
+`
+
+function inTransaction(db: DatabaseSync, work: () => void): void {
   db.exec('BEGIN IMMEDIATE')
   try {
-    db.exec(SCHEMA_V1)
-    db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION))
+    work()
     db.exec('COMMIT')
   } catch (err) {
     db.exec('ROLLBACK')
     throw err
   }
+}
+
+/** Brings a database to `SCHEMA_VERSION` in one transaction, or throws when it is newer; then retires the unused kinds. */
+export function migrate(db: DatabaseSync): void {
+  const current = versionOf(db)
+  if (current > SCHEMA_VERSION) {
+    throw new Error(`the database is at schema ${current}, newer than this daemon's ${SCHEMA_VERSION}`)
+  }
+  if (current < SCHEMA_VERSION) {
+    inTransaction(db, () => {
+      db.exec(SCHEMA_V1)
+      db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION))
+    })
+  }
+  inTransaction(db, () => db.exec(RETIRE_KINDS))
 }

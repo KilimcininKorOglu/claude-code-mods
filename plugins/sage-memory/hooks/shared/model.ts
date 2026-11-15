@@ -18,13 +18,10 @@ export const KINDS = [
   'file_note',
   'symbol_note',
   'command_note',
-  'summary',
   'memory_review',
   'tool_outcome',
   'error_pattern',
-  'session_digest',
   'role_operational',
-  'task_outcome',
   'security_signal',
   'fleet_convention',
 ] as const

@@ -75,10 +75,8 @@ function freshnessScore(m: Memory, now: number): number {
   return age <= 90 ? 12 : 5
 }
 
-const TRANSIENT_KINDS = new Set(['summary', 'memory_review'])
-
 function qualityScore(m: Memory): number {
-  const kind = TRANSIENT_KINDS.has(m.kind) ? 0 : 5
+  const kind = m.kind === 'memory_review' ? 0 : 5
   const tags = m.tags.length >= 3 ? 5 : m.tags.length >= 1 ? 3 : 0
   const length = m.text.length >= 80 && m.text.length <= 500 ? 5 : 2
   return kind + tags + length

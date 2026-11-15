@@ -310,7 +310,6 @@ const DURABLE_KINDS: ReadonlySet<Kind> = new Set<Kind>([
   'tool_outcome',
   'error_pattern',
   'role_operational',
-  'task_outcome',
   'security_signal',
   'fleet_convention',
 ])
