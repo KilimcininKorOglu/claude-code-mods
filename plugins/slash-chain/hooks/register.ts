@@ -1,5 +1,5 @@
 import type { CommandRunInput, CommandRunResult, EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
-import { cancelledText, doneText, FAIL_DESCRIPTION, FAIL_SCHEMA, FAIL_TOOL, failedWhy, failNote, parseChain, reasonOf, statusText, stepText, stoppedText, thrownWhy, turnWhy, type Step, type Wait } from './chain.ts'
+import { cancelledText, doneText, FAIL_DESCRIPTION, FAIL_SCHEMA, FAIL_TOOL, failedWhy, failNote, parseChain, reasonOf, statusText, stepText, stoppedText, thrownWhy, turnWhy, type Step, type Wait } from './chain'
 
 const ENABLED_KEY = 'enabled'
 const COMMAND = 'slash-chain'

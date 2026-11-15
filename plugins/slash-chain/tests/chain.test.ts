@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { cancelledText, parseChain, statusText, stoppedText, thrownWhy } from '../hooks/chain.ts'
+import { cancelledText, parseChain, statusText, stoppedText, thrownWhy } from '../hooks/chain'
 
 tier('user')
 
