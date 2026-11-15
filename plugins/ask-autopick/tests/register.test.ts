@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { minutesOf, pickedLine, pickedLog, picksOf, waitsLine, waitsLog } from '../hooks/pick'
+import { minutesOf, pickedLine, picksOf, waitsLine, waitsLog } from '../hooks/pick'
 
 tier('user')
 
@@ -150,7 +150,7 @@ describe('picks', () => {
   test('the sidebar draws each picked answer yellow and the rest faint, and a waiting question yellow', () => {
     const answers = { 'Renk?': 'Mavi (Recommended)', 'Boyut?': 'Büyük (Önerilen)' }
     expect(pickedLine(10, answers)).toEqual({
-      text: pickedLog(10, answers),
+      text: 'no answer in 10 min, picked the recommended option: Renk? → Mavi (Recommended); Boyut? → Büyük (Önerilen)',
       kind: 'warn',
       parts: [
         { text: 'no answer in 10 min, picked the recommended option: ', kind: 'dim' },

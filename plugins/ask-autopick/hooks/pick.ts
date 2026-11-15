@@ -82,11 +82,6 @@ export function pickedLine(minutes: number, answers: Record<string, string>): Li
   return { ...partsLine([{ text: `no answer in ${minutes} min, picked the recommended option: `, kind: 'dim' }, ...each]), kind: 'warn' }
 }
 
-/** The pick as the person reads it: each question with the option it got. */
-export function pickedLog(minutes: number, answers: Record<string, string>): string {
-  return pickedLine(minutes, answers).text
-}
-
 /** The line the person reads when a question has nothing to pick. */
 export function waitsLog(minutes: number): string {
   return `a question has no recommended first option or takes several answers, so it waits for you past ${minutes} min`
