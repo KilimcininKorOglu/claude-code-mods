@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { SessionMessage } from 'claude-code'
 
-import { renderTranscript } from '../hooks/transcript.ts'
+import { renderTranscript } from '../hooks/transcript'
 
 tier('user')
 

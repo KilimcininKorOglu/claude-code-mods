@@ -1,5 +1,5 @@
 /** The argument of /council and the lines it prints. */
-import { parseMembers } from './members.ts'
+import { parseMembers } from './members'
 
 export const ENABLED_KEY = 'enabled'
 export const MEMBERS_KEY = 'members'

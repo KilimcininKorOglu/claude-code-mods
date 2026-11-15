@@ -1,7 +1,7 @@
 import { describe, expect, mock, test, tier, type Engine, type MockClock, type Plugin, type TestBody } from 'claude-code/testing'
 import type { CommandRunInput, On, SessionMessage, ToolSpec } from 'claude-code'
 
-import { forkMemberPrompt, MEMBER_SYSTEM, SYSTEM_GUIDANCE, TOOL_ID } from '../hooks/prompts.ts'
+import { forkMemberPrompt, MEMBER_SYSTEM, SYSTEM_GUIDANCE, TOOL_ID } from '../hooks/prompts'
 
 tier('user')
 

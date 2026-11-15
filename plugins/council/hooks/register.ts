@@ -1,10 +1,12 @@
+/// <reference path="../types/sidebar.d.ts" />
+/// <reference path="../types/gemini.d.ts" />
 import type { EngineInterface, ModelForkResult, Register, SessionMessage, ToolCallResult } from 'claude-code'
-import { runLines, statusText, summaryText, type Chair, type Run, type Seat, type Via } from './board.ts'
-import { changeText, convenedText, ENABLED_KEY, MEMBERS_KEY, membersText, OFF_DENY, parseCommand } from './command.ts'
-import { configFrom, HAIKU_MAX_CHARS, MAX_TOKENS, MEMBER_MS, type Config } from './config.ts'
-import { bare, DEFAULT_MEMBERS, isSessionModel, labelOfModel, storedMembers, type Member } from './members.ts'
-import { chairPrompt, forkMemberPrompt, INPUT_SCHEMA, letterOf, MEMBER_SYSTEM, memberPrompt, noAnswerText, questionOf, resultText, sendText, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, type Lettered, type Row } from './prompts.ts'
-import { renderTranscript } from './transcript.ts'
+import { runLines, statusText, summaryText, type Chair, type Run, type Seat, type Via } from './board'
+import { changeText, convenedText, ENABLED_KEY, MEMBERS_KEY, membersText, OFF_DENY, parseCommand } from './command'
+import { configFrom, HAIKU_MAX_CHARS, MAX_TOKENS, MEMBER_MS, type Config } from './config'
+import { bare, DEFAULT_MEMBERS, isSessionModel, labelOfModel, storedMembers, type Member } from './members'
+import { chairPrompt, forkMemberPrompt, INPUT_SCHEMA, letterOf, MEMBER_SYSTEM, memberPrompt, noAnswerText, questionOf, resultText, sendText, SYSTEM_GUIDANCE, TOOL_DESCRIPTION, TOOL_NAME, type Lettered, type Row } from './prompts'
+import { renderTranscript } from './transcript'
 
 /** The name gemini-core knows this mod by, and the model it enrolls with; every request names its own. */
 const CONSUMER = 'council'

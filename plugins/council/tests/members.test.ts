@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { isSessionModel, memberOf, parseMembers, storedMembers } from '../hooks/members.ts'
+import { isSessionModel, memberOf, parseMembers, storedMembers } from '../hooks/members'
 
 tier('user')
 
