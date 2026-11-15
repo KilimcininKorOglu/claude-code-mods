@@ -1,6 +1,6 @@
 {
   "name": "prompt-offload",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Writes a prompt longer than the limit (2000 characters by default) to a temp file and sends the model its first 200 characters with the path, so one paste does not fill the context.",
   "author": {
     "name": "Kerem Gok",
