@@ -120,7 +120,7 @@ function deleteStep(op: Op, shown: Shown): Step | undefined {
   return shown.retirable(op.targetId) ? { kind: 'delete', id: op.targetId, reason: reasonOf(op), count: 'deleted' } : undefined
 }
 
-/** The same memory with the current value: a new text for a shown, non-permanent memory. */
+/** The same memory with the current value: a new text for a shown, unprotected memory. */
 function rewriteStep(op: Op, shown: Shown): Step | undefined {
   const text = typeof op.text === 'string' ? op.text.trim() : ''
   return shown.retirable(op.targetId) && text !== '' ? { kind: 'update', id: op.targetId, patch: { text }, count: 'rewritten' } : undefined
@@ -146,19 +146,30 @@ function splitStep(op: Op, shown: Shown, writer: Writer): Step | undefined {
 }
 
 const SCORES = ['importance', 'confidence', 'freshness'] as const
-/** A new status: a permanent memory may only become active again, and a stale one is marked as a review's. */
+/** A new status: a protected memory may only become active again, and a stale one is marked as a review's. */
 function statusPatch(op: Op, id: string, shown: Shown): UpdatePatch {
   if (op.status === 'active') return { status: 'active' }
   return op.status === 'stale' && shown.retirable(id) ? { status: 'stale', staleReason: 'review' } : {}
 }
 
-/** New scores, each held to 0..1, and a new status; an archive the model asks for deletes the memory. */
+/**
+ * New scores, each held to 0..1. A protected memory's importance only rises: a lower one would take
+ * its protection away and let the next turn delete it.
+ */
+function scoresPatch(op: Op, memory: Memory): UpdatePatch {
+  const patch: UpdatePatch = {}
+  for (const key of SCORES) if (typeof op[key] === 'number') patch[key] = Math.max(0, Math.min(1, op[key]))
+  if (isProtected(memory) && (patch.importance ?? memory.importance) < memory.importance) delete patch.importance
+  return patch
+}
+
+/** New scores and a new status; an archive the model asks for deletes the memory. */
 function recalibrateStep(op: Op, shown: Shown): Step | undefined {
   const id = op.targetId
-  if (typeof id !== 'string' || !shown.all.has(id)) return undefined
+  const memory = typeof id === 'string' ? shown.all.get(id) : undefined
+  if (typeof id !== 'string' || memory === undefined) return undefined
   if (op.status === 'archived' && shown.retirable(id)) return deleteStep(op, shown)
-  const patch: UpdatePatch = statusPatch(op, id, shown)
-  for (const key of SCORES) if (typeof op[key] === 'number') patch[key] = Math.max(0, Math.min(1, op[key]))
+  const patch: UpdatePatch = { ...statusPatch(op, id, shown), ...scoresPatch(op, memory) }
   return Object.keys(patch).length > 0 ? { kind: 'update', id, patch, count: 'recalibrated' } : undefined
 }
 

@@ -37,6 +37,20 @@ describe('curate', () => {
     expect(run([{ action: 'merge', targetIds: ['a', 'w'], text: 'One fact.' }])).toMatchObject([{ kind: 'replace', replaced: ['a'] }])
   })
 
+  test('a recalibration never lowers a protected memory\'s importance, which would let the next turn delete it', () => {
+    const shown = [memory('a'), { ...memory('w'), importance: 0.9 }, memory('p', true)]
+    const run = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), shown, { sessionId: 's1', root: '/repo' })
+    expect(run([
+      { action: 'recalibrate', targetId: 'w', importance: 0.3, confidence: 0.5 },
+      { action: 'recalibrate', targetId: 'p', importance: 0.1 },
+      { action: 'recalibrate', targetId: 'a', importance: 0.3 },
+    ])).toEqual([
+      { kind: 'update', id: 'w', patch: { confidence: 0.5 }, count: 'recalibrated' },
+      { kind: 'update', id: 'a', patch: { importance: 0.3 }, count: 'recalibrated' },
+    ])
+    expect(run([{ action: 'recalibrate', targetId: 'w', importance: 1 }])).toMatchObject([{ patch: { importance: 1 } }])
+  })
+
   test('a compact plan never deletes or merges away a memory of importance 0.9 or more', () => {
     const shown = [memory('a'), { ...memory('w'), importance: 0.9 }]
     const plan = planOf(JSON.stringify({ operations: [{ action: 'delete', targets: ['w'] }, { action: 'merge', targets: ['a', 'w'], newText: 'One fact.' }] }), shown)
