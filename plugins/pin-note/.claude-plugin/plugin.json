@@ -1,6 +1,6 @@
 {
   "name": "pin-note",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Keeps the notes you pin with /pin-note for the whole session and sends them to the model again, word for word, after each compaction and /clear. Off until /pin-note on.",
   "author": {
     "name": "Kerem Gok",
