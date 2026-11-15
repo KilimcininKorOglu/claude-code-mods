@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register, ToolCallInput, ToolCallResult } from 'claude-code'
 import { BUILTIN_RULES } from './builtin-rules'
 import { withFlags } from './command'
