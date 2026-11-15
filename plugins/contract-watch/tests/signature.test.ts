@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, parseCheck, sidebarLines, signaturesIn } from '../hooks/signature.ts'
+import { blockingLine, changedSignatures, denyText, doneLines, doneLog, isBlocking, isGuarded, isReported, logText, modeOf, noteText, parseCheck, sidebarLines, signaturesIn } from '../hooks/signature'
 
 tier('user')
 
