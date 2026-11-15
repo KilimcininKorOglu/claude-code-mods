@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register } from 'claude-code'
 import { ALL, configDirOf, installedOf, isNewer, logText, marketplaceOf, marketplaceText, missingText, sidebarLines, sourcesOf, statusText, versionOf, type Installed, type Mod } from './doctor'
 
