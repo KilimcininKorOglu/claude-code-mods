@@ -102,8 +102,7 @@ export function sentenceVectors(db: DatabaseSync, modelId: string): Map<string, 
 /**
  * The visible memories nearest the query, best cosine first; a stale vector is skipped. With
  * `bySentence`, a memory's cosine is the best of its whole text and each of its sentences, so a
- * fact one sentence of a long memory states is found; search and reminders keep the whole text
- * alone, because their relevance scale was measured on it.
+ * fact one sentence of a long memory states is found.
  */
 export function vectorHits(db: DatabaseSync, query: SemanticQuery, visibility: Visibility, limit: number, bySentence = false): VectorHit[] {
   const rows = sql(db, VISIBLE).all(query.modelId, ...visibilityParams(visibility)) as VectorRow[]

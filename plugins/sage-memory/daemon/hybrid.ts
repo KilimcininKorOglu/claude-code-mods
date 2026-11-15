@@ -17,6 +17,6 @@ export function searchHybrid(dbs: readonly [DatabaseSync, DatabaseSync], query: 
   const lexical = interleave(searchStore(project, query, visibility, limit), searchStore(user, query, visibility, limit))
   if (semantic === undefined || query.trim() === '') return lexicalHits(lexical.slice(0, limit))
   const fetch = Math.max(limit * 2, VECTOR_FETCH)
-  const vectors = [...vectorHits(project, semantic, visibility, fetch), ...vectorHits(user, semantic, visibility, fetch)].sort((a, b) => b.cosine - a.cosine)
+  const vectors = [...vectorHits(project, semantic, visibility, fetch, true), ...vectorHits(user, semantic, visibility, fetch, true)].sort((a, b) => b.cosine - a.cosine)
   return fuse(lexical, vectors, limit)
 }

@@ -50,29 +50,29 @@ function memoryOf(id: string, text = `Memory ${id} holds a fact about the build`
 
 describe('semantic relevance', () => {
   test('the pivot is the relation floor, the floor the prompt threshold, and semantics stays below an exact anchor', () => {
-    assert.deepEqual(memorySemanticRelevance(0.5), { strength: 0.85, reasons: ['query:semantic-cosine:0.50'] })
-    assert.equal(memorySemanticRelevance(0.46).strength.toFixed(2), '0.62')
+    assert.deepEqual(memorySemanticRelevance(0.6), { strength: 0.85, reasons: ['query:semantic-cosine:0.60'] })
+    assert.equal(memorySemanticRelevance(0.55).strength.toFixed(2), '0.62')
     assert.equal(memorySemanticRelevance(0.72).strength, 0.94)
-    assert.deepEqual(memorySemanticRelevance(0.3), { strength: 0, reasons: [] }, 'a cosine where unrelated questions land is no evidence')
+    assert.deepEqual(memorySemanticRelevance(0.4), { strength: 0, reasons: [] }, 'a cosine where unrelated questions land is no evidence')
     assert.deepEqual(memorySemanticRelevance(null), { strength: 0, reasons: [] })
   })
 
   test('a hit is as relevant as its stronger channel, with the reasons of both', () => {
-    const relevance = hitRelevance({ memory: memoryOf('M1', POOL), vectorScore: 0.6 }, 'sockets')
-    assert.deepEqual(relevance, { strength: 0.94, reasons: ['query:text-terms:sockets', 'query:semantic-cosine:0.60'] })
+    const relevance = hitRelevance({ memory: memoryOf('M1', POOL), vectorScore: 0.7 }, 'sockets')
+    assert.deepEqual(relevance, { strength: 0.94, reasons: ['query:text-terms:sockets', 'query:semantic-cosine:0.70'] })
   })
 })
 
 describe('fusion', () => {
   test('a vector hit lifts a memory the text index found; one it missed enters only from the floor', () => {
     const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(id => memoryOf(id))
-    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.47 }, { memory: d!, cosine: 0.4 }, { memory: b!, cosine: 0.3 }], 10)
+    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.56 }, { memory: d!, cosine: 0.5 }, { memory: b!, cosine: 0.3 }], 10)
     assert.deepEqual(
       fused.map(hit => [hit.memory.id, hit.source, hit.vectorScore]),
       [
         ['B', 'both', 0.3],
         ['A', 'lexical', null],
-        ['C', 'vector', 0.47],
+        ['C', 'vector', 0.56],
       ],
     )
   })
@@ -341,14 +341,14 @@ describe('reminders through the vector channel', () => {
     await embeddings.afterWrite(w.project, [close, loose])
     const query = 'src/billing/ledger.ts ledger.ts ledger billing'
     const vector = new Array<number>(16).fill(0)
-    vector[0] = 0.55
-    vector[2] = 0.48
-    vector[1] = Math.sqrt(1 - 0.55 * 0.55 - 0.48 * 0.48)
+    vector[0] = 0.65
+    vector[2] = 0.57
+    vector[1] = Math.sqrt(1 - 0.65 * 0.65 - 0.57 * 0.57)
     fake.vectors.set(query, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(query, []) }
     const ranking = rankForTools(readers, { paths: [], query, mutation: false, limit: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [close.id])
-    assert.match(ranking.rejected.find(r => r.id === loose.id)?.reason ?? '', /relation 0\.73 is below 0\.85/)
+    assert.match(ranking.rejected.find(r => r.id === loose.id)?.reason ?? '', /relation 0\.71 is below 0\.85/)
     w.close()
   })
 })

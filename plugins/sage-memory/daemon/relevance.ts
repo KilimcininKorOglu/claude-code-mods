@@ -186,18 +186,19 @@ export function memoryQueryRelevance(memory: Memory, query: string): Relevance {
 }
 
 /**
- * The cosine at which a vector hit is as strong as the relation floor. Measured against the
- * paraphrase-multilingual models with 2174 real memories, 15 targeted and 15 unrelated Turkish
- * questions: on the mpnet model 10 of the 15 targeted ones reach it with their own memory and 1
- * unrelated one finds some memory there.
+ * The cosine at which a vector hit is as strong as the relation floor. A hit's cosine is the best of
+ * the memory's whole text and each of its sentences. Measured on mpnet with 333 real memories, 30
+ * Turkish questions on a later sentence, 20 on a memory's topic and 30 unrelated ones: 16 of 30 and
+ * 12 of 20 reach it with their own memory, and no unrelated question finds a memory there.
  */
-export const SEMANTIC_PIVOT_COSINE = 0.5
+export const SEMANTIC_PIVOT_COSINE = 0.6
 /**
- * The cosine at which a vector hit is as strong as a prompt reminder's relevance floor: 11 of the
- * 15 targeted questions reach it with their own memory, and 1 of the 15 unrelated ones with some
- * memory. A vector hit below it can pass no reminder gate.
+ * The cosine at which a vector hit is as strong as a prompt reminder's relevance floor: 20 of 30
+ * sentence questions and 15 of 20 topic questions reach it with their own memory, and 1 of 30
+ * unrelated ones with some memory (the whole-text vector alone at 0.46: 11 of 30, 11 of 20 and 5 of
+ * 30). A vector hit below it can pass no reminder gate.
  */
-export const SEMANTIC_FLOOR_COSINE = 0.46
+export const SEMANTIC_FLOOR_COSINE = 0.55
 const SEMANTIC_SLOPE = (RELATION_FLOOR - TURN_MIN_RELEVANCE) / (SEMANTIC_PIVOT_COSINE - SEMANTIC_FLOOR_COSINE)
 /** Semantics never claims the certainty of an exact anchor match. */
 const SEMANTIC_MAX_STRENGTH = 0.94

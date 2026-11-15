@@ -25,7 +25,7 @@ Only a memory with the same text merges without a question. A `remember` whose t
 
 The consolidator settles a held memory with its model: it asks whether the stored memory already states everything the new one states. If so, nothing is written. If the new text states everything the stored one states and more, it is written and supersedes the stored one, which stays recoverable; a permanent memory, or one of importance 0.9 or more, is never superseded, so the new text is written beside it. Otherwise the new memory is written as distinct. An import writes a held bullet nowhere and names it in its report.
 
-A memory of two or more sentences keeps one vector per sentence beside the vector of its whole text, because a single fact reached only 0.26 to 0.70 of the whole long memory that states it, and 0.49 to 0.86 of that memory's best sentence (mpnet, 194 real memories). Search and reminders keep the whole-text vector, the scale their floors were measured on.
+A memory of two or more sentences keeps one vector per sentence beside the vector of its whole text, because a single fact reached only 0.26 to 0.70 of the whole long memory that states it, and 0.49 to 0.86 of that memory's best sentence (mpnet, 194 real memories). Search and reminders use the same best of whole text and sentences.
 
 Triage compares the pairs the embeddings find close (the same 0.72 floor over whole texts and sentences, inside one scope, audience and owner) beside the pairs that share an anchor or three tags. For a close pair it asks both ways whether one memory states the other whole, and the one stated whole loses to the other. When neither does, it asks whether both can hold, and a no files a review of the newer memory that a person decides. Hygiene merges exact copies only, and flags contradictions by its word rule (other numbers or a negation in two texts that share most terms) only while embeddings are not set up, because on a real store that rule flagged 40 of the 59 close sentence pairs and none of them conflicted.
 
@@ -163,6 +163,8 @@ On Claude Code 2.1.283, macOS, Node 24.18: a daemon request over the socket took
 
 **The vector floor, re-measured on the model change.** On 2174 real memories, 15 targeted and 15 unrelated Turkish questions, at the floor of 0.46 the mpnet model reached 11 of the 15 targeted questions with their own memory and 1 unrelated question found some memory there; the MiniLM model it replaces passed 4 of the unrelated ones at the same floor. The multilingual-e5 family separates nothing on this absolute scale: its unrelated bests ran 0.72 to 0.81 against targeted owns of 0.76 to 0.86, which is why the model is mpnet and not e5.
 
+**Search and reminders by sentence.** Search and reminders score a memory by the best cosine of its whole text and each of its sentences. On 333 real memories with 30 Turkish questions about a later sentence of a memory, 20 about a memory's topic and 30 unrelated ones: the whole-text vector alone at the old floor of 0.46 reached 11 of 30 and 11 of 20 with their own memory, and 5 of 30 unrelated questions found some memory; the best of whole and sentence at the new floor of 0.55 reached 20 of 30 and 15 of 20, and 1 unrelated question found some memory. The own memory ranked first for 20 of 30 and 13 of 20 questions, against 4 of 30 and 6 of 20 with the whole-text vector.
+
 **Duplicate and conflict questions.** With haiku on whole texts: the merge question called a fact that one sentence of a long memory states OVERLAP in 11 of 12 pairs, so the consolidator asks the containment question instead. It answered NO to 36 of 36 pairs where the new text adds a fact, changes a number or says the opposite, NO to 18 of 18 pairs with the long memory as the new text, and YES to 24 of 36 facts the long memory states (3 runs each); 9 of the 12 misses were facts that add a detail the memory lacks, and a miss writes the fact as distinct. The conflict question answered YES to 20 of 20 changed or negated facts and NO to 109 of 122 close pairs that can both hold (2 runs each).
 
 ## Limits
@@ -170,7 +172,7 @@ On Claude Code 2.1.283, macOS, Node 24.18: a daemon request over the socket took
 - macOS and Linux only: the daemon uses a Unix socket, and a socket path over about 100 bytes stops the mod.
 - An anchorless memory with default scores is rarely reminded: the reminder gate needs a score of 0.65.
 - Without embeddings, a question in one language finds a memory in another only through shared terms.
-- The model reads the first 512 tokens of a text. Search and reminders use the whole-text vector, so the end of a longer memory is found by its words alone (10 of 194 memories in this repository's store were longer, the longest 886 tokens).
+- The model reads the first 512 tokens of a text, so a single sentence longer than that is found by its opening and its words alone.
 - A negation scores 0.49 to 0.73 against the sentence it negates, so a negated fact can stay under the 0.72 floor and is written without a question.
 - Claude Code's LSP tool has no rename, so a renamed symbol does not move its anchor.
 
