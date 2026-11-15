@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusText } from '../hooks/classify'
+import { classOfRule, ignoredDirs, nameRule, parseDu, sizeText, statusLine } from '../hooks/classify'
 import { deletedShort } from '../hooks/report'
 
 tier('user')
@@ -30,9 +30,9 @@ describe('classify', () => {
     expect(sizeText(12)).toBe('12 KB')
     expect(sizeText(512 * 1024)).toBe('512 MB')
     expect(sizeText(3.44 * 1024 * 1024)).toBe('3.4 GB')
-    expect(statusText(4.9 * 1024 * 1024)).toBe(undefined)
-    expect(statusText(7.4 * 1024 * 1024)).toBe('artifacts 7.4 GB · /disk-janitor')
-    expect(statusText(23.1 * 1024 * 1024)).toBe('over 20 GB: artifacts 23.1 GB · /disk-janitor')
+    expect(statusLine(4.9 * 1024 * 1024)).toBe(undefined)
+    expect(statusLine(7.4 * 1024 * 1024)?.text).toBe('artifacts 7.4 GB · /disk-janitor')
+    expect(statusLine(23.1 * 1024 * 1024)?.text).toBe('over 20 GB: artifacts 23.1 GB · /disk-janitor')
   })
 
   test('the deletion line colours what went, what was skipped and what failed', async () => {

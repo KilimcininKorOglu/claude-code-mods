@@ -111,8 +111,3 @@ export function statusLine(totalKb: number): Line | undefined {
   const head = totalKb >= LOUD_KB ? 'over 20 GB: artifacts ' : 'artifacts '
   return partsLine([part(head, undefined), part(sizeText(totalKb), statusTone(totalKb)), part(' · /disk-janitor', 'dim')])
 }
-
-/** The status line for a total, or undefined under 5 GB. */
-export function statusText(totalKb: number): string | undefined {
-  return statusLine(totalKb)?.text
-}
