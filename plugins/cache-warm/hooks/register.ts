@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, ModelForkResult, Register, TurnUsage } from 'claude-code'
 import { responseUsd, writeUsd, type Usage } from './pricing'
 import {
