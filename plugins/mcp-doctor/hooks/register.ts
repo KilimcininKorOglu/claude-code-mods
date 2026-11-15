@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register } from 'claude-code'
-import { backLines, backText, deltaOf, failedLines, failedOf, failedText, prefixOf, reconnectButton, sectionKey, statusText, type Failure } from './doctor.ts'
+import { backLines, backText, deltaOf, failedLines, failedOf, failedText, prefixOf, reconnectButton, sectionKey, statusText, type Failure } from './doctor'
 
 const ENABLED_KEY = 'enabled'
 const CONSUMER = 'mcp-doctor'

@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { deltaOf, failedOf, isWatched, prefixOf, statusText } from '../hooks/doctor.ts'
+import { deltaOf, failedOf, isWatched, prefixOf, statusText } from '../hooks/doctor'
 
 tier('user')
 
