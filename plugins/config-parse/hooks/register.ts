@@ -1,5 +1,6 @@
+/// <reference path="../types/sidebar.d.ts" />
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { denyText, doneLines, doneLog, envError, goneLines, goneLog, isCommit, isGuarded, isJsonc, isMissingTool, isNarrowable, jsoncText, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Line, type Mode } from './parse.ts'
+import { denyText, doneLines, doneLog, envError, goneLines, goneLog, isCommit, isGuarded, isJsonc, isMissingTool, isNarrowable, jsoncText, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Line, type Mode } from './parse'
 
 const ENABLED_KEY = 'enabled'
 const MODE_KEY = 'mode'

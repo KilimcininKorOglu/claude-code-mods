@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { denyText, doneLog, envError, isGuarded, isJsonc, isMissingTool, jsoncText, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines } from '../hooks/parse.ts'
+import { denyText, doneLog, envError, isGuarded, isJsonc, isMissingTool, jsoncText, jsonError, kindOf, logText, modeOf, noteText, pythonCode, pythonError, sectionKey, shownPath, sidebarLines } from '../hooks/parse'
 
 tier('user')
 
