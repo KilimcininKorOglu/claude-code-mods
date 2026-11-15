@@ -70,7 +70,7 @@ function world(on: On, files: Record<string, string> = {}): World {
   on('prompt.submit', (_, e) => ({ text: e.text }))
   on('tool.call', () => ({ result: undefined, text: '' }))
   on('process.run', (_, e) => ({
-    value: { exitCode: 0, stdout: e.argv.includes('--git-common-dir') ? '/src/app/.git\n' : '', stderr: '' },
+    value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: e.argv.includes('--git-common-dir') ? '/src/app/.git\n' : '', stderr: '' },
   }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) }))
   on('fs.read', (_, e) => {
