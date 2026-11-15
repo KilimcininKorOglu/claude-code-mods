@@ -99,6 +99,7 @@ function world(on: On): World {
   })
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/k' : undefined }))
   on('fs.read', (_, e) => ({ value: e.path.endsWith('server.json') ? JSON.stringify({ token: 'secret-token' }) : (w.files.get(e.path) ?? '') }))
+  on('fs.exists', (_, e) => ({ value: e.path.endsWith('server.json') || w.files.has(e.path) }))
   on('process.run', (_, e) => {
     w.argvs.push([...e.argv])
     if (e.argv[0] === 'git') {
@@ -907,6 +908,20 @@ describe('consolidator', () => {
     await $.turn.complete(answered('The project is a TypeScript plugin marketplace.'))
     await settled(w)
     expect(w.asked).toHaveLength(2)
+  })
+
+  withSidebar('the evidence names the function each edit landed in, so the model can anchor a fact to it', async ($, on) => {
+    const w = readyWorld(on)
+    w.modelText = '{"candidates":[]}'
+    const file = '/src/my app/daemon/server.ts'
+    w.files.set(file, ['import { x } from "y"', '', 'export function idleTimer(ms: number): void {', '  const limit = ms * 2', '  schedule(limit)', '}'].join('\n'))
+    await $.session.start(START)
+    await $.turn.start({ text: 'x', turnId: 't' } as never)
+    const edit = { tool_name: 'Edit', tool_input: { file_path: file, old_string: 'ms', new_string: '  const limit = ms * 2' }, tool_use_id: 't1', tool_response: 'ok' }
+    await $.classic.PostToolBatch({ tool_calls: [edit] } as never)
+    await $.turn.complete(answered('The idle timer now doubles its limit, because one interval closed live sessions.'))
+    await settled(w)
+    expect(w.asked[0]?.prompt).toContain('"changedSymbols": [\n    {\n      "path": "daemon/server.ts",\n      "symbol": "idleTimer"\n    }\n  ]')
   })
 })
 

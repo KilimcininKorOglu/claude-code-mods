@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { additionsOf } from '../hooks/consolidate.ts'
+import { additionsOf, changedSymbolsOf, definedName, editSpotsOf, enclosingName } from '../hooks/consolidate.ts'
 import { stepsOf, tallyLine } from '../hooks/curate.ts'
 import type { Memory } from '../hooks/shared/model.ts'
 
@@ -14,6 +14,37 @@ function memory(id: string, permanent = false): Memory {
 
 const SHOWN = [memory('a'), memory('b'), memory('p', true)]
 const steps = (operations: unknown[]) => stepsOf(JSON.stringify({ operations }), SHOWN, { sessionId: 's1', root: '/repo' })
+
+describe('changed symbols', () => {
+  test('a definition line names its function or class in each language the projects use, and a block line names none', () => {
+    const lines = [
+      'export async function idleTimer(ms: number) {', 'export const pick = async (a: string): Promise<void> => {', 'class Store extends Base {', 'export interface Pane {',
+      'async def load(path: str) -> None:', 'func (s *Server) Close() error {', 'pub(crate) async fn run(cfg: &Config) -> Result<()> {', 'private static func reload() {',
+      'override fun onCreate(state: Bundle?) {', '  private async refresh(id: string): Promise<void> {',
+    ]
+    expect(lines.map(definedName)).toEqual(['idleTimer', 'pick', 'Store', 'Pane', 'load', 'Close', 'run', 'reload', 'onCreate', 'refresh'])
+    expect(['if (ready) {', '} else {', 'for (const x of xs) {', 'return build(a) {', 'const total = a + b', 'schedule(limit)'].map(definedName)).toEqual([undefined, undefined, undefined, undefined, undefined, undefined])
+  })
+
+  test('an edit names the nearest definition at or above its first line, and nothing when its line is gone', () => {
+    const content = ['import x', 'export function first() {', '  a()', '}', '', 'export function second() {', '  const limit = 2', '  b(limit)', '}'].join('\n')
+    expect(enclosingName(content, 'b(limit)')).toBe('second')
+    expect(enclosingName(content, 'export function first() {')).toBe('first')
+    expect(enclosingName(content, 'import x')).toBeUndefined()
+    expect(enclosingName(content, 'gone()')).toBeUndefined()
+  })
+
+  test('only Edit and MultiEdit calls give spots, one per new text with a non-empty first line', () => {
+    expect(editSpotsOf('Edit', { new_string: '\n   b(limit)\n  c()' }, '/r/a.ts')).toEqual([{ path: '/r/a.ts', line: 'b(limit)' }])
+    expect(editSpotsOf('MultiEdit', { edits: [{ new_string: 'x()' }, { new_string: '  ' }, { new_string: 'y()' }] }, '/r/a.ts').map(spot => spot.line)).toEqual(['x()', 'y()'])
+    expect(editSpotsOf('Write', { content: 'export function f() {}' }, '/r/a.ts')).toEqual([])
+  })
+
+  test('each changed symbol is listed once, at most ten', () => {
+    const found = Array.from({ length: 14 }, (_, i) => ({ path: 'a.ts', symbol: `f${i % 12}` }))
+    expect(changedSymbolsOf(found).map(item => item.symbol)).toEqual(['f0', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9'])
+  })
+})
 
 describe('curate', () => {
   test('a memory the session made wrong is deleted, never one the curator was not shown or a permanent one', () => {

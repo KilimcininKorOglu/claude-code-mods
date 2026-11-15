@@ -48,6 +48,12 @@ import {
 import {
   additionsOf,
   addedLine,
+  changedSymbolsOf,
+  editSpotsOf,
+  enclosingName,
+  MAX_EDITS,
+  type ChangedSymbol,
+  type EditSpot,
   CONSOLIDATE_MS,
   CONSOLIDATE_TOKENS,
   CONSOLIDATOR_SYSTEM,
@@ -1150,6 +1156,22 @@ async function existingFor($: EngineInterface, state: State, since: Since, answe
   return [...found.values()]
 }
 
+/**
+ * The functions and classes the turn's edits landed in, read from each edited file as it is now.
+ * Without them the model anchored a fact about one function to its whole file, or to a wrong file:
+ * 9 of 3230 live notes had a symbol anchor. A file deleted since the edit names nothing.
+ */
+async function changedSymbols($: EngineInterface, edits: readonly EditSpot[]): Promise<ChangedSymbol[]> {
+  const found: ChangedSymbol[] = []
+  const contents = new Map<string, string>()
+  for (const edit of edits) {
+    if (!contents.has(edit.path)) contents.set(edit.path, (await $.fs.exists(edit.path)) ? String(await $.fs.read(edit.path)) : '')
+    const symbol = enclosingName(contents.get(edit.path) ?? '', edit.line)
+    if (symbol !== undefined) found.push({ path: edit.path, symbol })
+  }
+  return changedSymbolsOf(found)
+}
+
 async function consolidate($: EngineInterface, state: State, answer: string, since: Since): Promise<void> {
   if (!(await isReady(state))) return handBack(state, since)
   if ((await $.store.get('consolidate')) === false) return
@@ -1157,7 +1179,8 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const root = state.project?.root ?? ''
   const existing = await existingFor($, state, since, answer)
   const now = await $.clock.now()
-  const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($)), existing, since.relevant, now)
+  const changed = await changedSymbols($, since.turn.edits)
+  const prompt = consolidatorPrompt(since.asked, answer, evidenceText(root, since.turn, await completedOf($), changed), existing, since.relevant, now)
   const r = await consolidatorAnswer($, state, prompt, since)
   if (!r.isAnswered) return
   const sessionId = await $.session.id()
@@ -1228,6 +1251,7 @@ function joinedSince(pending: Since, since: Since): Since {
     turn: {
       read: [...new Set([...pending.turn.read, ...since.turn.read])].slice(-20),
       written: [...new Set([...pending.turn.written, ...since.turn.written])].slice(-20),
+      edits: [...pending.turn.edits, ...since.turn.edits].slice(-MAX_EDITS),
       commands: [...new Set([...pending.turn.commands, ...since.turn.commands])].slice(-10),
     },
   }
@@ -1265,8 +1289,10 @@ function noteBatch($: EngineInterface, state: State, calls: readonly ToolCall[])
   state.worth = true
   for (const call of calls) {
     for (const path of pathsOf({ ...call, tool_response: undefined })) {
-      if (CHANGE_TOOLS.has(call.tool_name)) state.turn.written = noted(state.turn.written, path)
-      else if (call.tool_name === 'Read') state.turn.read = noted(state.turn.read, path)
+      if (CHANGE_TOOLS.has(call.tool_name)) {
+        state.turn.written = noted(state.turn.written, path)
+        state.turn.edits = [...state.turn.edits, ...editSpotsOf(call.tool_name, call.tool_input, path)].slice(-MAX_EDITS)
+      } else if (call.tool_name === 'Read') state.turn.read = noted(state.turn.read, path)
     }
   }
   if (state.turnMid || state.turn.read.length + state.turn.written.length < MID_TURN_PATHS) return
