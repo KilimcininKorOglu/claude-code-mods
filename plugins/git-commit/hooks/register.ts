@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, ProcessRunResult, Register, ToolCallResult } from 'claude-code'
 import { gitCalls, heredocsOf, joinPath, type GitCall, type Heredoc } from './command'
 import { parseStatus, readNumstat, stateBlock } from './context'
