@@ -23,6 +23,12 @@ describe('triage', () => {
     expect(preFilter(memory('d', { expiresAt: '2026-09-01T00:00:00Z' }), NOW).reasons).toEqual(['expired at 2026-09-01T00:00:00Z'])
   })
 
+  test('phase 1 keeps a state until its end date, so the model never rates it down as transient before then', () => {
+    const state = { persistence: 'short_lived' as const, text: 'Staging still runs 3.4.1 until the database migration lands.' }
+    expect(preFilter(memory('s', { ...state, expiresAt: '2026-10-15T00:00:00Z' }), NOW)).toEqual({ verdict: 'keep', reasons: ['state until 2026-10-15T00:00:00Z'] })
+    expect(preFilter(memory('t', { ...state, expiresAt: '2026-09-15T00:00:00Z' }), NOW).verdict).toBe('discard')
+  })
+
   test('phase 2 adds the five sub-scores into its bands', () => {
     const anchored = memory('a', { anchors: [{ type: 'file', path: 'a.ts' }, { type: 'symbol', symbol: 'f', path: 'a.ts' }], tags: ['x', 'y', 'z'], useCount: 2, lastVerifiedAt: '2026-09-20T00:00:00Z' })
     expect(valueScore(anchored, NOW)).toEqual({ total: 21 + 22 + 20 + 12 + 10, band: 'keep' })

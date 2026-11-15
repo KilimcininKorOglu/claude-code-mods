@@ -20,8 +20,11 @@ export type Verdict = { verdict: 'keep' | 'discard' | 'uncertain'; reasons: stri
 
 const TRANSIENT = [/^(wip|todo|test|tmp|draft|tbd|placeholder|scratch)\s*(?::|-\s|—|–)/i, /^fix(ed|ing)?\s*:/i, /^debug\s*:/i]
 
-const KEEP_RULES: readonly ((m: Memory) => string | undefined)[] = [
+const KEEP_RULES: readonly ((m: Memory, now: number) => string | undefined)[] = [
   m => (m.importance >= 0.9 ? 'importance ≥ 0.9' : undefined),
+  // A state is transient by design and the rating prompt scores a transient state 2, which deletes it;
+  // its own end date decides instead, and the expiry rule below drops it once that date has passed.
+  (m, now) => (m.persistence === 'short_lived' && m.expiresAt !== undefined && Date.parse(m.expiresAt) >= now ? `state until ${m.expiresAt}` : undefined),
   m => (m.persistence === 'permanent' ? 'permanent' : undefined),
   // SAGE also kept every memory an answer used. An answer that names a memory to say it is wrong counts
   // as a use, so that rule kept exactly the memories to drop; the use count still raises the value score.
@@ -44,7 +47,7 @@ function discardReasons(m: Memory, now: number): string[] {
 /** Keep checks first (safety first), then discard checks; the rest is uncertain. */
 export function preFilter(m: Memory, now: number): Verdict {
   for (const rule of KEEP_RULES) {
-    const reason = rule(m)
+    const reason = rule(m, now)
     if (reason !== undefined) return { verdict: 'keep', reasons: [reason] }
   }
   const reasons = discardReasons(m, now)
