@@ -164,6 +164,6 @@ Claude Code 2.1.283, macOS, Node 24.18 üzerinde: socket üzerinden bir daemon i
 
     make install     # eslint, typescript-eslint, typescript, @types/node
     make lint        # complexity sınırı 10; aşılırsa build kırılır
-    make typecheck   # hooks ve daemon; /plugin-types çıktısı olan .claude/types/ gerekir
+    make typecheck   # daemon (Node tipleri)
     make validate
     make test        # claude plugin test, sonra daemon için node --test

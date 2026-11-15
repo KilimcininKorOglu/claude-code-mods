@@ -164,6 +164,6 @@ On Claude Code 2.1.283, macOS, Node 24.18: a daemon request over the socket took
 
     make install     # eslint, typescript-eslint, typescript, @types/node
     make lint        # complexity limit 10, the build fails above it
-    make typecheck   # the hooks and the daemon; needs .claude/types/ from /plugin-types
+    make typecheck   # the daemon (Node types)
     make validate
     make test        # claude plugin test, then node --test for the daemon
