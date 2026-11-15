@@ -109,6 +109,5 @@ Reach L3: üye başına bir, başkan için bir request.
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity sınırı 10; aşılırsa build kırılır
-    make typecheck   # --plugin-dir ../sidebar --plugin-dir ../gemini-core ile /plugin-types çıktısı olan .claude/types/ gerekir
     make validate
     make test        # claude plugin test

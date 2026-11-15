@@ -109,6 +109,5 @@ Reach L3: one request per member and one for the chair.
 
     make install     # eslint, typescript-eslint, typescript
     make lint        # complexity limit 10, the build fails above it
-    make typecheck   # needs .claude/types/ from /plugin-types with --plugin-dir ../sidebar --plugin-dir ../gemini-core
     make validate
     make test        # claude plugin test
