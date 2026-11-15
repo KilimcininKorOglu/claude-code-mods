@@ -1,4 +1,4 @@
-/// <reference path="../types/sidebar.d.ts" />
+import type {} from '../types/sidebar'
 import type { EngineInterface, Register } from 'claude-code'
 import { backLines, backText, deltaOf, failedLines, failedOf, failedText, prefixOf, reconnectButton, sectionKey, statusText, type Failure } from './doctor'
 
