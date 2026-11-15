@@ -1,6 +1,6 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
-import { absolute, allBytes, base64, blockCells, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, headBytes, pngSize, quadrant, readBmp, screenshotPath, sipsSize, splitCell } from '../hooks/shot.ts'
+import { absolute, allBytes, base64, blockCells, bmpName, cells, commandImagePaths, copyName, halfBlocks, hasGraphics, headBytes, pngSize, quadrant, readBmp, screenshotPath, sipsSize, splitCell } from '../hooks/shot'
 
 tier('user')
 

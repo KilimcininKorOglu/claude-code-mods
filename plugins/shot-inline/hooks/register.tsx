@@ -1,5 +1,5 @@
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
-import { absolute, allBytes, blockCells, bmpName, cells, commandImagePaths, copyName, GLYPHS, hasGraphics, isGlyphs, isImagePath, isPng, pngSize, readBmp, screenshotPath, sipsSize, type Glyphs, type Size } from './shot.ts'
+import { absolute, allBytes, blockCells, bmpName, cells, commandImagePaths, copyName, GLYPHS, hasGraphics, isGlyphs, isImagePath, isPng, pngSize, readBmp, screenshotPath, sipsSize, type Glyphs, type Size } from './shot'
 
 const ENABLED_KEY = 'enabled'
 const GLYPHS_KEY = 'glyphs'
