@@ -1,4 +1,4 @@
-/// <reference path="../types/index.d.ts" />
+import type {} from '../types/index'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { Gemini, GeminiChange, GeminiEnroll, GeminiPrepared, GeminiRequest, GeminiSettings, GeminiTier } from '../types/index.d'
 import { buildHttp, MODEL_ID, withThinking } from './api'
