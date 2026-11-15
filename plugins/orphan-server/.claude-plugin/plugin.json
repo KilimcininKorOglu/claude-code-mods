@@ -1,6 +1,6 @@
 {
   "name": "orphan-server",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Lists the servers a Bash call of the model started in this repository and left listening on a port, with their age and session, and stops one with SIGTERM, then SIGKILL.",
   "author": {
     "name": "Kerem Gok",
