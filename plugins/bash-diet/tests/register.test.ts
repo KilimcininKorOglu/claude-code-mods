@@ -50,7 +50,7 @@ function world(on: On): World {
     if (e.argv[0] === 'cat' && text !== undefined && text !== '') yield { stream: 'stdout' as const, text }
     return { value: { code: text === undefined ? 1 : 0, signal: null } }
   })
-  on('process.run', (_, e) => ({ value: { exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }))
+  on('process.run', (_, e) => ({ value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }))
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) || [...w.files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.files.get(e.path)?.length ?? 0, mtimeMs: w.mtimes.get(e.path) ?? 1, isLink: false } }))
   on('fs.write', (_, e) => { put(w, e.path, e.text); return { value: undefined } })
