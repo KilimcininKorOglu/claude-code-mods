@@ -94,6 +94,7 @@ import {
   wordsOf,
 } from './commands'
 import { captureOf, HOUR_MS, mayCapture, outputOf } from './capture'
+import { mapLimited } from './pool'
 import { COMPACT_MAX, COMPACT_MS, COMPACT_TOKENS, compactPrompt, compactSystem, planOf, planText, type Change, type Plan } from './compact'
 import {
   actionOf,
@@ -210,6 +211,8 @@ type State = {
   captured: Map<string, number>
   /** The timer of the next daily cleanup. */
   daily?: { cancel: () => void }
+  /** Whether a triage the person started runs in the background, so a second waits for it. */
+  triaging: boolean
   /** What the memory manager pane shows. */
   pane: PaneState
   /** This session's reminded, used and added memories, shown under the daemon line. */
@@ -1069,8 +1072,8 @@ async function topOf($: EngineInterface, state: State, scope: 'project' | 'user'
 }
 
 /** Whether `b` states everything `a` states, by the job model's containment answer; undefined when it gave none. */
-async function states($: EngineInterface, a: string, b: string): Promise<boolean | undefined> {
-  const raw = await answerOf($, CONTAINS_SYSTEM, containsPrompt(a, b))
+async function states($: EngineInterface, a: string, b: string, misses?: Record<string, number>): Promise<boolean | undefined> {
+  const raw = await answerOf($, CONTAINS_SYSTEM, containsPrompt(a, b), misses)
   return raw === undefined ? undefined : containsVerdictOf(raw)
 }
 
@@ -1353,6 +1356,8 @@ type Limits = { calls: number; pairs: number }
 const TRIAGE_LIMITS: Limits = { calls: 1000, pairs: 50 }
 const DAILY_LIMITS: Limits = { calls: 40, pairs: 15 }
 const TRIAGE_MS = 60_000
+/** How many triage questions go to the job model at once; one at a time, a run of 164 ratings and 50 pairs blocked the command for 10 minutes. */
+const JOB_PARALLEL = 4
 const DAY_MS = 24 * 60 * 60 * 1000
 
 /** Every active and stale memory of both stores, every session's included, page by page. */
@@ -1368,9 +1373,13 @@ async function allMemories($: EngineInterface, state: State): Promise<Memory[]> 
 }
 
 /** One short model answer, or undefined when the model gave none: no answer is no verdict. */
-async function answerOf($: EngineInterface, system: string, prompt: string): Promise<string | undefined> {
+async function answerOf($: EngineInterface, system: string, prompt: string, misses?: Record<string, number>): Promise<string | undefined> {
   const r = await $.model.complete({ model: await jobModel($), system, prompt, maxTokens: 512, timeoutMs: TRIAGE_MS })
-  return r.isAnswered && r.text.trim() !== '' ? r.text : undefined
+  const text = r.isAnswered ? r.text.trim() : ''
+  if (text !== '') return text
+  const reason = r.isAnswered ? 'empty-reply' : `${r.reason}${apiErrorDetail(r)}`
+  if (misses !== undefined) misses[reason] = (misses[reason] ?? 0) + 1
+  return undefined
 }
 
 type Gray = { memory: Memory; score: Score }
@@ -1399,8 +1408,10 @@ function classify(memories: readonly Memory[], now: number): { kept: number; dis
  */
 async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number, now: number, report: Report): Promise<string[]> {
   const rated: string[] = []
-  for (const { memory, score } of gray.slice(0, limit)) {
-    const raw = await answerOf($, RATE_SYSTEM, ratePrompt(memory, score, now))
+  const chosen = gray.slice(0, limit)
+  const answers = await mapLimited(chosen, JOB_PARALLEL, ({ memory, score }) => answerOf($, RATE_SYSTEM, ratePrompt(memory, score, now), report.misses))
+  for (const [index, { memory, score }] of chosen.entries()) {
+    const raw = answers[index]
     const rating = raw === undefined ? undefined : ratingOf(raw)
     if (rating === undefined) {
       report.unrated += 1
@@ -1423,8 +1434,8 @@ async function rateGray($: EngineInterface, gray: readonly Gray[], limit: number
 type Compared = { merge?: Merge; overlap: boolean; proposal?: Proposal } | undefined
 
 /** Whether the two memories cannot both hold, by the job model's answer; undefined when it gave none. */
-async function conflicts($: EngineInterface, pair: Pair): Promise<boolean | undefined> {
-  const raw = await answerOf($, CONFLICT_SYSTEM, containsPrompt(pair.a.text, pair.b.text))
+async function conflicts($: EngineInterface, pair: Pair, misses: Record<string, number>): Promise<boolean | undefined> {
+  const raw = await answerOf($, CONFLICT_SYSTEM, containsPrompt(pair.a.text, pair.b.text), misses)
   return raw === undefined ? undefined : containsVerdictOf(raw)
 }
 
@@ -1432,34 +1443,35 @@ async function conflicts($: EngineInterface, pair: Pair): Promise<boolean | unde
  * A close pair: whether each memory states the other whole, asked both ways on the whole texts;
  * when neither does, whether both can hold, and a review of the newer one when they cannot.
  */
-async function compareClose($: EngineInterface, pair: Pair): Promise<Compared> {
-  const aInB = await states($, pair.a.text, pair.b.text)
-  const bInA = aInB === undefined ? undefined : await states($, pair.b.text, pair.a.text)
+async function compareClose($: EngineInterface, pair: Pair, misses: Record<string, number>): Promise<Compared> {
+  const aInB = await states($, pair.a.text, pair.b.text, misses)
+  const bInA = aInB === undefined ? undefined : await states($, pair.b.text, pair.a.text, misses)
   if (aInB === undefined || bInA === undefined) return undefined
   const merge = containedMerge(pair, aInB, bInA)
   if (merge !== undefined) return { merge, overlap: false }
-  const conflict = await conflicts($, pair)
+  const conflict = await conflicts($, pair, misses)
   if (conflict === undefined) return undefined
   return { overlap: !conflict, proposal: conflict ? conflictProposal(pair) : undefined }
 }
 
 /** A cluster pair: the merge question on the opening of both texts. */
-async function compareCluster($: EngineInterface, pair: Pair): Promise<Compared> {
-  const raw = await answerOf($, MERGE_SYSTEM, pairPrompt(pair))
+async function compareCluster($: EngineInterface, pair: Pair, misses: Record<string, number>): Promise<Compared> {
+  const raw = await answerOf($, MERGE_SYSTEM, pairPrompt(pair), misses)
   const verdict = raw === undefined ? undefined : mergeVerdictOf(raw)
   if (verdict === undefined) return undefined
   return { merge: verdict === 'YES' ? mergeOf(pair) : undefined, overlap: verdict === 'OVERLAP' }
 }
 
 /**
- * Phase 4: the model compares the pairs, a close pair by the containment question and a cluster
- * pair by the merge question; answers the keys of the pairs it gave a verdict.
+ * Phase 4: the model compares the pairs, `JOB_PARALLEL` at once, a close pair by the containment
+ * question and a cluster pair by the merge question; answers the keys of the pairs it gave a verdict.
  */
 async function comparePairs($: EngineInterface, pairs: readonly Pair[], report: Report): Promise<string[]> {
   const merges: Merge[] = []
   const compared: string[] = []
-  for (const pair of pairs) {
-    const result = pair.close === true ? await compareClose($, pair) : await compareCluster($, pair)
+  const results = await mapLimited(pairs, JOB_PARALLEL, pair => (pair.close === true ? compareClose($, pair, report.misses) : compareCluster($, pair, report.misses)))
+  for (const [index, pair] of pairs.entries()) {
+    const result = results[index]
     if (result === undefined) {
       report.unjudged += 1
       continue
@@ -1482,7 +1494,7 @@ async function triageReport($: EngineInterface, state: State, limits: Limits, ju
   const gray = oldestFirst(classified.gray, entry => entry.memory.id, judged.notes)
   const close = await ask<ClosePair[]>($, state, '/memory/close-pairs', {})
   const pairs = oldestFirst(pairsOf(memories, close), pairKey, judged.pairs)
-  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], deletions: [...classified.discards], proposals: [], merges: [], overlaps: [], pairs: 0, unjudged: 0, judged }
+  const report: Report = { total: memories.length, kept: classified.kept, discarded: classified.discards.length, gray: classified.gray.length, rated: 0, unrated: 0, patches: [], deletions: [...classified.discards], proposals: [], merges: [], overlaps: [], pairs: 0, unjudged: 0, misses: {}, judged }
   const rated = await rateGray($, gray, limits.calls, now, report)
   const compared = await comparePairs($, pairs.slice(0, limits.pairs), report)
   report.judged = {
@@ -1551,10 +1563,29 @@ async function applyTriage($: EngineInterface, state: State, report: Report): Pr
   return lines.join('\n')
 }
 
+/**
+ * Starts a triage on a timer and answers at once, because a run of 164 ratings and 50 pairs held the
+ * command for 10 minutes; the report goes to the transcript when the run ends, and a second start
+ * waits for it.
+ */
 async function triageCommand($: EngineInterface, state: State, rest: string): Promise<string> {
   if (!(await isReady(state))) return `the daemon is not ready: ${statusText(state.enabled, state.link, state.project?.name ?? '')}`
-  const { report, applied } = await triageRun($, state, TRIAGE_LIMITS, rest.trim().toLowerCase() === 'apply')
-  return reportText(report, applied)
+  if (state.triaging) return 'a triage runs already; its report comes when it ends'
+  const apply = rest.trim().toLowerCase() === 'apply'
+  state.triaging = true
+  $.clock.after(0, () => void triageJob($, state, apply))
+  return `triage started${apply ? ' (apply)' : ' (dry run)'}: ${JOB_PARALLEL} questions at a time go to the job model; the report comes when it ends`
+}
+
+async function triageJob($: EngineInterface, state: State, apply: boolean): Promise<void> {
+  try {
+    const done = await guarded($, 'the triage', () => triageRun($, state, TRIAGE_LIMITS, apply))
+    if (done === undefined) return
+    $.ui.log(reportText(done.report, done.applied))
+    await toStream($, 'triage', { text: `triage of ${done.report.total} memories ended; the report is in the transcript`, kind: 'ok' })
+  } finally {
+    state.triaging = false
+  }
 }
 
 /** The daily cleanup is on unless the person turned it off. */
@@ -1783,7 +1814,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), triaging: false, pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)

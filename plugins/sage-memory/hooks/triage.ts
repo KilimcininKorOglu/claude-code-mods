@@ -469,6 +469,8 @@ export type Report = {
   overlaps: Pair[]
   pairs: number
   unjudged: number
+  /** How many job-model questions got no answer, by the reason the engine gave. */
+  misses: Record<string, number>
   /** The progress after this run, stored once the run is applied. */
   judged: Judged
 }
@@ -484,10 +486,17 @@ function patchText(patch: UpdatePatch): string {
 }
 
 /** The report lists every change it would make, so the person sees what apply writes. */
+/** The line that counts the questions the job model left unanswered, by reason; none when every one was answered. */
+function missLine(misses: Record<string, number>): string[] {
+  const parts = Object.entries(misses).sort(([a], [b]) => a.localeCompare(b)).map(([reason, count]) => `${reason} ${count}`)
+  return parts.length === 0 ? [] : [`questions without an answer: ${parts.join(', ')}`]
+}
+
 export function reportText(r: Report, applied: string | undefined): string {
   const lines = [
     `triage of ${r.total} memories: ${r.kept} kept by rule, ${r.discarded} discarded by rule or score, ${r.gray} in the gray band (${r.rated} rated, ${r.unrated} without a rating)`,
     `${r.deletions.length} deletion(s), ${r.patches.length} patch(es), ${r.proposals.length} review proposal(s), ${r.merges.length} merge(s) and ${r.overlaps.length} overlap(s) from ${r.pairs} compared pair(s)${r.unjudged > 0 ? `, ${r.unjudged} pair(s) without a verdict` : ''}`,
+    ...missLine(r.misses),
     ...r.deletions.map(d => `  delete: ${quoted(d.memory)} (${d.reason})`),
     ...r.merges.map(m => `  merge: ${m.loser.id} into ${m.keeper.id}: "${m.loser.text.slice(0, 60)}"`),
     ...r.patches.map(p => `  patch: ${quoted(p.memory)}: ${patchText(p.patch)}`),

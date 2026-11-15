@@ -1088,10 +1088,30 @@ describe('triage, compact and capture', () => {
     return w
   }
 
+  /** Starts a triage, lets its timer run, and answers the report it logged. */
+  async function triaged($: Parameters<TestBody>[0], w: World, args: string): Promise<string> {
+    const started = String((await $.command.run(run(args))).text)
+    expect(started).toStartWith('triage started')
+    await settled(w)
+    return w.logs.filter(line => line.startsWith('triage of')).at(-1) ?? ''
+  }
+
+  withSidebar('a triage answers at once, refuses a second start while it runs, and logs its report when it ends', async ($, on) => {
+    const w = triageWorld(on)
+    await $.session.start(START)
+    expect(String((await $.command.run(run('triage'))).text)).toBe('triage started (dry run): 4 questions at a time go to the job model; the report comes when it ends')
+    expect(String((await $.command.run(run('triage'))).text)).toBe('a triage runs already; its report comes when it ends')
+    expect(w.logs.some(line => line.startsWith('triage of'))).toBe(false)
+    await settled(w)
+    expect(w.logs.filter(line => line.startsWith('triage of'))).toHaveLength(1)
+    expect(streamOf(w, 'triage')).toEqual(['triage of 4 memories ended; the report is in the transcript'])
+    expect(String((await $.command.run(run('triage'))).text)).toStartWith('triage started')
+  })
+
   withSidebar('a triage dry run lists every deletion, merge and patch it would make, and writes nothing', async ($, on) => {
     const w = triageWorld(on)
     await $.session.start(START)
-    const text = String((await $.command.run(run('triage'))).text)
+    const text = await triaged($, w, 'triage')
     expect(text).toContain('triage of 4 memories: 2 kept by rule, 1 discarded by rule or score, 1 in the gray band (1 rated, 0 without a rating)')
     expect(text).toContain('2 deletion(s), 0 patch(es), 0 review proposal(s), 1 merge(s) and 0 overlap(s) from 1 compared pair(s)')
     expect(text).toContain('  delete: w1: "wip: try the other parser" (triage discard: text starts with a transient marker;')
@@ -1105,7 +1125,7 @@ describe('triage, compact and capture', () => {
   withSidebar('triage apply deletes what it rated as noise and lets the permanent keeper supersede its twin', async ($, on) => {
     const w = triageWorld(on)
     await $.session.start(START)
-    const text = String((await $.command.run(run('triage apply'))).text)
+    const text = await triaged($, w, 'triage apply')
     expect(bodiesOf(w, '/memory/delete').map(b => ({ id: b.id, force: b.force }))).toEqual([
       { id: 'w1', force: true },
       { id: 'g1', force: true },
@@ -1122,7 +1142,7 @@ describe('triage, compact and capture', () => {
     w.mergeText = 'NO'
     w.contains = prompt => (prompt.startsWith(`A: "${GRAY.text}"`) ? 'YES' : 'NO')
     await $.session.start(START)
-    const text = String((await $.command.run(run('triage'))).text)
+    const text = await triaged($, w, 'triage')
     expect(w.asked.filter(a => a.system.startsWith('Two project memories')).map(a => a.prompt)).toEqual([
       `A: "${GRAY.text}"\nB: "${KEEPER.text}"`,
       `A: "${KEEPER.text}"\nB: "${GRAY.text}"`,
@@ -1139,7 +1159,7 @@ describe('triage, compact and capture', () => {
     w.contains = () => 'NO'
     w.conflictText = 'YES'
     await $.session.start(START)
-    const text = String((await $.command.run(run('triage apply'))).text)
+    const text = await triaged($, w, 'triage apply')
     expect(w.asked.filter(a => a.system.startsWith('Two project memories, A and B, follow. Do they give')).map(a => a.prompt)).toEqual([`A: "${GRAY.text}"\nB: "${TWIN.text}"`])
     expect(bodiesOf(w, '/candidates/propose').map(b => b.input)).toMatchObject([{ kind: 'memory_review', targetMemoryId: GRAY.id }])
     expect(text).toContain('1 review proposal(s) filed')
@@ -1150,9 +1170,11 @@ describe('triage, compact and capture', () => {
     w.rateText = undefined
     w.mergeText = undefined
     await $.session.start(START)
-    const text = String((await $.command.run(run('triage apply'))).text)
+    const text = await triaged($, w, 'triage apply')
     expect(text).toContain('(0 rated, 1 without a rating)')
     expect(text).toContain('1 pair(s) without a verdict')
+    // The reason the engine gave for each unanswered question is counted, so a run that lost answers says why.
+    expect(text).toContain('questions without an answer: empty-reply 2')
     expect(bodiesOf(w, '/memory/update')).toEqual([])
   })
 
@@ -1163,22 +1185,25 @@ describe('triage, compact and capture', () => {
     w.rateText = '4 | a build fact a later session needs'
     await $.session.start(START)
     const own = (): string => [...w.store.keys()].find(k => k.startsWith('triaged:')) ?? ''
-    await $.command.run(run('triage'))
+    await triaged($, w, 'triage')
     expect(own()).toBe('')
     // The first apply writes the progress under the project's own key.
-    await $.command.run(run('triage apply'))
+    await triaged($, w, 'triage apply')
     const stored = own()
     expect(stored).not.toBe('')
     // g1 was rated an hour ago and g2 never, so g2 goes first although the list holds g1 first.
     const earlier = Date.parse('2026-09-28T11:00:00Z')
     w.store.set(stored, { notes: { g1: earlier, gone: earlier }, pairs: {} })
     w.asked = []
-    await $.command.run(run('triage apply'))
+    await triaged($, w, 'triage apply')
     const rated = w.asked.filter(a => a.system.startsWith('Rate one memory')).map(a => /TEXT: "([^"]+)"/.exec(a.prompt)?.[1] ?? '')
     expect(rated[0]).toBe(other.text)
     const progress = w.store.get(stored) as { notes: Record<string, number>; pairs: Record<string, number> }
     // Both are rated now, and a memory that is gone leaves the record.
-    expect(progress.notes).toEqual({ g1: Date.parse('2026-09-28T12:00:00Z'), g2: Date.parse('2026-09-28T12:00:00Z') })
+    // The background run reads the clock after the timers ran, so the time is that run's, after the earlier rating.
+    const at = progress.notes.g2 ?? 0
+    expect(at).toBeGreaterThan(earlier)
+    expect(progress.notes).toEqual({ g1: at, g2: at })
     expect(Object.keys(progress.pairs)).toEqual(['k1|t1'])
   })
 
