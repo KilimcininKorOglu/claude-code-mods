@@ -104,7 +104,9 @@ export function heldTerms(db: DatabaseSync, query: string, params: SQLInputValue
 export function heldForm(db: DatabaseSync, term: string, params: SQLInputValue[], column?: string): string | undefined {
   const scoped = (form: string): string => (column ? `${column} : ${form}` : form)
   if (isHeld(db, scoped(term), params)) return term
-  if (!term.endsWith('*')) return undefined
+  // A term with a digit is an identifier, a hash or a number, not a word with a suffix; cutting each
+  // took 5.3 s of a 5,000-line paste's search on 3,000 memories, 0.56 s without.
+  if (!term.endsWith('*') || /\p{N}/u.test(term)) return undefined
   const bare = term.slice(1, -2)
   for (let end = bare.length - 1; end >= MIN_PREFIX; end--) {
     const cut = `"${bare.slice(0, end)}"*`

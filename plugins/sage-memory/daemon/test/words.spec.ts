@@ -91,6 +91,14 @@ describe('word evidence from the store', () => {
     w.close()
   })
 
+  test('a term with a digit is an identifier or a number, never cut to a shorter word', async () => {
+    const { w } = await store([...ENGLISH, 'The abc team owns the nightly build'])
+    const params = visibilityParams(SHOWN)
+    assert.deepEqual(heldTerms(w.project.db, 'abc9f3e1', params).terms, [], 'a hash that starts like a word does not become that word')
+    assert.deepEqual(heldTerms(w.project.db, 'logların', params).terms.map(term => term.term), ['"log"*'], 'a word of letters is still cut to its stem')
+    w.close()
+  })
+
   test('a query matches with at most 64 held terms, the rarest first', async () => {
     const many = Array.from({ length: 100 }, (_, i) => `word${i}`)
     const { w } = await store([many.join(' '), ...ENGLISH.slice(0, 3).map((text, i) => `${text} ${many.slice(0, 10 * (i + 1)).join(' ')}`)])
