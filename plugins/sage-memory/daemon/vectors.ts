@@ -11,8 +11,12 @@ import { visibilityParams, type Visibility } from './search.ts'
  * search skips it, and the next fill replaces it.
  */
 
-/** A query's vector and the model that made it; only vectors of the same model compare. */
-export type SemanticQuery = { modelId: string; vector: Float32Array }
+/**
+ * A query's vector and the model that made it; only vectors of the same model compare. `pieces`
+ * holds a vector per line or sentence of a long query, so a question at the end of a pasted log,
+ * which the model never reads past its first 512 tokens, still counts.
+ */
+export type SemanticQuery = { modelId: string; vector: Float32Array; pieces?: readonly Float32Array[] }
 
 export type VectorHit = { memory: Memory; cosine: number }
 
@@ -45,6 +49,55 @@ export function sentencesOf(text: string): string[] {
     else pieces.push(trimmed)
   }
   return pieces.length > 1 ? pieces : []
+}
+
+/**
+ * The most pieces a query is embedded as. A piece took about 10 ms on a store of 3,000 memories (5 to
+ * embed, 5 to compare) and the hook waits 5 s for a reminder, so a paste of thousands of distinct
+ * lines would answer nothing at all. Past the cap, the first half and the last half are kept, where
+ * a question stands before or after what was pasted.
+ */
+const MAX_PIECES = 200
+
+/** A piece as its digits aside, so log lines that differ only in times, ids and counts are one piece. */
+function shapeOf(piece: string): string {
+  return piece.replace(/\p{N}+/gu, '0')
+}
+
+/**
+ * The pieces of a query: each line, and each sentence of a long line, a piece under 40 letters joined
+ * to the one before it, each shape once (`shapeOf`), at most `MAX_PIECES`; none for a text of one
+ * piece. A pasted log has no sentence ends, so lines come first: on a 41-line log with a question
+ * last, the whole text's vector was the same with and without the question (cosine 1.0000).
+ */
+export function piecesOf(text: string): string[] {
+  const shapes = new Map<string, string>()
+  for (const piece of linePieces(text)) if (!shapes.has(shapeOf(piece))) shapes.set(shapeOf(piece), piece)
+  const distinct = [...shapes.values()]
+  if (distinct.length <= 1) return []
+  return distinct.length <= MAX_PIECES ? distinct : [...distinct.slice(0, MAX_PIECES / 2), ...distinct.slice(-MAX_PIECES / 2)]
+}
+
+/** Each line and each sentence of a long line, a piece under 40 letters joined to the one before it. */
+function linePieces(text: string): string[] {
+  const pieces: string[] = []
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (trimmed === '') continue
+    for (const piece of sentencesOf(trimmed).length > 0 ? sentencesOf(trimmed) : [trimmed]) {
+      const last = pieces.length - 1
+      if (last >= 0 && (piece.length < MIN_SENTENCE || (pieces[last] ?? '').length < MIN_SENTENCE)) pieces[last] = `${pieces[last]} ${piece}`
+      else pieces.push(piece)
+    }
+  }
+  return pieces
+}
+
+/** The best cosine of any query vector against any of a memory's vectors. */
+function bestCosine(queries: readonly Float32Array[], vectors: readonly Float32Array[]): number {
+  let best = Number.NEGATIVE_INFINITY
+  for (const query of queries) for (const vector of vectors) best = Math.max(best, dot(query, vector))
+  return best
 }
 
 function toBlob(vector: Float32Array): Uint8Array {
@@ -107,6 +160,7 @@ export function sentenceVectors(db: DatabaseSync, modelId: string): Map<string, 
 export function vectorHits(db: DatabaseSync, query: SemanticQuery, visibility: Visibility, limit: number, bySentence = false): VectorHit[] {
   const rows = sql(db, VISIBLE).all(query.modelId, ...visibilityParams(visibility)) as VectorRow[]
   const sentences = bySentence ? sentenceVectors(db, query.modelId) : new Map<string, Array<{ vector: Float32Array; hash: string }>>()
+  const queries = [query.vector, ...(query.pieces ?? [])]
   const hits: VectorHit[] = []
   for (const row of rows) {
     const memory = parseMemory(row)
@@ -114,7 +168,7 @@ export function vectorHits(db: DatabaseSync, query: SemanticQuery, visibility: V
     const hash = textHash(memory.text)
     if (vector.length !== query.vector.length || row.text_hash !== hash) continue
     const own = (sentences.get(row.id) ?? []).filter(sentence => sentence.hash === hash && sentence.vector.length === query.vector.length)
-    hits.push({ memory, cosine: Math.max(dot(query.vector, vector), ...own.map(sentence => dot(query.vector, sentence.vector))) })
+    hits.push({ memory, cosine: bestCosine(queries, [vector, ...own.map(sentence => sentence.vector)]) })
   }
   return hits.sort((a, b) => b.cosine - a.cosine).slice(0, limit)
 }

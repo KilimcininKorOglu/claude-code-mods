@@ -3,7 +3,7 @@ import type { EmbedState } from '../hooks/shared/protocol.ts'
 import type { Embedder, Runtime } from './embedder.ts'
 import { log, messageOf } from './log.ts'
 import { transaction, type Store } from './stores.ts'
-import { dropOrphanVectors, sentencesOf, storeVectors, textHash, unembedded, type MadeVectors, type SemanticQuery } from './vectors.ts'
+import { dropOrphanVectors, piecesOf, sentencesOf, storeVectors, textHash, unembedded, type MadeVectors, type SemanticQuery } from './vectors.ts'
 
 /**
  * The daemon's embeddings: the model, loaded at its first use once setup installed it and run one
@@ -14,8 +14,12 @@ import { dropOrphanVectors, sentencesOf, storeVectors, textHash, unembedded, typ
  */
 export type Embeddings = {
   state: () => EmbedState
-  /** The query's vector, or undefined while embeddings are not ready; the stores named are filled in the background. */
-  semantic: (text: string, stores: readonly Store[]) => Promise<SemanticQuery | undefined>
+  /**
+   * The query's vector, or undefined while embeddings are not ready; the stores named are filled in
+   * the background. `byPiece` adds a vector per line or sentence (`piecesOf`), for a prompt or a
+   * subagent's task, which can be a long paste; a search or a write compares the whole text alone.
+   */
+  semantic: (text: string, stores: readonly Store[], byPiece?: boolean) => Promise<SemanticQuery | undefined>
   /** Embeds the active and stale memories a write left. */
   afterWrite: (store: Store, memories: readonly Memory[]) => Promise<void>
   /** Embeds every memory of the store that lacks a current vector; answers how many. */
@@ -142,14 +146,18 @@ function touch(core: Core, store: Store): void {
   fill(core, store).catch((err: unknown) => log(`embeddings: the background fill of ${store.name} stopped: ${messageOf(err)}`))
 }
 
-async function semantic(core: Core, text: string, stores: readonly Store[]): Promise<SemanticQuery | undefined> {
+async function semantic(core: Core, text: string, stores: readonly Store[], byPiece: boolean): Promise<SemanticQuery | undefined> {
   if (text.trim() === '') return undefined
   const model = await ready(core)
   if (model === undefined) return undefined
   stores.forEach(store => touch(core, store))
   try {
     const [vector] = await infer(core, model, [text])
-    return vector === undefined ? undefined : { modelId: model.modelId, vector }
+    // The pieces go in their own call: in one batch with the whole text, each was padded to its 512
+    // tokens, and 41 lines of a log took 1.8 s to embed instead of 0.2 s.
+    const parts = byPiece ? piecesOf(text) : []
+    const pieces = parts.length > 0 ? await infer(core, model, parts) : []
+    return vector === undefined ? undefined : { modelId: model.modelId, vector, pieces }
   } catch (err) {
     fail(core, 'embedding a query', err)
     return undefined
@@ -180,7 +188,7 @@ export function createEmbeddings(runtime: Runtime): Embeddings {
   const core: Core = { runtime, closing: false, queue: Promise.resolve(), filled: new Set(), fills: new Map() }
   return {
     state: () => stateOf(core),
-    semantic: (text, stores) => semantic(core, text, stores),
+    semantic: (text, stores, byPiece = false) => semantic(core, text, stores, byPiece),
     afterWrite: (store, memories) => afterWrite(core, store, memories),
     fill: store => fill(core, store),
     load: (allowRemote, onProgress) => startLoad(core, allowRemote, onProgress),

@@ -17,7 +17,7 @@ import { createStores, transaction, type Store } from '../stores.ts'
 import { updateMemory } from '../update.ts'
 import { dropMemory } from '../move.ts'
 import { sql } from '../rows.ts'
-import { sentencesOf, unembedded, vectorHits, type SemanticQuery } from '../vectors.ts'
+import { piecesOf, sentencesOf, unembedded, vectorHits, type SemanticQuery } from '../vectors.ts'
 import { fakeRuntime, queryOf, toward } from './fake-runtime.ts'
 import { cleanUp, tempDir, waitFor } from './support.ts'
 import { world, type World } from './world.ts'
@@ -512,6 +512,49 @@ describe('reminders through the vector channel', () => {
     const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id, worded.id])
     w.close()
+  })
+
+  test('a question after a pasted log reaches its memory through the vector of its own line', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const refunds = (await w.remember({ text: 'Refunds above 500 euros need a second approval from finance' })).memory
+    fake.vectors.set(refunds.text, toward(0, 1))
+    await embeddings.afterWrite(w.project, [refunds])
+    const question = 'Who has to approve a big refund for a customer?'
+    const log = Array.from({ length: 40 }, (_, i) => `2026-11-16T10:${String(i).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i * 17} in ${100 + i}ms`).join('\n')
+    const prompt = `${log}\n${question}`
+    fake.vectors.set(question, toward(0, 0.7))
+    const readers = w.readers('s1', 'main')
+    const whole = rankForPrompt({ ...readers, semantic: await embeddings.semantic(prompt, []) }, { query: prompt, limit: 8, blockCount: 8 })
+    assert.deepEqual(whole.candidates, [], 'the whole text alone does not resemble the memory')
+    const byPiece = rankForPrompt({ ...readers, semantic: await embeddings.semantic(prompt, [], true) }, { query: prompt, limit: 8, blockCount: 8 })
+    assert.deepEqual(byPiece.candidates.map(c => c.memory.id), [refunds.id])
+    w.close()
+  })
+
+  test('a prompt is split into its lines and sentences; a text of one piece has none', () => {
+    assert.deepEqual(piecesOf('Which package manager do we use here?'), [])
+    const log = '2026-11-16T10:00:00Z worker-0 processed batch 0 in 100ms\n2026-11-16T10:01:00Z worker-1 failed to reach the payment gateway'
+    assert.deepEqual(piecesOf(`${log}\nWho has to approve a big refund for a customer?`), [
+      '2026-11-16T10:00:00Z worker-0 processed batch 0 in 100ms',
+      '2026-11-16T10:01:00Z worker-1 failed to reach the payment gateway',
+      'Who has to approve a big refund for a customer?',
+    ])
+    assert.deepEqual(piecesOf('same line repeated here for the test\nsame line repeated here for the test'), [], 'a repeated line is one piece')
+  })
+
+  test('log lines that differ only in their numbers are one piece, and a long paste keeps its first and last 100', () => {
+    const log = Array.from({ length: 5000 }, (_, i) => `2026-11-16T10:${String(i % 60).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i} in ${i}ms`).join('\n')
+    assert.deepEqual(piecesOf(`${log}\nWho has to approve a big refund for a customer?`), ['2026-11-16T10:00:00Z worker-0 processed batch 0 in 0ms', 'Who has to approve a big refund for a customer?'])
+    const words = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike', 'november', 'oscar', 'papa', 'quebec']
+    const distinct = Array.from({ length: 300 }, (_, i) => `The ${words[i % 17]} service ${words[Math.floor(i / 17) % 17]} keeps its own queue`)
+    const first = 'Why does the nightly export queue stall every night?'
+    const last = 'And who owns the fix for this nightly stall in the team?'
+    const pieces = piecesOf([first, ...distinct, last].join('\n'))
+    assert.equal(pieces.length, 200)
+    assert.equal(pieces[0], first)
+    assert.equal(pieces.at(-1), last)
   })
 
   test('a memory above the meaning floor reaches a prompt although text matches under the floor fill the search list', async () => {

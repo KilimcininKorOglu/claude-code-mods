@@ -14,25 +14,28 @@ import { transaction, type Stores } from './stores.ts'
 /** How many memories a reminder may carry at most, whatever its budget. */
 const MAX_REMINDER = 50
 
-/** Both stores as a reminder reads them, with the vector of `query` while embeddings are on. */
-async function readersOf(stores: Stores, embeddings: Embeddings, body: Body, query: string): Promise<Readers> {
+/**
+ * Both stores as a reminder reads them, with the vector of `query` while embeddings are on; `byPiece`
+ * adds the vectors of its lines and sentences, for a prompt or a task that can be a long paste.
+ */
+async function readersOf(stores: Stores, embeddings: Embeddings, body: Body, query: string, byPiece: boolean): Promise<Readers> {
   const places = placesOf(stores, body)
   return {
     project: opFor(places, places.project),
     user: opFor(places, places.global),
     sessionId: optionalString(body, 'sessionId'),
     loop: optionalString(body, 'loop'),
-    semantic: await embeddings.semantic(query, [places.project, places.global]),
+    semantic: await embeddings.semantic(query, [places.project, places.global], byPiece),
   }
 }
 
 export function remindRoutes(stores: Stores, embeddings: Embeddings): Routes {
   const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
-  const readers = (body: Body, query: string): Promise<Readers> => readersOf(stores, embeddings, body, query)
+  const readers = (body: Body, query: string, byPiece = true): Promise<Readers> => readersOf(stores, embeddings, body, query, byPiece)
   return {
     '/remind/tools': post(async body => {
       const request = { paths: stringList(body, 'paths'), query: optionalText(body, 'query'), mutation: flag(body, 'mutation'), limit: optionalCount(body, 'limit', MAX_REMINDER) ?? 8 }
-      return rankForTools(await readers(body, request.query), request)
+      return rankForTools(await readers(body, request.query, false), request)
     }),
     '/remind/prompt': post(async body => {
       const limit = optionalCount(body, 'limit', MAX_REMINDER) ?? 8
