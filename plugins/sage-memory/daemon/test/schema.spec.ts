@@ -141,6 +141,24 @@ describe('schema', () => {
     }
   })
 
+  test('an update of the record alone, as the usage counters write it, leaves the text index untouched', () => {
+    const db = openDatabase(join(tempDir(), 'counters.db'))
+    try {
+      insertMemory(db, 'm1', 'Run the migrations with pnpm', 'build')
+      const changes = (): number => Number(db.prepare('SELECT total_changes() AS n').get()?.n)
+      const before = changes()
+      db.prepare("UPDATE memories SET data = json_set(data, '$.reminderCount', 1) WHERE id = 'm1'").run()
+      assert.equal(changes() - before, 1, 'one row of memories, no delete and insert in the index')
+      assert.deepEqual(matches(db, 'migrations'), ['m1'])
+      const edit = changes()
+      db.prepare("UPDATE memories SET text = 'Run the seeders', search_text = 'Run the seeders' WHERE id = 'm1'").run()
+      assert.ok(changes() - edit > 1, 'a text edit rewrites the index rows too')
+      assert.deepEqual(matches(db, 'seeders'), ['m1'])
+    } finally {
+      db.close()
+    }
+  })
+
   test('a move to schema 2 that fails leaves schema 1 and its index', () => {
     const file = join(tempDir(), 'v1-broken.db')
     const old = versionOne(file)
