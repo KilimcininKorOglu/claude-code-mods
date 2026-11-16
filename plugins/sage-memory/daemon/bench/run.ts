@@ -12,7 +12,7 @@ import { join, resolve } from 'node:path'
 import { CHOOSE, EXTRA_ANCHORS, IN_LANGUAGE, LANGUAGES, LONG, LONG_LEAD, NAMED, NOTES, QUESTIONS, SHARED, SHARED_NAME, SHARED_NAME_KEYS, SUBAGENT_TASKS, TOOL_PATHS, TOPICLESS, TOPIC_TAGS, TRANSLATED, UNRELATED, filler, type Language, type Note, type StoreLanguage } from './fixtures.ts'
 
 type Memory = { id: string; scope: string }
-type Ranked = { memory: Memory }
+type Ranked = { memory: Memory; reasons?: string[] }
 type Rejected = { id: string; gate: string }
 type Ranking = { candidates: Ranked[]; rejected: Rejected[] }
 type Score = { asked: number; hit: number; sibling: number; other: number }
@@ -29,6 +29,8 @@ const size = Number(flag('--size') ?? NOTES.length)
 const storeLanguage = (flag('--notes') ?? 'en') as StoreLanguage
 const wordsOnly = args.includes('--words-only')
 const why = args.includes('--why')
+/** `--sent` prints every prompt and every note it sent, with the note's class and cosine, one line each. */
+const listSent = args.includes('--sent')
 
 const { world } = await import(join(build, 'daemon/test/world.ts'))
 const { rankForPrompt, rankForTools, rankForSubagent } = await import(join(build, 'daemon/remind.ts'))
@@ -92,6 +94,26 @@ function tally(score: Score, sent: readonly Note[], want: string | undefined): v
   }
 }
 
+let promptIndex = 0
+/** The class of a sent note for the prompt that wanted `want`. */
+function classOf(note: Note, want: string | undefined): string {
+  const target = NOTES.find(item => item.key === want)
+  return note.key === want ? 'wanted' : target !== undefined && topicOf(note) === target.topic ? 'same-topic' : 'other'
+}
+
+/** Tallies a prompt in its group and, with `--sent`, prints it and each note it sent with the cosine its reasons give. */
+function count(group: keyof typeof groups, sent: readonly Note[], want: string | undefined, ranked: readonly Ranked[], lang = '-'): void {
+  tally(groups[group], sent, want)
+  if (!listSent) return
+  promptIndex++
+  console.log(`asked\t${group}\t${lang}\t${promptIndex}`)
+  for (const note of sent) {
+    const reasons = ranked.find(item => keyOf.get(item.memory.id) === note)?.reasons ?? []
+    const cos = reasons.map(reason => /^query:semantic-cosine:(\d\.\d+)$/.exec(reason)?.[1]).find(value => value !== undefined) ?? '-'
+    console.log(`sent\t${group}\t${lang}\t${promptIndex}\t${classOf(note, want)}\t${note.key}\t${cos}\t${reasons[0] ?? '-'}`)
+  }
+}
+
 const cosine = (a: readonly number[], b: readonly number[]): number => a.reduce((sum, value, i) => sum + value * b[i]!, 0)
 const embedder: Embedder | undefined = why && !wordsOnly ? await runtime.load({ allowRemote: false, onProgress: () => {} }) : undefined
 const noteVectors = embedder ? await embedder.embed(notes.map(textOf)) : []
@@ -123,7 +145,7 @@ const byLanguage = Object.fromEntries(LANGUAGES.map(lang => [lang, fresh()])) as
 for (const [want, texts] of Object.entries(QUESTIONS)) {
   for (const lang of LANGUAGES) {
     const { ranking, sent } = await promptSent(texts[lang])
-    tally(CHOOSE.has(lang) ? groups.choose : groups.accept, sent, want)
+    count(CHOOSE.has(lang) ? 'choose' : 'accept', sent, want, ranking.candidates, lang)
     tally(byLanguage[lang], sent, want)
     if (lang === storeLanguage) tally(groups.same, sent, want)
     if (why && !sent.some(note => note.key === want)) await explain(texts[lang], want, ranking, sent)
@@ -131,35 +153,42 @@ for (const [want, texts] of Object.entries(QUESTIONS)) {
 }
 for (const prompt of NAMED) {
   const { ranking, sent } = await promptSent(prompt.text)
-  tally(groups.named, sent, prompt.want)
+  count('named', sent, prompt.want, ranking.candidates)
   if (why && !sent.some(note => note.key === prompt.want)) await explain(prompt.text, prompt.want, ranking, sent)
 }
 for (const prompt of SHARED) {
-  const { sent } = await promptSent(prompt.text)
-  tally(groups.shared, sent, prompt.want)
+  const { ranking, sent } = await promptSent(prompt.text)
+  count('shared', sent, prompt.want, ranking.candidates)
   sharedAlso += sent.filter(note => prompt.also.includes(note.key)).length
 }
 for (const prompt of IN_LANGUAGE.filter(row => row.store === storeLanguage)) {
   const { ranking, sent } = await promptSent(prompt.text)
-  tally(groups.suffixed, sent, prompt.want)
+  count('suffixed', sent, prompt.want, ranking.candidates)
   if (why && !sent.some(note => note.key === prompt.want)) await explain(prompt.text, prompt.want, ranking, sent)
 }
-for (const prompt of LONG) tally(groups.long, (await promptSent(prompt.text)).sent, prompt.want)
+for (const prompt of LONG) {
+  const { ranking, sent } = await promptSent(prompt.text)
+  count('long', sent, prompt.want, ranking.candidates)
+}
 for (const task of SUBAGENT_TASKS) {
   const ranking = rankForSubagent(await readers(task.text), { task: task.text, audienceLimit: 20, taskLimit: 8 }) as { audience: Memory[]; task: Ranked[] }
   const sent = (hooks.subagentReminder([], ranking.audience, ranking.task) as { sent: Memory[] }).sent
-  tally(groups.subagent, sent.map(memory => keyOf.get(memory.id)!), task.want)
+  count('subagent', sent.map(memory => keyOf.get(memory.id)!), task.want, ranking.task)
 }
 for (const lang of LANGUAGES) {
-  for (const text of UNRELATED[lang]) tally(groups.unrelated, (await promptSent(text)).sent, undefined)
-  for (const text of TOPICLESS[lang]) tally(groups.topicless, (await promptSent(text)).sent, undefined)
+  for (const [group, texts] of [['unrelated', UNRELATED[lang]], ['topicless', TOPICLESS[lang]]] as const) {
+    for (const text of texts) {
+      const { ranking, sent } = await promptSent(text)
+      count(group, sent, undefined, ranking.candidates, lang)
+    }
+  }
 }
 for (const { path, want } of TOOL_PATHS) {
   const file = join(w.root, path)
   const query = hooks.queryOf([{ tool_name: 'Read', tool_input: { file_path: file } }], [file], [], w.root) as string
   const ranking = rankForTools(await readers(query), { paths: [file], query, mutation: false, limit: 24 }) as Ranking
   const sent = (hooks.toolReminder(ranking.candidates, '', hooks.toolBudget(undefined), false, false) as { sent: Memory[] }).sent
-  tally(groups.tool, sent.map(memory => keyOf.get(memory.id)!), want)
+  count('tool', sent.map(memory => keyOf.get(memory.id)!), want, ranking.candidates, path)
 }
 const unrelatedBest = await bestCosine(LANGUAGES.flatMap(lang => UNRELATED[lang]))
 const topiclessBest = await bestCosine(LANGUAGES.flatMap(lang => TOPICLESS[lang]))
