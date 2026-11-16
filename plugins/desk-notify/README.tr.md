@@ -1,50 +1,50 @@
 # desk-notify
 
-Bir session'ı bir pencerede çalışır bırakıp başka bir pencereye geçiyorsun. Bu arada model sana bir soru soruyor, plan onayını bekliyor ya da turn'ünü bitiriyor ve hiçbir şey seni haberdar etmiyor. Bu mod o anlarda bir masaüstü bildirimi gönderir; böylece hiçbir session sen fark etmeden beklemez.
+Bir session'ı bir pencerede çalışır hâlde bırakıp başka bir pencereye geçtiğinizi düşünün. Bu sırada model size bir soru sorar, plan onayınızı bekler ya da turn'ünü bitirir. Ancak sizi bundan haberdar eden bir şey yoktur. Bu mod bu anlarda bir masaüstü bildirimi gönderir. Böylece hiçbir session siz fark etmeden beklemez.
 
 ## Ne yapar
 
-1. Model `AskUserQuestion` çağırınca, soru seni beklemeye başlamadan önce `Question awaiting your answer` gönderir.
-2. Model `ExitPlanMode` çağırınca, onay seni beklemeye başlamadan önce `Plan awaiting your approval` gönderir.
-3. Bir ana loop turn'ü bitince (`Stop`) `Turn finished` gönderir. Bir subagent'ın bitişi `SubagentStop`'tur ve bildirim göndermez.
-4. Bir API hatası turn'ü bitirince (`StopFailure`) hatanın ilk satırıyla birlikte `Turn failed` gönderir; satır 60 karakterde kesilir ve markdown işaretlerinden arındırılır. Hata metni yoksa turn'ün son kelimeleri onun yerine geçer.
-5. Her bildirim `Claude Code` alt başlığını ve proje adını taşır: ana repository (git worktree'de de), yoksa git kökü, o da yoksa session'ın dizini. Ad session başlarken bir kez okunur, böylece bir shell `cd`'si onu değiştirmez.
+1. Model `AskUserQuestion` çağırdığında, soru cevabınızı beklemeye başlamadan önce `Question awaiting your answer` bildirimi gönderilir.
+2. Model `ExitPlanMode` çağırdığında, plan onayınızı beklemeye başlamadan önce `Plan awaiting your approval` bildirimi gönderilir.
+3. Bir ana loop turn'ü bittiğinde (`Stop`) `Turn finished` bildirimi gönderilir. Bir subagent'ın bitişi `SubagentStop` olayıdır ve bildirim göndermez.
+4. Bir API hatası turn'ü bitirdiğinde (`StopFailure`) hatanın ilk satırıyla birlikte `Turn failed` bildirimi gönderilir. Satır 60 karakterde kesilir ve markdown işaretleri temizlenir. Hata metni yoksa satırın yerine turn'ün son kelimeleri kullanılır.
+5. Her bildirim `Claude Code` alt başlığını ve proje adını taşır. Proje adı şu sırayla belirlenir: ana repository (git worktree içinde de), yoksa git kökü, o da yoksa session'ın dizini. Ad session başında bir kez okunur. Bu yüzden shell'de çalışan bir `cd` adı değiştirmez.
 
-Bildirim komutu hemen döner ve 5 saniye sonra sonlandırılır; böylece takılan bir bildirim servisi hiçbir tool çağrısını bekletmez:
+Bildirim komutu hemen döner ve 5 saniye sonra sonlandırılır. Böylece yanıt vermeyen bir bildirim servisi hiçbir tool çağrısını bekletmez:
 
 | Masaüstü | Komut |
 |---|---|
 | macOS | `osascript -e 'display notification ...'` |
 | Linux | `notify-send <başlık> <alt başlık ve gövde>` (alt başlık alanı yoktur) |
-| Windows | hiçbir zaman bir tıklamayı beklemeyen bir PowerShell toast'ı |
+| Windows | bir tıklamayı hiçbir zaman beklemeyen bir PowerShell toast'ı |
 
-Masaüstü session başına bir kez okunur: `OS=Windows_NT` Windows demektir, değilse `uname -s` `Darwin` ya da `Linux` der. Başka bir sistemde mod bunu bir kez söyler ve hiçbir şey göndermez. Bildirim komutu başarısız olursa ya da bulunamazsa mod bunu bir transcript satırıyla bir kez söyler; farklı bir hata gelene kadar tekrarlamaz.
+Masaüstü türü her session'da bir kez okunur: `OS=Windows_NT` Windows anlamına gelir. Diğer durumlarda `uname -s` çıktısı `Darwin` ya da `Linux` olur. Başka bir sistemde mod bunu bir kez bildirir ve hiçbir bildirim göndermez. Bildirim komutu başarısız olursa ya da bulunamazsa mod bunu transcript'e bir satırla bir kez yazar. Farklı bir hata gelene kadar aynı satır tekrarlanmaz.
 
-2.1.282'deki canlı denemede model `AskUserQuestion` ile bir soru sordu; soru ekrana gelmeden önce `osascript` çalıştı ve exit 0 ile bitti.
+2.1.282 üzerindeki canlı denemede model `AskUserQuestion` ile bir soru sordu. Soru ekranda görünmeden önce `osascript` çalıştı ve exit 0 ile bitti.
 
 ## Komut
 
-    /desk-notify                  masaüstü ve her olayın ayarı (/desk-notify status da olur)
-    /desk-notify ask on | off     cevabını bekleyen bir soru
-    /desk-notify plan on | off    onayını bekleyen bir plan
+    /desk-notify                  masaüstü türü ve her olayın ayarı (/desk-notify status da olur)
+    /desk-notify ask on | off     cevabınızı bekleyen bir soru
+    /desk-notify plan on | off    onayınızı bekleyen bir plan
     /desk-notify stop on | off    biten ya da başarısız olan bir turn
 
-Her olay varsayılan olarak açıktır ve ayarı session'lar arasında korunur. Tek başına bir `on` ya da `off` yoktur: olayları tek tek açıp kapatırsın.
+Her olay varsayılan olarak açıktır ve ayarı session'lar arasında korunur. Tek başına bir `on` ya da `off` komutu yoktur: olaylar tek tek açılır ve kapatılır.
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install desk-notify@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
+Function hook'lar early access aşamasında. Claude Code 2.1.288 ve sonrası onları varsayılan olarak yükler, bu yüzden açmanız gereken bir ayar yoktur.
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlat.
-2. macOS'ta bildirim görünmüyorsa Sistem Ayarları > Bildirimler'de `osascript` bildirimlerinin göründüğü uygulamayı kontrol et. Linux'ta `notify-send`'i (`libnotify`) kur.
-3. Bu bildirimleri zaten gönderen kendi hook'un varsa onu kaldır, yoksa her olay iki kez bildirim gönderir.
+1. Claude Code'u yeniden başlatın.
+2. macOS'ta bildirim görünmüyorsa Sistem Ayarları → Bildirimler bölümünde `osascript` bildirimlerinin göründüğü uygulamanın ayarlarını kontrol edin. Linux'ta `notify-send` (`libnotify`) paketini yükleyin.
+3. Bu bildirimleri zaten gönderen kendi hook'unuz varsa onu kaldırın. Aksi hâlde her olay için iki bildirim gelir.
 
-## Nereye uzanır
+## Nelere erişir
 
 Claude Code 2.1.288 üzerinde `claude plugin validate` ile doğrulandı:
 
@@ -54,21 +54,21 @@ Claude Code 2.1.288 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L2: process çalıştırır.
 
-    1. Okur:     OS değişkenini, her çağrının tool adını, başarısız bir turn'ün hata metnini ve son asistan mesajını
-    2. Çalıştırır: session başına bir kez uname -s ve iki git rev-parse çağrısı; bildirim başına bir osascript, notify-send ya da powershell.exe
-    3. Gönderir: sabit bir başlık, proje adı ve başarısız bir turn için hatanın 60 karakterini taşıyan bir masaüstü bildirimi; modele hiçbir şey, makineden dışarı hiçbir şey
-    4. Saklar:   $.store içinde her olayın açık/kapalı ayarını
-    5. Düşman girdi: proje adı ve hata metni AppleScript string literal'i için escape edilir, PowerShell script'ine yalnız base64 (UTF-16LE) olarak girer ve script -EncodedCommand ile çalışır, notify-send'e tek bir argv öğesi olarak geçer; hiçbiri bir komut çalıştıramaz
+    1. Okur:         OS değişkenini, her çağrının tool adını, başarısız bir turn'ün hata metnini ve son asistan mesajını
+    2. Çalıştırır:   her session'da bir kez uname -s ve iki git rev-parse çağrısı; her bildirim için bir osascript, notify-send ya da powershell.exe
+    3. Gönderir:     sabit bir başlık, proje adı ve başarısız bir turn için hatanın ilk 60 karakterini içeren bir masaüstü bildirimi; modele hiçbir şey göndermez, makineden dışarı hiçbir şey çıkmaz
+    4. Saklar:       her olayın açık/kapalı ayarını $.store içinde
+    5. Düşman girdi: proje adı ve hata metni AppleScript string literal'i için escape edilir; PowerShell script'ine yalnız base64 (UTF-16LE) olarak girer ve script -EncodedCommand ile çalışır; notify-send'e tek bir argv öğesi olarak verilir; bu yüzden hiçbiri bir komut çalıştıramaz
 
 ## Sınırlar
 
 - macOS bildiriminin kendine ait bir simgesi yoktur, çünkü `display notification` simge argümanı almaz.
-- Senin yarıda kestiğin bir turn'ün `Stop` tetikleyip tetiklemediği ölçülmedi.
+- Sizin yarıda kestiğiniz bir turn'ün `Stop` olayını tetikleyip tetiklemediği ölçülmedi.
 - Linux ve Windows komutları canlı olarak ölçülmedi.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make lint        # complexity sınırı 10; aşılırsa build başarısız olur
     make validate
     make test        # claude plugin test
