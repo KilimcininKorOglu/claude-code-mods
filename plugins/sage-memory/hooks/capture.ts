@@ -4,7 +4,7 @@
  * Pure code; `register.tsx` writes the memory.
  */
 import { safeCommand } from './consolidate'
-import type { RememberInput } from './shared/model'
+import { MAX_NOTE_CHARS, type RememberInput } from './shared/model'
 
 export const HOUR_MS = 60 * 60 * 1000
 const PER_HOUR = 20
@@ -23,8 +23,16 @@ export function captureOf(command: string, output: string, failed: boolean, sess
   if (shown === undefined || shown.startsWith('[redacted')) return undefined
   const out = output.replace(/\s+/g, ' ').trim()
   const common = { scope: 'project' as const, persistence: 'long_lived' as const, anchors: [{ type: 'command' as const, command: shown }], sources: [{ type: 'command' as const, command: shown, sessionId }] }
-  if (failed) return { ...common, text: `Error pattern from Bash: ${out.slice(0, 200)}`, kind: 'error_pattern', importance: 0.55, confidence: 0.6, tags: ['auto-capture', 'error_pattern', 'bash'] }
-  return { ...common, text: `Successful Bash: \`${shown}\` → ${out.slice(0, 160)}`, kind: 'tool_outcome', importance: 0.45, confidence: 0.7, tags: ['auto-capture', 'tool_outcome', 'bash'] }
+  if (failed) return { ...common, text: within('Error pattern from Bash: ', out), kind: 'error_pattern', importance: 0.55, confidence: 0.6, tags: ['auto-capture', 'error_pattern', 'bash'] }
+  return { ...common, text: within(`Successful Bash: \`${shown.slice(0, MAX_SHOWN)}\` → `, out), kind: 'tool_outcome', importance: 0.45, confidence: 0.7, tags: ['auto-capture', 'tool_outcome', 'bash'] }
+}
+
+/** The most characters of a command a captured text shows; the anchor keeps the whole command. */
+const MAX_SHOWN = 120
+
+/** The lead and as much of the output as fits in a memory. */
+function within(lead: string, out: string): string {
+  return lead + out.slice(0, MAX_NOTE_CHARS - lead.length)
 }
 
 /**

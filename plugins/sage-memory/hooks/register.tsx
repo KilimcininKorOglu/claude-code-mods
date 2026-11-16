@@ -138,7 +138,8 @@ import {
 } from './triage'
 import { addedBy, answerText, callOf, editLine, OFF_TEXT, similarText, toolName, TOOLS, type Input } from './tools'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
-import { isProtected, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
+import { notesOf, problemOf, SHORTEN_MS, SHORTEN_SYSTEM, SHORTEN_TOKENS, shortenPrompt } from './shorten'
+import { isProtected, MAX_NOTE_CHARS, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol'
 
@@ -215,6 +216,8 @@ type State = {
   daily?: { cancel: () => void }
   /** Whether a triage the person started runs in the background, so a second waits for it. */
   triaging: boolean
+  /** Whether this window rewrites the memories written before the length limit. */
+  shortening: boolean
   /** What the memory manager pane shows. */
   pane: PaneState
   /** This session's reminded, used and added memories, shown under the daemon line. */
@@ -685,6 +688,10 @@ const IMPORT_USAGE = 'expects import <path> [--section <heading>] [--kind <kind>
 /** Writes one imported bullet and counts what the daemon did with it. */
 async function importOne($: EngineInterface, state: State, input: RememberInput, tally: ImportTally): Promise<void> {
   try {
+    if (input.text.length > MAX_NOTE_CHARS) {
+      for (const text of await shortened($, input.text)) await importOne($, state, { ...input, text }, tally)
+      return
+    }
     const r = await ask<RememberResult>($, state, '/memory/remember', { input })
     if (r.outcome === 'added') tally.added += 1
     else if (r.outcome === 'similar') tally.similar.push(`"${input.text.slice(0, 60)}" close to ${r.similar.map(memory => memory.id).join(', ')}`)
@@ -1129,8 +1136,36 @@ async function countAdded($: EngineInterface, state: State, memory: Memory): Pro
   await toStream($, 'consolidator', addedLine(memory))
 }
 
+/**
+ * The job model's rewrite of a text longer than a memory holds, as texts within the limit that keep
+ * every name of it; a refused answer is asked once more with what was wrong. Throws when no answer passes.
+ */
+async function shortened($: EngineInterface, text: string): Promise<string[]> {
+  let problem: string | undefined
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await completeWithRetry($, { model: await jobModel($), system: SHORTEN_SYSTEM, prompt: shortenPrompt(text, problem), maxTokens: SHORTEN_TOKENS, timeoutMs: SHORTEN_MS })
+    if (!r.isAnswered) throw new Error(`the job model gave no rewrite (${r.reason}${apiErrorDetail(r)})`)
+    const notes = notesOf(r.text)
+    problem = problemOf(text, notes)
+    if (problem === undefined && notes !== undefined) return notes
+  }
+  throw new Error(`the job model's rewrite was refused twice: ${problem ?? ''}`)
+}
+
+/** Writes the parts of a consolidator text longer than a memory holds; a failed rewrite is a red line. */
+async function writeParts($: EngineInterface, state: State, input: RememberInput): Promise<boolean> {
+  try {
+    for (const text of await shortened($, input.text)) await writeOne($, state, { ...input, text })
+    return true
+  } catch (err) {
+    await toStream($, 'error', { text: `the consolidator's memory was not written: ${errorText(err)}`, kind: 'error' })
+    return false
+  }
+}
+
 /** Writes one memory; a refusal (a progress note, a secret, a missing anchor) is a red line, and the rest still go. */
 async function writeOne($: EngineInterface, state: State, input: RememberInput): Promise<boolean> {
+  if (input.text.length > MAX_NOTE_CHARS) return writeParts($, state, input)
   try {
     const result = await ask<RememberResult>($, state, '/memory/remember', { input })
     if (result.outcome === 'added') await countAdded($, state, result.memory)
@@ -1262,6 +1297,9 @@ async function curatorTargets($: EngineInterface, state: State, written: readonl
  * replace (and the parts of a split are close to each other by design), so each is written as distinct.
  */
 async function replaceWith($: EngineInterface, state: State, step: Extract<Step, { kind: 'replace' }>): Promise<void> {
+  // Checked before the first write, so a refused part leaves no other part beside the memories it was to replace.
+  const long = step.inputs.find(input => input.text.length > MAX_NOTE_CHARS)
+  if (long !== undefined) throw new Error(`a text of ${long.text.length} characters; a memory holds at most ${MAX_NOTE_CHARS}`)
   const written: Memory[] = []
   for (const input of step.inputs) {
     const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true } })
@@ -1602,6 +1640,56 @@ async function triageJob($: EngineInterface, state: State, apply: boolean): Prom
   }
 }
 
+// ── Memories written before the length limit ───────────────────────────
+
+/** How many long memories one request hands this window; the daemon holds them from other windows. */
+const SHORTEN_BATCH = JOB_PARALLEL * 2
+
+/** Records a failed rewrite in the daemon, so the memory is handed out again only up to its limit; a failed record is a red line. */
+async function shortenFailed($: EngineInterface, state: State, memory: Memory, err: unknown): Promise<void> {
+  try {
+    await ask($, state, '/memory/shorten-failed', { id: memory.id, reason: errorText(err) })
+  } catch (recordError) {
+    await toStream($, 'error', { text: `the failed rewrite of ${memory.id} was not recorded: ${errorText(recordError)}`, kind: 'error' })
+  }
+}
+
+/** Rewrites one long memory as short ones in its place; answers whether it was replaced. */
+async function shortenOne($: EngineInterface, state: State, memory: Memory): Promise<boolean> {
+  try {
+    const texts = await shortened($, memory.text)
+    await ask($, state, '/memory/replace', { id: memory.id, revision: memory.revision, texts })
+    return true
+  } catch (err) {
+    await shortenFailed($, state, memory, err)
+    return false
+  }
+}
+
+/**
+ * Rewrites every live memory of both stores longer than a memory now holds, `JOB_PARALLEL` at a time,
+ * and writes the count to the sidebar after each batch. It ends when the daemon hands out no more:
+ * each memory is replaced, failed its tries, or is held by another window.
+ */
+async function shortenJob($: EngineInterface, state: State): Promise<void> {
+  if (state.shortening || !(await isReady(state))) return
+  state.shortening = true
+  const tally = { replaced: 0, failed: 0 }
+  try {
+    for (let batch = await ask<Memory[]>($, state, '/memory/long', { limit: SHORTEN_BATCH }); batch.length > 0; batch = await ask<Memory[]>($, state, '/memory/long', { limit: SHORTEN_BATCH })) {
+      for (const replaced of await mapLimited(batch, JOB_PARALLEL, memory => shortenOne($, state, memory))) tally[replaced ? 'replaced' : 'failed'] += 1
+      await toStream($, 'shorten', { text: shortenLine(tally), kind: 'warn' })
+    }
+  } finally {
+    state.shortening = false
+  }
+  if (tally.replaced + tally.failed > 0) await toStream($, 'shorten', { text: `${shortenLine(tally)}; done`, kind: tally.failed > 0 ? 'error' : 'ok' })
+}
+
+function shortenLine(tally: { replaced: number; failed: number }): string {
+  return `rewrote ${tally.replaced} memories longer than ${MAX_NOTE_CHARS} characters as short ones${tally.failed > 0 ? `, ${tally.failed} failed` : ''}`
+}
+
 /** The daily cleanup is on unless the person turned it off. */
 async function isDailyOn($: EngineInterface): Promise<boolean> {
   return (await $.store.get('daily')) !== false
@@ -1828,7 +1916,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), triaging: false, pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), triaging: false, shortening: false, pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1840,6 +1928,8 @@ export const register: Register = on => {
     if (e.isInteractive) $.clock.every(REDRAW_MS, () => void redraw($, state))
     if (state.enabled) await linked($, state)
     else await show($, state)
+    // A -p run ends before a rewrite of many memories would, so only an interactive window takes the job.
+    if (e.isInteractive && state.enabled) $.clock.after(0, () => void guarded($, 'the rewrite of long memories', () => shortenJob($, state)))
     return r
   })
 

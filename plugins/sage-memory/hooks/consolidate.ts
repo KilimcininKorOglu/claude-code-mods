@@ -7,7 +7,7 @@
  * digests were most of what triage found as noise. Pure code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link'
-import { ANCHOR_TYPES, isProtected, KIND_MEANINGS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model'
+import { ANCHOR_TYPES, isProtected, KIND_MEANINGS, MAX_NOTE_CHARS, MODEL_KINDS, oneOf, PATH_ANCHOR_TYPES, sourceTypeOf, STRUCTURAL_KINDS, type Anchor, type AnchorType, type Kind, type Memory, type RememberInput } from './shared/model'
 
 /** The model the LLM jobs use until the person names another with `/sage-memory model`. */
 export const DEFAULT_MODEL = 'haiku'
@@ -205,8 +205,9 @@ Rules:
 1. Do not mark "keep" a candidate that an existing entry already covers, even
    if phrased differently. A candidate that changes an existing entry is kept
    with that entry's id in "supersedes", never as a second entry beside it.
-2. Use one concise sentence per entry, written in English whatever the
-   language of the session, and keep the reason in it. Add 1-3 lowercase tags
+2. Use one concise sentence per entry, at most ${MAX_NOTE_CHARS} characters, written in
+   English whatever the language of the session, and keep the reason in it.
+   Write a larger fact as several entries, each stating one part on its own. Add 1-3 lowercase tags
    without "#".
 3. Add 1-3 concrete anchors when supported. Allowed anchor types are "file",
    "directory", "symbol", "package", "command", "test", and "git". Never invent

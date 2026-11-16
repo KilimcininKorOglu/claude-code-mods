@@ -2,6 +2,7 @@ import { describe, expect, mock, test, tier, type MockClock, type Plugin, type T
 import type { CommandRunInput, On, RenderPropsOf, UiPane } from 'claude-code'
 import type { Memory } from '../hooks/shared/model'
 import { TOOLS } from '../hooks/tools'
+import { captureOf } from '../hooks/capture'
 import { countsLine, stateLines, storedLine } from '../hooks/link'
 
 tier('user')
@@ -60,6 +61,8 @@ type World = {
   /** The containment answer for one prompt, which names the two texts in order. */
   contains?: (prompt: string) => string | undefined
   conflictText?: string
+  /** The rewrite of a long memory, by the question's prompt. */
+  shorten?: (prompt: string) => string | undefined
   files: Map<string, string>
   panes: UiPane[]
   buttons: unknown[]
@@ -85,8 +88,14 @@ function modelAnswer(w: World, system: string): string | undefined {
   return system.startsWith('You are a fast, automated memory curator') ? w.curatorText : w.modelText
 }
 
+/** The world's answer to a job model call: the questions that read their prompt first, then by the system prompt alone. */
+function answerFor(w: World, system: string, prompt: string): string | undefined {
+  if (system.startsWith('Two project memories, A and B, follow. Does B')) return w.contains?.(prompt)
+  return system.startsWith('You rewrite one stored memory note') ? w.shorten?.(prompt) : modelAnswer(w, system)
+}
+
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -131,8 +140,7 @@ function world(on: On): World {
       w.emptyReplies -= 1
       return { value: { isAnswered: false, reason: 'empty-reply', usage: {} } } as never
     }
-    const system = e.system ?? ''
-    const text = system.startsWith('Two project memories, A and B, follow. Does B') ? w.contains?.(e.prompt) : modelAnswer(w, system)
+    const text = answerFor(w, e.system ?? '', e.prompt)
     return { value: text === undefined ? { isAnswered: false, reason: 'empty-reply', usage: {} } : { isAnswered: true, text, usage: {} } } as never
   })
   on('tool.register', (_, e) => { w.tools.push(e.name); return { value: undefined } as never })
@@ -1521,5 +1529,88 @@ describe('pane', () => {
     await settled(w)
     expect(bodiesOf(w, '/candidates/resolve')[0]).toMatchObject({ id: 'c1', decision: 'archive' })
     expect(await ui.find({ type: 'Text', text: /resolved c1: archive/ })).toBeDefined()
+  })
+})
+
+describe('the 250-character limit', () => {
+  const OLD = memory('m9', `${'The release pipeline runs make check before each deploy and stops on a failure. '.repeat(3)}The rollback script is src/rollback.sh, measured on 2026-11-15.`, { revision: 3 })
+  const PARTS = [
+    'The release pipeline runs make check before each deploy and stops the deploy on a failure.',
+    'The deploy rollback script is src/rollback.sh, measured on 2026-11-15.',
+  ]
+  const answer = (notes: string[]) => JSON.stringify({ notes })
+
+  /** A daemon that hands out `OLD` once, then no more long memories. */
+  function longWorld(on: On): World {
+    const w = readyWorld(on)
+    let handed = false
+    w.routes.set('/memory/long', () => (handed ? [] : ((handed = true), [OLD])))
+    w.routes.set('/memory/replace', { replaced: OLD.id, parts: [] })
+    w.routes.set('/memory/shorten-failed', { recorded: true })
+    return w
+  }
+
+  withSidebar('a memory written before the limit is rewritten as short ones in its place, and the sidebar counts it', async ($, on) => {
+    const w = longWorld(on)
+    w.shorten = () => answer(PARTS)
+    await $.session.start(START)
+    await settled(w)
+    expect(w.asked[0]?.system).toContain(`at most 250 characters`)
+    expect(w.asked[0]?.prompt).toContain(OLD.text)
+    expect(bodiesOf(w, '/memory/replace')).toEqual([expect.objectContaining({ id: 'm9', revision: 3, texts: PARTS })])
+    expect(streamOf(w, 'shorten').at(-1)).toBe('rewrote 1 memories longer than 250 characters as short ones; done')
+  })
+
+  withSidebar('a rewrite that loses a name is asked again with what it lost; a second loss records the failure and replaces nothing', async ($, on) => {
+    const w = longWorld(on)
+    w.shorten = () => answer([PARTS[0]!, 'The deploy rollback script is src/rollback.sh.'])
+    await $.session.start(START)
+    await settled(w)
+    expect(w.asked).toHaveLength(2)
+    expect(w.asked[1]?.prompt).toContain('the notes leave out 2026-11-15')
+    expect(bodiesOf(w, '/memory/replace')).toEqual([])
+    expect(String(bodiesOf(w, '/memory/shorten-failed')[0]?.reason)).toContain('refused twice')
+    expect(w.byKey.get('shorten')?.at(-1)?.kind).toBe('error')
+  })
+
+  withSidebar('an answer that is not JSON or holds a note over the limit is never sent as a replacement', async ($, on) => {
+    const w = longWorld(on)
+    const answers = ['Sure! Here are the notes.', answer([`${PARTS[1]} ${'x'.repeat(200)}`, PARTS[0]!])]
+    w.shorten = () => answers.shift()
+    await $.session.start(START)
+    await settled(w)
+    expect(w.asked[1]?.prompt).toContain('was not {"notes":[...]} JSON')
+    expect(bodiesOf(w, '/memory/replace')).toEqual([])
+    expect(String(bodiesOf(w, '/memory/shorten-failed')[0]?.reason)).toContain('longer than 250 characters')
+  })
+
+  withSidebar('a -p session takes no rewrite job', async ($, on) => {
+    const w = longWorld(on)
+    await $.session.start({ ...START, isInteractive: false })
+    await settled(w)
+    expect(bodiesOf(w, '/memory/long')).toEqual([])
+  })
+
+  withSidebar('a consolidator memory longer than the limit is written as the parts the job model gives', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/memory/remember', { memory: DAEMON, outcome: 'added' })
+    w.modelText = JSON.stringify({ candidates: [{ text: 'The deploy rules', is: 'keep', memory: { text: OLD.text, kind: 'fact' } }] })
+    w.shorten = () => answer(PARTS)
+    await $.session.start(START)
+    await $.turn.start({ text: 'x', turnId: 't' } as never)
+    await $.classic.PostToolBatch({ tool_calls: [{ tool_name: 'Read', tool_input: { file_path: '/src/my app/src/rollback.sh' }, tool_use_id: 't1', tool_response: '' }] } as never)
+    await $.turn.complete(answered('The deploy rules are set.'))
+    await settled(w)
+    expect(bodiesOf(w, '/memory/remember').map(body => (body.input as { text: string }).text)).toEqual(PARTS)
+  })
+
+  test('a captured command and its output fit in a memory, however long they are', () => {
+    const command = `npm run build -- ${'--flag '.repeat(40)}`
+    const output = 'y'.repeat(2000)
+    for (const failed of [false, true]) {
+      const text = captureOf(command, output, failed, 's')?.text ?? ''
+      expect(text.length).toBeLessThanOrEqual(250)
+      expect(text.length).toBeGreaterThan(200)
+    }
   })
 })

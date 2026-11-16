@@ -5,7 +5,7 @@
  * code; `register.tsx` makes every call.
  */
 import { openingOf, scopeLabel, wordLine, type Line } from './link'
-import { ANCHOR_TYPES, kindGuide, KINDS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type Memory, type RememberResult, type SimilarMemory } from './shared/model'
+import { ANCHOR_TYPES, kindGuide, KINDS, MAX_NOTE_CHARS, MODEL_KINDS, MODEL_SOURCES, PERSISTENCES, SCOPES, sourceTypeOf, STATUSES, VERIFY_DEPTHS, type Memory, type RememberResult, type SimilarMemory } from './shared/model'
 
 type Schema = Record<string, unknown>
 
@@ -63,7 +63,7 @@ const CONFIDENCE = number(0, 1, '1: verified in code or output; 0.8: default; 0.
 
 const REMEMBER_DESCRIPTION = [
   'Save one durable fact for later sessions: a convention, a decision with its reason, a warning, a bug root cause, a command, or a user preference.',
-  'Write it in English, in 1-4 self-contained sentences with the exact paths, symbols or commands, and anchor it to them; file_note, symbol_note and command_note need an anchor.',
+  `Write it in English, in at most ${MAX_NOTE_CHARS} characters (spaces included; a longer text is refused), with the exact paths, symbols or commands, and anchor it to them; save a larger fact as several memories, each stating one part on its own. file_note, symbol_note and command_note need an anchor.`,
   'Not for task progress (WIP or TODO text is refused), one-off debugging, or what the code already shows. To change a memory, call update instead of saving a near-duplicate.',
   'A memory close in meaning, in any language, stops the write and is answered: update it, or call remember again with distinct: true when yours is another fact.',
 ].join(' ')
@@ -75,7 +75,7 @@ export const TOOLS: readonly ToolDef[] = [
     description: REMEMBER_DESCRIPTION,
     inputSchema: object(
       {
-        text: text('The fact, in English.'),
+        text: text(`The fact, in English, at most ${MAX_NOTE_CHARS} characters.`),
         kind: KIND,
         scope: SCOPE,
         tags: texts('1-3 stable tags, without #.'),
@@ -155,7 +155,7 @@ export const TOOLS: readonly ToolDef[] = [
       {
         id: text('The memory id.'),
         scope: choice(['project', 'user'], 'Move it to this scope; the id stays. A move to user drops path anchors, so a file_note or symbol_note left without one needs a new kind in the same call.'),
-        text: text('Replacement text.'),
+        text: text(`Replacement text, at most ${MAX_NOTE_CHARS} characters.`),
         tags: texts('Replacement tags, without #.'),
         kind: KIND,
         anchors: ANCHORS,

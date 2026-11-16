@@ -8,7 +8,7 @@
  */
 import { anchorsOf, confidenceOf, importanceOf, keptKind, kindOf, operationsOf } from './consolidate'
 import { faint, listed, partsLine, type Line } from './link'
-import { isProtected, type Memory, type RememberInput, type UpdatePatch } from './shared/model'
+import { isProtected, MAX_NOTE_CHARS, type Memory, type RememberInput, type UpdatePatch } from './shared/model'
 
 /** 2.1.288 enforces this timeout on a timer-launched call; 30 s cut the curator's answer as aborted. */
 export const CURATE_MS = 180_000
@@ -49,6 +49,7 @@ Strict Rules & Semantic Evaluation:
 6. Linking: link two candidates only when a later session must read them together: the same decision, the same bug, or the same rule seen from another side. Touching the same file is not enough. When one makes the other wrong, that is a contradict, not a link. Unlink a pair whose "related" list names the other but whose subjects differ.
 7. Target only provided candidate IDs. If nothing needs changes, return {"operations":[]}.
 8. Output raw JSON only. No markdown fences, no explanations.
+9. Every "text" holds at most ${MAX_NOTE_CHARS} characters; a longer text is refused. Split a larger fact into several split items.
 
 {"operations":[]}`
 

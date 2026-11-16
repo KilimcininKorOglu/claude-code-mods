@@ -6,7 +6,7 @@
  * and the counts are of memories. Pure code; `register.tsx` asks the model and applies the plan.
  */
 import { operationsOf } from './consolidate'
-import { isProtected, type Memory } from './shared/model'
+import { isProtected, MAX_NOTE_CHARS, type Memory } from './shared/model'
 
 export const COMPACT_MS = 120_000
 export const COMPACT_TOKENS = 16_000
@@ -38,7 +38,7 @@ Review each entry and return a JSON object with an "operations" array. Each oper
 
 1. Be ruthless about noise. If an entry won't help a future AI agent do its job better, delete it.
 2. Deduplicate aggressively. Similar entries should be merged. Identical entries MUST be merged.
-3. Keep entries concise. Each entry should be one clear sentence in English. Remove filler words.
+3. Keep entries concise. Each entry should be one clear sentence in English, at most ${MAX_NOTE_CHARS} characters; a longer "newText" is refused. Remove filler words.
 4. Preserve factual accuracy. Don't change the meaning of entries unless they're wrong.
 5. Handle every entry. Every entry must appear in at least one operation (keep, rewrite, merge, or delete).
 6. Prefer quality over quantity. 10 excellent entries > 30 mediocre ones.
