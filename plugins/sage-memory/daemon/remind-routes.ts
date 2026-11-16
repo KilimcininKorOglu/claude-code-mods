@@ -35,7 +35,9 @@ export function remindRoutes(stores: Stores, embeddings: Embeddings): Routes {
       return rankForTools(await readers(body, request.query), request)
     }),
     '/remind/prompt': post(async body => {
-      const request = { query: requiredString(body, 'query'), limit: optionalCount(body, 'limit', MAX_REMINDER) ?? 8 }
+      const limit = optionalCount(body, 'limit', MAX_REMINDER) ?? 8
+      // The hook sends how many memories its block carries; without it, the block is taken to carry the limit.
+      const request = { query: requiredString(body, 'query'), limit, blockCount: optionalCount(body, 'blockCount', MAX_REMINDER) ?? limit }
       return rankForPrompt(await readers(body, request.query), request)
     }),
     '/remind/subagent': post(async body => {

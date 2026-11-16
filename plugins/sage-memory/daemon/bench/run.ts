@@ -67,7 +67,7 @@ function timedRank(read: unknown, text: string): Ranking {
   let ranking: Ranking = { candidates: [], rejected: [] }
   for (let run = 0; run < 3; run++) {
     const started = performance.now()
-    ranking = rankForPrompt(read, { query: text, limit: 24 }) as Ranking
+    ranking = rankForPrompt(read, { query: text, limit: 24, blockCount: 8 }) as Ranking
     best = Math.min(best, performance.now() - started)
   }
   timings.push(best)

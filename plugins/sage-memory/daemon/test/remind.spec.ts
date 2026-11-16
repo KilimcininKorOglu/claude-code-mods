@@ -151,7 +151,7 @@ describe('a reminder with the prompt', () => {
     const w = world()
     const important = (await w.remember({ text: 'Staging deploys need the VPN profile named ops-eu', importance: 0.9, confidence: 0.9, tags: ['deploy'] })).memory
     await w.remember({ text: 'A staging banner shows on every page of the preview site' })
-    const ranking = rankForPrompt(w.readers('s1', 'main'), { query: 'how do I deploy to staging over the vpn', limit: 8 })
+    const ranking = rankForPrompt(w.readers('s1', 'main'), { query: 'how do I deploy to staging over the vpn', limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [important.id])
     assert.ok(ranking.rejected.every(r => r.gate === 'belowScore'))
     w.close()
@@ -160,7 +160,7 @@ describe('a reminder with the prompt', () => {
   test('without embeddings, a default memory one shared word relates to stays out', async () => {
     const w = world()
     const loose = (await w.remember({ text: 'A staging banner shows on every page of the preview site' })).memory
-    const ranking = rankForPrompt(w.readers('s1', 'main'), { query: 'banner', limit: 8 })
+    const ranking = rankForPrompt(w.readers('s1', 'main'), { query: 'banner', limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates, [], 'words are the only evidence here, so the score still weighs how important the memory is')
     assert.equal(ranking.rejected.find(r => r.id === loose.id)?.gate, 'belowScore')
     w.close()

@@ -32,6 +32,7 @@ import {
   MAIN_LOOP,
   globalReminder,
   pathsOf,
+  PROMPT_BUDGET,
   promptReminder,
   queryOf,
   reminderLine,
@@ -927,7 +928,7 @@ async function beforePrompt($: EngineInterface, state: State, text: string): Pro
 /** The reminder of the memories a prompt's text finds, or nothing. */
 async function promptRelated($: EngineInterface, state: State, text: string): Promise<string | undefined> {
   if (!(await isReady(state)) || (await $.store.get('remindPrompt')) === false) return undefined
-  const body = { sessionId: await $.session.id(), loop: MAIN_LOOP, query: text.slice(0, 4000), limit: CANDIDATES }
+  const body = { sessionId: await $.session.id(), loop: MAIN_LOOP, query: text.slice(0, 4000), limit: CANDIDATES, blockCount: PROMPT_BUDGET.count }
   const ranking = await ask<Ranking>($, state, '/remind/prompt', body, REMIND_MS)
   return deliver($, state, MAIN_LOOP, 'prompt', promptReminder(ranking.candidates, loopOf(state, MAIN_LOOP).visible))
 }

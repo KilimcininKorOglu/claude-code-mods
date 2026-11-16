@@ -331,7 +331,7 @@ describe('reminders through the vector channel', () => {
     vector[2] = 0.4
     fake.vectors.set(prompt, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
-    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => [c.memory.id, c.reasons]), [[vpn.id, ['query:semantic-cosine:0.60']]])
     assert.deepEqual(ranking.rejected, [], 'the banner at 0.40 is under the floor, so it never became a candidate')
     w.close()
@@ -347,7 +347,7 @@ describe('reminders through the vector channel', () => {
     const prompt = 'staging deploy vpn profile'
     fake.vectors.set(prompt, toward(4, 1))
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
-    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [important.id], 'a missing vector is no evidence against a memory; its words decide, and the score keeps the weak one out')
     assert.ok(!ranking.candidates.some(c => c.memory.id === loose.id))
     w.close()
@@ -368,7 +368,7 @@ describe('reminders through the vector channel', () => {
     vector[2] = 0.6
     fake.vectors.set(prompt, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
-    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [plain.id, weighty.id], 'importance 0.6 and no anchor do not hold back a 0.80 match, and it ranks before a 0.60 one')
     w.close()
   })
@@ -389,7 +389,7 @@ describe('reminders through the vector channel', () => {
     vector[4] = Math.sqrt(1 - 0.18)
     fake.vectors.set(prompt, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
-    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [named.id], 'two shared words and tags at a cosine of 0.30 are no relation; the named symbol is')
     w.close()
   })
@@ -407,7 +407,7 @@ describe('reminders through the vector channel', () => {
     vector[4] = Math.sqrt(1 - 0.45 * 0.45)
     fake.vectors.set(prompt, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
-    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id], 'a 0.45 meaning under the semantic floor still lets two shared words and tags count')
     w.close()
   })

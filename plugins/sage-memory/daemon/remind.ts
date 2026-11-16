@@ -6,6 +6,7 @@ import type { Op } from './op.ts'
 import { descending } from './order.ts'
 import { findRelated } from './related.ts'
 import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, promptRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
+import { namedMemories, type Named } from './named.ts'
 import { memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
 import { selectMemories } from './rows.ts'
 import { REMINDED_POLICY, type Visibility } from './search.ts'
@@ -225,33 +226,55 @@ export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
   return applyGates(ranked, [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
 }
 
-export type PromptRequest = { query: string; limit: number }
+/** `blockCount` is how many memories the reminder's block carries: a name more memories hold singles none out. */
+export type PromptRequest = { query: string; limit: number; blockCount: number }
+
+/** The relevance of a memory the prompt names: as strong as a named anchor. */
+const NAMED_STRENGTH = 0.96
 
 /**
- * Stronger relevance first, then the closer meaning, the score breaking what is left. The semantic line
- * reaches its cap at a cosine of about 0.62, so every closer match ties on relevance; ordered by score,
+ * Named memories first, the ones whose name fewer memories hold before the others; then stronger
+ * relevance, then the closer meaning, the score breaking what is left. The semantic line reaches its
+ * cap at a cosine of about 0.62, so every closer match ties on relevance; ordered by score,
  * importance then decided which of them went.
  */
-function byMeaning(cosines: ReadonlyMap<string, number>): (left: Ranked, right: Ranked) => number {
+function byMeaning(cosines: ReadonlyMap<string, number>, named: ReadonlyMap<string, Named>): (left: Ranked, right: Ranked) => number {
+  const holders = (item: Ranked): number => named.get(item.memory.id)?.holders ?? Number.POSITIVE_INFINITY
   return (left, right) =>
-    right.relationStrength - left.relationStrength || (cosines.get(right.memory.id) ?? 0) - (cosines.get(left.memory.id) ?? 0) || byScore(left, right)
+    holders(left) - holders(right) ||
+    right.relationStrength - left.relationStrength ||
+    (cosines.get(right.memory.id) ?? 0) - (cosines.get(left.memory.id) ?? 0) ||
+    byScore(left, right)
+}
+
+/** A search hit's ranking entry; a named memory takes the named relevance whatever its words or meaning say. */
+function promptEntry(hit: SearchHit, request: PromptRequest, withMeaning: boolean, named: ReadonlyMap<string, Named>): Ranked {
+  const name = named.get(hit.memory.id)
+  const relevance = name ? { strength: NAMED_STRENGTH, reasons: [`query:exact-name:${name.name}`] } : promptRelevance(hit, request.query, withMeaning)
+  return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
+}
+
+/** The search hits, and each named memory the search did not return, so a name reaches a memory whatever its rank in the search. */
+function promptHits(readers: Readers, request: PromptRequest, named: ReadonlyMap<string, Named>): SearchHit[] {
+  const hits = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2).filter(hit => hit.memory.kind !== 'memory_review')
+  const found = new Set(hits.map(hit => hit.memory.id))
+  const missing = [...named.values()].filter(item => !found.has(item.memory.id))
+  return [...hits, ...missing.map(item => ({ memory: item.memory, lexicalScore: null, vectorScore: null, finalScore: 0, source: 'lexical' as const }))]
 }
 
 /**
- * The memories a reminder with the person's prompt may carry: what the prompt's text or meaning finds
- * in either store, relevant enough and important enough, most relevant first.
+ * The memories a reminder with the person's prompt may carry: the memories the prompt names, then
+ * what the prompt's text or meaning finds in either store, relevant enough and important enough.
+ * Only the project store is named: the user store's memories reach every context on their own.
  */
 export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking {
   if (request.query.trim() === '') return { candidates: [], rejected: [] }
-  const hits = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2).filter(hit => hit.memory.kind !== 'memory_review')
+  const named = new Map(namedMemories(readers.project.store.db, request.query, visibilityFor(readers, ['active']), request.blockCount).map(item => [item.memory.id, item]))
+  const hits = promptHits(readers, request, named)
   const cosines = new Map(hits.flatMap(hit => (hit.vectorScore === null ? [] : [[hit.memory.id, hit.vectorScore] as const])))
-  const ranked = hits
-    .map(hit => {
-      const relevance = promptRelevance(hit, request.query, readers.semantic !== undefined)
-      return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
-    })
-    .sort(byMeaning(cosines))
-  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate(id => readers.semantic === undefined || !cosines.has(id)), remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
+  const ranked = hits.map(hit => promptEntry(hit, request, readers.semantic !== undefined, named)).sort(byMeaning(cosines, named))
+  const wordsOnly = (id: string): boolean => !named.has(id) && (readers.semantic === undefined || !cosines.has(id))
+  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate(wordsOnly), remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
   return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
 }
 
@@ -299,6 +322,6 @@ export function rankForSubagent(readers: Readers, request: SubagentRequest): Sub
     .flatMap(op => memoriesForAudience(op, context, readers.sessionId, request.audienceLimit))
     .sort(byImportance)
     .slice(0, request.audienceLimit)
-  const task = rankForPrompt({ ...readers, loop: undefined }, { query: request.task, limit: request.taskLimit }).candidates
+  const task = rankForPrompt({ ...readers, loop: undefined }, { query: request.task, limit: request.taskLimit, blockCount: request.taskLimit }).candidates
   return { audience, task }
 }
