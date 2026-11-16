@@ -32,6 +32,12 @@ type Gate = (item: Ranked) => Rejection | undefined
 const MAX_REJECTED = 20
 /** At most this many candidates are answered; the hooks module keeps far fewer. */
 const MAX_CANDIDATES = 64
+/**
+ * How many memories anchored to a path or a directory above it are read before their relation is
+ * weighed. The read sorts by importance, so a smaller cut dropped a file's own memory behind the
+ * important memories of a directory above it.
+ */
+const PATH_FETCH = 1000
 /** A memory found this strongly by an anchor or an exact anchor value seeds the graph walk. */
 const GRAPH_SEED_STRENGTH = 0.9
 
@@ -120,7 +126,7 @@ function pathChannel(readers: Readers, request: ToolsRequest, statuses: readonly
   const { root } = readers.project
   if (root === undefined) return
   for (const path of relativePaths(root, request.paths)) {
-    for (const memory of memoriesForPaths(readers.project, [path], visibilityFor(readers, statuses), request.limit * 2)) {
+    for (const memory of memoriesForPaths(readers.project, [path], visibilityFor(readers, statuses), PATH_FETCH)) {
       const relation = pathAnchorRelation(memory, path)
       if (relation) addFound(found, { memory, op: readers.project, relationStrength: relation.strength, reasons: relation.reasons })
     }

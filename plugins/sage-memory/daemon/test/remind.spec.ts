@@ -34,6 +34,27 @@ describe("a reminder on a file tool's result", () => {
     w.close()
   })
 
+  test('a memory on a directory right under the root is no candidate for a file two levels below it', async () => {
+    const w = world()
+    const broad = (await w.remember({ text: 'Every mod keeps its own Makefile and README pair', anchors: [{ type: 'directory', path: 'plugins' }] })).memory
+    const own = (await w.remember({ text: 'The restore mod watches only markdown files', anchors: [{ type: 'directory', path: 'plugins/restore' }] })).memory
+    const path = 'plugins/restore/README.md'
+    const ranking = rankForTools(w.readers('s1', 'main'), { paths: [path], query: 'plugins restore README md', mutation: false, limit: 8 })
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [own.id])
+    assert.equal(ranking.rejected.find(r => r.id === broad.id)?.gate, 'belowScore')
+    w.close()
+  })
+
+  test('a memory anchored to the file itself stays a candidate however many important memories its directory holds', async () => {
+    const w = world()
+    for (let i = 0; i < 20; i++) await w.remember({ text: `Module rule number ${i} for the source tree`, anchors: [{ type: 'directory', path: 'src' }], importance: 0.9, distinct: true })
+    const own = (await w.remember({ text: 'The app entry must register the router before the store', anchors: [{ type: 'file', path: 'src/app.ts' }], importance: 0.6 })).memory
+    // The hooks spell a path as words, so the query alone does not find the file's memory.
+    const ranking = rankForTools(w.readers('s1', 'main'), { ...READ_APP, query: 'src app ts' })
+    assert.ok(ranking.candidates.some(c => c.memory.id === own.id), 'the file\'s own memory is not cut before its relation is weighed')
+    w.close()
+  })
+
   test('the gates hold back a low importance, a never policy, and a repeated text', async () => {
     const w = world()
     const anchors = [{ type: 'file' as const, path: 'src/app.ts' }]
