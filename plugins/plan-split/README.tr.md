@@ -32,7 +32,7 @@ Her model yalnız kendi prompt cache'ini okur. 2.1.322 üzerinde ölçüldü: bi
 ## Komut
 
     /plan-split               durum: açık ya da kapalı, iki model ve ana loop'un şu anki modu
-    /plan-split on            sonraki istekten itibaren modele moda göre yönlendirir
+    /plan-split on            sonraki istekten itibaren istekleri moda göre yönlendirir
     /plan-split off           her istek yeniden session'ın modelinde kalır
     /plan-split plan <model>  plan modunun modeli, varsayılan fable
     /plan-split code <model>  diğer bütün modların modeli, varsayılan opus
