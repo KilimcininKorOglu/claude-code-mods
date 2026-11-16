@@ -18,7 +18,7 @@ So the mod does three things:
    - A file whose only placeholder is `$ARGUMENTS` is compared as a template: every other part word for word, each `$ARGUMENTS` matching any text. If the engine's text does not fit, the engine's filled-in text stays and the file's current text follows it, with a note saying that it replaces the instructions above and that the arguments above still apply.
    - A file with another placeholder (`$1`, `${...}`, `` !`...` ``) cannot be compared, because the engine filled it in. If the file was written after the session started, the same note follows.
    - A skill or command that is not called again is not sent again.
-2. It records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and only a path with `/rules/` in it counts), plus the global `CLAUDE.md` (`~/.claude/CLAUDE.md`, under `CLAUDE_CONFIG_DIR` when it is set). A project's `CLAUDE.md` does not count. With each prompt you send, a rules file whose text changed since the session read it reaches the model as a note only the model reads: the file, and its current text, which replaces the earlier one. A file written again with the same text sends nothing, and each change is sent once.
+2. It records every rules file the `instructions` attachment carries (each starts with `Contents of <path> (`, and a path with `/rules/` in it counts), plus the global `CLAUDE.md` and every file it links with `@`: each file under `~/.claude`, or under `CLAUDE_CONFIG_DIR` when it is set. Only a markdown file with no `..` in its path counts, because the text of a file in the attachment can hold a line that looks like such a header. A project's `CLAUDE.md` and the files it links do not count. With each prompt you send, a rules file whose text changed since the session read it reaches the model as a note only the model reads: the file, and its current text, which replaces the earlier one. A file written again with the same text sends nothing, and each change is sent once.
 3. It records every file the main loop's Read tool read, with its last write time. A subagent's reads live in its own context, so they are not recorded. At each call of a skill, the files of that skill's directory that the model read and that were written since reach the model as one line at the end of the call's text, naming them and asking the model to read them again; their text is not sent. The line comes at every call until the model reads the file again. Measured on Claude Code 2.1.282 with a skill whose text asks to read its `sub/a.md` at every call: the model read the changed file again both with the line and without it, so the line matters for a skill that does not ask for a fresh read at every call.
 
 You see one line per event in the [sidebar](../sidebar) stream, or in the transcript while the sidebar is closed. The first part is faint and the file names are in the default colour; for a file the model has to read again the names are yellow:
@@ -56,11 +56,11 @@ Validated with `claude plugin validate` on Claude Code 2.1.283:
 
 Reach L1: it reads files.
 
-    1. Reads:    the file of each skill and command the session calls, and its last write time; the rules files and the global CLAUDE.md the session read, and their last write time; the last write time of each file the model reads with the Read tool; the host's installed_plugins.json, to find a plugin's command file
+    1. Reads:    the file of each skill and command the session calls, and its last write time; the rules files, the global CLAUDE.md and the files it links that the session read, and their last write time; the last write time of each file the model reads with the Read tool; the host's installed_plugins.json, to find a plugin's command file
     2. Runs:     nothing
-    3. Sends:    to the model, the current text of a called skill or command whose file changed, and the whole text of a read rules file or of the global CLAUDE.md that changed on disk; the names of a called skill's files that changed since the model read them
+    3. Sends:    to the model, the current text of a called skill or command whose file changed, and the whole text of a read rules file, of the global CLAUDE.md or of a file it links that changed on disk; the names of a called skill's files that changed since the model read them
     4. Persists: in $.store, the on/off setting; the rules and read records live in memory and end with the session
-    5. Hostile input: every text sent is a file the session itself uses; a skill or rules file that holds hostile text reaches the model through the engine as well
+    5. Hostile input: every text sent is a file the session itself uses; a skill or rules file that holds hostile text reaches the model through the engine as well; a line in a file's text that forges a `Contents of <path> (` header names no file with `..` in its path and no file that is not markdown
 
 ## Limits
 
@@ -70,7 +70,7 @@ Reach L1: it reads files.
 - A command whose file is in neither place the mod looks (a `--plugin-dir` plugin, a command in a subdirectory of `commands/`) keeps the engine's text.
 - A changed rules file reaches the model with your next prompt, not at the moment it is written. When a compaction comes between the change and the next prompt, the engine sends the file too.
 - `/reload-plugins` makes the engine send the instruction files again with their new text, and the reloaded module takes that as its starting text. After an edit followed by a reload the mod therefore sends nothing, because the engine already did; it matters for an edit with no reload or restart in between.
-- A project's CLAUDE.md is not watched, only the global one.
+- A project's CLAUDE.md is not watched, only the global one and the files under `~/.claude` it links. A file the global CLAUDE.md links from outside `~/.claude`, or links after the session started, is not watched.
 - The global CLAUDE.md goes to the model whole at every change, about 5k tokens for a 21 KB file.
 - A changed skill file the model read is named only at the skill's next call, not between calls. `skill.prompt` does not say which loop called the skill, so a skill preloaded into a subagent can get the line for a file only the main loop read.
 

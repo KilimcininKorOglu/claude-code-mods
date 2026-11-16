@@ -79,10 +79,13 @@ export function currentText(engineText: string, fileBody: string, path: string, 
 
 /**
  * The watched files an `instructions` attachment carries, by the `Contents of <path> (` line each starts
- * with: every rules file, and the user's global CLAUDE.md. A project's CLAUDE.md is not watched.
+ * with: every rules file, and every file under the host's config directory, which holds the user's global
+ * CLAUDE.md and the files it links with `@`. A project's CLAUDE.md is not watched. No config directory
+ * yet (`''`) adds nothing, because every path starts with `/`.
  */
-export function rulePathsOf(text: string, globalFile: string): string[] {
-  return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => watchable(p) && (p.includes('/rules/') || p === globalFile))
+export function rulePathsOf(text: string, config: string): string[] {
+  const inConfig = (p: string) => config !== '' && p.startsWith(`${config}/`)
+  return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => watchable(p) && (p.includes('/rules/') || inConfig(p)))
 }
 
 /**

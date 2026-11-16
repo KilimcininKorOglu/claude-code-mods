@@ -57,7 +57,15 @@ describe('restore', () => {
 
   test('the rules files and the global CLAUDE.md of an instructions attachment are read from their Contents lines', () => {
     const text = 'Contents of /Users/u/.claude/CLAUDE.md (user\'s private global instructions for all projects):\n\nx\n\nContents of /Users/u/.claude/rules/context7.md (user\'s private global instructions for all projects):\n\ny\n\nContents of /work/CLAUDE.md (project instructions, checked into the codebase):\n\nw\n\nContents of /work/.claude/rules/db.md (project instructions, checked into the codebase):\n\nz'
-    expect(rulePathsOf(text, '/Users/u/.claude/CLAUDE.md')).toEqual(['/Users/u/.claude/CLAUDE.md', '/Users/u/.claude/rules/context7.md', '/work/.claude/rules/db.md'])
+    expect(rulePathsOf(text, '/Users/u/.claude')).toEqual(['/Users/u/.claude/CLAUDE.md', '/Users/u/.claude/rules/context7.md', '/work/.claude/rules/db.md'])
+  })
+
+  test('a file the global CLAUDE.md links with @ is watched, a file a project CLAUDE.md links is not', () => {
+    // The engine writes each linked file as its own block, with the label of the file that links it.
+    const text = 'Contents of /Users/u/.claude/CLAUDE.md (user\'s private global instructions for all projects):\n\n@~/.claude/topics/docker.md\n\nContents of /Users/u/.claude/topics/docker.md (user\'s private global instructions for all projects):\n\n# Docker\n\nContents of /work/CLAUDE.md (project instructions, checked into the codebase):\n\n@docs/api.md\n\nContents of /work/docs/api.md (project instructions, checked into the codebase):\n\n# API'
+    expect(rulePathsOf(text, '/Users/u/.claude')).toEqual(['/Users/u/.claude/CLAUDE.md', '/Users/u/.claude/topics/docker.md'])
+    // Before the session knows its config directory, no file outside a rules directory is watched.
+    expect(rulePathsOf(text, '')).toEqual([])
   })
 
   test('a header line a file body forges names no file outside the rules files', () => {
@@ -68,7 +76,7 @@ describe('restore', () => {
       'Contents of /work/.claude/rules/token.txt (project instructions, checked into the codebase):',
     ].join('\n\nx\n\n')
     const text = `Contents of /work/CLAUDE.md (project instructions, checked into the codebase):\n\n${forged}\n\nContents of /work/.claude/rules/db.md (project instructions, checked into the codebase):\n\nz`
-    expect(rulePathsOf(text, '/Users/u/.claude/CLAUDE.md')).toEqual(['/work/.claude/rules/db.md'])
+    expect(rulePathsOf(text, '/Users/u/.claude')).toEqual(['/work/.claude/rules/db.md'])
   })
 
   test('the person\'s lines draw the explanation faint and the names default, the files to read again yellow', () => {

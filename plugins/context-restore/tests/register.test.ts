@@ -185,6 +185,20 @@ describe('context-restore', () => {
     expect(w.notes.at(-1)).toEqual([])
   })
 
+  test('a topic file the global CLAUDE.md links and that changed on disk reaches the model', async ($, on) => {
+    const w = world(on)
+    const global = '/Users/u/.claude/CLAUDE.md'
+    const topic = '/Users/u/.claude/topics/git.md'
+    w.files.set(global, { text: '@~/.claude/topics/git.md', mtimeMs: T0 - 5 })
+    w.files.set(topic, { text: '# Git\n\n- Commit each fix alone.', mtimeMs: T0 - 5 })
+    await started($)
+    const attachment = `Contents of ${global} (user's private global instructions for all projects):\n\n@~/.claude/topics/git.md\n\nContents of ${topic} (user's private global instructions for all projects):\n\n# Git\n\n- Commit each fix alone.`
+    await $.prompt.attachment({ type: 'instructions', text: attachment, origin: { kind: 'engine' } })
+    w.files.set(topic, { text: '# Git\n\n- Commit each fix alone.\n- A push needs no approval.', mtimeMs: T0 + 10 })
+    await prompt($)
+    expect(w.notes.at(-1)).toEqual([`context-restore: git.md (${topic}) changed on disk after this session read it. Its current text follows and replaces the earlier one; follow it from now on.\n\n# Git\n\n- Commit each fix alone.\n- A push needs no approval.`])
+  })
+
   test('a rules file written again with the same text sends nothing, and its next real change does', async ($, on) => {
     const w = world(on)
     await started($)

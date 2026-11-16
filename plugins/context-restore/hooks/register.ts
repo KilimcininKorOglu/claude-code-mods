@@ -119,9 +119,12 @@ async function recordRead($: EngineInterface, state: State, path: string): Promi
   else state.reads.set(path, at)
 }
 
-/** Records the rules files and the global CLAUDE.md the session read, with the time each was last written and its text. */
+/**
+ * Records the rules files, the global CLAUDE.md and the files it links that the session read, with the
+ * time each was last written and its text.
+ */
 async function recordRules($: EngineInterface, state: State, text: string): Promise<void> {
-  for (const path of rulePathsOf(text, `${state.config}/CLAUDE.md`)) {
+  for (const path of rulePathsOf(text, state.config)) {
     const at = await mtimeOf($, path)
     if (at !== undefined) state.rules.set(path, { at, text: String(await $.fs.read(path)) })
   }

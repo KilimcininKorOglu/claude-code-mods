@@ -18,7 +18,7 @@ Bu yüzden mod üç şey yapar:
    - Tek placeholder'ı `$ARGUMENTS` olan bir dosya kalıp olarak karşılaştırılır: diğer her kısım kelimesi kelimesine, her `$ARGUMENTS` herhangi bir metinle eşleşir. Engine'in metni kalıba uymazsa engine'in doldurduğu metin kalır ve arkasından dosyanın güncel metni gelir; yanında bunun yukarıdaki talimatların yerine geçtiğini ve yukarıdaki argümanların hâlâ geçerli olduğunu söyleyen bir not bulunur.
    - Başka bir placeholder (`$1`, `${...}`, `` !`...` ``) içeren dosya karşılaştırılamaz, çünkü engine onu doldurmuştur. Dosya session başladıktan sonra yazıldıysa aynı not arkasından gelir.
    - Yeniden çağrılmayan bir skill ya da komut yeniden gönderilmez.
-2. `instructions` attachment'ının taşıdığı her rules dosyasını (her biri `Contents of <yol> (` ile başlar ve yalnız içinde `/rules/` geçen yollar sayılır) ve global `CLAUDE.md`'yi (`~/.claude/CLAUDE.md`, `CLAUDE_CONFIG_DIR` ayarlıysa onun altında) kaydeder. Projenin `CLAUDE.md`'si sayılmaz. Gönderdiğin her prompt'la birlikte, session okuduğundan beri metni değişen bir rules dosyası modele yalnız onun okuduğu bir not olarak gider: dosya ve eskisinin yerine geçen güncel metni. Aynı metinle yeniden kaydedilen bir dosya hiçbir şey göndermez ve her değişiklik bir kez gönderilir.
+2. `instructions` attachment'ının taşıdığı her rules dosyasını (her biri `Contents of <yol> (` ile başlar ve içinde `/rules/` geçen yollar sayılır), global `CLAUDE.md`'yi ve onun `@` ile bağladığı her dosyayı kaydeder: `~/.claude` altındaki, `CLAUDE_CONFIG_DIR` ayarlıysa onun altındaki her dosya. Yalnız yolunda `..` geçmeyen markdown dosyaları sayılır, çünkü attachment'taki bir dosyanın metni böyle bir başlığa benzeyen bir satır içerebilir. Projenin `CLAUDE.md`'si ve onun bağladığı dosyalar sayılmaz. Gönderdiğin her prompt'la birlikte, session okuduğundan beri metni değişen bir rules dosyası modele yalnız onun okuduğu bir not olarak gider: dosya ve eskisinin yerine geçen güncel metni. Aynı metinle yeniden kaydedilen bir dosya hiçbir şey göndermez ve her değişiklik bir kez gönderilir.
 3. Ana loop'un Read tool'uyla okuduğu her dosyayı son yazılma zamanıyla kaydeder. Subagent'ın okudukları kendi context'inde yaşar, onlar kaydedilmez. Bir skill her çağrıldığında, o skill'in dizininden modelin okuduğu ve o zamandan beri yeniden yazılan dosyalar, çağrının metninin sonunda tek bir satırla modele bildirilir: dosyaların adları ve onları yeniden okuması isteği; metinleri gönderilmez. Satır, model dosyayı yeniden okuyana kadar her çağrıda gelir. Claude Code 2.1.282'de, metni her çağrıda `sub/a.md`'sini okumasını isteyen bir skill'le ölçüldü: model değişen dosyayı hem satırla hem satır olmadan yeniden okudu. Yani bu satır, her çağrıda taze okuma istemeyen bir skill için önemlidir.
 
 Her olay için [sidebar](../sidebar) stream'inde, sidebar kapalıysa transcript'te tek bir satır görürsün. Baştaki kısım soluk, dosya adları varsayılan renktedir; modelin yeniden okuması gereken dosyaların adları sarıdır:
@@ -56,11 +56,11 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L1: dosya okur.
 
-    1. Okur:     session'ın çağırdığı her skill'in ve komutun dosyasını ve son yazılma zamanını; session'ın okuduğu rules dosyalarını ve global CLAUDE.md'yi, son yazılma zamanlarıyla; modelin Read tool'uyla okuduğu her dosyanın son yazılma zamanını; bir plugin'in komut dosyasını bulmak için host'un installed_plugins.json dosyasını
+    1. Okur:     session'ın çağırdığı her skill'in ve komutun dosyasını ve son yazılma zamanını; session'ın okuduğu rules dosyalarını, global CLAUDE.md'yi ve onun bağladığı dosyaları, son yazılma zamanlarıyla; modelin Read tool'uyla okuduğu her dosyanın son yazılma zamanını; bir plugin'in komut dosyasını bulmak için host'un installed_plugins.json dosyasını
     2. Çalıştırır: hiçbir şey
-    3. Gönderir: modele, dosyası değişmiş olarak çağrılan bir skill'in ya da komutun güncel metnini ve okunmuş bir rules dosyasının ya da diskte değişen global CLAUDE.md'nin bütün metnini; çağrılan bir skill'in, model okuduktan sonra değişen dosyalarının adlarını
+    3. Gönderir: modele, dosyası değişmiş olarak çağrılan bir skill'in ya da komutun güncel metnini ve okunmuş bir rules dosyasının, global CLAUDE.md'nin ya da onun bağladığı bir dosyanın diskte değişen bütün metnini; çağrılan bir skill'in, model okuduktan sonra değişen dosyalarının adlarını
     4. Saklar:   $.store içinde açık/kapalı ayarını; rules ve okuma kayıtları bellekte durur ve session'la biter
-    5. Düşman girdi: gönderilen her metin, session'ın zaten kullandığı bir dosyadır; düşmanca metin içeren bir skill ya da rules dosyası modele engine üzerinden de ulaşır
+    5. Düşman girdi: gönderilen her metin, session'ın zaten kullandığı bir dosyadır; düşmanca metin içeren bir skill ya da rules dosyası modele engine üzerinden de ulaşır; bir dosyanın metnindeki sahte bir `Contents of <yol> (` başlığı, yolunda `..` geçen ya da markdown olmayan bir dosyayı izletemez
 
 ## Sınırlar
 
@@ -70,7 +70,7 @@ Reach L1: dosya okur.
 - Dosyası mod'un baktığı iki yerde de olmayan bir komut (bir `--plugin-dir` plugin'i, `commands/` altındaki bir alt dizinde duran komut) engine'in metnini korur.
 - Değişen bir rules dosyası modele yazıldığı anda değil, bir sonraki prompt'unla ulaşır. Değişiklikle bir sonraki prompt arasında bir compaction olursa engine dosyayı zaten gönderir.
 - `/reload-plugins` engine'in instruction dosyalarını yeni metinleriyle yeniden göndermesine yol açar, yeniden yüklenen modül de o metni başlangıç metni olarak alır. Yani bir düzenlemeden sonra reload yaptıysan mod hiçbir şey göndermez, çünkü engine göndermiştir; mod, arada reload ya da yeniden başlatma olmayan bir düzenleme için işe yarar.
-- Projenin CLAUDE.md'si izlenmez, yalnız global olanı izlenir.
+- Projenin CLAUDE.md'si izlenmez; yalnız global olanı ve onun `~/.claude` altında bağladığı dosyalar izlenir. Global CLAUDE.md'nin `~/.claude` dışından ya da session başladıktan sonra bağladığı bir dosya izlenmez.
 - Global CLAUDE.md her değişiklikte modele bütünüyle gider; 21 KB'lık bir dosya için yaklaşık 5k token.
 - Modelin okuduğu ve sonra değişen bir skill dosyası yalnız skill'in bir sonraki çağrısında bildirilir, çağrılar arasında değil. `skill.prompt` skill'i hangi loop'un çağırdığını söylemez; bu yüzden bir subagent'a önceden yüklenen skill, yalnız ana loop'un okuduğu bir dosya için de satırı alabilir.
 
