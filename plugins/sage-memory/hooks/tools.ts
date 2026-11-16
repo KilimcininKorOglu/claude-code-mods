@@ -95,14 +95,14 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'search',
     listed: true,
-    description: 'Search memories by text, tag, path, anchor and meaning.',
-    inputSchema: object({ query: text('Text, symbol, tag, command or path.'), limit: number(1, 100), include_stale: yes('Include stale memories.') }, ['query']),
+    description: "Search memories by the words of their text and tags, and by meaning once embeddings are set up. Anchors are not searched: for a file's memories call for_file.",
+    inputSchema: object({ query: text('Words, a name, a tag or a question.'), limit: number(1, 100, '20 by default.'), include_stale: yes('Include stale memories.') }, ['query']),
   },
   {
     name: 'search_explain',
     listed: false,
     description: "search, with each result's lexical, vector and fused score. Call it to say why a result matched.",
-    inputSchema: object({ query: text('Text, symbol, tag, command or path.'), limit: number(1, 100), include_stale: yes('Include stale memories.') }, ['query']),
+    inputSchema: object({ query: text('Words, a name, a tag or a question.'), limit: number(1, 100, '20 by default.'), include_stale: yes('Include stale memories.') }, ['query']),
   },
   {
     name: 'for_file',
@@ -149,7 +149,7 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'update',
     listed: true,
     description:
-      'Change one memory by id: its text, tags, kind, anchors, audience, scores, persistence, contextPolicy, status, links, or scope. When a memory states a value you confirmed is out of date, rewrite its text here. To keep it only as history, set status stale or archived. Prefer this to a near-duplicate remember.',
+      'Change one memory by id: its text, tags, kind, anchors, audience, scores, persistence, contextPolicy, status, links, or scope. When a memory states a value you confirmed is out of date, rewrite its text here; delete one that holds no correct value.',
     inputSchema: object(
       {
         id: text('The memory id.'),
@@ -176,7 +176,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'delete',
     listed: true,
-    description: 'Delete one memory you confirmed is wrong or obsolete when no correct value replaces it. Needs force: true and a reason; recover undoes it.',
+    description: 'Delete one memory you confirmed is wrong or obsolete when no correct value replaces it. Needs force: true; the reason goes to the audit log, and recover undoes it.',
     inputSchema: object(
       {
         id: text('The memory id.'),
