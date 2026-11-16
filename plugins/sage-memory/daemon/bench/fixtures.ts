@@ -253,15 +253,20 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
  * target without a second right answer.
  */
 export function filler(count: number, seed = 7): Note[] {
-  let state = seed
+  // mulberry32 in 32-bit integer steps: a float multiply above 2^53 drops the low bits, and a
+  // remainder of those then took 3 of 8 values, so the loop never found enough new texts.
+  let state = seed >>> 0
   const next = (n: number): number => {
-    state = (state * 1103515245 + 12345) % 2147483648
-    return state % n
+    state = (state + 0x6d2b79f5) >>> 0
+    let t = Math.imul(state ^ (state >>> 15), state | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) % n
   }
   const topics = Object.keys(TOPIC_PARTS)
   const seen = new Set<string>()
   const notes: Note[] = []
-  while (notes.length < count) {
+  for (let tries = 0; notes.length < count; tries++) {
+    if (tries > count * 20) throw new Error(`filler found only ${notes.length} distinct memories of ${count}`)
     const topic = topics[next(topics.length)]!
     const parts = TOPIC_PARTS[topic]!
     const fact = parts.facts[next(parts.facts.length)]!.replace('{d}', DAYS[next(DAYS.length)]!).replace('{h}', String(next(24)).padStart(2, '0')).replace('{n}', String(next(97) + 2))
