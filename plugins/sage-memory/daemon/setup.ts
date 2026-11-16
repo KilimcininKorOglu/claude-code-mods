@@ -1,7 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { isProjectKey } from '../hooks/shared/layout.ts'
-import type { ProjectRef, SetupJob, SetupStep } from '../hooks/shared/protocol.ts'
+import type { SetupJob, SetupStep } from '../hooks/shared/protocol.ts'
+import { projectRefs } from './nested.ts'
 import type { Runtime } from './embedder.ts'
 import type { Embeddings } from './embeddings.ts'
 import { log, messageOf } from './log.ts'
@@ -21,22 +19,6 @@ export type Setup = {
 }
 
 export type SetupContext = { dir: string; runtime: Runtime; embeddings: Embeddings; stores: Stores }
-
-/** The projects whose stores are on disk, from the `project.json` each store directory holds. */
-function projectRefs(dir: string): ProjectRef[] {
-  if (!existsSync(dir)) return []
-  const refs: ProjectRef[] = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const file = join(dir, entry.name, 'project.json')
-    if (!entry.isDirectory() || !isProjectKey(entry.name) || !existsSync(file)) continue
-    const ref = JSON.parse(readFileSync(file, 'utf8')) as Partial<ProjectRef>
-    if (ref.key !== entry.name || typeof ref.root !== 'string' || typeof ref.name !== 'string' || typeof ref.commonDir !== 'string') {
-      throw new Error(`${file} does not describe the project store it sits in`)
-    }
-    refs.push({ key: ref.key, name: ref.name, root: ref.root, commonDir: ref.commonDir })
-  }
-  return refs
-}
 
 function storesOnDisk(context: SetupContext): Store[] {
   return [context.stores.global(), ...projectRefs(context.dir).map(ref => context.stores.project(ref))]

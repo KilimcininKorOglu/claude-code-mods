@@ -175,16 +175,23 @@ export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
 
 type Post = (handle: (body: Body) => unknown) => Route
 
-/** Counts reminders and uses in the store that holds each id; an id held by neither is skipped. */
+/**
+ * Counts reminders and uses in the store that holds each id: the project's, the user's, or a project
+ * store above or below it, whose memories a session is reminded of too; an id held by none is skipped.
+ */
 function counterRoutes(stores: Stores, post: Post): Routes {
   const count = async (body: Body, record: (op: Op, ids: string[]) => void): Promise<{ counted: number; held: string[] }> => {
-    const ids = stringList(body, 'ids')
-    const held = await both(stores, body, op => {
-      const own = ids.filter(id => readMemory(op.store.db, id) !== undefined)
-      if (own.length > 0) record(op, own)
-      return own
-    })
-    return { counted: held.project.length + held.user.length, held: [...held.project, ...held.user] }
+    const places = placesOf(stores, body)
+    let left = stringList(body, 'ids')
+    const held: string[] = []
+    for (const store of [places.project, places.global, ...places.nested()]) {
+      const own = left.filter(id => readMemory(store.db, id) !== undefined)
+      if (own.length === 0) continue
+      await transaction(store, () => record(opFor(places, store), own))
+      held.push(...own)
+      left = left.filter(id => !own.includes(id))
+    }
+    return { counted: held.length, held }
   }
   const reminded = async (body: Body): Promise<{ counted: number }> => {
     const trigger = requiredString(body, 'trigger')

@@ -136,14 +136,14 @@ export function searchStore(db: DatabaseSync, query: string, visibility: Visibil
 }
 
 /**
- * Two ranked lists as one: rank by rank, the first list first at each rank, each memory once.
- * This is reciprocal-rank fusion with equal weights, so neither store outranks the other.
+ * Ranked lists as one: rank by rank, the earlier list first at each rank, each memory once.
+ * This is reciprocal-rank fusion with equal weights, so no store outranks another.
  */
-export function interleave<T extends { id: string }>(first: readonly T[], second: readonly T[]): T[] {
+export function interleave<T extends { id: string }>(...lists: readonly (readonly T[])[]): T[] {
   const seen = new Set<string>()
   const merged: T[] = []
-  for (let i = 0; i < Math.max(first.length, second.length); i++) {
-    for (const item of [first[i], second[i]]) {
+  for (let i = 0; i < Math.max(0, ...lists.map(list => list.length)); i++) {
+    for (const item of lists.map(list => list[i])) {
       if (item === undefined || seen.has(item.id)) continue
       seen.add(item.id)
       merged.push(item)

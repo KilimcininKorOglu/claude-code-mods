@@ -8,7 +8,9 @@ import { findRelated } from './related.ts'
 import { MEANING_FLOOR_COSINE, MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, promptRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
 import { namedMemories, type Named } from './named.ts'
 import { memoriesAmong, memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
-import { selectMemories } from './rows.ts'
+import { selectMemories, sql } from './rows.ts'
+import { isAbsolute, join } from 'node:path'
+import { rebase } from './nested.ts'
 import { REMINDED_POLICY, type Visibility } from './search.ts'
 import type { SemanticQuery } from './vectors.ts'
 import { wordEvidence, type WordEvidence } from './words.ts'
@@ -21,10 +23,45 @@ import { wordEvidence, type WordEvidence } from './words.ts'
  */
 
 /**
- * The two stores a reminder reads, the session it is for, the loop whose context it goes to, and
- * the vector of its query while embeddings are on.
+ * The stores a reminder reads (the project's, the user's, and `nested`: the project stores above
+ * or below the project's root, each op with its own root), the session it is for, the loop whose
+ * context it goes to, and the vector of its query while embeddings are on.
  */
-export type Readers = { project: Op; user: Op; sessionId?: string; loop?: string; semantic?: SemanticQuery }
+export type Readers = { project: Op; user: Op; nested?: readonly Op[]; sessionId?: string; loop?: string; semantic?: SemanticQuery }
+
+/** The project stores a reminder reads: the project's own first, then the ones above or below it. */
+function projectOps(readers: Readers): Op[] {
+  return [readers.project, ...(readers.nested ?? [])]
+}
+
+/** Every store a reminder reads, the project's first. */
+function allOps(readers: Readers): Op[] {
+  return [readers.project, readers.user, ...(readers.nested ?? [])]
+}
+
+/** The store that holds a memory: the user's for a user memory, else the project store whose rows hold its id. */
+function opOf(readers: Readers, memory: Memory): Op {
+  if (memory.scope === 'user') return readers.user
+  return projectOps(readers).find(op => sql(op.store.db, 'SELECT 1 FROM memories WHERE id = ?').get(memory.id) !== undefined) ?? readers.project
+}
+
+/**
+ * A memory as the session sees it: one of a project store above or below the project has its anchor
+ * paths rebased from that store's root to the project's, so its `about` names the file the session
+ * opens, and an edit of that file counts as its use.
+ */
+function asSeen(readers: Readers, memory: Memory): Memory {
+  const from = opOf(readers, memory).root
+  const to = readers.project.root
+  if (memory.scope === 'user' || from === undefined || to === undefined || from === to) return memory
+  return { ...memory, anchors: memory.anchors.map(anchor => (anchor.path === undefined ? anchor : { ...anchor, path: rebase(anchor.path, from, to) })) }
+}
+
+/** The ranking with each memory as the session sees it. */
+function seen(readers: Readers, ranking: Ranking): Ranking {
+  if ((readers.nested ?? []).length === 0) return ranking
+  return { ...ranking, candidates: ranking.candidates.map(item => ({ ...item, memory: asSeen(readers, item.memory) })) }
+}
 
 type Found = { memory: Memory; op: Op; relationStrength: number; reasons: string[] }
 
@@ -175,23 +212,23 @@ export type ToolsRequest = {
 function pathChannel(readers: Readers, request: ToolsRequest, statuses: readonly Status[], found: Map<string, Found>, placed: Set<string>): void {
   const { root } = readers.project
   if (root === undefined) return
-  for (const path of relativePaths(root, request.paths)) {
-    for (const memory of memoriesForPaths(readers.project, [path], visibilityFor(readers, statuses), PATH_FETCH)) {
-      const relation = pathAnchorRelation(memory, path)
-      if (!relation) continue
-      addFound(found, { memory, op: readers.project, relationStrength: relation.strength, reasons: relation.reasons })
-      if (relation.strength >= RELATION_FLOOR) placed.add(memory.id)
+  // Each store's anchors are written from its own root, so every store reads the paths from its own.
+  const absolute = request.paths.map(path => (isAbsolute(path) ? path : join(root, path)))
+  for (const op of projectOps(readers)) {
+    if (op.root === undefined) continue
+    for (const path of relativePaths(op.root, absolute)) {
+      for (const memory of memoriesForPaths(op, [path], visibilityFor(readers, statuses), PATH_FETCH)) {
+        const relation = pathAnchorRelation(memory, path)
+        if (!relation) continue
+        addFound(found, { memory, op, relationStrength: relation.strength, reasons: relation.reasons })
+        if (relation.strength >= RELATION_FLOOR) placed.add(memory.id)
+      }
     }
   }
 }
 
-/** The store a memory lives in: the user scope in the global store, every other scope in the project's. */
-function opOf(readers: Readers, memory: Memory): Op {
-  return memory.scope === 'user' ? readers.user : readers.project
-}
-
 function hitsFor(readers: Readers, query: string, visibility: Visibility, limit: number): SearchHit[] {
-  return searchHybrid([readers.project.store.db, readers.user.store.db], query, visibility, limit, readers.semantic, MEANING_FLOOR_COSINE)
+  return searchHybrid(allOps(readers).map(op => op.store.db), query, visibility, limit, readers.semantic, MEANING_FLOOR_COSINE)
 }
 
 /** Memories the query finds in either store, each weighed by the stronger of its lexical and semantic evidence. */
@@ -212,7 +249,7 @@ function isGraphSeed(item: Found): boolean {
 function graphChannel(readers: Readers, request: ToolsRequest, statuses: readonly Status[], found: Map<string, Found>): void {
   const seeds = [...found.values()].filter(isGraphSeed)
   const seedMemories = seeds.map(seed => seed.memory)
-  for (const op of [readers.project, readers.user]) {
+  for (const op of allOps(readers)) {
     const ids = seeds.filter(seed => seed.op === op).map(seed => seed.memory.id)
     if (ids.length === 0) continue
     for (const memory of findRelated(op, ids, { visibility: visibilityFor(readers, statuses), limit: request.limit * 2, maxDepth: 2 })) {
@@ -239,7 +276,7 @@ export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
     .filter(item => statuses.includes(item.memory.status) && item.memory.kind !== 'memory_review')
     .map(item => ({ memory: item.memory, relationStrength: item.relationStrength, score: reminderScore(item.memory, item.relationStrength), reasons: item.reasons }))
     .sort(byPlacement(placed))
-  return applyGates(spreadSiblings(ranked, item => (placed.has(item.memory.id) ? 0 : 1)), [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
+  return seen(readers, applyGates(spreadSiblings(ranked, item => (placed.has(item.memory.id) ? 0 : 1)), [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))]))
 }
 
 /** `blockCount` is how many memories the reminder's block carries: a name more memories hold singles none out. */
@@ -291,11 +328,13 @@ function promptEntry(hit: SearchHit, request: PromptRequest, withMeaning: boolea
  */
 function promptHits(readers: Readers, request: PromptRequest, named: ReadonlyMap<string, Named>, words: ReadonlyMap<string, WordEvidence>): { hits: SearchHit[]; cosines: ReadonlyMap<string, number> } {
   const visibility = visibilityFor(readers, ['active'])
-  const search = searchWithCosines([readers.project.store.db, readers.user.store.db], request.query, visibility, request.limit * 2, readers.semantic, MEANING_FLOOR_COSINE)
+  const search = searchWithCosines(allOps(readers).map(op => op.store.db), request.query, visibility, request.limit * 2, readers.semantic, MEANING_FLOOR_COSINE)
   const hits = search.hits.filter(hit => hit.memory.kind !== 'memory_review')
   const found = new Set(hits.map(hit => hit.memory.id))
   const unfound = (memory: Memory): boolean => !found.has(memory.id) && memory.kind !== 'memory_review'
-  const extra = [...[...named.values()].map(item => item.memory), ...memoriesAmong(readers.project, [...words.keys()].filter(id => !named.has(id)), visibility, words.size)].filter(unfound)
+  const worded = [...words.keys()].filter(id => !named.has(id))
+  const fromWords = projectOps(readers).flatMap(op => memoriesAmong(op, worded, visibility, words.size))
+  const extra = [...[...named.values()].map(item => item.memory), ...fromWords].filter(unfound)
   const added = extra.map(memory => ({ memory, lexicalScore: null, vectorScore: search.cosines.get(memory.id) ?? null, finalScore: 0, source: 'lexical' as const }))
   return { hits: [...hits, ...added], cosines: search.cosines }
 }
@@ -309,13 +348,15 @@ function promptHits(readers: Readers, request: PromptRequest, named: ReadonlyMap
 export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking {
   if (request.query.trim() === '') return { candidates: [], rejected: [] }
   const visibility = visibilityFor(readers, ['active'])
-  const named = new Map(namedMemories(readers.project.store.db, request.query, visibility, request.blockCount).map(item => [item.memory.id, item]))
-  const words = wordEvidence(readers.project.store.db, request.query, visibility)
+  const dbs = projectOps(readers).map(op => op.store.db)
+  const named = new Map(namedMemories(dbs, request.query, visibility, request.blockCount).map(item => [item.memory.id, item]))
+  // Each store counts its own words: a word's rarity is read against the memories it was written beside.
+  const words = new Map(dbs.flatMap(db => [...wordEvidence(db, request.query, visibility)]))
   const { hits, cosines } = promptHits(readers, request, named, words)
   const evidence = { named, words, cosines }
   const ranked = spreadSiblings(hits.map(hit => promptEntry(hit, request, readers.semantic !== undefined, evidence)).sort(byMeaning(evidence)))
   const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
-  return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
+  return seen(readers, { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected })
 }
 
 /** Most important first, the newer change breaking a tie. */
@@ -358,10 +399,10 @@ export type SubagentRequest ={ role?: string; mode?: string; task: string; audie
  */
 export function rankForSubagent(readers: Readers, request: SubagentRequest): SubagentRanking {
   const context = { role: request.role, mode: request.mode }
-  const audience = [readers.project, readers.user]
+  const audience = allOps(readers)
     .flatMap(op => memoriesForAudience(op, context, readers.sessionId, request.audienceLimit))
     .sort(byImportance)
     .slice(0, request.audienceLimit)
   const task = rankForPrompt({ ...readers, loop: undefined }, { query: request.task, limit: request.taskLimit, blockCount: request.taskLimit }).candidates
-  return { audience, task }
+  return { audience: audience.map(memory => asSeen(readers, memory)), task }
 }

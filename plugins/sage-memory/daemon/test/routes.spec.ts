@@ -84,7 +84,8 @@ describe('where a memory is kept', () => {
       const own = await d.remember(d.alpha, { text: MIGRATIONS })
       assert.equal((await d.value<Memory>('/memory/get', { project: d.beta, id: user.id })).scope, 'user', 'every project reads the user store')
       const hidden = await d.ask('/memory/get', { project: d.beta, id: own.id })
-      assert.deepEqual([hidden.status, hidden.error], [404, `no memory ${own.id} in the project or the user store`])
+      // alpha and beta are sibling folders, so neither reads the other's store.
+      assert.deepEqual([hidden.status, hidden.error], [404, `no memory ${own.id} in the project store, the user store or a project store above or below it`])
       assert.equal((await d.value<Memory>('/memory/get', { project: d.alpha, id: own.id })).text, MIGRATIONS)
       assert.ok(existsSync(layoutOf(d.dir).globalDb))
       const recorded = JSON.parse(readFileSync(join(d.dir, d.alpha.key, 'project.json'), 'utf8')) as ProjectRef
@@ -318,7 +319,7 @@ describe('candidate routes', () => {
       assert.equal(accepted.resolution.applied, true)
       assert.equal((await d.value<Memory>('/memory/get', { project: d.alpha, id: user.id })).status, 'archived')
       const missing = await d.ask('/candidates/reject', { project: d.alpha, id: 'candidate_NOPE' })
-      assert.deepEqual([missing.status, missing.error], [404, 'no candidate candidate_NOPE in the project or the user store'])
+      assert.deepEqual([missing.status, missing.error], [404, 'no candidate candidate_NOPE in the project store, the user store or a project store above or below it'])
     }))
 
   test('a proposal of the user scope is kept in the user store and accepted into a user memory', () =>

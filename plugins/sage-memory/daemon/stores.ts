@@ -1,23 +1,28 @@
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite'
 import { isProjectKey, layoutOf, projectDirOf } from '../hooks/shared/layout.ts'
 import type { ProjectRef } from '../hooks/shared/protocol.ts'
 import { writeAtomic } from './files.ts'
 import { log, messageOf } from './log.ts'
+import { nestedRefs, projectRefs } from './nested.ts'
 import { applyPragmas, migrate } from './schema.ts'
+
+const REFS_MS = 30_000
 
 /**
  * One open database: its file, the connection, when a request last used it, its write queue, how
  * many queued writes have not finished (a store with one is never closed as idle), and the audit
  * rows written since the audit log was last cut.
  */
-export type Store = { name: string; file: string; db: DatabaseSync; lastUsed: number; queue: Promise<void>; pending: number; auditWrites: number }
+export type Store = { name: string; file: string; db: DatabaseSync; lastUsed: number; queue: Promise<void>; pending: number; auditWrites: number; root?: string }
 
 export type Stores = {
   /** The cross-project store (`user` scope). */
   global: () => Store
   /** One project's store, opened on first use; the project's `project.json` is written then. */
   project: (ref: ProjectRef) => Store
+  /** The stores of the projects above and below `ref`'s root (`nested.ts`), opened as they are, without writing their `project.json`. */
+  nested: (ref: ProjectRef) => Store[]
   /** Closes every store unused for `maxIdleMs`; answers how many closed. */
   closeIdle: (now: number, maxIdleMs: number) => number
   closeAll: () => void
@@ -94,13 +99,25 @@ export function createStores(dir: string): Stores {
   const open = new Map<string, Store>()
   const roots = new Map<string, string>()
 
-  const use = (name: string, file: string): Store => {
+  const use = (name: string, file: string, root?: string): Store => {
     const known = open.get(name)
-    const store = known ?? { name, file, db: openDatabase(file), lastUsed: 0, queue: Promise.resolve(), pending: 0, auditWrites: 0 }
+    const store = known ?? { name, file, db: openDatabase(file), lastUsed: 0, queue: Promise.resolve(), pending: 0, auditWrites: 0, root }
     store.lastUsed = Date.now()
     open.set(name, store)
     return store
   }
+
+  // The store list is read again at most every 30 s, so a request does not read every project.json.
+  let listed: { at: number; refs: ProjectRef[] } = { at: 0, refs: [] }
+  const refsOnDisk = (): ProjectRef[] => {
+    const now = Date.now()
+    if (now - listed.at >= REFS_MS) listed = { at: now, refs: projectRefs(dir) }
+    return listed.refs
+  }
+  const nested = (ref: ProjectRef): Store[] =>
+    nestedRefs(ref, refsOnDisk())
+      .filter(other => existsSync(`${projectDirOf(dir, other.key)}/sage.db`))
+      .map(other => use(other.key, `${projectDirOf(dir, other.key)}/sage.db`, other.root))
 
   const project = (ref: ProjectRef): Store => {
     if (!isProjectKey(ref.key)) throw new Error(`not a project key: ${JSON.stringify(ref.key)}`)
@@ -110,7 +127,7 @@ export function createStores(dir: string): Stores {
       recordProject(dir, ref)
       roots.set(ref.key, ref.root)
     }
-    return use(ref.key, `${projectDir}/sage.db`)
+    return use(ref.key, `${projectDir}/sage.db`, ref.root)
   }
 
   const close = (name: string): void => {
@@ -127,6 +144,7 @@ export function createStores(dir: string): Stores {
   return {
     global: () => use('global', layoutOf(dir).globalDb),
     project,
+    nested,
     closeIdle,
     closeAll: () => [...open.keys()].forEach(close),
     names: () => [...open.keys()],

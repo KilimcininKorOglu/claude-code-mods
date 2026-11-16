@@ -32,14 +32,18 @@ function readerVisibility(body: Body, statuses: readonly Status[]): Visibility {
   return { statuses, policies: EVERY_POLICY, audienceScoped: true, sessionId: optionalString(body, 'sessionId'), allSessions: flag(body, 'allSessions') }
 }
 
-/** Both stores searched through the text index and, while embeddings are on, the vector channel too. */
+/**
+ * The project's store, the user store and the project stores above or below the project, searched
+ * through the text index and, while embeddings are on, the vector channel too.
+ */
 async function search(stores: Stores, embeddings: Embeddings, body: Body): Promise<SearchHit[]> {
   const places = placesOf(stores, body)
   const query = optionalText(body, 'query')
   const limit = optionalCount(body, 'limit', 100) ?? 20
   const visibility = readerVisibility(body, flag(body, 'includeStale') ? ['active', 'stale'] : ['active'])
-  const semantic = await embeddings.semantic(query, [places.project, places.global])
-  return searchHybrid([places.project.db, places.global.db], query, visibility, limit, semantic, MEANING_FLOOR_COSINE)
+  const read = [places.project, places.global, ...places.nested()]
+  const semantic = await embeddings.semantic(query, read)
+  return searchHybrid(read.map(store => store.db), query, visibility, limit, semantic, MEANING_FLOOR_COSINE)
 }
 
 /**

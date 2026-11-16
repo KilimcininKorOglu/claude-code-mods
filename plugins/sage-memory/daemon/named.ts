@@ -63,14 +63,15 @@ function holdersOf(db: DatabaseSync, name: string, visibility: Visibility, ancho
 }
 
 /**
- * The memories of one store a prompt names, each with the name and how many memories hold it; a
- * memory two names point at keeps the name fewer memories hold.
+ * The memories a prompt names, each with the name and how many memories hold it in all the stores
+ * read together (the project's and those above or below it), so a name is not counted once per
+ * store; a memory two names point at keeps the name fewer memories hold.
  */
-export function namedMemories(db: DatabaseSync, prompt: string, visibility: Visibility, blockCount: number): Named[] {
+export function namedMemories(dbs: readonly DatabaseSync[], prompt: string, visibility: Visibility, blockCount: number): Named[] {
   const found = new Map<string, Named>()
-  const anchors = anchorIndex(db, visibility)
+  const indexes = dbs.map(db => ({ db, anchors: anchorIndex(db, visibility) }))
   for (const name of namesOf(prompt)) {
-    const holders = holdersOf(db, name, visibility, anchors)
+    const holders = indexes.flatMap(({ db, anchors }) => holdersOf(db, name, visibility, anchors))
     if (holders.length === 0 || holders.length > blockCount) continue
     for (const memory of holders) {
       const known = found.get(memory.id)

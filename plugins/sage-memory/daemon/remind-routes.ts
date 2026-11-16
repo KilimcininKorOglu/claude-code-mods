@@ -15,17 +15,20 @@ import { transaction, type Stores } from './stores.ts'
 const MAX_REMINDER = 50
 
 /**
- * Both stores as a reminder reads them, with the vector of `query` while embeddings are on; `byPiece`
- * adds the vectors of its lines and sentences, for a prompt or a task that can be a long paste.
+ * The stores as a reminder reads them (the project's, the user's, and the project stores above or
+ * below the project, each with its own root), with the vector of `query` while embeddings are on;
+ * `byPiece` adds the vectors of its lines and sentences, for a prompt or a task that can be a long paste.
  */
 async function readersOf(stores: Stores, embeddings: Embeddings, body: Body, query: string, byPiece: boolean): Promise<Readers> {
   const places = placesOf(stores, body)
+  const nested = places.nested()
   return {
     project: opFor(places, places.project),
     user: opFor(places, places.global),
+    nested: nested.map(store => opFor(places, store)),
     sessionId: optionalString(body, 'sessionId'),
     loop: optionalString(body, 'loop'),
-    semantic: await embeddings.semantic(query, [places.project, places.global], byPiece),
+    semantic: await embeddings.semantic(query, [places.project, places.global, ...nested], byPiece),
   }
 }
 
