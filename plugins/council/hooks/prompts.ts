@@ -26,7 +26,7 @@ const WHEN = [
 
 /** What the model reads about the tool. It names no model, so a change of the members does not make it stale. */
 export const TOOL_DESCRIPTION = [
-  'Ask a council of models about a hard problem. Each reads the conversation and your question and answers alone; the model of this session then writes one verdict from their answers. You get the verdict and every answer, in about half a minute.',
+  'Ask a council of models about a hard problem. Each answers your question alone, after reading the conversation (a subagent\'s call sends the question only); the model of this session then writes one verdict from their answers. You get the verdict and every answer; a run of five members took 25 to 44 seconds.',
   ...WHEN,
 ].join('\n')
 
