@@ -1,10 +1,10 @@
 # prompt-time
 
-Transcript saat göstermez: uzun bir session'da geriye kaydırdığında bir mesajın ne zaman gönderildiğini ya da modelin onun üzerinde ne kadar çalıştığını anlayamazsın. Bu mod transcript'te senin her mesajının ve modelin cevaplarındaki her metin bloğunun altına soluk bir satırda saati çizer. Resume edilmiş bir session, transcript dosyası 4 MiB ya da daha küçükse eski mesajlarının saatlerini de gösterir.
+Transcript saat göstermez. Uzun bir session'da geriye kaydırdığınızda bir mesajın ne zaman gönderildiğini ya da modelin onun üzerinde ne kadar çalıştığını göremezsiniz. Bu mod, transcript'te her mesajınızın ve modelin cevaplarındaki her metin bloğunun altına soluk bir satırla saati yazar. Resume edilen bir session'da, transcript dosyası 4 MiB ya da daha küçükse eski mesajların saatleri de gösterilir.
 
 ## Ne gösterir
 
-Bugün yazılmış bir mesaj ya da cevap bloğu yalnız saati gösterir. Daha eski olanı yerel saat diliminde tarihi de gösterir:
+Bugün yazılmış bir mesajda ya da cevap bloğunda yalnız saat gösterilir. Daha eski olanlarda yerel saat dilimine göre tarih de gösterilir:
 
     ❯ Say one word, then run date, then say one more word.
     22:24
@@ -18,32 +18,32 @@ Bugün yazılmış bir mesaj ya da cevap bloğu yalnız saati gösterir. Daha es
     ❯ Summarize the log.
     17.09.2026 21:58
 
-Satır yalnız görüntüdür. Saklanan mesaj değişmez ve modele hiçbir şey ulaşmaz; yani mod token harcamaz ve prompt cache'e dokunmaz.
+Satır yalnız ekranda gösterilir. Saklanan mesaj değişmez ve modele hiçbir şey gönderilmez. Bu yüzden mod token harcamaz ve prompt cache'i etkilemez.
 
-## Saati nereden bilir
+## Saati nereden alır
 
-- **Senin mesajın.** `prompt.submit` saati ve prompt'un metnini kaydeder. Aynı metni taşıyan sonraki yeni `UserMessage` satırı o saati alır. Başka bir hook'un düşürdüğü bir prompt hiç çizilmez, saati de hiçbir satıra geçmez.
-- **Bir cevap bloğu.** Bir turn çalışırken (`turn.start` ile `turn.complete` arasında) ilk kez çizilen yeni bir `AssistantMessage` bloğu o çizimin saatini alır. Canlı bir denemede çizim, transcript'in blok için sakladığı timestamp'e 0,1 saniyeden yakındı.
-- **Resume edilmiş bir session.** Başlangıçta, resume'da ve fork'ta `classic.SessionStart` session'ın transcript'ini okur ve her user ve assistant satırının `uuid`'sini `timestamp`'ine eşler. Engine'in bu satırlar için kullandığı `requestId` aynı `uuid`'dir (2.1.277 üzerinde ölçüldü). Okumadan önce çizilmiş satırlar `$.ui.invalidate` ile yeniden çizilir. 4 MiB'ı aşan bir transcript okunmaz, çünkü `$.fs.read` 4 MiB'ı aşan bir dosyayı reddeder ve aralık okuması yoktur; mod boyutu önce `$.fs.stat` ile kontrol eder ve debug log'a bir satır yazar. O session'ın satırları saatsiz kalır, bir turn onları yeniden çizdiğinde de (bir resize bütün satırları yeniden çizer); yeni mesajlar ise saatini her zamanki gibi alır. O session'ın bir turn sırasında ilk kez çizilen bir bloğu, fullscreen'de bir kaydırmanın çizdiği gibi, yine turn'ün saatini alır: bir bloğu turn'üne bağlayan hiçbir prop ve hiçbir `$.session.messages()` satırı yoktur.
+- **Sizin mesajınız.** `prompt.submit` saati ve prompt'un metnini kaydeder. Aynı metni taşıyan bir sonraki yeni `UserMessage` satırı bu saati alır. Başka bir hook'un iptal ettiği bir prompt hiçbir zaman çizilmez, bu yüzden saati hiçbir satıra verilmez.
+- **Bir cevap bloğu.** Bir turn çalışırken (`turn.start` ile `turn.complete` arasında) ilk kez çizilen yeni bir `AssistantMessage` bloğu, çizildiği andaki saati alır. Canlı bir denemede çizim zamanı ile transcript'in blok için sakladığı timestamp arasındaki fark 0,1 saniyeden azdı.
+- **Resume edilen bir session.** Başlangıçta, resume'da ve fork'ta `classic.SessionStart` session'ın transcript'ini okur. Her user ve assistant satırının `uuid` değeri kendi `timestamp` değeriyle eşleştirilir. Engine'in bu satırlar için kullandığı `requestId`, aynı `uuid` değeridir (2.1.277 üzerinde ölçüldü). Okumadan önce çizilmiş satırlar `$.ui.invalidate` ile yeniden çizilir. 4 MiB'ı aşan bir transcript okunmaz, çünkü `$.fs.read` 4 MiB'ı aşan bir dosyayı reddeder ve aralık okuması desteklenmez. Mod boyutu önce `$.fs.stat` ile kontrol eder ve debug log'a bir satır yazar. Bu session'ın eski satırları saatsiz kalır. Bir turn bu satırları yeniden çizdiğinde de (örneğin bir resize bütün satırları yeniden çizer) saat gösterilmez. Yeni mesajlar ise saatlerini normal şekilde alır. Bu session'ın bir turn sırasında ilk kez çizilen eski bir bloğu (örneğin fullscreen'de kaydırınca çizilen bir blok) yine turn'ün saatini alır. Bunun nedeni, bir bloğu kendi turn'üne bağlayan bir prop'un ya da `$.session.messages()` satırının olmamasıdır.
 
-`/clear` bilinen saatleri unutur, çünkü temizlenen mesajlar ekrandan gider.
+`/clear` bilinen saatleri siler, çünkü temizlenen mesajlar ekrandan kalkar.
 
 ## Kurulum
 
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-time@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
+Function hook'lar early access aşamasında. Claude Code 2.1.288 ve sonrası onları varsayılan olarak yükler, bu yüzden açmanız gereken bir ayar yoktur.
 
-Yerel bir checkout'tan tek session için yüklemek istersen:
+Modu yerel bir checkout'tan tek bir session için yüklemek için:
 
     claude --plugin-dir plugins/prompt-time
 
 ## Kurulumdan sonra
 
-Claude Code'u yeniden başlat. Mod transcript'i session başında okur; yani kurulum sırasında açık olan bir session, önceki mesajlarının altında saat göstermez.
+Claude Code'u yeniden başlatın. Mod transcript'i session başında okur. Bu yüzden kurulum sırasında açık olan bir session'da önceki mesajların altında saat gösterilmez.
 
-## Nereye uzanır
+## Nelere erişir
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
@@ -52,25 +52,25 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L1: transcript'i okur.
 
-    1. Okur:     session'ın kendi transcript dosyasının boyutunu, sonra 4 MiB ya da daha küçükse dosyayı başlangıçta, resume'da ve fork'ta bir kere ve yalnız satırlarının type, uuid ve timestamp değerlerini; gönderilen her prompt'un ve çizilen her user satırının metnini, ikisini eşlemek için; saati
-    2. Çalıştırır: hiçbir şey; process yok, fork yok, timer yok
-    3. Gönderir: hiçbir şey; network çağrısı yok ve modele hiçbir şey gitmez
-    4. Saklar:   hiçbir şey; saatler bellekte durur ve session'la birlikte gider
-    5. Düşman girdi: JSON olmayan bir transcript satırı sayılır ve atlanır, string uuid'si ya da parse edilebilir timestamp'i olmayan bir satır atlanır; çizilen etiket yalnız sayılardan kurulur
+    1. Okur:         session'ın kendi transcript dosyasının boyutunu; dosya 4 MiB ya da daha küçükse başlangıçta, resume'da ve fork'ta dosyayı bir kez, yalnız satırların type, uuid ve timestamp değerlerini; ikisini eşleştirmek için gönderilen her prompt'un ve çizilen her user satırının metnini; saati
+    2. Çalıştırır:   hiçbir şey; process, fork ya da timer yoktur
+    3. Gönderir:     hiçbir şey; network çağrısı yapmaz ve modele hiçbir şey göndermez
+    4. Saklar:       hiçbir şey; saatler bellekte tutulur ve session ile birlikte silinir
+    5. Düşman girdi: JSON olmayan bir transcript satırı sayılır ve atlanır; string bir uuid'si ya da parse edilebilir bir timestamp'i olmayan satır atlanır; ekrana yazılan etiket yalnız sayılardan oluşturulur
 
 ## Sınırlar
 
-- Transcript'i 4 MiB'ı aşan resume edilmiş bir session, önceki mesajlarının altında saat göstermez. Transcript satırı timestamp'ini taşır, ama `$.fs.read` dosyanın tamamını reddeder, `$.session.messages()` da timestamp vermez. `~/.claude/projects`'te bakılan transcript'lerin 78'i 4 MiB'ı aşıyordu.
-- Session ortasında yüklenen bir mod, ekranda zaten duran mesajların altında saat göstermez, çünkü transcript'i yalnız session başında okur.
-- Bir user satırı prompt'un saatini metin eşleştirerek alır. Engine yeni bir prompt'u iki kez çizer, önce `placeholder` olarak, sonra saklanan id'siyle; bu yüzden prompt'un metnini taşıyan her yeni satır, sonraki prompt'a kadar o saati alır. Metni farklı olan bir notification satırı almaz.
-- Bir cevap bloğu saatini bir turn sırasında ilk kez çizildiğinde alır. Engine bir turn'ün son bloğunu `turn.complete`'ten birkaç milisaniye sonra ilk kez çizebilir (2.1.277 üzerinde görüldü); bu yüzden metni turn'ün son metnine eşit olan ilk yeni blok, turn'ün bittiği saati alır. Turn'ü bittikten sonra ilk kez çizilen diğer her blok, session resume edilene kadar saat göstermez.
-- Bir thinking bloğu saat göstermez. Claude Code 2.1.277'de thinking için bir `ui.render` yeri yoktur, yalnız bir cevabın metin blokları için vardır (`AssistantMessage`).
-- Saat, Claude Code'u çalıştıran makinenin yerel saatidir.
-- `claude plugin test`'in test engine'i `classic.SessionStart`'ı tetikleyemez. Transcript okuması `indexTranscript`'in unit test'leri ve canlı bir resume denemesiyle sınandı.
+- Transcript'i 4 MiB'ı aşan resume edilmiş bir session'da önceki mesajların altında saat gösterilmez. Transcript satırı timestamp'ini içerir, ancak `$.fs.read` dosyanın tamamını reddeder ve `$.session.messages()` timestamp döndürmez. `~/.claude/projects` altında kontrol edilen transcript'lerin 78'i 4 MiB'ı aşıyordu.
+- Session ortasında yüklenen bir mod, ekranda zaten bulunan mesajların altında saat göstermez, çünkü transcript'i yalnız session başında okur.
+- Bir user satırı prompt'un saatini metin eşleştirmesiyle alır. Engine yeni bir prompt'u iki kez çizer: önce `placeholder` olarak, ardından saklanan id'siyle. Bu yüzden prompt'un metnini taşıyan her yeni satır, bir sonraki prompt'a kadar bu saati alır. Metni farklı olan bir notification satırı bu saati almaz.
+- Bir cevap bloğu saatini, bir turn sırasında ilk kez çizildiğinde alır. Engine bir turn'ün son bloğunu `turn.complete` olayından birkaç milisaniye sonra ilk kez çizebilir (2.1.277 üzerinde görüldü). Bu yüzden metni turn'ün son metniyle aynı olan ilk yeni blok, turn'ün bittiği saati alır. Turn bittikten sonra ilk kez çizilen diğer bloklarda, session resume edilene kadar saat gösterilmez.
+- Thinking bloklarında saat gösterilmez. Claude Code 2.1.277'de thinking için bir `ui.render` noktası yoktur. Bu nokta yalnız bir cevabın metin blokları (`AssistantMessage`) için vardır.
+- Saat, Claude Code'u çalıştıran bilgisayarın yerel saatidir.
+- `claude plugin test` test engine'i `classic.SessionStart` olayını tetikleyemez. Transcript okuması `indexTranscript` unit test'leri ve canlı bir resume denemesiyle test edildi.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make lint        # complexity sınırı 10; aşılırsa build başarısız olur
     make validate
     make test        # claude plugin test
