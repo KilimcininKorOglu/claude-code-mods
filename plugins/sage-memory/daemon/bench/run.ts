@@ -38,6 +38,8 @@ const { createEmbeddings } = await import(join(build, 'daemon/embeddings.ts'))
 const { transformersRuntime } = await import(join(build, 'daemon/embedder.ts'))
 const { layoutOf } = await import(join(build, 'hooks/shared/layout.ts'))
 const hooks = await import(join(build, 'hooks/remind.ts'))
+const { searchHybrid } = await import(join(build, 'daemon/hybrid.ts'))
+const { EVERY_POLICY } = await import(join(build, 'daemon/search.ts'))
 
 /** A note as the store under test holds it: translated, or in English with its long lead. */
 function textOf(note: Note): string {
@@ -71,17 +73,38 @@ async function readers(query: string, byPiece = true): Promise<unknown> {
 }
 
 const timings: number[] = []
-/** The ranking, timed as the fastest of three runs, so one slow tick does not decide the line. */
-function timedRank(read: unknown, text: string): Ranking {
+const toolTimings: number[] = []
+const searchTimings: number[] = []
+
+/** The fastest of three runs of `work`, so one slow tick does not decide the line. */
+function fastest<T>(work: () => T, into: number[]): T {
   let best = Number.POSITIVE_INFINITY
-  let ranking: Ranking = { candidates: [], rejected: [] }
+  let result = work()
   for (let run = 0; run < 3; run++) {
     const started = performance.now()
-    ranking = rankForPrompt(read, { query: text, limit: 24, blockCount: 8 }) as Ranking
+    result = work()
     best = Math.min(best, performance.now() - started)
   }
-  timings.push(best)
-  return ranking
+  into.push(best)
+  return result
+}
+
+/**
+ * The prompt ranking, timed; the same text also times the other two paths a store answers at every
+ * request, a file tool's ranking (on a file no memory names) and the search tool, as their routes call them.
+ */
+function timedRank(read: unknown, text: string): Ranking {
+  const readers = read as { project: { store: { db: unknown } }; user: { store: { db: unknown } }; semantic?: unknown }
+  fastest(() => rankForTools(read, { paths: ['src/bench/unnamed.ts'], query: text, mutation: false, limit: 24 }), toolTimings)
+  const visibility = { statuses: ['active'], policies: EVERY_POLICY, audienceScoped: true }
+  fastest(() => searchHybrid([readers.project.store.db, readers.user.store.db], text, visibility, 20, readers.semantic, 0.45), searchTimings)
+  return fastest(() => rankForPrompt(read, { query: text, limit: 24, blockCount: 8 }) as Ranking, timings)
+}
+
+/** The median and p95 line of one path's timings. */
+function timingLine(name: string, values: number[]): string {
+  const sorted = [...values].sort((a, b) => a - b)
+  return `${name} ms: median ${sorted[Math.floor(sorted.length / 2)]!.toFixed(1)}  p95 ${sorted[Math.floor(sorted.length * 0.95)]!.toFixed(1)}`
 }
 
 async function promptSent(text: string): Promise<{ ranking: Ranking; sent: Note[] }> {
@@ -221,5 +244,6 @@ if (embedder) console.log(`best cosine of an unrelated message ${unrelatedBest.t
 console.log(`rankForPrompt ms of the long prompts: ${longTimings.map(ms => ms.toFixed(1)).join(', ')}`)
 if (longEmbedTimings.length > 0) console.log(`embedding ms of the long prompts: ${longEmbedTimings.map(ms => ms.toFixed(1)).join(', ')}`)
 if (embedTimings.length > 0) console.log(`embedding ms of every query: max ${Math.max(...embedTimings).toFixed(1)}`)
-timings.sort((a, b) => a - b)
-console.log(`rankForPrompt ms: median ${timings[Math.floor(timings.length / 2)]!.toFixed(1)}  p95 ${timings[Math.floor(timings.length * 0.95)]!.toFixed(1)}`)
+console.log(timingLine('rankForPrompt', timings))
+console.log(timingLine('rankForTools', toolTimings))
+console.log(timingLine('search', searchTimings))
