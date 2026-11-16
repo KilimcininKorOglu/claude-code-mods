@@ -16,6 +16,7 @@ import { flag, optionalCount, optionalObject, optionalScope, optionalString, req
 import { readAudit, readMemory } from './rows.ts'
 import { transaction, type Store, type Stores } from './stores.ts'
 import { updateMemory, type UpdateRequest } from './update.ts'
+import { pluginVersion } from './version.ts'
 
 export type RouteInput = { body: Body; res: ServerResponse }
 export type Route = { method: 'GET' | 'POST'; auth: boolean; handle: (input: RouteInput) => unknown }
@@ -115,11 +116,11 @@ async function replaceRoute(stores: Stores, embeddings: Embeddings, body: Body):
 const LEASE_MS = 10 * 60_000
 
 /** The long memories of both stores no other window holds, each held for this one for `LEASE_MS`. */
-async function leaseLong(stores: Stores, leases: Map<string, number>, body: Body): Promise<Memory[]> {
+async function leaseLong(stores: Stores, leases: Map<string, number>, version: string, body: Body): Promise<Memory[]> {
   const limit = optionalCount(body, 'limit', 1000) ?? 50
   const now = Date.now()
   const held = (id: string): boolean => (leases.get(id) ?? 0) > now
-  const found = await both(stores, body, op => longMemories(op, limit, held))
+  const found = await both(stores, body, op => longMemories(op, limit, version, held))
   const memories = [...found.project, ...found.user].slice(0, limit)
   for (const memory of memories) leases.set(memory.id, now + LEASE_MS)
   for (const [id, until] of leases) if (until <= now) leases.delete(id)
@@ -128,6 +129,8 @@ async function leaseLong(stores: Stores, leases: Map<string, number>, body: Body
 
 export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
   const leases = new Map<string, number>()
+  // The version the daemon started with: a failed rewrite counts against it alone.
+  const version = pluginVersion()
   const post =(handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
   const byId = (body: Body): ((places: Places) => Store) => places => memoryStore(places, requiredString(body, 'id'))
   return {
@@ -135,10 +138,10 @@ export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
     '/memory/get': post(body => run(stores, body, byId(body), op => readMemory(op.store.db, requiredString(body, 'id')))),
     '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
     '/memory/replace': post(body => replaceRoute(stores, embeddings, body)),
-    '/memory/long': post(body => leaseLong(stores, leases, body)),
+    '/memory/long': post(body => leaseLong(stores, leases, version, body)),
     '/memory/shorten-failed': post(body =>
       run(stores, body, byId(body), op => {
-        shortenFailed(op, requiredString(body, 'id'), requiredString(body, 'reason'), sessionOf(body))
+        shortenFailed(op, { id: requiredString(body, 'id'), reason: requiredString(body, 'reason'), version, sessionId: sessionOf(body) })
         leases.delete(requiredString(body, 'id'))
         return { recorded: true }
       }),

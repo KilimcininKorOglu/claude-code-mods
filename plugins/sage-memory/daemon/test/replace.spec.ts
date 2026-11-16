@@ -122,7 +122,7 @@ describe('replacing a long memory with shorter ones', () => {
     const dropped = [PARTS[0]!, PARTS[1]!, 'The deploy rollback command is `deploy.sh --rollback`.', PARTS[3]!]
     await assert.rejects(w.run(op => replaceMemory(op, { id: old.id, revision: old.revision, texts: dropped })), /leave out 2026-11-15/)
     assert.equal(w.read(old.id).status, 'active')
-    assert.equal(longMemories(w.op(), 10).length, 1)
+    assert.equal(longMemories(w.op(), 10, '0.4.0').length, 1)
     w.close()
   })
 
@@ -150,20 +150,23 @@ describe('replacing a long memory with shorter ones', () => {
     await w.remember({ text: AT })
     const gone = await oldLong(w, `${LONG_TEXT} A deleted copy.`)
     await w.run(op => deleteMemory(op, { id: gone.id, reason: 'test', force: true }))
-    assert.deepEqual(longMemories(w.op(), 10).map(memory => memory.id), [high.id, low.id])
+    assert.deepEqual(longMemories(w.op(), 10, '0.4.0').map(memory => memory.id), [high.id, low.id])
     w.close()
   })
 
-  test('a memory whose rewrite failed three times is handed out no more; one held by another window is skipped', async () => {
+  test('a memory whose rewrite failed three times under a version waits for the next version; one another window holds is skipped', async () => {
     const w = world()
     const first = await oldLong(w, LONG_TEXT, { importance: 0.9 })
     const second = await oldLong(w, `${LONG_TEXT} A second copy.`, { importance: 0.5 })
-    for (let i = 0; i < 2; i++) await w.run(op => shortenFailed(op, first.id, 'lost a date'))
-    assert.deepEqual(longMemories(w.op(), 10).map(memory => memory.id), [first.id, second.id], 'two failures: still handed out')
-    await w.run(op => shortenFailed(op, first.id, 'lost a date'))
-    assert.deepEqual(longMemories(w.op(), 10).map(memory => memory.id), [second.id], 'three failures: left as it is')
-    assert.deepEqual(longMemories(w.op(), 10, id => id === second.id), [], 'a memory another window holds is skipped')
-    await assert.rejects(w.run(op => shortenFailed(op, 'no-such-id', 'x')), /not a memory of this store/)
+    const fail = (version: string) => w.run(op => shortenFailed(op, { id: first.id, reason: 'lost a date', version }))
+    const handed = (version: string) => longMemories(w.op(), 10, version).map(memory => memory.id)
+    for (let i = 0; i < 2; i++) await fail('0.4.0')
+    assert.deepEqual(handed('0.4.0'), [first.id, second.id], 'two failures: still handed out')
+    await fail('0.4.0')
+    assert.deepEqual(handed('0.4.0'), [second.id], 'three failures: left as it is')
+    assert.deepEqual(handed('0.4.1'), [first.id, second.id], 'the next version tries it again')
+    assert.deepEqual(longMemories(w.op(), 10, '0.4.0', id => id === second.id), [], 'a memory another window holds is skipped')
+    await assert.rejects(w.run(op => shortenFailed(op, { id: 'no-such-id', reason: 'x', version: '0.4.0' })), /not a memory of this store/)
     w.close()
   })
 

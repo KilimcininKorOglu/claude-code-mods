@@ -26,7 +26,11 @@ export type ReplaceResult = { replaced: string; parts: Memory[] }
 /** The most memories one memory is split into. */
 export const MAX_PARTS = 40
 
-/** A memory whose rewrite failed this many times is left as it is and handed out no more. */
+/**
+ * A memory whose rewrite failed this many times under one plugin version is left as it is until the
+ * next version, which tries it again (the user's choice), so a better job model or prompt gets
+ * another chance and no version pays for the same memory more than this many times.
+ */
 export const MAX_SHORTEN_TRIES = 3
 
 const LONG = `
@@ -34,30 +38,33 @@ const LONG = `
   WHERE status IN ('active', 'stale') AND kind != 'memory_review' AND length(text) > ?
   ORDER BY importance DESC, id`
 
-const FAILED = `SELECT memory_id AS id, COUNT(*) AS n FROM audit_log WHERE action = 'memory.shorten_failed' GROUP BY memory_id`
+const FAILED = `
+  SELECT memory_id AS id, COUNT(*) AS n FROM audit_log
+  WHERE action = 'memory.shorten_failed' AND json_extract(detail, '$.version') = ?
+  GROUP BY memory_id`
 
-/** How many times each memory's rewrite failed, read in one scan of the log. */
-function failures(op: Op): Map<string, number> {
-  const rows = sql(op.store.db, FAILED).all() as Array<{ id: string; n: number }>
+/** How many times each memory's rewrite failed under `version`, read in one scan of the log. */
+function failures(op: Op, version: string): Map<string, number> {
+  const rows = sql(op.store.db, FAILED).all(version) as Array<{ id: string; n: number }>
   return new Map(rows.map(row => [row.id, row.n]))
 }
 
 /**
  * The live memories of a store whose text is longer than a memory may now hold, weightiest first,
  * without those `skip` names (another window holds them) and those whose rewrite failed
- * `MAX_SHORTEN_TRIES` times.
+ * `MAX_SHORTEN_TRIES` times under `version`.
  */
-export function longMemories(op: Op, limit: number, skip: (id: string) => boolean = () => false): Memory[] {
-  const failed = failures(op)
+export function longMemories(op: Op, limit: number, version: string, skip: (id: string) => boolean = () => false): Memory[] {
+  const failed = failures(op, version)
   return selectMemories(op.store.db, LONG, MAX_NOTE_CHARS)
     .filter(memory => (failed.get(memory.id) ?? 0) < MAX_SHORTEN_TRIES && !skip(memory.id))
     .slice(0, limit)
 }
 
-/** Records a failed rewrite of a memory, with what the job model's answer lacked. */
-export function shortenFailed(op: Op, id: string, reason: string, sessionId?: string): void {
-  if (readMemory(op.store.db, id) === undefined) throw refused(`${id} is not a memory of this store`)
-  audit(op.store, op.now, 'memory.shorten_failed', { memoryId: id, sessionId, detail: { reason: reason.slice(0, 500) } })
+/** Records a failed rewrite of a memory under `version`, with what the job model's answer lacked. */
+export function shortenFailed(op: Op, request: { id: string; reason: string; version: string; sessionId?: string }): void {
+  if (readMemory(op.store.db, request.id) === undefined) throw refused(`${request.id} is not a memory of this store`)
+  audit(op.store, op.now, 'memory.shorten_failed', { memoryId: request.id, sessionId: request.sessionId, detail: { reason: request.reason.slice(0, 500), version: request.version } })
 }
 
 /** The old memory's fields a part carries, so it is found, reminded and kept as the old one was. */
