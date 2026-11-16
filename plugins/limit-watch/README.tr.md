@@ -1,59 +1,59 @@
 # limit-watch
 
-Bir Claude subscription'ının 5 saatlik ve 7 günlük bir limiti ile Fable'ınki gibi model başına haftalık limitleri vardır, bir Claude gateway de spend limit ekleyebilir. Claude Code bunları yalnız bir limit dolmak üzereyken bir uyarıda gösterir; nerede olduğunu iş işten geçtiğinde öğrenirsin. Bu mod limitleri session boyunca ekranda tutar, her reset'e kadar geri sayar, bugünkü hızın bir limiti ne zaman dolduracağını tahmin eder, modele limitleri okuyan bir tool verir ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar. `/limit-watch off` hepsini durdurur; `/limit-watch on` yeniden başlatır.
+Bir Claude aboneliğinin 5 saatlik bir limiti, 7 günlük bir limiti ve Fable gibi modellerin haftalık limitleri vardır. Bir Claude gateway'i de bir spend limit ekleyebilir. Claude Code bu limitleri yalnız bir limit dolmak üzereyken bir bildirimle gösterir. Bu yüzden limitlerin durumunu ancak iş işten geçtiğinde öğrenirsiniz. Bu mod limitleri session boyunca ekranda tutar ve her reset'e kalan süreyi gösterir. Ayrıca şu anki hızla bir limitin ne zaman dolacağını hesaplar, modele limitleri okuyan bir tool verir ve bir limit %80 ile %95'i geçtiğinde bir uyarı yazar. `/limit-watch off` bunların hepsini durdurur. `/limit-watch on` hepsini yeniden başlatır.
 
 ## Ne gösterir
 
-**Prompt'un altında bir status line**, her turn'den sonra ve her 60 saniyede bir güncellenir:
+**Prompt'un altında bir status line.** Status line her turn'den sonra ve her 60 saniyede bir güncellenir:
 
     limit-watch: 5h 9%, reset in 2h 36m · 7d 15%, reset in 5d 10h · measuring the pace
 
 Son kısım şunlardan biridir:
 
-- `5h hits 100% in ~1h 40m`: bugünkü hızda bu limit reset'inden önce dolar. Birden fazla limit doluyorsa ilki adlandırılır.
-- `no limit fills before its reset`: her limit, bugünkü hız onu doldurmadan önce reset olur, ya da hızı düzdür.
-- `measuring the pace`: hiçbir limitin henüz yeterince uzun bir aralığı yok.
+- `5h hits 100% in ~1h 40m`: şu anki hızla bu limit, reset'inden önce dolar. Birden çok limit doluyorsa ilk dolan limit yazılır.
+- `no limit fills before its reset`: şu anki hızla her limit dolmadan önce reset olur ya da hızı sıfırdır.
+- `measuring the pace`: hiçbir limitin örnekleri henüz yeterince uzun bir aralığa yayılmadı.
 - `5h limit reached`: bir limit %100'de.
 
-Model başına haftalık limit 7 günlük limitten sonra gelir ve modelinin adını taşır: `7d Fable 25%, reset in 6d 9h`. Hızı 7 günlük limitinki gibi ölçülür.
+Modele özel haftalık limit, 7 günlük limitten sonra modelin adıyla yazılır: `7d Fable 25%, reset in 6d 9h`. Hızı, 7 günlük limitin hızı gibi hesaplanır.
 
-Bir API key session'ı hiçbir limit bildirmez. Status line o zaman `no usage limits reported yet` der. Yeni bir session da Claude bir kere cevap verene kadar bunu gösterir.
+Bir API key ile açılan session hiçbir limit bildirmez. Bu durumda status line `no usage limits reported yet` gösterir. Yeni bir session da Claude ilk cevabını verene kadar bu metni gösterir.
 
-**[sidebar](../sidebar) içinde bir section**, sidebar açıkken o status line'ın yerine: aynı parçalar, limit başına bir satır; yalnızca yüzde renklidir (%80 altında yeşil, %80'den itibaren sarı, %95'ten itibaren kırmızı, pane'deki bar ile aynı adımlar) ve reset geri sayımı soluktur. Altlarında hız satırı durur: `limit reached` kırmızı, `hits 100% in` ifadesinin `~<süre>` kısmı sarı olur; hiçbir limit dolmadığında satırın tamamı yeşil, hız hâlâ ölçülürken soluktur. Status line o sırada temizlenir. Sidebar kapalıyken ya da o mod kurulu değilken status line yukarıdaki gibi kalır.
+**[sidebar](../sidebar) içinde bir section.** Sidebar açıkken bu section status line'ın yerine geçer. Section aynı bilgileri, her limit için bir satırda gösterir. Yalnız yüzde renklidir: %80'in altında yeşil, %80'den itibaren sarı, %95'ten itibaren kırmızı. Bu eşikler pane'deki bar'ın eşikleriyle aynıdır. Reset'e kalan süre soluk renktedir. Limit satırlarının altında hız satırı bulunur: `limit reached` kırmızı, `hits 100% in` ifadesinin `~<süre>` kısmı sarı renktedir. Hiçbir limit dolmuyorsa satırın tamamı yeşil, hız hâlâ ölçülüyorsa soluk renktedir. Bu sırada status line temizlenir. Sidebar kapalıysa ya da yüklü değilse status line yukarıdaki gibi kalır.
 
-**`/limit-watch` ile açılıp kapanan bir pane**, limit başına bir blok ile:
+**`/limit-watch` ile açılıp kapanan bir pane.** Pane her limit için bir blok gösterir:
 
     5-hour limit · 9% used
     ██████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
     resets 22:40, in 2h 36m
     pace +4.2%/h over the last 38m
 
-Bar pane'in genişliğini doldurur. %80 altında yeşil, %80'den itibaren sarı ve %95'ten itibaren kırmızıdır. Hız ölçülürken hız satırı ne kadar daha örnek gerektiğini söyler.
+Bar, pane'in genişliğini doldurur. Bar %80'in altında yeşil, %80'den itibaren sarı, %95'ten itibaren kırmızıdır. Hız ölçülürken hız satırı, ne kadar daha örnek gerektiğini gösterir.
 
-**`/limit-watch on` ve `/limit-watch off`** izleyicinin tamamını durdurur ve başlatır. Kapalıyken hiçbir şey örneklenmez: status line, sidebar section, pane ve uyarı olmaz; açık bir pane ve duran section düşürülür. Ayar, her pencerenin paylaştığı store'da tutulur; bir penceredeki `off`, öbür pencereleri de onlara etki eden sonraki hook'ta durdurur ve restart'ı aşar. İzleyici kapalıyken çıplak `/limit-watch`, pane açmak yerine `off.` diye yanıtlar.
+**`/limit-watch on` ve `/limit-watch off`.** Bu komutlar modun bütün izleme işini başlatır ve durdurur. Mod kapalıyken hiçbir örnek alınmaz: status line, sidebar section'ı, pane ve uyarı gösterilmez. Açık bir pane ve sidebar section'ı kaldırılır. Ayar, bütün pencerelerin ortak kullandığı store'da saklanır. Bu yüzden bir pencerede çalıştırılan `off`, diğer pencereleri de ayarı okuyan bir sonraki hook'ta durdurur. Ayar, Claude Code yeniden başlatıldığında da korunur. Mod kapalıyken argümansız `/limit-watch` komutu pane açmaz ve `off.` cevabını verir.
 
-**Modelin okuduğu bir tool, `mcp__limit-watch__limits`**. Session başından itibaren ToolSearch olmadan listelenir ve yalnız okuduğu için onay sormadan çalışır. Her çağrı limitleri yeniden örnekler, yani model limitleri o anki hâliyle alır. Cevap limit başına bir satırdır:
+**Modelin okuduğu bir tool: `mcp__limit-watch__limits`.** Tool, session başından itibaren ToolSearch ile yüklenmesi gerekmeden listelenir. Yalnız okuma yaptığı için onay istemeden çalışır. Her çağrı limitleri yeniden okur. Böylece model limitlerin o anki durumunu alır. Cevap her limit için bir satırdır:
 
     Usage limits at 20:04 local time:
     - 5-hour limit: 41% used, resets 22:40 (in 2h 36m), pace +4.2%/h over the last 38m, reaches 100% at 10:05 (in ~14h) at this pace
 
-Açıklaması modele, uzun ya da masraflı bir işten önce ya da limitleri sorduğunda onu çağırmasını söyler. İzleyici kapalıyken tool hiçbir şey okumaz ve bunu söyler.
+Tool'un açıklaması, modelden tool'u uzun ya da maliyetli bir işten önce ya da siz limitleri sorduğunuzda çağırmasını ister. Mod kapalıyken tool hiçbir şey okumaz ve bunu bildirir.
 
-**Transcript'te bir uyarı**, bir limit %80'i geçtiğinde ve %95'i geçtiğinde yeniden:
+**Transcript'te bir uyarı.** Bir limit %80'i geçtiğinde ve ardından %95'i geçtiğinde bir uyarı yazılır:
 
     limit-watch: 5-hour limit passed 80% (now 82%), resets 22:40 (in 1h 5m)
 
-Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir session onu tekrarlamaz, aynı anda açık ikinci bir session da tekrarlamaz: mod her örnekte, uyarmadan önce uyarılmış seviyeleri store'dan yeniden okur. Yine de tam aynı anda örnek alan iki session'ın ikisi de uyarabilir. Limit reset olduktan sonra uyarılar yeniden gelir.
+Her uyarı, limitin her döngüsünde yalnız bir kez yazılır. Aynı döngüdeki yeni bir session uyarıyı tekrarlamaz. Aynı anda açık olan ikinci bir session da tekrarlamaz: mod her örnekte, uyarmadan önce uyarılmış seviyeleri store'dan yeniden okur. Ancak tam aynı anda örnek alan iki session'ın ikisi de uyarı yazabilir. Limit reset olduktan sonra uyarılar yeniden yazılır.
 
-## Sayılar nasıl oluşur
+## Sayılar nasıl hesaplanır
 
-- `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir, son API cevabından okunur. limit-watch bunu session başlangıcında, her ana loop turn'ünden sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başlangıcında ya da timer'da başarısız olan bir okuma bir kere `cannot read the usage limits: <error>` olarak log'lanır ve 60 saniyelik timer çalışmaya devam eder.
-- `$.session.usage()` model başına haftalık limitleri bildirmez. limit-watch onları hesabın usage endpoint'inden okur: `GET https://api.anthropic.com/api/oauth/usage`. Yanıttaki `limits[]` dizisinde `weekly_scoped` türünde ve model adı taşıyan her kayıt bir limittir. Mod `$.session.authorize()`'dan bir handle alır ve onu `$.http.fetch`'e verir. Credential header'ını engine kendisi koyar, yani mod token'ı hiç görmez. Endpoint en çok 5 dakikada bir okunur: session başında, her ana loop turn'ünden sonra ve `/limit-watch` pane'i açtığında. Her tool çağrısı onu yeniden okur. 60 saniyelik timer endpoint'i hiç okumaz, yani boşta duran bir session hiçbir şey göndermez. First-party girişi olmayan bir session (API key, gateway, üçüncü taraf bir provider) hiç istek göndermez. Başarısız bir okuma bir kere `cannot read the per-model limits: <error>` olarak log'lanır ve model başına limitleri düşürür. Böylece eski bir okuma güncel gibi gösterilmez. Öbür limitler kalır.
-- Her okuma bir örnektir (`{ at, percent }`) ve `$.store` içinde tutulur, böylece bir restart hızı korur.
-- 5 saatlik ve spend limitleri hızı örneklerinden okur: yakın bir aralığın bütün örneklerinden en küçük kareler ile geçirilen doğrunun eğimi, saat başına yüzde olarak. Her örnek hesaba girer, bu yüzden iki uçtan birindeki tek bir tam sayı adımı hızı tek başına belirlemez. Aralık 5 saatlik limit için son bir saat, spend limiti için son 24 saattir; böylece hız şu an nasıl çalıştığını izler. Bir hız yalnız örnekleri en az 10 dakika (5 saatlik limit) ya da 2 saat (spend limiti) yayıldığında gösterilir. Daha kısa bir aralık, yüzdenin tek bir adımının ikiye katlayabileceği bir hız verir.
-- 7 günlük limit ve model başına her haftalık limit hızı cycle'ın şimdiye kadarki ortalaması olarak okur: yüzde, cycle'ın başından beri geçen süreye bölünür (`resetsAt` eksi 7 gün). Geceler, boş saatler ve hiçbir session'ın çalışmadığı süre de bu süreye girer, yani hız için örnek gerekmez. Hız cycle'ın ikinci gününden itibaren gösterilir. Bu kuraldan önce ölçüldü: 2,4 yoğun saatten sonra %4, `7d hits 100% in ~2d 8h` olarak okundu, çünkü o saatlerin hızı iki güne aralıksız yayıldı; aynı okumanın cycle ortalaması limiti yaklaşık 6 günde doldurur.
-- Status line'ın son kısmı %100'e kalan süre için `(100 - percent) / pace` kullanır. O süreden önce reset olan bir limit dolan sayılmaz.
-- Yeni bir cycle, `resetsAt` 5 dakikadan fazla kaydığında başlar; `resetsAt` taşımayan bir limit içinse yüzde yarım puandan fazla düştüğünde. Yeni bir cycle o limitin örneklerini ve uyarılarını temizler.
+- `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir. Bu değerler son API cevabından okunur. limit-watch bu değerleri session başında, her ana loop turn'ünden sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başında ya da timer'da başarısız olan bir okuma, log'a bir kez `cannot read the usage limits: <error>` olarak yazılır. 60 saniyelik timer çalışmaya devam eder.
+- `$.session.usage()` modele özel haftalık limitleri bildirmez. limit-watch bu limitleri hesabın usage endpoint'inden okur: `GET https://api.anthropic.com/api/oauth/usage`. Cevaptaki `limits[]` dizisinde türü `weekly_scoped` olan ve bir model adı içeren her kayıt bir limittir. Mod `$.session.authorize()`'dan bir handle alır ve bu handle'ı `$.http.fetch`'e verir. Credential header'ını engine ekler. Bu yüzden mod token'ı hiçbir zaman görmez. Endpoint en fazla 5 dakikada bir okunur: session başında, her ana loop turn'ünden sonra ve `/limit-watch` pane'i açtığında. Her tool çağrısı da endpoint'i yeniden okur. 60 saniyelik timer endpoint'i hiç okumaz. Bu yüzden boşta duran bir session hiçbir istek göndermez. First-party girişi olmayan bir session (bir API key, bir gateway ya da üçüncü taraf bir provider) hiç istek göndermez. Başarısız bir okuma log'a bir kez `cannot read the per-model limits: <error>` olarak yazılır ve modele özel limitler kaldırılır. Böylece eski bir okuma güncelmiş gibi gösterilmez. Diğer limitler kalır.
+- Her okuma bir örnektir (`{ at, percent }`) ve `$.store` içinde saklanır. Böylece Claude Code yeniden başlatıldığında hız bilgisi korunur.
+- 5 saatlik limit ve spend limit, hızı örneklerinden hesaplar: yakın bir aralıktaki bütün örneklerden en küçük kareler yöntemiyle geçirilen doğrunun eğimi, saat başına yüzde olarak. Her örnek hesaba katılır. Bu yüzden aralığın iki ucundan birindeki tek bir tam sayı adımı hızı tek başına belirlemez. Aralık, 5 saatlik limit için son bir saat, spend limit için son 24 saattir. Böylece hız, şu anki çalışma temponuzu izler. Hız yalnız örnekler en az 10 dakikaya (5 saatlik limit) ya da 2 saate (spend limit) yayıldığında gösterilir. Daha kısa bir aralık, yüzdedeki tek bir adımın iki katına çıkarabileceği bir hız verir.
+- 7 günlük limit ve modele özel her haftalık limit, hızı döngünün şimdiye kadarki ortalaması olarak hesaplar: yüzde, döngünün başından beri geçen süreye bölünür (`resetsAt` eksi 7 gün). Geceler, boş saatler ve hiçbir session'ın çalışmadığı süre de bu süreye dahildir. Bu yüzden bu hız için örnek gerekmez. Hız, döngünün ikinci gününden itibaren gösterilir. Bu kural eklenmeden önce ölçüldü: 2,4 yoğun saatten sonra %4 kullanım, `7d hits 100% in ~2d 8h` olarak okundu, çünkü o saatlerin hızı iki güne aralıksız yayıldı. Aynı okumanın döngü ortalaması limiti yaklaşık 6 günde doldurur.
+- Status line'ın son kısmı, %100'e kalan süreyi `(100 - percent) / pace` ile hesaplar. Bu süreden önce reset olan bir limit dolan limit sayılmaz.
+- `resetsAt` 5 dakikadan fazla kayarsa yeni bir döngü başlar. `resetsAt` değeri olmayan bir limitte yüzde yarım puandan fazla düşerse yeni bir döngü başlar. Yeni bir döngü, o limitin örneklerini ve uyarılarını temizler.
 - Bilinmeyen biçimde saklanmış bir değer tek bir log satırıyla bildirilir ve örnekler baştan başlar.
 
 ## Kurulum
@@ -61,46 +61,46 @@ Her uyarı limit cycle'ı başına bir kere gelir. Aynı cycle'daki yeni bir ses
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install limit-watch@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
+Function hook'lar early access aşamasında. Claude Code 2.1.288 ve sonrası onları varsayılan olarak yükler, bu yüzden açmanız gereken bir ayar yoktur.
 
-Yerel bir checkout'tan tek session için yüklemek istersen:
+Modu yerel bir checkout'tan tek bir session için yüklemek için:
 
     claude --plugin-dir plugins/limit-watch
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlat.
-2. Bir Claude subscription ile giriş yap (`/login`). API key ile açılan bir session hiçbir limit bildirmez ve status line `no usage limits reported yet` olarak kalır.
-3. Bir prompt gönder. Limitler son API cevabından gelir, yani status line ilk cevaptan sonra dolar. Pane'i `/limit-watch` ile aç.
+1. Claude Code'u yeniden başlatın.
+2. Bir Claude aboneliğiyle giriş yapın (`/login`). Bir API key ile açılan session hiçbir limit bildirmez ve status line `no usage limits reported yet` olarak kalır.
+3. Bir prompt gönderin. Limitler son API cevabından alınır. Bu yüzden status line ilk cevaptan sonra dolar. Pane'i `/limit-watch` ile açın.
 
-## Nereye uzanır
+## Nelere erişir
 
 Claude Code 2.1.325 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane} (default matcher key: plugin)
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.http.fetch (via fetchScoped), $.session.authorize (via fetchScoped), $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
-Reach L3: ağ.
+Reach L3: network'e erişir.
 
-    1. Okur:     $.session.usage'ın rate-limit window'larını (kind, kullanılan yüzde, reset zamanı); hesabın usage endpoint'indeki model başına haftalık limitleri; yedi hook'unun event payload'larını
-    2. Çalıştırır: hiçbir şey; interaktif bir session'da bir 60 saniyelik timer
-    3. Gönderir: session çalışırken en çok 5 dakikada bir ve her tool çağrısında https://api.anthropic.com/api/oauth/usage adresine bir GET; session'ın credential'ını engine ekler, mod onu hiç görmez; model mcp__limit-watch__limits'i çağırdığında okuma modelin context'ine girer
-    4. Saklar:   her limitin örneklerini ve uyarılmış seviyelerini $.store içinde, limit başına en fazla 1500 örnek, ve saklanan on/off ayarı
-    5. Düşman girdi: kullanım rakamları ve endpoint'in JSON'u; bilinmeyen biçimde bir yanıt ve bilinmeyen biçimde saklanmış bir değer bildirilir, hiçbir zaman güvenilmez
+    1. Okur:         $.session.usage'ın rate-limit window'larını (tür, kullanılan yüzde, reset zamanı); hesabın usage endpoint'indeki modele özel haftalık limitleri; yedi hook'unun event payload'larını
+    2. Çalıştırır:   hiçbir şey; interaktif bir session'da 60 saniyelik bir timer
+    3. Gönderir:     session çalışırken en fazla 5 dakikada bir ve her tool çağrısında https://api.anthropic.com/api/oauth/usage adresine bir GET; session'ın credential'ını engine ekler ve mod onu hiçbir zaman görmez; model mcp__limit-watch__limits çağırdığında okuma modelin context'ine girer
+    4. Saklar:       her limitin örneklerini ve uyarılmış seviyelerini $.store içinde, her limit için en fazla 1500 örnek; saklanan açık/kapalı ayarını
+    5. Düşman girdi: kullanım değerleri ve endpoint'in JSON'u; bilinmeyen biçimde bir cevap ve bilinmeyen biçimde saklanmış bir değer bildirilir, hiçbir zaman güvenilir kabul edilmez
 
 ## Sınırlar
 
-- Yeni bir session, Claude bir kere cevap verene kadar okuma taşımaz, çünkü rakamlar son API cevabından gelir.
-- 7 günlük limit cycle'ının ilk 24 saatinde hız göstermez.
-- 7 günlük hız, cycle'ın `resetsAt`'ten tam 7 gün önce başladığını varsayar.
-- Usage endpoint'i belgelenmiş bir API değildir. Yanıtının biçimi değişirse model başına limitler tek bir log satırıyla kaybolur, öbür limitler kalır.
-- Boşta duran bir session, yeniden çalışana kadar model başına limitin son okumasını gösterir.
-- Bir spend limit %100'ü geçebilir. Bar dolu yerde durur; yüzde durmaz.
-- `/limit-watch` tek bir pane'i açıp kapar. İkinci çalıştırma onu kapatır. İzleyici kapalıyken çıplak komut hiçbir şey açmaz; `/limit-watch on` örneklemeyi yeniden başlatır.
+- Yeni bir session, Claude ilk cevabını verene kadar hiçbir okuma göstermez, çünkü değerler son API cevabından alınır.
+- 7 günlük limit, döngüsünün ilk 24 saatinde hız göstermez.
+- 7 günlük hız hesabı, döngünün `resetsAt` değerinden tam 7 gün önce başladığını kabul eder.
+- Usage endpoint'i belgelenmiş bir API değildir. Cevabının biçimi değişirse modele özel limitler tek bir log satırıyla kaldırılır. Diğer limitler kalır.
+- Boşta duran bir session, yeniden çalışana kadar modele özel limitin son okumasını gösterir.
+- Bir spend limit %100'ü geçebilir. Bar dolu konumda durur, ancak yüzde artmaya devam eder.
+- `/limit-watch` tek bir pane'i açar ve kapatır. İkinci çalıştırma pane'i kapatır. Mod kapalıyken argümansız komut hiçbir şey açmaz. `/limit-watch on` örneklemeyi yeniden başlatır.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make lint        # complexity sınırı 10; aşılırsa build başarısız olur
     make validate
     make test        # claude plugin test
