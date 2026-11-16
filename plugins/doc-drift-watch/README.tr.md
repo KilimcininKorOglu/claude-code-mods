@@ -35,13 +35,13 @@ Canlı denemede model, bir README'nin `other.go:3` ile gösterdiği dosyayı sil
 
 Varsayılan mod `note` modudur: mod bulguları bildirir ve hiçbir işlemi durdurmaz.
 
-`deny` modunda bir doküman eskimiş bir satır içerdiği sürece `git commit`, `git push` ya da `git merge` durdurulur. Mod cevap vermeden önce açık her dokümanı yeniden ölçer. Böylece modelin düzelttiği bir doküman kontrolü kendiliğinden açar ve hiçbir kontrol kalıcı olarak kapalı kalmaz:
+`deny` modunda bir doküman eskimiş bir satır içerdiği sürece `git commit`, `git push` ya da `git merge` durdurulur. Mod cevap vermeden önce açık her dokümanı yeniden ölçer. Böylece modelin düzelttiği bir doküman gate'i kendiliğinden açar ve hiçbir gate kalıcı olarak kapalı kalmaz:
 
     doc-drift-watch: stopped: 1 doc(s) still hold stale lines: README.md (1). Update them and run the command again; there is no way around this gate.
 
 Bir `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git rev-parse --show-toplevel` ve `git diff --cached --name-only -z`). Commit açık dokümanların hiçbirini içermiyorsa çalışır ve kaç bulgunun hâlâ açık olduğu tek bir satırla bildirilir. `git commit -a`, `-am` ve `--` işaretinden sonra pathspec verilen commit'ler daraltılmaz, çünkü bu commit'lerin neyi içerdiğini yalnız index göstermez. `push` ve `merge` index okumaz. Bu yüzden bu komutlarda bütün bulgular geçerlidir.
 
-Bu kontrolü atlamanın bir yolu ya da tek seferlik bir izin yoktur. Kontrol, dokümanlar yeniden doğru olduğunda ya da siz `/doc-drift-watch mode note` ayarını yaptığınızda açılır.
+Gate'i atlamanın bir yolu ya da tek seferlik bir izin yoktur. Gate, dokümanlar yeniden doğru olduğunda ya da siz `/doc-drift-watch mode note` ayarını yaptığınızda açılır.
 
 ## Komut
 
