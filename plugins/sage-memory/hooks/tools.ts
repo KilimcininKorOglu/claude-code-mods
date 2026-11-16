@@ -65,7 +65,7 @@ const REMEMBER_DESCRIPTION = [
   'Save one durable fact for later sessions: a convention, a decision with its reason, a warning, a bug root cause, a command, or a user preference.',
   `Write it in English, in at most ${MAX_NOTE_CHARS} characters (spaces included; a longer text is refused), with the exact paths, symbols or commands, and anchor it to them; save a larger fact as several memories, each stating one part on its own. file_note, symbol_note and command_note need an anchor.`,
   'Not for task progress (WIP or TODO text is refused), one-off debugging, or what the code already shows. To change a memory, call update instead of saving a near-duplicate.',
-  'A memory close in meaning, in any language, stops the write and is answered: update it, or call remember again with distinct: true when yours is another fact.',
+  'A fact a stored memory already states, in any words or language or as a case of its rule, is not saved again; new information joins the memory on its subject when both fit, and the answer says which happened.',
 ].join(' ')
 
 export const TOOLS: readonly ToolDef[] = [
@@ -88,7 +88,6 @@ export const TOOLS: readonly ToolDef[] = [
         source: SOURCE,
         supersedes: texts('Ids of older memories this one replaces; they become superseded.'),
         contradicts: texts('Ids this contradicts.'),
-        distinct: yes('You read the similar memories an earlier remember answered, and this is a different fact.'),
       },
       ['text'],
     ),
@@ -287,7 +286,7 @@ function picked(input: Input, keys: readonly string[]): Record<string, unknown> 
   return Object.fromEntries(keys.filter(key => input[key] !== undefined).map(key => [key, input[key]]))
 }
 
-const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'expiresAt', 'supersedes', 'contradicts', 'distinct']
+const REMEMBER_KEYS = ['text', 'kind', 'scope', 'tags', 'anchors', 'audience', 'importance', 'confidence', 'persistence', 'expiresAt', 'supersedes', 'contradicts']
 const PATCH_KEYS = ['scope', 'text', 'tags', 'kind', 'anchors', 'audience', 'importance', 'confidence', 'freshness', 'persistence', 'expiresAt', 'contextPolicy', 'status', 'supersedes', 'contradicts', 'force']
 const HYGIENE_KEYS = ['verify', 'verifyDepth','staleReviewDays', 'lowConfidenceReviewDays', 'sessionRetentionDays', 'purgeDeletedAfterDays']
 

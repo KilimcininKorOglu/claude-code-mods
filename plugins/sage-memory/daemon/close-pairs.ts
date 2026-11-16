@@ -1,16 +1,20 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { ClosePair, Memory } from '../hooks/shared/model.ts'
-import { SIMILAR_COSINE } from './remember.ts'
 import { audienceKey, parseMemory, sql } from './rows.ts'
 import { dot, fromBlob, sentenceVectors, textHash } from './vectors.ts'
 
 /**
  * The pairs of live memories of one store whose meaning is close: the best cosine between the
  * whole text or any sentence of one and the whole text or any sentence of the other reaches
- * `SIMILAR_COSINE`, the floor of the write's own check. Only memories that share a scope, an
- * audience and an owner pair up, as a write is compared. Triage asks the job model about each
- * pair; no cosine merges alone.
+ * `CLOSE_PAIR_COSINE`. Only memories that share a scope, an audience and an owner pair up, as a
+ * write is compared. Triage asks the job model about each pair; no cosine merges alone.
  */
+
+/**
+ * The floor of a close pair. It stays above the write's subject floor (`SIMILAR_COSINE`, 0.45),
+ * because the daily triage asks about at most 15 pairs, and a paraphrase reached 0.73 to 0.96.
+ */
+export const CLOSE_PAIR_COSINE = 0.72
 
 type Embedded = { memory: Memory; bucket: string; vectors: Float32Array[] }
 
@@ -53,7 +57,7 @@ export async function closePairs(db: DatabaseSync, modelId: string): Promise<Clo
     for (const b of items.slice(index + 1)) {
       if (a.bucket !== b.bucket) continue
       const cosine = bestCosine(a, b)
-      if (cosine >= SIMILAR_COSINE) pairs.push({ a: a.memory.id, b: b.memory.id, cosine: Math.round(cosine * 100) / 100 })
+      if (cosine >= CLOSE_PAIR_COSINE) pairs.push({ a: a.memory.id, b: b.memory.id, cosine: Math.round(cosine * 100) / 100 })
     }
     await new Promise(resolve => setImmediate(resolve))
   }

@@ -238,11 +238,19 @@ describe('the meaning check of a write', () => {
     return { w, old, query: await embeddings.semantic(NEW, []) }
   }
 
-  test('a write just above the similarity cosine is not written and names the memory', async () => {
+  // A new rule that was a case of a stored one measured 0.67 to it, and was written beside it as a second rule.
+  test('a write on the subject of a stored memory, at the 0.67 a case of a stored rule measured, is not written and names the memory for the writer to judge', async () => {
+    const { w, old, query } = await seeded(0.67)
+    const result = await w.run(op => remember(op, { text: NEW }, query))
+    assert.deepEqual(result, { outcome: 'similar', similar: [{ id: old.id, kind: 'fact', text: old.text, cosine: 0.67 }] })
+    assert.equal(unembedded(w.project.db, 'fake/model').length, 0, 'no memory was added')
+    w.close()
+  })
+
+  test('a write just above the subject cosine is answered with the memory', async () => {
     const { w, old, query } = await seeded(SIMILAR_COSINE + 0.01)
     const result = await w.run(op => remember(op, { text: NEW }, query))
-    assert.deepEqual(result, { outcome: 'similar', similar: [{ id: old.id, kind: 'fact', text: old.text, cosine: 0.73 }] })
-    assert.equal(unembedded(w.project.db, 'fake/model').length, 0, 'no memory was added')
+    assert.deepEqual(result, { outcome: 'similar', similar: [{ id: old.id, kind: 'fact', text: old.text, cosine: 0.46 }] })
     w.close()
   })
 

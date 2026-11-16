@@ -3,6 +3,7 @@
  * input `remember` and `update` take, the lines the answers print, and the bullets `import` reads
  * from a markdown file. Pure code; `register.tsx` asks the daemon.
  */
+import type { Settled } from './rule'
 import {
   CONTEXT_POLICIES,
   MODEL_KINDS,
@@ -376,12 +377,23 @@ export function importInput(text: string, flags: ImportFlags, sessionId: string)
   }
 }
 
-/** What an import did with its bullets: written anew, folded into a memory with the same text, held back by a close one, refused. */
-export type ImportTally = { added: number; exact: number; similar: string[]; refused: string[] }
+/**
+ * What an import did with its bullets: written anew, folded into a memory with the same text, added to
+ * the memory it belongs to, already stated by a stored memory, left unwritten for want of a verdict, refused.
+ */
+export type ImportTally = { added: number; exact: number; extended: number; covered: string[]; similar: string[]; refused: string[] }
 
-/** The report of an import; each bullet held back by a close memory is named, because it was not written. */
+/** Counts what the rule question made of an imported bullet the daemon answered with related memories. */
+export function tallySettled(tally: ImportTally, text: string, settled: Settled): void {
+  if (settled.outcome === 'added') tally.added += 1
+  else if (settled.outcome === 'extended') tally.extended += 1
+  else if (settled.outcome === 'same') tally.covered.push(`"${text.slice(0, 60)}" is stated by ${settled.id}`)
+  else tally.similar.push(`"${text.slice(0, 60)}": the job model gave no verdict on its related memories`)
+}
+
+/** The report of an import; each bullet that was not written is named. */
 export function importReport(path: string, total: number, t: ImportTally): string {
-  const done = total - t.refused.length - t.similar.length
-  const head = `imported ${done} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.exact} already there, ${t.similar.length} held back by a close memory, ${t.refused.length} refused`
-  return [head, ...t.similar.map(line => `  held back: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
+  const done = total - t.refused.length - t.similar.length - t.covered.length
+  const head = `imported ${done} of ${total} bullet(s) from ${path}: ${t.added} added, ${t.extended} added to a memory, ${t.exact} already there, ${t.covered.length} stated by a memory, ${t.similar.length} not judged, ${t.refused.length} refused`
+  return [head, ...t.covered.map(line => `  not written: ${line}`), ...t.similar.map(line => `  not written: ${line}`), ...t.refused.map(line => `  refused: ${line}`)].join('\n')
 }

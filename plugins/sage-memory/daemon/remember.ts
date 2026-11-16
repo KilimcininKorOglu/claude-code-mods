@@ -6,6 +6,7 @@ import { ftsTerms, MAX_TERMS } from './fts.ts'
 import { syncEdges } from './graph.ts'
 import { storeLabel, type Op } from './op.ts'
 import { assessQuality, checkRemember, clamp01, isNearDuplicate, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
+import { MEANING_FLOOR_COSINE } from './relevance.ts'
 import { audienceKey, readMemory, selectMemories, writeMemory } from './rows.ts'
 import { EVERY_POLICY } from './search.ts'
 import { ulid } from './ulid.ts'
@@ -21,10 +22,15 @@ import { vectorHits, type SemanticQuery } from './vectors.ts'
 const DEFAULT_IMPORTANCE = 0.6
 const DEFAULT_CONFIDENCE = 0.8
 
-/** The cosine from which a live memory counts as close in meaning to a new write (see `similarOf`). */
-export const SIMILAR_COSINE = 0.72
-/** How many similar memories an answer names. */
-const MAX_SIMILAR = 3
+/**
+ * The cosine from which a live memory is on the same subject as a new write, so the writer judges
+ * whether the write adds anything to it (see `similarOf`). It is the meaning floor of the reminders:
+ * a cosine cannot tell a restated rule from a new one (a rule and a case of it measured 0.67, and two
+ * opposite preferences 0.96), so it only picks the memories the job model reads.
+ */
+export const SIMILAR_COSINE = MEANING_FLOOR_COSINE
+/** How many related memories an answer names. */
+const MAX_SIMILAR = 5
 const LIVE: readonly Status[] = ['active', 'stale']
 
 type Draft = {
@@ -232,10 +238,9 @@ export function supersede(op: Op, memory: Memory, targets: readonly string[]): s
  * sentences is at `SIMILAR_COSINE` or closer to the draft, best first, without the ones the draft
  * replaces. Measured on the mpnet model over 194 real memories: a translation or a paraphrase of a
  * memory reached 0.73 to 0.96 of it, and ranked it first in 28 of 28; a fact one sentence of a long
- * memory states reached 0.49 to 0.86, at the floor in 5 of 12; the same memory with another number
- * reached 0.89 to 0.99; and the best other memory reached the floor for 7 of those 40 texts. Two
- * distinct stored memories reached up to 0.85 and opposite preferences 0.96, so no cosine merges
- * alone, and the writer decides.
+ * memory states reached 0.49 to 0.86; a case of a stored rule reached 0.60 to 0.70 of the rule; the same memory with another number
+ * reached 0.89 to 0.99. Two distinct stored memories reached up to 0.85 and opposite preferences
+ * 0.96, so no cosine merges alone, and the writer decides.
  */
 function meaningSimilar(op: Op, draft: Draft, semantic: SemanticQuery | undefined): SimilarMemory[] {
   if (semantic === undefined) return []

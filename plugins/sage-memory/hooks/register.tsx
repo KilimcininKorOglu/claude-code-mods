@@ -87,6 +87,7 @@ import {
   importFlagsOf,
   importInput,
   importReport,
+  tallySettled,
   type ImportTally,
   listText,
   patchOf as flagPatchOf,
@@ -136,10 +137,11 @@ import {
   type Report,
   type Score,
 } from './triage'
-import { addedBy, answerText, callOf, editLine, OFF_TEXT, similarText, toolName, TOOLS, type Input } from './tools'
+import { addedBy, answerText, callOf, editLine, OFF_TEXT, toolName, TOOLS, type Input } from './tools'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
 import { notesOf, problemOf, SHORTEN_MS, SHORTEN_SYSTEM, SHORTEN_TOKENS, shortenPrompt } from './shorten'
-import { isProtected, MAX_NOTE_CHARS, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
+import { RULE_SYSTEM, RULE_TOKENS, rulePrompt, ruleVerdictOf, settledLine, settledText, type RuleVerdict, type Settled } from './rule'
+import { MAX_NOTE_CHARS, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
 import type { EmbedStatus, ProjectRef, SetupJob, Status } from './shared/protocol'
 
@@ -570,8 +572,9 @@ async function readCommand($: EngineInterface, state: State, word: string, rest:
 async function rememberCommand($: EngineInterface, state: State, rest: string): Promise<string> {
   const flags = flagsOf(wordsOf(rest))
   if (flags.errors.length > 0 || flags.text === '') return [...flags.errors, flags.text === '' ? 'expects remember [flags] <text>' : ''].filter(line => line !== '').join('\n')
-  const result = await ask<RememberResult>($, state, '/memory/remember', { input: rememberInputOf(flags, await $.session.id()) })
-  if (result.outcome === 'similar') return `${similarText(result.similar)}\n(as a command: /sage-memory update <id> <text>, or remember --distinct <text>)`
+  const input = rememberInputOf(flags, await $.session.id())
+  const result = await ask<RememberResult>($, state, '/memory/remember', { input })
+  if (result.outcome === 'similar') return `${settledText(await settleRule($, state, input, result.similar))}\n(to write it beside them anyway: remember --distinct <text>)`
   return `${result.outcome === 'added' ? 'added' : 'merged into'} ${detailText(result.memory)}`
 }
 
@@ -694,7 +697,7 @@ async function importOne($: EngineInterface, state: State, input: RememberInput,
     }
     const r = await ask<RememberResult>($, state, '/memory/remember', { input })
     if (r.outcome === 'added') tally.added += 1
-    else if (r.outcome === 'similar') tally.similar.push(`"${input.text.slice(0, 60)}" close to ${r.similar.map(memory => memory.id).join(', ')}`)
+    else if (r.outcome === 'similar') tallySettled(tally, input.text, await settleRule($, state, input, r.similar))
     else tally.exact += 1
   } catch (err) {
     tally.refused.push(`${input.text.slice(0, 60)}: ${errorText(err)}`)
@@ -708,7 +711,7 @@ async function importCommand($: EngineInterface, state: State, rest: string): Pr
   const bullets = bulletsOf(await $.fs.read(flags.path), flags.section)
   if (bullets === undefined) return `${flags.path} has no heading "${flags.section ?? ''}"`
   const sessionId = await $.session.id()
-  const tally: ImportTally = { added: 0, exact: 0, similar: [], refused: [] }
+  const tally: ImportTally = { added: 0, exact: 0, extended: 0, covered: [], similar: [], refused: [] }
   for (const bullet of bullets) await importOne($, state, importInput(bullet, flags, sessionId), tally)
   return importReport(flags.path, bullets.length, tally)
 }
@@ -1049,11 +1052,31 @@ async function serveTool($: EngineInterface, state: State, name: string, input: 
   try {
     const call = callOf(name, input, await $.session.id())
     const value = await ask<unknown>($, state, call.path, { ...call.body, sessionId: await $.session.id() })
+    const related = name === 'remember' ? relatedOf(value) : undefined
+    if (related !== undefined) return settledTool($, state, call.body.input as RememberInput, related)
     await noteEdit($, state, name, input, value)
     return { result: answerText(name, value) }
   } catch (err) {
     return { result: errorText(err), isError: true }
   }
+}
+
+/** The related memories a remember answered instead of writing, or undefined for any other answer. */
+function relatedOf(value: unknown): SimilarMemory[] | undefined {
+  const result = value as Partial<RememberResult>
+  return result.outcome === 'similar' ? result.similar : undefined
+}
+
+/** The model's remember that the daemon answered with related memories, settled by the rule question. */
+async function settledTool($: EngineInterface, state: State, input: RememberInput, related: readonly SimilarMemory[]): Promise<{ result: string; isError?: true }> {
+  const settled = await settleRule($, state, input, related)
+  if (settled.outcome === 'added') {
+    state.counts.added += 1
+    await show($, state)
+  }
+  const line = settled.outcome === 'added' ? addedLine(settled.memory) : settledLine(settled)
+  if (line !== undefined) await toStream($, 'model', line)
+  return settled.outcome === 'unjudged' ? { result: settledText(settled), isError: true } : { result: settledText(settled) }
 }
 
 /** Counts a memory the model added, and writes the stream line of any change it made to the store. */
@@ -1091,43 +1114,64 @@ async function states($: EngineInterface, a: string, b: string, misses?: Record<
   return raw === undefined ? undefined : containsVerdictOf(raw)
 }
 
-/** What a held memory does about one close memory: nothing is written, it replaces that memory, or the next one is asked. */
-type Settled = 'stated' | 'replaces' | 'next' | 'unknown'
-
-async function settleOne($: EngineInterface, input: RememberInput, memory: SimilarMemory): Promise<Settled> {
-  const stated = await states($, input.text, memory.text)
-  if (stated !== false) return stated === true ? 'stated' : 'unknown'
-  const covers = await states($, memory.text, input.text)
-  if (covers === undefined) return 'unknown'
-  return covers ? 'replaces' : 'next'
+/** The job model's verdict on what a new text adds to its related memories, or undefined when it gave none it could read. */
+async function ruleVerdict($: EngineInterface, text: string, related: readonly SimilarMemory[]): Promise<RuleVerdict | undefined> {
+  const r = await completeWithRetry($, { model: await jobModel($), system: RULE_SYSTEM, prompt: rulePrompt(related, text), maxTokens: RULE_TOKENS, timeoutMs: TRIAGE_MS })
+  return r.isAnswered ? ruleVerdictOf(r.text, related.map(memory => memory.id)) : undefined
 }
 
 /**
- * The consolidator's memory that memories close in meaning held back, settled by the containment
- * question the job model answers for each, closest first: a memory that already states the new text
- * drops the write; a new text that states everything a memory states, and more, supersedes it (a
- * protected memory is never replaced, so the new text is written beside it); and a text no memory
- * holds is written as distinct. A missing answer leaves the memory unwritten with a red line.
+ * Memory `id` rewritten as `text`, which joins the new information to it, when `text` fits in a memory
+ * and the containment question finds both the stored text and the new one in it; the stored text is
+ * superseded and stays recoverable. Undefined when the joined text does not hold both, so the new
+ * information is written on its own and nothing is lost.
  */
-async function settleSimilar($: EngineInterface, state: State, input: RememberInput, similar: readonly SimilarMemory[]): Promise<void> {
-  for (const memory of similar) {
-    const settled = await settleOne($, input, memory)
-    if (settled === 'unknown') return toStream($, 'error', { text: `the consolidator's memory was not written: no verdict on its likeness to ${memory.id}`, kind: 'error' })
-    if (settled === 'stated') return
-    if (settled === 'replaces') return replaceWithLonger($, state, input, memory.id)
-  }
-  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true } })
-  if (result.outcome === 'added') await countAdded($, state, result.memory)
+async function extended($: EngineInterface, state: State, input: RememberInput, stored: SimilarMemory, text: string): Promise<Memory | undefined> {
+  if (text.length > MAX_NOTE_CHARS) return undefined
+  if ((await states($, stored.text, text)) !== true || (await states($, input.text, text)) !== true) return undefined
+  const memory = await ask<Memory | undefined>($, state, '/memory/get', { id: stored.id })
+  if (memory === undefined || memory === null) return undefined
+  const result = await ask<{ parts: Memory[] }>($, state, '/memory/replace', { id: memory.id, revision: memory.revision, texts: [text] })
+  return result.parts[0]
 }
 
-/** Writes a new text that states everything memory `id` states and supersedes that memory, so the old text stays recoverable; a protected memory stays beside it. */
-async function replaceWithLonger($: EngineInterface, state: State, input: RememberInput, id: string): Promise<void> {
-  const memory = await ask<Memory | undefined>($, state, '/memory/get', { id })
-  const keep = memory === undefined || memory === null || isProtected(memory)
-  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, distinct: true, ...(keep ? {} : { supersedes: [id] }) } })
-  if (result.outcome !== 'added') return
-  if (keep) return countAdded($, state, result.memory)
-  await toStream($, 'consolidator', { text: `replaced ${id} with ${result.memory.id}: ${input.text.slice(0, 80)}`, kind: 'warn' })
+/**
+ * A write the daemon answered with related memories, settled by the rule question (`hooks/rule.ts`):
+ * a text they already cover is not written; new information joins the memory it belongs to when both
+ * fit in one memory; otherwise only what no memory covers is written, or the text as it is.
+ */
+async function settleRule($: EngineInterface, state: State, input: RememberInput, related: readonly SimilarMemory[]): Promise<Settled> {
+  const verdict = await ruleVerdict($, input.text, related)
+  if (verdict === undefined) return { outcome: 'unjudged' }
+  if (verdict.kind === 'same') return { outcome: 'same', id: verdict.id }
+  if (verdict.kind === 'add') {
+    const joined = await joinedTo($, state, input, related, verdict)
+    if (joined !== undefined) return joined
+  }
+  return writtenAlone($, state, input, verdict.kind === 'newpart' ? verdict.text : input.text)
+}
+
+/** The ADD verdict carried out on the memory it names, or undefined when that memory was not asked about or the joined text does not hold both. */
+async function joinedTo($: EngineInterface, state: State, input: RememberInput, related: readonly SimilarMemory[], verdict: Extract<RuleVerdict, { kind: 'add' }>): Promise<Settled | undefined> {
+  const stored = related.find(memory => memory.id === verdict.id)
+  const memory = stored === undefined ? undefined : await extended($, state, input, stored, verdict.text)
+  return memory === undefined ? undefined : { outcome: 'extended', id: verdict.id, memory }
+}
+
+/** Writes the new information as a memory of its own: `text` when it fits in a memory, else the text that was asked about. */
+async function writtenAlone($: EngineInterface, state: State, input: RememberInput, text: string): Promise<Settled> {
+  const kept = text.length <= MAX_NOTE_CHARS ? text : input.text
+  const result = await ask<RememberResult>($, state, '/memory/remember', { input: { ...input, text: kept, distinct: true } })
+  return result.outcome === 'similar' ? { outcome: 'unjudged' } : { outcome: 'added', memory: result.memory }
+}
+
+/** What the consolidator did with a write the daemon answered with related memories. */
+async function settleSimilar($: EngineInterface, state: State, input: RememberInput, related: readonly SimilarMemory[]): Promise<void> {
+  const settled = await settleRule($, state, input, related)
+  if (settled.outcome === 'unjudged') return toStream($, 'error', { text: `the consolidator's memory was not written: the job model gave no verdict on ${related.map(memory => memory.id).join(', ')}`, kind: 'error' })
+  if (settled.outcome === 'added') return countAdded($, state, settled.memory)
+  const line = settledLine(settled)
+  if (line !== undefined) await toStream($, 'consolidator', line)
 }
 
 async function countAdded($: EngineInterface, state: State, memory: Memory): Promise<void> {
@@ -1770,7 +1814,8 @@ async function compactCommand($: EngineInterface, state: State, rest: string): P
 
 /**
  * Writes what a finished Bash command teaches, while the person turned that capture on. An outcome
- * a memory close in meaning already states is held back by the daemon and not written again.
+ * the daemon answers with related memories goes through the rule question, so one a memory already
+ * states is not written again.
  */
 async function captureOutcome($: EngineInterface, state: State, command: string, result: unknown, failed: boolean): Promise<void> {
   if ((await $.store.get(failed ? 'captureErrors' : 'captureOutcomes')) !== true || !(await isReady(state))) return
@@ -1778,7 +1823,10 @@ async function captureOutcome($: EngineInterface, state: State, command: string,
   const key = `${failed ? 'error' : 'outcome'}:${command.trim()}`
   if (input === undefined || !mayCapture(state.captured, key, await $.clock.now())) return
   state.captured.set(key, await $.clock.now())
-  await ask($, state, '/memory/remember', { input })
+  const written = await ask<RememberResult>($, state, '/memory/remember', { input })
+  if (written.outcome !== 'similar') return
+  const line = settledLine(await settleRule($, state, input, written.similar))
+  if (line !== undefined) await toStream($, 'capture', line)
 }
 
 // ── Pane ───────────────────────────────────────────────────────────────
