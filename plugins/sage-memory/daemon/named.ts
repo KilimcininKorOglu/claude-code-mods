@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 import type { Memory } from '../hooks/shared/model.ts'
-import { namesOf, tokensOf } from './names.ts'
+import { namesOf, tokensOf } from '../hooks/shared/names.ts'
 import { selectMemories, sql } from './rows.ts'
 import { visibilityParams, type Visibility } from './search.ts'
 

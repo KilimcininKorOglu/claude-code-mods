@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { after, describe, test } from 'node:test'
-import { namesOf } from '../names.ts'
+import { namesOf } from '../../hooks/shared/names.ts'
 import { rankForPrompt } from '../remind.ts'
 import { cleanUp } from './support.ts'
 import { world, type World } from './world.ts'

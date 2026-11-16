@@ -180,12 +180,13 @@ export const TOPIC_TAGS: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * Sentences put before a target's fact in the English store, so the fact a question asks about
- * stands in a later sentence of a long memory, as in a consolidated note.
+ * stands in a later sentence of a memory. One sentence for p1, d2 and e2, so each memory stays
+ * within the 250 characters a memory holds.
  */
 export const LONG_LEAD: Readonly<Record<string, string>> = {
-  p1: 'The payments module was split out of the order service in the spring. Its jobs run in their own worker pool and report to the finance dashboard. ',
-  d2: 'Deploys are driven by the release pipeline and post their progress to the team channel. Each step writes its duration to the build log. ',
-  e2: 'Templates live in the mail service and are rendered with the same layout for every brand. Previews are available on staging for each template. ',
+  p1: 'The payments module was split out of the order service in the spring. ',
+  d2: 'Deploys are driven by the release pipeline and post their progress to the team channel. ',
+  e2: 'Templates live in the mail service and are rendered with the same layout for every brand. ',
   l2: 'Monitoring runs on a separate host so that it survives an outage of the app servers. Dashboards show CPU, memory and request rates per service. ',
 }
 

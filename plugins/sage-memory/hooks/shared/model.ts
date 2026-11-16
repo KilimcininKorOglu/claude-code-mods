@@ -159,6 +159,13 @@ export type Memory = {
 }
 
 /**
+ * The most characters a memory's text holds, spaces and punctuation included (the user's choice). Ten
+ * memories of this size fit a reminder block whole, and no text passes the embedding model's 512
+ * tokens, so no memory is left out of a block or a vector for its length.
+ */
+export const MAX_NOTE_CHARS = 250
+
+/**
  * A memory that is permanent or of importance 0.9 or more. The consolidator never names it in
  * `supersedes`, the curator never deletes, rewrites, merges away, splits or lowers it, compact never
  * deletes or merges it away, and triage never lets it lose a merge. Hygiene's dedupe still folds a

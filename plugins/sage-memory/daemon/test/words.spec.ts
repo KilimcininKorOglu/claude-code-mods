@@ -100,11 +100,14 @@ describe('word evidence from the store', () => {
   })
 
   test('a query matches with at most 64 held terms, the rarest first', async () => {
-    const many = Array.from({ length: 100 }, (_, i) => `word${i}`)
-    const { w } = await store([many.join(' '), ...ENGLISH.slice(0, 3).map((text, i) => `${text} ${many.slice(0, 10 * (i + 1)).join(' ')}`)])
+    // The `z` ends each word, so no word is the prefix of another (`w1z` does not start `w10z`).
+    const many = Array.from({ length: 100 }, (_, i) => `w${i}z`)
+    const quarters = [0, 25, 50, 75].map(from => many.slice(from, from + 25).join(' '))
+    // w70z to w99z are held by a second memory too; w0z to w69z by one memory each.
+    const { w } = await store([...quarters, many.slice(70, 85).join(' '), many.slice(85, 100).join(' ')])
     const held = heldTerms(w.project.db, many.join(' '), visibilityParams(SHOWN))
     assert.equal(held.terms.length, 64)
-    assert.ok(held.terms.every(term => term.count === 1), 'the 70 terms only one memory holds come before the 30 more memories hold')
+    assert.ok(held.terms.every(term => term.count === 1), 'the 70 terms only one memory holds come before the 30 two memories hold')
     w.close()
   })
 

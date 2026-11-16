@@ -8,7 +8,9 @@ import { dropMemory, insertMoved, movedMemory, removeMoved } from './move.ts'
 import { storeLabel, type Op } from './op.ts'
 import { candidateStore, memoryStore, opFor, placesOf, storeForScope, type Places } from './places.ts'
 import { backfill, recoverMemory } from './recover.ts'
+import { refused } from './errors.ts'
 import { remember, supersede } from './remember.ts'
+import { longMemories, replaceMemory, shortenFailed, type ReplaceRequest, type ReplaceResult } from './replace.ts'
 import { clear, deleteMemory, forget } from './remove.ts'
 import { flag, optionalCount, optionalObject, optionalScope, optionalString, requiredObject, requiredString, stringList, type Body } from './request.ts'
 import { readAudit, readMemory } from './rows.ts'
@@ -93,13 +95,54 @@ async function rememberRoute(stores: Stores, embeddings: Embeddings, body: Body)
   return write(stores, embeddings, body, pick, op => remember(op, input, semantic))
 }
 
+/** Replaces a memory with shorter ones in the store that holds it, then embeds the parts. */
+async function replaceRoute(stores: Stores, embeddings: Embeddings, body: Body): Promise<ReplaceResult> {
+  const revision = optionalCount(body, 'revision', Number.MAX_SAFE_INTEGER)
+  if (revision === undefined) throw refused('revision is required: the revision of the memory as it was read')
+  const request: ReplaceRequest = { id: requiredString(body, 'id'), revision, texts: stringList(body, 'texts'), sessionId: sessionOf(body) }
+  const places = placesOf(stores, body)
+  const store = memoryStore(places, request.id)
+  const result = await transaction(store, () => replaceMemory(opFor(places, store), request))
+  await embeddings.afterWrite(store, result.parts)
+  return result
+}
+
+/**
+ * How long a long memory handed to one window is kept from the others: one daemon serves every
+ * window, and a rewrite took up to 25.9 s (two tries of the longest note measured), so ten minutes
+ * covers a slow job model and still frees the memory of a window that closed mid-rewrite.
+ */
+const LEASE_MS = 10 * 60_000
+
+/** The long memories of both stores no other window holds, each held for this one for `LEASE_MS`. */
+async function leaseLong(stores: Stores, leases: Map<string, number>, body: Body): Promise<Memory[]> {
+  const limit = optionalCount(body, 'limit', 1000) ?? 50
+  const now = Date.now()
+  const held = (id: string): boolean => (leases.get(id) ?? 0) > now
+  const found = await both(stores, body, op => longMemories(op, limit, held))
+  const memories = [...found.project, ...found.user].slice(0, limit)
+  for (const memory of memories) leases.set(memory.id, now + LEASE_MS)
+  for (const [id, until] of leases) if (until <= now) leases.delete(id)
+  return memories
+}
+
 export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
-  const post = (handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
+  const leases = new Map<string, number>()
+  const post =(handle: (body: Body) => unknown): Route => ({ method: 'POST', auth: true, handle: ({ body }) => handle(body) })
   const byId = (body: Body): ((places: Places) => Store) => places => memoryStore(places, requiredString(body, 'id'))
   return {
     '/memory/remember': post(body => rememberRoute(stores, embeddings, body)),
     '/memory/get': post(body => run(stores, body, byId(body), op => readMemory(op.store.db, requiredString(body, 'id')))),
     '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
+    '/memory/replace': post(body => replaceRoute(stores, embeddings, body)),
+    '/memory/long': post(body => leaseLong(stores, leases, body)),
+    '/memory/shorten-failed': post(body =>
+      run(stores, body, byId(body), op => {
+        shortenFailed(op, requiredString(body, 'id'), requiredString(body, 'reason'), sessionOf(body))
+        leases.delete(requiredString(body, 'id'))
+        return { recorded: true }
+      }),
+    ),
     '/memory/delete': post(body =>
       run(stores, body, places => memoryStore(places, requiredString(body, 'id')), op => ({
         deleted: deleteMemory(op, { id: requiredString(body, 'id'), reason: optionalString(body, 'reason') ?? 'deleted', force: flag(body, 'force'), neverRemind: flag(body, 'neverRemind'), sessionId: sessionOf(body) }),

@@ -3,6 +3,7 @@ import {
   AUDIENCE_KEYS,
   CONTEXT_POLICIES,
   KINDS,
+  MAX_NOTE_CHARS,
   PERSISTENCES,
   SCOPES,
   SOURCE_TYPES,
@@ -95,6 +96,9 @@ export function checkedText(text: unknown): string {
   const collapsed = collapseSpace(text)
   if (collapsed === '') throw refused('the text is empty')
   if (collapsed.length < MIN_TEXT_CHARS) throw refused(`the text is under ${MIN_TEXT_CHARS} characters, too short for a memory`)
+  if (collapsed.length > MAX_NOTE_CHARS) {
+    throw refused(`the text is ${collapsed.length} characters; a memory holds at most ${MAX_NOTE_CHARS}, so shorten it or split it into several memories, each stating one fact on its own`)
+  }
   return collapsed
 }
 
