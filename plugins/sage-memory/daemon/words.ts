@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { ftsTerms, MIN_PREFIX } from './fts.ts'
+import { ftsTerms } from './fts.ts'
 import { selectIds, sql } from './rows.ts'
-import { visibilityParams, type Visibility } from './search.ts'
+import { heldForm, visibilityParams, type Visibility } from './search.ts'
+import { cjkPairs } from './searchable.ts'
 
 /**
  * Word evidence from the store itself. A prompt's terms are weighed by how many memories hold them,
@@ -35,25 +36,44 @@ const HOLDERS = `
 type Term = { term: string; holders: ReadonlySet<string> }
 
 function holdersOf(db: DatabaseSync, term: string, params: ReturnType<typeof visibilityParams>): Set<string> {
-  return new Set(selectIds(db, HOLDERS, `text : ${term}`, ...params))
+  return new Set(selectIds(db, HOLDERS, `search_text : ${term}`, ...params))
 }
 
 /**
- * A prompt term as the store holds it: a prefix term the store does not hold is cut, letter by
- * letter, to its longest prefix of at least three letters that it holds, so `logların` finds `log`
- * and `saklanma` finds `saklanır`; undefined when no prefix is held.
+ * A memory's terms with the pairs of one Chinese, Japanese or Korean word joined: a word of those
+ * scripts is split into overlapping pairs, which always come together, so the pairs of one query run
+ * the memory holds side by side count as one term, weighed by the memories that hold the whole
+ * sequence. Counted apart, the three pairs of `必要です` made one common word look like three rare ones.
  */
-function heldTerm(db: DatabaseSync, term: string, params: ReturnType<typeof visibilityParams>): Term | undefined {
-  const holders = holdersOf(db, term, params)
-  if (holders.size > 0) return { term, holders }
-  if (!term.endsWith('*')) return undefined
-  const bare = term.slice(1, -2)
-  for (let end = bare.length - 1; end >= MIN_PREFIX; end--) {
-    const cut = `"${bare.slice(0, end)}"*`
-    const shorter = holdersOf(db, cut, params)
-    if (shorter.size > 0) return { term: cut, holders: shorter }
+function joinPairs(db: DatabaseSync, own: readonly Term[], runs: readonly string[][], id: string, params: ReturnType<typeof visibilityParams>): Term[] {
+  const held = new Set(own.map(term => term.term))
+  const joined = new Set<string>()
+  const phrases: Term[] = []
+  const close = (sequence: string[]): void => {
+    if (sequence.length < 2) return
+    const phrase: Term = { term: `"${sequence.join(' ')}"`, holders: holdersOf(db, `"${sequence.join(' ')}"`, params) }
+    if (!phrase.holders.has(id)) return
+    phrases.push(phrase)
+    for (const pair of sequence) joined.add(`"${pair}"`)
   }
-  return undefined
+  for (const pairs of runs) {
+    let sequence: string[] = []
+    for (const pair of pairs) {
+      if (held.has(`"${pair}"`)) sequence.push(pair)
+      else {
+        close(sequence)
+        sequence = []
+      }
+    }
+    close(sequence)
+  }
+  return [...own.filter(term => !joined.has(term.term)), ...phrases]
+}
+
+/** A prompt term in the form the memories' text holds it (`heldForm`), with its holders. */
+function heldTerm(db: DatabaseSync, term: string, params: ReturnType<typeof visibilityParams>): Term | undefined {
+  const form = heldForm(db, term, params, 'search_text')
+  return form === undefined ? undefined : { term: form, holders: holdersOf(db, form, params) }
 }
 
 /** The prompt's terms the store holds, once each: a prefix term another one starts with stands for both, as `deploy` does for `deploys`. */
@@ -81,10 +101,12 @@ export function wordEvidence(db: DatabaseSync, query: string, visibility: Visibi
   const params = visibilityParams(visibility)
   const size = Number((sql(db, VISIBLE_COUNT).get(...params) as { n: number }).n)
   const terms = knownTerms(db, query, params)
+  const runs = cjkPairs(query.toLowerCase())
   const held = new Map<string, Term[]>()
   for (const term of terms) for (const id of term.holders) held.set(id, [...(held.get(id) ?? []), term])
   const evidence = new Map<string, WordEvidence>()
-  for (const [id, own] of held) {
+  for (const [id, pairs] of held) {
+    const own = runs.length > 0 ? joinPairs(db, pairs, runs, id, params) : pairs
     const chance = own.reduce((expected, term) => expected * (term.holders.size / size), size) * choose(terms.length, own.length)
     if (chance < 1) evidence.set(id, { chance, terms: own.map(term => term.term.replace(/^"|"\*?$/g, '')) })
   }

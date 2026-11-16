@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { after, describe, test } from 'node:test'
-import { EVERY_POLICY, type Visibility } from '../search.ts'
+import { EVERY_POLICY, searchStore, type Visibility } from '../search.ts'
 import { wordEvidence } from '../words.ts'
 import { cleanUp } from './support.ts'
 import { world, type World } from './world.ts'
@@ -61,6 +61,24 @@ describe('word evidence from the store', () => {
     const { w, texts } = await store([...ENGLISH, limit])
     assert.deepEqual(singledOut(w, texts, 'retry limit kaç'), [limit], 'the index splits the identifier at the underscore')
     assert.deepEqual(singledOut(w, texts, 'retry limiti kaç'), [limit], 'a suffixed word is cut to the longest prefix the store holds')
+    w.close()
+  })
+
+  test('a camelCase identifier, a Japanese word and a name beside Japanese text are found', async () => {
+    const camel = 'Call retryLimit before each send'
+    const japanese = 'アプリケーションのログは90日間保存した後、削除します。'
+    const named = 'Android アプリの minSdkは29です。'
+    const { w, texts } = await store([...ENGLISH, camel, japanese, named])
+    assert.deepEqual(singledOut(w, texts, 'retry limit before send'), [camel], 'the index holds the words of the identifier')
+    assert.deepEqual(singledOut(w, texts, 'ログは何日間保存しますか'), [japanese])
+    assert.deepEqual(singledOut(w, texts, 'minSdk 29'), [named])
+    w.close()
+  })
+
+  test('a search finds a memory through the stem of a suffixed word', async () => {
+    const { w, texts } = await store(ENGLISH)
+    const found = searchStore(w.project.db, 'logların süresi', SHOWN, 10).map(memory => texts.get(memory.id))
+    assert.deepEqual(found, [ENGLISH[6]], '`logların` is cut to `log`, which `Log files` holds')
     w.close()
   })
 

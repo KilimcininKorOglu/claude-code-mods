@@ -1,7 +1,7 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 import type { ContextPolicy, Memory, Scope, Status } from '../hooks/shared/model.ts'
-import { ftsTerms } from './fts.ts'
-import { selectMemories } from './rows.ts'
+import { ftsTerms, MIN_PREFIX } from './fts.ts'
+import { selectMemories, sql } from './rows.ts'
 
 /**
  * Which memories a read may see. A session reads its own session memories and no other
@@ -58,15 +58,46 @@ const BY_TEXT = `
   ORDER BY bm25(memories_fts), m.importance DESC
   LIMIT ?`
 
+const HELD = `
+  SELECT EXISTS (
+    SELECT 1 FROM memories_fts f CROSS JOIN memories m ON m.rowid = f.rowid
+    WHERE memories_fts MATCH ?
+      AND m.status IN (SELECT value FROM json_each(?)) AND m.context_policy IN (SELECT value FROM json_each(?))
+      AND (? IS NULL OR m.scope = ?) AND (? = 1 OR m.scope != 'session' OR m.owner_session_id = ?) AND (? = 1 OR m.audience IS NULL)
+  ) AS held`
+
+function isHeld(db: DatabaseSync, match: string, params: SQLInputValue[]): boolean {
+  return Number((sql(db, HELD).get(match, ...params) as { held: number }).held) === 1
+}
+
+/**
+ * A query term as the store holds it: a prefix term no visible memory holds is cut, letter by
+ * letter, to its longest prefix of at least three letters one holds, so `logların` finds `log` and
+ * `saklanma` finds `saklanır`; undefined when none is held. `column` limits the match to one column.
+ */
+export function heldForm(db: DatabaseSync, term: string, params: SQLInputValue[], column?: string): string | undefined {
+  const scoped = (form: string): string => (column ? `${column} : ${form}` : form)
+  if (isHeld(db, scoped(term), params)) return term
+  if (!term.endsWith('*')) return undefined
+  const bare = term.slice(1, -2)
+  for (let end = bare.length - 1; end >= MIN_PREFIX; end--) {
+    const cut = `"${bare.slice(0, end)}"*`
+    if (isHeld(db, scoped(cut), params)) return cut
+  }
+  return undefined
+}
+
 /**
  * The memories of one store that match a free-text query, best match first: every term first,
- * any term when that finds nothing. A blank query lists the most important memories; a query
- * with no searchable term finds nothing.
+ * any term when that finds nothing. A term is taken in the form the store holds (`heldForm`); a term
+ * the store does not hold in any form stays as it is, so the every-term search fails and the
+ * any-term search runs. A blank query lists the most important memories; a query with no
+ * searchable term finds nothing.
  */
 export function searchStore(db: DatabaseSync, query: string, visibility: Visibility, limit: number): Memory[] {
   const params = visibilityParams(visibility)
   if (query.trim() === '') return selectMemories(db, BY_RANK, ...params, limit)
-  const terms = ftsTerms(query)
+  const terms = ftsTerms(query).map(term => heldForm(db, term, params) ?? term)
   if (terms.length === 0) return []
   const every = selectMemories(db, BY_TEXT, terms.join(' '), ...params, limit)
   if (every.length > 0 || terms.length === 1) return every

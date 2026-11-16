@@ -2,18 +2,31 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { after, describe, test } from 'node:test'
-import { migrate, SCHEMA_VERSION } from '../schema.ts'
+import { migrate, SCHEMA_V1, SCHEMA_VERSION } from '../schema.ts'
+import { searchableText, splitCjk } from '../searchable.ts'
 import { openDatabase } from '../stores.ts'
 import { cleanUp, tempDir } from './support.ts'
 
 after(cleanUp)
 
-function insertMemory(db: DatabaseSync, id: string, text: string, tags: string): void {
+const INSERT_V1 = `INSERT INTO memories (id, data, text, status, kind, scope, persistence, context_policy, importance, confidence, freshness, tags, canonical_text, created_at, updated_at)
+  VALUES (?, '{}', ?, 'active', 'fact', 'project', 'durable', 'auto', 0.5, 0.8, 1, ?, ?, ?, ?)`
+const INSERT_V2 = `INSERT INTO memories (id, data, text, status, kind, scope, persistence, context_policy, importance, confidence, freshness, tags, canonical_text, created_at, updated_at, search_text)
+  VALUES (?, '{}', ?, 'active', 'fact', 'project', 'durable', 'auto', 0.5, 0.8, 1, ?, ?, ?, ?, ?)`
+
+/** A row as the write path leaves it; `searchable` false leaves out the column a schema 1 table lacks. */
+function insertMemory(db: DatabaseSync, id: string, text: string, tags: string, searchable = true): void {
   const now = new Date().toISOString()
-  db.prepare(
-    `INSERT INTO memories (id, data, text, status, kind, scope, persistence, context_policy, importance, confidence, freshness, tags, canonical_text, created_at, updated_at)
-     VALUES (?, '{}', ?, 'active', 'fact', 'project', 'durable', 'auto', 0.5, 0.8, 1, ?, ?, ?, ?)`,
-  ).run(id, text, tags, text.toLowerCase(), now, now)
+  if (searchable) db.prepare(INSERT_V2).run(id, text, tags, text.toLowerCase(), now, now, searchableText(text))
+  else db.prepare(INSERT_V1).run(id, text, tags, text.toLowerCase(), now, now)
+}
+
+/** A database at schema 1, as a release before the search text column left it. */
+function versionOne(file: string): DatabaseSync {
+  const db = new DatabaseSync(file)
+  db.exec(SCHEMA_V1)
+  db.exec("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT INTO schema_meta VALUES ('schema_version', '1')")
+  return db
 }
 
 function matches(db: DatabaseSync, query: string): string[] {
@@ -50,7 +63,7 @@ describe('schema', () => {
       insertMemory(db, 'm2', 'Deploys go through the staging branch', 'deploy')
       assert.deepEqual(matches(db, 'migrations'), ['m1'])
       assert.deepEqual(matches(db, 'running'), ['m1'], 'porter stems running to run')
-      db.prepare("UPDATE memories SET text = 'Run the seeders with pnpm' WHERE id = 'm1'").run()
+      db.prepare("UPDATE memories SET text = 'Run the seeders with pnpm', search_text = 'Run the seeders with pnpm' WHERE id = 'm1'").run()
       assert.deepEqual(matches(db, 'migrations'), [])
       assert.deepEqual(matches(db, 'seeders'), ['m1'])
       db.prepare("UPDATE memories SET tags = 'release' WHERE id = 'm2'").run()
@@ -105,6 +118,42 @@ describe('schema', () => {
     db.prepare("UPDATE schema_meta SET value = ? WHERE key = 'schema_version'").run(String(SCHEMA_VERSION + 1))
     db.close()
     assert.throws(() => openDatabase(file), new RegExp(`schema ${SCHEMA_VERSION + 1}, newer than this daemon's ${SCHEMA_VERSION}`))
+  })
+
+  test('a schema 1 store moves to schema 2: Japanese words, camelCase words and the rest are found', () => {
+    const file = join(tempDir(), 'v1.db')
+    const old = versionOne(file)
+    insertMemory(old, 'm1', 'アプリケーションのログは90日間保存した後、削除します。', '', false)
+    insertMemory(old, 'm2', 'Call retryLimit before each send', '', false)
+    insertMemory(old, 'm3', 'Run the migrations with pnpm', 'build', false)
+    old.close()
+    const db = openDatabase(file)
+    try {
+      assert.equal(versionOf(db), '2')
+      assert.deepEqual(matches(db, splitCjk('ログ')), ['m1'])
+      assert.deepEqual(matches(db, splitCjk('保存')), ['m1'])
+      assert.deepEqual(matches(db, 'retry AND limit'), ['m2'])
+      assert.deepEqual(matches(db, 'migrations'), ['m3'])
+      insertMemory(db, 'm4', 'ディスク使用率のアラート', '')
+      assert.deepEqual(matches(db, splitCjk('アラート')), ['m4'], 'a write after the move is indexed the same way')
+    } finally {
+      db.close()
+    }
+  })
+
+  test('a move to schema 2 that fails leaves schema 1 and its index', () => {
+    const file = join(tempDir(), 'v1-broken.db')
+    const old = versionOne(file)
+    insertMemory(old, 'm1', 'Run the migrations with pnpm', 'build', false)
+    old.exec('DROP TRIGGER memories_fts_update')
+    assert.throws(() => migrate(old), /no such trigger: memories_fts_update/)
+    try {
+      assert.equal(versionOf(old), '1')
+      assert.deepEqual(matches(old, 'migrations'), ['m1'])
+      assert.equal(old.prepare("SELECT COUNT(*) AS n FROM pragma_table_info('memories') WHERE name = 'search_text'").get()?.n, 0)
+    } finally {
+      old.close()
+    }
   })
 
   test('a migration that fails leaves the database as it was', () => {

@@ -2,6 +2,7 @@ import type { DatabaseSync, SQLInputValue, StatementSync } from 'node:sqlite'
 import type { AuditEntry, Candidate, Memory } from '../hooks/shared/model.ts'
 import { canonicalText } from '../hooks/shared/text.ts'
 import { messageOf } from './log.ts'
+import { searchableText } from './searchable.ts'
 import type { Store } from './stores.ts'
 
 /** Reading and writing rows: prepared statements, the memory and candidate records, the audit log. */
@@ -77,10 +78,10 @@ export function audienceKey(memory: Pick<Memory, 'audience'>): string | null {
 
 const UPSERT = `
   INSERT INTO memories (id, data, text, status, kind, scope, persistence, context_policy, importance, confidence, freshness,
-    audience, tags, owner_session_id, canonical_text, created_at, updated_at, expires_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    audience, tags, owner_session_id, canonical_text, created_at, updated_at, expires_at, search_text)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT (id) DO UPDATE SET
-    data = excluded.data, text = excluded.text, status = excluded.status, kind = excluded.kind, scope = excluded.scope,
+    data = excluded.data, text = excluded.text, search_text = excluded.search_text, status = excluded.status, kind = excluded.kind, scope = excluded.scope,
     persistence = excluded.persistence, context_policy = excluded.context_policy, importance = excluded.importance,
     confidence = excluded.confidence, freshness = excluded.freshness, audience = excluded.audience, tags = excluded.tags,
     owner_session_id = excluded.owner_session_id, canonical_text = excluded.canonical_text, created_at = excluded.created_at,
@@ -107,6 +108,7 @@ export function writeMemory(db: DatabaseSync, memory: Memory): void {
     memory.createdAt,
     memory.updatedAt,
     memory.expiresAt ?? null,
+    searchableText(memory.text),
   )
 }
 

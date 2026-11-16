@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { searchableText } from './searchable.ts'
 
 /** The schema this daemon writes. A database at a higher version is refused, never downgraded. */
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
 
 const PRAGMAS = `
   PRAGMA journal_mode = WAL;
@@ -18,7 +19,7 @@ const PRAGMAS = `
  * that leaves them alone costs no reindex. `reminders` records which memory a loop of a session
  * was already given in the current context epoch, so a memory goes to a context once.
  */
-const SCHEMA_V1 = `
+export const SCHEMA_V1 = `
   CREATE TABLE memories (
     id TEXT PRIMARY KEY,
     data TEXT NOT NULL,
@@ -119,6 +120,49 @@ const SCHEMA_V1 = `
   );
 `
 
+/**
+ * Version 2. The text index holds `memories.search_text`, which `writeMemory` fills from the text
+ * (`searchableText`): each run of Chinese, Japanese or Korean letters as its pairs, and each
+ * camelCase identifier followed by its words. The column is filled before the index and its triggers
+ * exist, then `rebuild` indexes every row once.
+ */
+const SCHEMA_V2_DROP = `
+  ALTER TABLE memories ADD COLUMN search_text TEXT NOT NULL DEFAULT '';
+  DROP TRIGGER memories_fts_insert;
+  DROP TRIGGER memories_fts_delete;
+  DROP TRIGGER memories_fts_update;
+  DROP TABLE memories_fts;
+`
+
+const SCHEMA_V2_INDEX = `
+  CREATE VIRTUAL TABLE memories_fts USING fts5 (
+    search_text, tags, audience,
+    content = 'memories', content_rowid = 'rowid',
+    tokenize = 'porter unicode61 remove_diacritics 2'
+  );
+  CREATE TRIGGER memories_fts_insert AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts (rowid, search_text, tags, audience) VALUES (new.rowid, new.search_text, new.tags, new.audience);
+  END;
+  CREATE TRIGGER memories_fts_delete AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts (memories_fts, rowid, search_text, tags, audience) VALUES ('delete', old.rowid, old.search_text, old.tags, old.audience);
+  END;
+  CREATE TRIGGER memories_fts_update AFTER UPDATE ON memories
+  WHEN old.search_text IS NOT new.search_text OR old.tags IS NOT new.tags OR old.audience IS NOT new.audience
+  BEGIN
+    INSERT INTO memories_fts (memories_fts, rowid, search_text, tags, audience) VALUES ('delete', old.rowid, old.search_text, old.tags, old.audience);
+    INSERT INTO memories_fts (rowid, search_text, tags, audience) VALUES (new.rowid, new.search_text, new.tags, new.audience);
+  END;
+  INSERT INTO memories_fts (memories_fts) VALUES ('rebuild');
+`
+
+/** Schema 1 to 2: the column, filled from each memory's text, then the index over it. */
+function toVersion2(db: DatabaseSync): void {
+  db.exec(SCHEMA_V2_DROP)
+  const fill = db.prepare('UPDATE memories SET search_text = ? WHERE rowid = ?')
+  for (const row of db.prepare('SELECT rowid AS id, text FROM memories').all() as Array<{ id: number; text: string }>) fill.run(searchableText(row.text), row.id)
+  db.exec(SCHEMA_V2_INDEX)
+}
+
 /** Sets the connection pragmas every store runs with. */
 export function applyPragmas(db: DatabaseSync): void {
   db.exec(PRAGMAS)
@@ -177,7 +221,8 @@ export function migrate(db: DatabaseSync): void {
   }
   if (current < SCHEMA_VERSION) {
     inTransaction(db, () => {
-      db.exec(SCHEMA_V1)
+      if (current < 1) db.exec(SCHEMA_V1)
+      toVersion2(db)
       db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION))
     })
   }
