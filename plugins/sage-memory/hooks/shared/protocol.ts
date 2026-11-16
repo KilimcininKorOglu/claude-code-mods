@@ -8,8 +8,10 @@
  * 2: `remember` answers `similar` without writing, and its answer has no `nearDuplicate`.
  * 3: `/remind/global` with `sessionId` and `loop` answers only the rules that loop's context was not
  *    reminded of yet or that changed since; an older daemon would answer every rule at every prompt.
+ * 4: `/remind/prompt` reads `blockCount`, the number of memories the prompt block holds, which bounds
+ *    how many memories a name may single out; an older daemon would ignore it.
  */
-export const PROTOCOL = 3
+export const PROTOCOL = 4
 
 /** What `GET /hello` answers without a token: enough to tell that a daemon runs, and which build. */
 export type Hello = {
