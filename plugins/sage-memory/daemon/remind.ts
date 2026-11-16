@@ -233,16 +233,23 @@ export type PromptRequest = { query: string; limit: number; blockCount: number }
 /** The relevance of a memory the prompt names: as strong as a named anchor. */
 const NAMED_STRENGTH = 0.96
 
+/** Whether the prompt spells out one of the memory's anchors (a symbol, a command, a path). */
+function namesAnchor(item: Ranked): boolean {
+  return item.reasons.some(reason => reason.startsWith('query:exact-') && !reason.startsWith('query:exact-name:'))
+}
+
 /**
- * Named memories first, the ones whose name fewer memories hold before the others; then the closer
- * meaning, then stronger relevance, the score breaking what is left. Meaning comes before relevance,
- * because shared words lifted a farther memory's relevance over a closer one's; a memory without a
- * vector (no embeddings, or one waiting for its fill) is ordered by its relevance.
+ * Named memories first, the ones whose name fewer memories hold before the others; then a memory
+ * whose anchor the prompt spells out; then the closer meaning, then stronger relevance, the score
+ * breaking what is left. Meaning comes before relevance, because shared words lifted a farther
+ * memory's relevance over a closer one's; a memory without a vector (no embeddings, or one waiting
+ * for its fill) is ordered by its relevance.
  */
 function byMeaning(cosines: ReadonlyMap<string, number>, named: ReadonlyMap<string, Named>): (left: Ranked, right: Ranked) => number {
   const holders = (item: Ranked): number => named.get(item.memory.id)?.holders ?? Number.POSITIVE_INFINITY
   return (left, right) =>
     holders(left) - holders(right) ||
+    Number(namesAnchor(right)) - Number(namesAnchor(left)) ||
     (cosines.get(right.memory.id) ?? 0) - (cosines.get(left.memory.id) ?? 0) ||
     right.relationStrength - left.relationStrength ||
     byScore(left, right)

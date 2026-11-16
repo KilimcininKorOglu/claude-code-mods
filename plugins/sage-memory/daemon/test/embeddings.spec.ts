@@ -416,6 +416,56 @@ describe('reminders through the vector channel', () => {
     w.close()
   })
 
+  test('a memory the prompt names only through an anchor comes before every memory its meaning brings', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const anchored = (await w.remember({ text: 'Lost sockets are retried three times', anchors: [{ type: 'symbol', path: 'src/net.ts', symbol: 'createPool' }] })).memory
+    fake.vectors.set(anchored.text, toward(0, 1))
+    const meant: Memory[] = []
+    for (const word of ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel']) {
+      const memory = (await w.remember({ text: `The ${word} network keeps its own connection settings`, distinct: true })).memory
+      fake.vectors.set(memory.text, toward(2, 1))
+      meant.push(memory)
+    }
+    await embeddings.afterWrite(w.project, [anchored, ...meant])
+    const prompt = 'why does createPool give up'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.3
+    vector[2] = 0.6
+    vector[4] = Math.sqrt(1 - 0.09 - 0.36)
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
+    assert.equal(ranking.candidates[0]?.memory.id, anchored.id, 'the symbol the prompt names outranks eight memories at a cosine of 0.60')
+    w.close()
+  })
+
+  test('a memory whose command anchor the prompt spells out comes before every memory its meaning brings', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const anchored = (await w.remember({ text: 'The bench prints one table per store language', anchors: [{ type: 'command', command: 'make bench' }] })).memory
+    fake.vectors.set(anchored.text, toward(0, 1))
+    const meant: Memory[] = []
+    for (const word of ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel']) {
+      const memory = (await w.remember({ text: `The ${word} report keeps its own column order`, distinct: true })).memory
+      fake.vectors.set(memory.text, toward(2, 1))
+      meant.push(memory)
+    }
+    await embeddings.afterWrite(w.project, [anchored, ...meant])
+    const prompt = 'what does make bench print'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.3
+    vector[2] = 0.6
+    vector[4] = Math.sqrt(1 - 0.09 - 0.36)
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
+    assert.equal(ranking.candidates[0]?.memory.id, anchored.id, 'the command the prompt spells out outranks eight memories at a cosine of 0.60')
+    w.close()
+  })
+
   test('a prompt reminder takes meaning alone above the meaning floor, shared words between the noise floor and it, and neither under the noise floor', async () => {
     const w = world()
     const fake = fakeRuntime()
