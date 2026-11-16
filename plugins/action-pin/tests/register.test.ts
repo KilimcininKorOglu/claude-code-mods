@@ -104,7 +104,7 @@ describe('action-pin', () => {
     const bar: Bar = { open: true, sections: [] }
     seatSidebar(on, bar)
     // An absolute path this long is cut at 64 characters, so it would give both workflows one key.
-    const long = '/Users/kerem/Desktop/GIT-KilimcininKorOglu/app.hermesmonitoring.cloud'
+    const long = '/Users/someone/Desktop/repositories/long-example-project.example.com'
     for (const name of ['ci', 'release']) w.files.set(`${long}/.github/workflows/${name}.yml`, '  - uses: actions/checkout@v4\n')
     await $.session.start({ surface: null, isInteractive: true, cwd: long })
     await $.tool.call({ tool: 'Edit', file_path: `${long}/.github/workflows/ci.yml`, old_string: '', new_string: '  - uses: actions/checkout@v4' } as never)
