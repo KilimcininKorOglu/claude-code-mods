@@ -1,26 +1,26 @@
 # output-flood
 
-Model tek bir cevap için `pytest tests/ -v` ya da `find .` çalıştırır; onlarca KB çıktı context'e düşer ve session'ın geri kalanında orada kalır. Sonraki istekler bu yükü taşır, model de bunun neye mal olduğunu bilmez. Bu mod her Bash komutunun context'inden ne kadar harcadığını ölçer. Bir komutun çıktısı bir boyut sınırını geçerse modele bunun neye mal olduğunu ve aynı soruyu hangi daha dar komutun cevaplayacağını söyler.
+Model tek bir cevap için `pytest tests/ -v` ya da `find .` çalıştırır. Onlarca KB'lık çıktı context'e girer ve session sonuna kadar orada kalır. Sonraki her istek bu yükü taşır ve model bunun maliyetini bilmez. Bu mod her Bash komutunun context'ten ne kadar yer kapladığını ölçer. Bir komutun çıktısı bir boyut sınırını aşarsa modele bu çıktının maliyeti bildirilir. Aynı soruyu cevaplayacak daha dar bir komut da önerilir.
 
 ## Ne yapar
 
-1. Her tool çağrısı grubu bittikten sonra ve bir sonraki model isteğinden önce mod her Bash sonucunu, modelin okuduğu hâliyle karakter olarak ölçer. Ölçüm, sonucu yeniden yazan bütün mod'lardan sonra yapılır; bu yüzden başka bir mod'un ([bash-diet](../bash-diet) gibi) küçülttüğü bir sonuç, plugin'ler hangi sırayla yüklenirse yüklensin küçülmüş boyutuyla sayılır. Subagent çağrıları da aynı şekilde ölçülür.
-2. Sınırın üstündeki bir sonuç (varsayılan 20 KB, yaklaşık 5000 token) bir bulgudur. Model bir sonraki isteğinden önce şu notu okur:
+1. Her tool çağrısı grubu bittikten sonra ve bir sonraki model isteğinden önce, her Bash sonucunun boyutu modelin okuduğu hâliyle karakter olarak ölçülür. Ölçüm, sonucu yeniden yazan bütün modlardan sonra yapılır. Bu yüzden başka bir modun ([bash-diet](../bash-diet) gibi) küçülttüğü bir sonuç, plugin'lerin yüklenme sırasından bağımsız olarak küçülmüş boyutuyla sayılır. Subagent çağrıları da aynı şekilde ölçülür.
+2. Sınırı (varsayılan 20 KB, yaklaşık 5000 token) aşan bir sonuç bir bulgudur. Model bir sonraki isteğinden önce şu notu okur:
 
        output-flood: "pytest tests/ -v" returned 30 KB of output, over the 20 KB limit, and all of it is now in the context. Next time run the one test or file this turn needs, and let the runner report only failures (pytest -x -q, go test -run, cargo test <name>, jest -t).
 
-   Tavsiye komutun türüne göre değişir: bir test runner, `git log`/`diff`/`show`, bir dosya sistemi taraması (`find`, `ls`, `du`, `tree`), bir package install, bir dosya ya da JSON okuması, container log'ları. Bilinen bir türe girmeyen bir komuta, çıktısını bir dosyaya yazması ve ihtiyacı olan aralığı okuması söylenir.
-3. Hiçbir tavsiye `tail` ya da `head`'e pipe önermez. Sonundan kesilen uzun bir çıktı, ekrandan akıp giden hatayı gizler; her öneri bunun yerine komutun ürettiğini daraltır.
-4. Aynı anda transcript'e tek bir satır düşer; satırda modelin okuduğu talimat yoktur, yalnız bulgu vardır:
+   Öneri komutun türüne göre değişir: test runner, `git log`/`diff`/`show`, dosya sistemi taraması (`find`, `ls`, `du`, `tree`), paket yüklemesi, dosya ya da JSON okuma, container log'ları. Bilinen bir türe girmeyen bir komut için, çıktıyı bir dosyaya yazması ve yalnız ihtiyaç duyduğu aralığı okuması önerilir.
+3. Hiçbir öneri `tail` ya da `head`'e pipe içermez. Sonundan kesilen uzun bir çıktı, ekrandan akıp geçen hatayı gizler. Bu yüzden her öneri, komutun ürettiği çıktıyı daraltır.
+4. Aynı anda transcript'e tek bir satır yazılır. Satır, modelin okuduğu talimatı içermez, yalnız bulguyu içerir:
 
        output-flood: 30 KB of output from "pytest tests/ -v", over 20 KB
 
-5. [sidebar](../sidebar) açıksa bulgu transcript yerine onun stream'ine bir kayıt olarak gider: ilk satırda boyut (sınırın iki katının altında sarı, iki katında ya da üstünde kırmızı, `over N KB` soluk), altında soluk tavsiye. Transcript temiz kalır. Sidebar kapalıysa ya da kurulu değilse satır yukarıdaki gibi transcript'e düşer.
-6. Bir komut session başına bir kez bildirilir; komut ilk 60 karakterinden tanınır. Boyutu yine de `/output-flood`'un yazdığı toplama eklenir.
+5. [sidebar](../sidebar) açıksa bulgu transcript yerine sidebar'ın stream'ine bir kayıt olarak yazılır. İlk satırda boyut görünür: sınırın iki katının altındaysa sarı, iki katı ya da üstündeyse kırmızı renktedir ve `over N KB` soluk renktedir. Altındaki satırda öneri soluk renkte yazar. Transcript temiz kalır. Sidebar kapalıysa ya da yüklü değilse satır yukarıdaki gibi transcript'e yazılır.
+6. Her komut her session'da yalnız bir kez bildirilir. Komut ilk 60 karakterinden tanınır. Boyutu yine de `/output-flood` komutunun gösterdiği toplama eklenir.
 
 ## Komut
 
-    /output-flood            açık mı kapalı mı, sınır ve bu session'da neyin taştığı
+    /output-flood            açık mı kapalı mı, sınır ve bu session'da sınırı aşan komutlar
     /output-flood on | off   varsayılan açık
     /output-flood limit 50   50 KB'ı aşan bir sonuç bildirilir; 1 ile 1000 arası, varsayılan 20, session'lar arasında saklanır
 
@@ -29,13 +29,13 @@ Model tek bir cevap için `pytest tests/ -v` ya da `find .` çalıştırır; onl
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install output-flood@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
+Function hook'lar early access aşamasında. Claude Code 2.1.288 ve sonrası onları varsayılan olarak yükler, bu yüzden açmanız gereken bir ayar yoktur.
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlat.
+1. Claude Code'u yeniden başlatın.
 
-## Nereye uzanır
+## Nelere erişir
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
@@ -44,23 +44,23 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L1: session'ı okur.
 
-    1. Okur:     her Bash komutunun metnini ve sonucunun modelin okuduğu haliyle uzunluğunu; çıktının kendisini hiçbir zaman parse etmez
-    2. Çalıştırır: hiçbir şey
-    3. Gönderir: modelin bir sonraki request'inden önce ona bir not ve transcript'e bir satır; makineden hiçbir şey çıkmaz
-    4. Saklar:   $.store içinde on/off ayarını ve limiti
-    5. Düşman girdi: yalnız çıktının uzunluğu ölçülür; komut metni nota 60 karaktere kesilerek ulaşır ve hiçbir zaman çalıştırılmaz
+    1. Okur:         her Bash komutunun metnini ve sonucunun modelin okuduğu hâliyle uzunluğunu; çıktının kendisini hiçbir zaman parse etmez
+    2. Çalıştırır:   hiçbir şey
+    3. Gönderir:     modelin bir sonraki isteğinden önce modele bir not; transcript'e bir satır; makineden dışarı hiçbir şey çıkmaz
+    4. Saklar:       açık/kapalı ayarını ve sınırı $.store içinde
+    5. Düşman girdi: yalnız çıktının uzunluğu ölçülür; komut metni nota 60 karaktere kesilerek girer ve hiçbir zaman çalıştırılmaz
 
 ## Sınırlar
 
-- Not yazıldığında çıktı zaten context'tedir. Mod onu geri alamaz; not sonraki komut içindir.
-- Başarısız bir komut (engine'in hata olarak bildirdiği sıfırdan farklı bir exit) hata metninden ölçülür, çünkü başarısız bir test çalıştırması en büyük çıktıdır. Hata metni olduğu gibi kalır. Claude Code bu metni 10.000 karakterde keser; yani başarısız bir komut 20 KB sınırını ancak daha düşük bir sınır ayarlarsan geçer.
-- Arka plana alınan bir komut ölçülmez: sonucu çıktıyı değil, bir task id taşır.
-- Tavsiye komut metnine göre seçilir. Bir script'in ya da bir `make` target'ının arkasındaki komut genel tavsiyeyi alır.
-- Boyut token olarak değil karakter olarak sayılır. Bir ASCII satırında token başına yaklaşık dört karakter vardır, başka metinlerde daha fazla.
+- Not yazıldığında çıktı zaten context'tedir. Mod çıktıyı geri alamaz. Not, bir sonraki komut içindir.
+- Başarısız bir komut (engine'in hata olarak bildirdiği sıfırdan farklı bir exit) hata metninden ölçülür, çünkü başarısız bir test çalıştırması genellikle en büyük çıktıyı üretir. Hata metni değiştirilmez. Claude Code bu metni 10.000 karakterde keser. Bu yüzden başarısız bir komut, ancak daha düşük bir sınır ayarlarsanız 20 KB sınırını aşar.
+- Arka planda çalışan bir komut ölçülmez, çünkü sonucu çıktıyı değil bir task id'yi taşır.
+- Öneri komut metnine göre seçilir. Bir script'in ya da bir `make` target'ının içinde çalışan komut için genel öneri verilir.
+- Boyut token olarak değil karakter olarak sayılır. ASCII metinde bir token yaklaşık dört karakterdir. Diğer metinlerde bu sayı daha yüksektir.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make lint        # complexity sınırı 10; aşılırsa build başarısız olur
     make validate
     make test        # claude plugin test
