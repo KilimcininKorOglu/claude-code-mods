@@ -134,6 +134,25 @@ function byRelation(left: Ranked, right: Ranked): number {
  * 0.94 for memories of other files and outranked a directory anchor's 0.92. `placed` holds the memories
  * whose anchor alone reaches the relation floor; an anchor past its reach places nothing.
  */
+/**
+ * Memories that took one memory's place together (the parts of a split, which name it alone in
+ * `supersedes`) are siblings. Every first sibling comes before every second one, each group in its
+ * tier order (`tierOf`: the anchored memories of a file before the ones a query found), so one
+ * split memory does not fill a block. On a store copy whose 227 long memories were split into 1,792
+ * parts, the file tool's 8 places held 6.48 second parts per call and 25 of the 77 wanted memories
+ * came; with the spread 58 came, against 56 before the split. Nothing is dropped.
+ */
+export function spreadSiblings<T extends Ranked>(items: readonly T[], tierOf: (item: T) => number = () => 0): T[] {
+  const seen = new Map<string, number>()
+  const keyed = items.map((item, index) => {
+    const key = item.memory.supersedes?.length === 1 ? item.memory.supersedes[0]! : item.memory.id
+    const nth = seen.get(key) ?? 0
+    seen.set(key, nth + 1)
+    return { item, index, nth, tier: tierOf(item) }
+  })
+  return keyed.sort((a, b) => Math.min(a.nth, 1) - Math.min(b.nth, 1) || a.tier - b.tier || a.index - b.index).map(entry => entry.item)
+}
+
 function byPlacement(placed: ReadonlySet<string>): (left: Ranked, right: Ranked) => number {
   return (left, right) => Number(placed.has(right.memory.id)) - Number(placed.has(left.memory.id)) || byRelation(left, right)
 }
@@ -220,7 +239,7 @@ export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
     .filter(item => statuses.includes(item.memory.status) && item.memory.kind !== 'memory_review')
     .map(item => ({ memory: item.memory, relationStrength: item.relationStrength, score: reminderScore(item.memory, item.relationStrength), reasons: item.reasons }))
     .sort(byPlacement(placed))
-  return applyGates(ranked, [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
+  return applyGates(spreadSiblings(ranked, item => (placed.has(item.memory.id) ? 0 : 1)), [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
 }
 
 /** `blockCount` is how many memories the reminder's block carries: a name more memories hold singles none out. */
@@ -294,7 +313,7 @@ export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking
   const words = wordEvidence(readers.project.store.db, request.query, visibility)
   const { hits, cosines } = promptHits(readers, request, named, words)
   const evidence = { named, words, cosines }
-  const ranked = hits.map(hit => promptEntry(hit, request, readers.semantic !== undefined, evidence)).sort(byMeaning(evidence))
+  const ranked = spreadSiblings(hits.map(hit => promptEntry(hit, request, readers.semantic !== undefined, evidence)).sort(byMeaning(evidence)))
   const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
   return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
 }

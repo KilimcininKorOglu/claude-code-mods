@@ -4,6 +4,7 @@ import type { Memory } from '../../hooks/shared/model.ts'
 import { insertMoved, movedMemory, removeMoved } from '../move.ts'
 import { recoverMemory } from '../recover.ts'
 import { deleteMemory } from '../remove.ts'
+import { rankForTools } from '../remind.ts'
 import { longMemories, replaceMemory, shortenFailed } from '../replace.ts'
 import { remember } from '../remember.ts'
 import { writeMemory } from '../rows.ts'
@@ -167,6 +168,23 @@ describe('replacing a long memory with shorter ones', () => {
     assert.deepEqual(handed('0.4.1'), [first.id, second.id], 'the next version tries it again')
     assert.deepEqual(longMemories(w.op(), 10, '0.4.0', id => id === second.id), [], 'a memory another window holds is skipped')
     await assert.rejects(w.run(op => shortenFailed(op, { id: 'no-such-id', reason: 'x', version: '0.4.0' })), /not a memory of this store/)
+    w.close()
+  })
+
+  test('the parts of one split memory do not fill a file block: each other memory of the file comes before a second part', async () => {
+    const w = world()
+    const own = [
+      (await w.remember({ text: 'The app entry point reads its port from the environment', anchors: [{ type: 'file', path: 'src/app.ts' }], importance: 0.6 })).memory,
+      (await w.remember({ text: 'Every request handler in the app logs its duration', anchors: [{ type: 'file', path: 'src/app.ts' }], importance: 0.6, distinct: true })).memory,
+    ]
+    const old = await oldLong(w, LONG_TEXT, { importance: 0.9 })
+    const { parts } = await w.run(op => replaceMemory(op, { id: old.id, revision: old.revision, texts: PARTS }))
+    const ranked = rankForTools(w.readers('s', 'main'), { paths: [`${w.root}/src/app.ts`], query: 'src app ts', mutation: false, limit: 8 }).candidates.map(c => c.memory.id)
+    const partIds = new Set(parts.map(part => part.id))
+    const firstThree = ranked.slice(0, 3)
+    assert.ok(own.every(memory => firstThree.includes(memory.id)), 'both other memories of the file are among the first three')
+    assert.equal(firstThree.filter(id => partIds.has(id)).length, 1, 'one part of the split memory is among the first three')
+    assert.deepEqual(new Set(ranked.filter(id => partIds.has(id))), partIds, 'no part is dropped')
     w.close()
   })
 
