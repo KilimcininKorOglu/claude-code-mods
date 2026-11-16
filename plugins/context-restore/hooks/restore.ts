@@ -82,7 +82,15 @@ export function currentText(engineText: string, fileBody: string, path: string, 
  * with: every rules file, and the user's global CLAUDE.md. A project's CLAUDE.md is not watched.
  */
 export function rulePathsOf(text: string, globalFile: string): string[] {
-  return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => p.includes('/rules/') || p === globalFile)
+  return [...text.matchAll(RULE_HEADER)].map(m => m[1] ?? '').filter(p => watchable(p) && (p.includes('/rules/') || p === globalFile))
+}
+
+/**
+ * A file body sits in the same attachment as the headers, so a line of it can forge one: only a markdown
+ * file with no `..` segment is watched, and never a key or credentials file a forged path points at.
+ */
+function watchable(path: string): boolean {
+  return path.endsWith('.md') && !path.split('/').includes('..')
 }
 
 /** The files a skill's directory holds besides its SKILL.md, out of `paths`, relative to the directory. */
