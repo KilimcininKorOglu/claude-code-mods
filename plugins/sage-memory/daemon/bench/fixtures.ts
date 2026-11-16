@@ -121,14 +121,136 @@ export const TOOL_PATHS: ReadonlyArray<{ path: string; want: string | undefined 
   { path: 'src/orders/cart.ts', want: undefined },
 ]
 
-const SERVICES = ['shipping', 'warehouse', 'label printing', 'route planning', 'driver app', 'customs', 'pallet tracking', 'returns desk', 'fleet', 'dock booking', 'carrier sync', 'tariff']
-const ACTIONS = ['retries a failed call', 'batches its writes', 'keeps a local copy of', 'rejects an unknown', 'rounds every', 'sorts each list of', 'locks the row of', 'archives the old', 'checks the size of', 'compresses each']
-const OBJECTS = ['parcel ids', 'pallet weights', 'route stops', 'driver shifts', 'customs codes', 'dock slots', 'carrier quotes', 'tariff tables', 'label files', 'fleet positions']
-const DETAILS = ['before it alerts the night team', 'once per hour', 'in groups of 50', 'and writes a warning to the audit table', 'with a two second pause between tries', 'only on weekdays', 'and keeps the result for one day', 'unless the tenant opted out']
+/** The tags a consolidator gives a topic's memories, the same in every store language. */
+export const TOPIC_TAGS: Readonly<Record<string, readonly string[]>> = {
+  payments: ['payments', 'billing'],
+  auth: ['auth', 'security'],
+  deploy: ['deploy', 'release'],
+  cache: ['cache', 'performance'],
+  search: ['search'],
+  email: ['email', 'notifications'],
+  logging: ['logging', 'monitoring'],
+  mobile: ['mobile'],
+}
 
 /**
- * Filler memories for the larger stores: seeded and generated from parts that share no fact with a
- * target, so they add size and near-topic noise without a second right answer.
+ * Sentences put before a target's fact in the English store, so the fact a question asks about
+ * stands in a later sentence of a long memory, as in a consolidated note.
+ */
+export const LONG_LEAD: Readonly<Record<string, string>> = {
+  p1: 'The payments module was split out of the order service in the spring. Its jobs run in their own worker pool and report to the finance dashboard. ',
+  d2: 'Deploys are driven by the release pipeline and post their progress to the team channel. Each step writes its duration to the build log. ',
+  e2: 'Templates live in the mail service and are rendered with the same layout for every brand. Previews are available on staging for each template. ',
+  l2: 'Monitoring runs on a separate host so that it survives an outage of the app servers. Dashboards show CPU, memory and request rates per service. ',
+}
+
+export type StoreLanguage = 'en' | 'tr' | 'ja'
+
+/** The same memories written in Turkish and Japanese, for the stores where notes and questions share a language. */
+export const TRANSLATED: Readonly<Record<Exclude<StoreLanguage, 'en'>, Readonly<Record<string, string>>>> = {
+  tr: {
+    p1: 'İadeler `src/payments/refund.ts` içindeki `RefundQueue` üzerinden geçer; 500 EUR üstündeki bir iade, sağlayıcıya gönderilmeden önce ikinci bir onaylayıcıyı bekler.',
+    p2: 'Ödeme sağlayıcısının webhook çağrısı `X-Harbor-Signature` header ile doğrulanır; imzasız bir webhook 401 ile cevaplanır ve kaydedilir.',
+    p3: 'Staging ortamında kart ödemeleri sağlayıcının test modunu kullanır; 4111 1111 1111 1111 test kartı orada her zaman başarılı olur.',
+    p4: 'Faturalar her kiracı için ayrı numaralanır ve bir numara, fatura iptal edilse bile tekrar kullanılmaz.',
+    p5: 'Para tutarları kayan noktalı sayı olarak değil, tam sayı alt birim (kuruş) olarak saklanır.',
+    a1: 'Erişim token’ları 15 dakika, yenileme token’ları 30 gün yaşar; ilkini `src/auth/config.ts` içindeki `TOKEN_TTL_SECONDS` belirler.',
+    a2: 'Bir kullanıcı en fazla üç cihazda oturum açabilir; dördüncü cihazda giriş yapınca en eski oturum kapanır.',
+    a3: 'Parolalar argon2id ile hash’lenir; bir parola ya da hash’i asla log’a yazılmaz.',
+    a4: 'Sunuculara SSH erişimi yalnız key ile yapılır; sshd’de parola ile giriş kapalıdır.',
+    a5: 'Yönetici hesapları iki adımlı doğrulama kullanmak zorundadır; giriş sayfası bunu kullanmayan bir yöneticiyi reddeder.',
+    d1: 'Canlı ortama deploy yalnız main dalından ve bütün testler geçtikten sonra yapılır; `make deploy` temiz olmayan bir çalışma ağacını reddeder.',
+    d2: 'Veritabanı migration’ları yeni container’lar başlamadan önce çalışır; başarısız bir migration, eski container’lara dokunmadan deploy’u durdurur.',
+    d3: 'Staging her gece 02:00 UTC’de main dalından otomatik olarak yeniden kurulur.',
+    d4: 'Docker imajları Alpine’den değil, ince Debian tabanından derlenir, çünkü PDF oluşturucu glibc ister.',
+    d5: 'Geri alma önceki imaj etiketini yeniden deploy eder; veritabanı migration’larını asla geri almaz.',
+    c1: 'Rota cache’i Redis’te bir saatlik TTL ile tutulur; bunu `src/cache/redis.ts` içindeki `CACHE_TTL` değiştirir.',
+    c2: 'Bir fiyat değişince ürün cache’i bütünüyle boşaltılmaz, etikete göre temizlenir, çünkü tam boşaltma bir kez veritabanını aşırı yükledi.',
+    c3: 'Görseller CDN üzerinden değişmez cache header’larıyla ve dosya adında içerik hash’iyle sunulur.',
+    c4: 'Oturum verisi CDN’de asla cache’lenmez; oturum cookie’si taşıyan yanıtlar `Cache-Control: private` taşır.',
+    c5: 'Arama sonuçları cache’i kullanıcıya özeldir ve beş dakika sonra sona erer.',
+    s1: 'Arama, sorgu atmadan önce en az üç yazılmış karakter ister; daha kısa girişte son aramalar gösterilir.',
+    s2: 'Arama indeksi her pazar 03:00’te yeniden kurulur; `reindex.ts` tek bir kiracıyı istendiğinde yeniden kurabilir.',
+    s3: 'Arama, tam SKU eşleşmelerini ad eşleşmelerinin üstüne koyar.',
+    s4: 'Ürün adları bunları içerdiği için yaygın kelimeler arama indeksinden çıkarılmaz.',
+    s5: 'Arama sorguları gizlilik için kullanıcı kimliği olmadan kaydedilir.',
+    e1: 'Bildirim e-postaları, sağlayıcının hız sınırının altında kalmak için kuyruktan dakikada en fazla 100 adet çıkar.',
+    e2: 'Her e-posta şablonu İngilizce ve Almanca vardır; eksik bir çeviri boş bir postaya değil, İngilizceye düşer.',
+    e3: 'Geri dönen posta webhook’ları, üç kalıcı geri dönüşten sonra bir adresi teslim edilemez olarak işaretler.',
+    e4: 'Anlık bildirimler kullanıcının saat diliminde 22:00 ile 07:00 arasında gönderilmez.',
+    e5: 'Pazarlama e-postaları açık bir izin ister; işlem e-postaları istemez.',
+    l1: 'Uygulama log’ları 90 gün saklanır ve sonra otomatik olarak silinir.',
+    l2: 'Bir sunucuda disk kullanımı yüzde 85’i geçince bir alarm tetiklenir.',
+    l3: 'Her istisna kendi istek kimliğiyle kaydedilir, böylece bir destek kaydı onu anabilir.',
+    l4: 'Sağlık kontrolleri `/healthz` üzerinde kimlik doğrulamasız cevap verir ve veritabanına asla dokunmaz.',
+    l5: 'Log satırları JSON’dur, her satırda bir nesne vardır ve zaman UTC’dir.',
+    m1: 'Android uygulaması Android 10 ve sonrasını destekler; `app/build.gradle` içinde `minSdk` 29’dur.',
+    m2: 'iOS uygulaması token’larını UserDefaults’ta değil, Keychain’de saklar.',
+    m3: 'Mobil derlemeler CI’da imzalanır; hiçbir geliştirici makinesi yayın key’ini tutmaz.',
+    m4: 'API 426 ile cevap verince uygulama zorunlu güncelleme ekranı gösterir.',
+    m5: 'Çevrimdışı siparişler cihazda kuyruğa alınır ve ağ geri gelince gönderilir.',
+  },
+  ja: {
+    p1: '返金は `src/payments/refund.ts` の `RefundQueue` を通ります。500 EUR を超える返金は、プロバイダーに送る前に2人目の承認者を待ちます。',
+    p2: '決済プロバイダーの webhook は `X-Harbor-Signature` ヘッダーで検証します。署名のない webhook には 401 を返し、ログに残します。',
+    p3: 'ステージングではカード決済にプロバイダーのテストモードを使います。テストカード 4111 1111 1111 1111 はそこで必ず成功します。',
+    p4: '請求書の番号はテナントごとに振られ、請求書を取り消しても番号は再利用しません。',
+    p5: '金額は浮動小数点ではなく、整数の最小単位（セント）で保存します。',
+    a1: 'アクセストークンの有効期間は15分、リフレッシュトークンは30日です。前者は `src/auth/config.ts` の `TOKEN_TTL_SECONDS` で設定します。',
+    a2: '1人のユーザーがセッションを持てる端末は最大3台です。4台目でログインすると最も古いセッションが終了します。',
+    a3: 'パスワードは argon2id でハッシュ化します。パスワードやそのハッシュは決してログに出しません。',
+    a4: 'サーバーへの SSH はキーのみで、sshd ではパスワードでのログインを無効にしています。',
+    a5: '管理者アカウントは二要素認証が必須で、それがない管理者はログイン画面で拒否されます。',
+    d1: '本番へのデプロイは main ブランチから、全テストが通った後にだけ行います。`make deploy` は未コミットの変更がある作業ツリーを拒否します。',
+    d2: 'データベースのマイグレーションは新しいコンテナの起動前に実行し、失敗したマイグレーションは古いコンテナに触れずにデプロイを止めます。',
+    d3: 'ステージングは毎晩 02:00 UTC に main から自動で再デプロイされます。',
+    d4: 'PDF 生成に glibc が必要なため、Docker イメージは Alpine ではなく軽量な Debian ベースでビルドします。',
+    d5: 'ロールバックは前のイメージタグを再デプロイするだけで、データベースのマイグレーションは元に戻しません。',
+    c1: 'ルートキャッシュは Redis に TTL 1時間で保持します。`src/cache/redis.ts` の `CACHE_TTL` で変更します。',
+    c2: '価格が変わったとき、商品キャッシュは全消去せずタグ単位で削除します。以前、全消去でデータベースが過負荷になったためです。',
+    c3: '画像は CDN から不変のキャッシュヘッダーと、ファイル名に含めたコンテンツハッシュ付きで配信します。',
+    c4: 'セッションデータは CDN にキャッシュしません。セッション cookie を持つ応答には `Cache-Control: private` を付けます。',
+    c5: '検索結果のキャッシュはユーザーごとで、5分で期限切れになります。',
+    s1: '検索は3文字以上入力されるまでクエリを送らず、それより短い入力では最近の検索を表示します。',
+    s2: '検索インデックスは毎週日曜 03:00 に再構築します。`reindex.ts` で1つのテナントだけを随時再構築できます。',
+    s3: '検索では SKU の完全一致を名前の一致より上位にします。',
+    s4: '商品名に含まれるため、ストップワードは検索インデックスから除きません。',
+    s5: '検索クエリはプライバシーのため、ユーザー ID なしで記録します。',
+    e1: '通知メールはプロバイダーのレート制限を超えないよう、キューから1分あたり最大100通まで送信します。',
+    e2: 'すべてのメールテンプレートに英語版とドイツ語版があり、翻訳がない場合は空のメールではなく英語版を送ります。',
+    e3: 'バウンスの webhook は、ハードバウンスが3回あったアドレスを配信不能にします。',
+    e4: 'プッシュ通知は、ユーザーのタイムゾーンで 22:00 から 07:00 の間は送りません。',
+    e5: 'マーケティングメールには明示的な同意が必要ですが、取引メールには不要です。',
+    l1: 'アプリケーションのログは90日間保存した後、自動で削除します。',
+    l2: 'サーバーのディスク使用率が85パーセントを超えるとアラートが出ます。',
+    l3: 'すべての例外はリクエスト ID と一緒に記録し、サポートのチケットで引用できるようにします。',
+    l4: 'ヘルスチェックは `/healthz` で認証なしに応答し、データベースには一切触れません。',
+    l5: 'ログは1行に1つの JSON オブジェクトで、時刻は UTC です。',
+    m1: 'Android アプリは Android 10 以降に対応し、`app/build.gradle` の `minSdk` は 29 です。',
+    m2: 'iOS アプリはトークンを UserDefaults ではなく Keychain に保存します。',
+    m3: 'モバイルのビルドは CI で署名し、開発者のマシンはリリース用のキーを持ちません。',
+    m4: 'API が 426 を返すと、アプリは強制アップデート画面を表示します。',
+    m5: 'オフラインの注文は端末のキューに入れ、ネットワークが戻ったときに送信します。',
+  },
+}
+
+/** Each topic's parts for filler memories: what a sibling note talks about, never a target's fact. */
+const TOPIC_PARTS: Readonly<Record<string, { subjects: readonly string[]; facts: readonly string[] }>> = {
+  payments: { subjects: ['The payout report', 'The tax export', 'The chargeback list', 'The settlement job'], facts: ['is generated every {d} at {h}:00', 'covers tenant group {n}', 'is kept in the finance bucket for {n} months', 'is checked by the finance team on {d}'] },
+  auth: { subjects: ['The audit of role changes', 'The invite link', 'The API key rotation', 'The login rate limit'], facts: ['runs every {d} at {h}:00', 'applies to tenant group {n}', 'allows {n} attempts per hour', 'is reported to the security team on {d}'] },
+  deploy: { subjects: ['The canary stage', 'The build cache', 'The release notes job', 'The preview environment'], facts: ['runs every {d} at {h}:00', 'keeps the last {n} builds', 'is created for branch group {n}', 'is cleaned up on {d}'] },
+  cache: { subjects: ['The warm-up job', 'The edge rule', 'The fragment cache', 'The thumbnail cache'], facts: ['runs every {d} at {h}:00', 'covers region group {n}', 'holds at most {n} thousand entries', 'is reviewed on {d}'] },
+  search: { subjects: ['The synonym list', 'The autocomplete feed', 'The facet counter', 'The typo dictionary'], facts: ['is refreshed every {d} at {h}:00', 'covers catalog group {n}', 'keeps the top {n} entries', 'is reviewed by the catalog team on {d}'] },
+  email: { subjects: ['The digest mail', 'The receipt mail', 'The unsubscribe report', 'The domain warm-up'], facts: ['goes out every {d} at {h}:00', 'is sent to segment {n}', 'is capped at {n} thousand mails a day', 'is reviewed on {d}'] },
+  logging: { subjects: ['The error budget report', 'The trace sampler', 'The uptime report', 'The slow query digest'], facts: ['is sent every {d} at {h}:00', 'covers service group {n}', 'samples {n} percent of requests', 'is reviewed on {d}'] },
+  mobile: { subjects: ['The crash report digest', 'The beta channel', 'The screenshot test run', 'The store listing update'], facts: ['runs every {d} at {h}:00', 'covers device group {n}', 'keeps the last {n} builds', 'is published on {d}'] },
+}
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+/**
+ * Filler memories for the larger stores, seeded and spread over the eight topics: each states a
+ * fact about some other part of a topic, so a larger store holds more near neighbours of every
+ * target without a second right answer.
  */
 export function filler(count: number, seed = 7): Note[] {
   let state = seed
@@ -136,13 +258,17 @@ export function filler(count: number, seed = 7): Note[] {
     state = (state * 1103515245 + 12345) % 2147483648
     return state % n
   }
+  const topics = Object.keys(TOPIC_PARTS)
   const seen = new Set<string>()
   const notes: Note[] = []
   while (notes.length < count) {
-    const text = `The ${SERVICES[next(SERVICES.length)]} service ${ACTIONS[next(ACTIONS.length)]} ${OBJECTS[next(OBJECTS.length)]} ${DETAILS[next(DETAILS.length)]}; run ${next(900) + 100}.`
+    const topic = topics[next(topics.length)]!
+    const parts = TOPIC_PARTS[topic]!
+    const fact = parts.facts[next(parts.facts.length)]!.replace('{d}', DAYS[next(DAYS.length)]!).replace('{h}', String(next(24)).padStart(2, '0')).replace('{n}', String(next(97) + 2))
+    const text = `${parts.subjects[next(parts.subjects.length)]} ${fact}.`
     if (seen.has(text)) continue
     seen.add(text)
-    notes.push({ key: `f${notes.length}`, topic: 'filler', text })
+    notes.push({ key: `f${notes.length}`, topic: `filler-${topic}`, text })
   }
   return notes
 }
