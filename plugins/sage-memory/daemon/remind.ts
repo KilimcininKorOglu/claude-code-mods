@@ -5,7 +5,7 @@ import { searchHybrid } from './hybrid.ts'
 import type { Op } from './op.ts'
 import { descending } from './order.ts'
 import { findRelated } from './related.ts'
-import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
+import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, promptRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
 import { memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
 import { selectMemories } from './rows.ts'
 import { REMINDED_POLICY, type Visibility } from './search.ts'
@@ -247,7 +247,7 @@ export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking
   const cosines = new Map(hits.map(hit => [hit.memory.id, hit.vectorScore ?? 0]))
   const ranked = hits
     .map(hit => {
-      const relevance = hitRelevance(hit, request.query)
+      const relevance = promptRelevance(hit, request.query, readers.semantic !== undefined)
       return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
     })
     .sort(byMeaning(cosines))

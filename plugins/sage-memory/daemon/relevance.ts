@@ -224,6 +224,29 @@ export function hitRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, que
   return { strength: Math.max(lexical.strength, semantic.strength), reasons: [...lexical.reasons, ...semantic.reasons] }
 }
 
+/**
+ * The highest cosine an unrelated question reached on this model: 0.33 to 0.40 for 10 questions in each
+ * of English, Turkish, German, Russian, Japanese and Chinese against the same memories. A memory whose
+ * meaning stays at or under it shares no topic with the prompt, whatever words they share.
+ */
+export const NOISE_COSINE = 0.4
+
+/**
+ * A prompt hit's relevance. With embeddings the meaning decides; shared words count only for a memory
+ * whose meaning is above the noise band, and an anchor the prompt names (a file, a symbol, a command)
+ * counts alone. Words alone admitted a memory in any language they happened to match: in 57 measured
+ * prompts, 230 of 253 unwanted memories came with word evidence. Without embeddings the words are the
+ * only evidence there is.
+ */
+export function promptRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string, withMeaning: boolean): Relevance {
+  if (!withMeaning) return hitRelevance(hit, query)
+  const lexical = memoryQueryRelevance(hit.memory, query)
+  const isNamed = lexical.reasons.some(reason => reason.startsWith('query:exact-'))
+  const named = isNamed || (hit.vectorScore ?? 0) > NOISE_COSINE ? lexical : NONE
+  const semantic = memorySemanticRelevance(hit.vectorScore)
+  return { strength: Math.max(named.strength, semantic.strength), reasons: [...named.reasons, ...semantic.reasons] }
+}
+
 function structuralKeys(memory: Memory): Set<string> {
   const keys = new Set<string>()
   for (const anchor of memory.anchors) {

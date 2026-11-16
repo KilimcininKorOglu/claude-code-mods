@@ -357,6 +357,45 @@ describe('reminders through the vector channel', () => {
     w.close()
   })
 
+  test('with embeddings, shared words alone bring no memory to a prompt, while a named anchor still does', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const worded = (await w.remember({ text: 'The staging deploy banner shows on every preview page', importance: 0.9, tags: ['staging', 'deploy'] })).memory
+    const named = (await w.remember({ text: 'createPool retries a lost socket three times', anchors: [{ type: 'symbol', path: 'src/net.ts', symbol: 'createPool' }] })).memory
+    fake.vectors.set(worded.text, toward(0, 1))
+    fake.vectors.set(named.text, toward(2, 1))
+    await embeddings.afterWrite(w.project, [worded, named])
+    const prompt = 'staging deploy createPool'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.3
+    vector[2] = 0.3
+    vector[4] = Math.sqrt(1 - 0.18)
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [named.id], 'two shared words and tags at a cosine of 0.30 are no relation; the named symbol is')
+    w.close()
+  })
+
+  test('shared words bring a memory to a prompt when its meaning is above the noise band', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const near = (await w.remember({ text: 'The staging deploy banner shows on every preview page', importance: 0.9, tags: ['staging', 'deploy'] })).memory
+    fake.vectors.set(near.text, toward(0, 1))
+    await embeddings.afterWrite(w.project, [near])
+    const prompt = 'staging deploy'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.45
+    vector[4] = Math.sqrt(1 - 0.45 * 0.45)
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id], 'a 0.45 meaning under the semantic floor still lets two shared words and tags count')
+    w.close()
+  })
+
   test('a tool reminder takes a vector hit through the relation floor only from the pivot up', async () => {
     const w = world()
     const fake = fakeRuntime()
