@@ -1,25 +1,25 @@
 # tool-coach
 
-Var olmayan bir dosyanın Read'i başarısız olur, model aynı Read'i tekrar tekrar ister: her turn bir isteğe mal olur ve aynı hatayı getirir. Bu mod, modelin az önce başarısız olan bir tool çağrısını aynı input ile tekrarlamasını durdurur. Bir dosya ya da bir komut bir şeyi değiştirene kadar çağrı yeniden çalışmaz; model bunun yerine daha önce aldığı hatayı okur.
+Var olmayan bir dosyayı okuyan bir Read çağrısı başarısız olur. Model ardından aynı Read çağrısını tekrar tekrar yapar. Her tekrar bir isteğe mal olur ve aynı hatayı getirir. Bu mod, modelin az önce başarısız olan bir tool çağrısını aynı input ile tekrarlamasını engeller. Bir dosya ya da bir komut bir şeyi değiştirene kadar çağrı yeniden çalıştırılmaz. Model bunun yerine daha önce aldığı hatayı okur.
 
 ## Ne yapar
 
-1. Mod her tool çağrısını hook'lar: yerleşik tool'lar, MCP tool'ları ve subagent'ların çağrıları. Bash dışarıda kalır, çünkü başarısız bir komut çoğu zaman haklı bir nedenle yeniden çalışır; örneğin bir düzeltmeden sonraki test.
-2. Sonucu hata olan bir çağrı hatasıyla birlikte saklanır. Bu, tool'un kendi bildirdiği hataları (`File does not exist`, `String to replace not found`, bir MCP hatası) ve engine'in reddettiği input'u (`InputValidationError`) kapsar.
-3. Aynı tool ve aynı input ile gelen aynı çağrı çalışmaz. Model sonuç yerine şunu okur:
+1. Mod her tool çağrısını izler: yerleşik tool'lar, MCP tool'ları ve subagent'ların çağrıları. Bash bu kapsamın dışındadır, çünkü başarısız bir komutun yeniden çalıştırılması çoğu zaman doğru bir adımdır. Örnek: bir düzeltmeden sonra testin yeniden çalıştırılması.
+2. Sonucu hata olan bir çağrı, hatasıyla birlikte saklanır. Bu kapsamda tool'un kendi bildirdiği hatalar (`File does not exist`, `String to replace not found`, bir MCP hatası) ve engine'in reddettiği input'lar (`InputValidationError`) vardır.
+3. Aynı tool ve aynı input ile gelen tekrar çağrı çalıştırılmaz. Model sonuç yerine şu metni okur:
 
        this exact Read call failed a moment ago, and no file or command has changed anything since, so it would fail the same way. Its error was:
        File does not exist. Note: your current working directory is /w.
        Read the error, change the input, and call again.
 
-   Hata, modelin okuduğu hatadır ve 300 karakterde kesilir. İki çağrının input'u, key'lerin sırası ne olursa olsun aynı değerleri taşıyorsa bu iki çağrı aynıdır. `description` alanı yalnız çağrıyı etiketler, bu yüzden karşılaştırılmaz. Ana loop ve her subagent kendi başarısız çağrılarını ayrı tutar.
-4. Başka bir input ile gelen çağrı her zamanki gibi çalışır.
-5. Başarılı bir Edit, Write, NotebookEdit ya da Bash çağrısı saklanan bütün çağrıları siler, çünkü başarısız çağrının ihtiyacını karşılamış olabilir: bir dosya artık vardır ya da bir komut bir sunucu başlatmıştır. Her yeni turn da onları siler, çünkü sen bir şeyi elle değiştirmiş olabilirsin; `/tool-coach on` ya da `off` da siler.
-6. Aynı anda bir satır yazılır, böylece hangi çağrının reddedildiğini görürsün. [sidebar](../sidebar) açıksa satır onun stream'ine bir kayıt olarak gider: tool adı kırmızı, geri kalanı soluk. Sidebar kapalıysa satır transcript'e düşer:
+   Metindeki hata, modelin daha önce okuduğu hatadır ve 300 karakterde kesilir. İki çağrının input'u, key sırası ne olursa olsun aynı değerleri taşıyorsa iki çağrı aynı sayılır. `description` alanı yalnız çağrıyı etiketler, bu yüzden karşılaştırmaya katılmaz. Ana loop ve her subagent kendi başarısız çağrılarını ayrı tutar.
+4. Farklı bir input ile gelen çağrı her zamanki gibi çalışır.
+5. Başarılı bir Edit, Write, NotebookEdit ya da Bash çağrısı saklanan bütün çağrıları siler. Bunun nedeni, bu çağrının başarısız çağrının ihtiyacını karşılamış olabilmesidir: bir dosya artık vardır ya da bir komut bir sunucu başlatmıştır. Her yeni turn da saklanan çağrıları siler, çünkü bir şeyi elle değiştirmiş olabilirsiniz. `/tool-coach on` ve `off` da bunları siler.
+6. Aynı anda bir satır yazılır. Bu sayede hangi çağrının reddedildiğini görürsünüz. [sidebar](../sidebar) açıksa satır sidebar'ın stream'ine bir kayıt olarak yazılır: tool adı kırmızı, satırın geri kalanı soluk renktedir. Sidebar kapalıysa satır transcript'e yazılır:
 
        tool-coach: Read call repeated after it failed, not run
 
-Canlı denemede model var olmayan bir dosyayı okudu, sonra aynı Read'i yeniden istedi. İkinci çağrı çalışmadı ve model daha önce aldığı hatayı bildirdi. Bir Write dosyayı oluşturduktan sonra aynı Read çalıştı ve metni döndürdü. Başarısız bir Bash komutu istendiği gibi yeniden çalıştı.
+Canlı denemede model var olmayan bir dosyayı okumaya çalıştı ve ardından aynı Read çağrısını tekrarladı. İkinci çağrı çalıştırılmadı ve model daha önce aldığı hatayı bildirdi. Bir Write çağrısı dosyayı oluşturduktan sonra aynı Read çalıştı ve dosyanın metnini döndürdü. Başarısız bir Bash komutu istendiği gibi yeniden çalıştı.
 
 ## Komut
 
@@ -31,36 +31,36 @@ Canlı denemede model var olmayan bir dosyayı okudu, sonra aynı Read'i yeniden
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install tool-coach@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
+Function hook'lar early access aşamasında. Claude Code 2.1.288 ve sonrası onları varsayılan olarak yükler, bu yüzden açmanız gereken bir ayar yoktur.
 
 ## Kurulumdan sonra
 
-1. Claude Code'u yeniden başlat.
+1. Claude Code'u yeniden başlatın.
 
-## Nereye uzanır
+## Nelere erişir
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
     ❯ ./register.ts hooks: session.start, command.run{command=tool-coach}, turn.start, tool.call
     ❯ ./register.ts calls: $.command.register, $.sidebar.set (via toPerson), $.store.get (via readSettings), $.store.set (via runCommand), $.ui.log (via toPerson)
 
-Reach L0: çizer ve hatırlar.
+Reach L0: yalnız ekrana yazar ve bellekte tutar.
 
-    1. Okur:        her tool çağrısının tool adını, input'unu ve sonucunu
-    2. Çalıştırır:  hiçbir şey
-    3. Gönderir:    başarısız bir çağrı aynen tekrarlanınca modele bir deny metni, sidebar'a ya da transcript'e bir satır; makineden hiçbir şey çıkmaz
-    4. Saklar:      $.store içinde açık/kapalı ayarını; başarısız çağrılar bir değişikliğe ya da sonraki turn'e kadar bellekte durur
-    5. Düşman girdi: bir çağrının input'u ve hatası yalnız karşılaştırılır ve modele geri alıntılanır, hiçbir zaman çalıştırılmaz ya da açılmaz
+    1. Okur:         her tool çağrısının tool adını, input'unu ve sonucunu
+    2. Çalıştırır:   hiçbir şey
+    3. Gönderir:     başarısız bir çağrı aynen tekrarlandığında modele bir deny metni; sidebar'a ya da transcript'e bir satır; makineden dışarı hiçbir şey çıkmaz
+    4. Saklar:       açık/kapalı ayarını $.store içinde; başarısız çağrılar bir değişikliğe ya da sonraki turn'e kadar bellekte durur
+    5. Düşman girdi: bir çağrının input'u ve hatası yalnız karşılaştırılır ve modele alıntı olarak geri verilir; hiçbir zaman çalıştırılmaz ya da açılmaz
 
 ## Sınırlar
 
-- Mod bir tool'un input schema'sını okuyamaz, bu yüzden ilk çağrıdan önce input'u kontrol etmez. Schema'yı engine kendisi kontrol eder ve `InputValidationError` döner; mod tekrarı durdurur.
-- Mod'un görmediği bir değişiklik, örneğin başka bir programın yazdığı bir dosya, saklanan çağrıları silmez. Sonraki turn siler.
-- Başarısız bir çağrı, dosya ya da komut dışındaki bir nedenle aynı input ile sonradan başarılı olabilir; örneğin bir MCP sunucusu yeniden bağlanmıştır. Model o zaman başka bir input kullanmalı ya da sonraki turn'ü beklemelidir.
+- Mod bir tool'un input schema'sını okuyamaz, bu yüzden ilk çağrıdan önce input'u kontrol etmez. Schema'yı engine kendisi kontrol eder ve `InputValidationError` döndürür. Mod yalnız tekrarı engeller.
+- Modun görmediği bir değişiklik, örneğin başka bir programın yazdığı bir dosya, saklanan çağrıları silmez. Saklanan çağrılar sonraki turn'de silinir.
+- Başarısız bir çağrı, dosya ya da komut dışındaki bir nedenle aynı input ile sonradan başarılı olabilir. Örnek: yeniden bağlanan bir MCP sunucusu. Bu durumda modelin farklı bir input kullanması ya da sonraki turn'ü beklemesi gerekir.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make lint        # complexity sınırı 10; aşılırsa build başarısız olur
     make validate
     make test        # claude plugin test
