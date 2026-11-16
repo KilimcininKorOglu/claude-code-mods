@@ -26,6 +26,17 @@ describe('search', () => {
     w.close()
   })
 
+  test('a two-letter word finds only itself, never every longer word it starts', async () => {
+    const w = world()
+    const never = (await w.remember({ text: 'Never deploy a build on a Friday evening' })).memory
+    const ci = (await w.remember({ text: 'The CI job runs lint before the unit tests' })).memory
+    // "ne" and "bu" are Turkish words; as prefixes they matched "never" and "build".
+    assert.deepEqual(searchStore(w.project.db, 'ne bu', SHOWN, 10), [], 'a Turkish two-letter word matches no English word it begins')
+    assert.deepEqual(searchStore(w.project.db, 'ci', SHOWN, 10).map(m => m.id), [ci.id], 'a two-letter term that is a word still finds its memory')
+    assert.deepEqual(searchStore(w.project.db, 'deplo', SHOWN, 10).map(m => m.id), [never.id], 'a longer word still matches as a prefix')
+    w.close()
+  })
+
   test("a reminder never carries a never memory, an audience's memory, or another session's", async () => {
     const w = world()
     await w.remember({ text: 'Pool sizing is private to the operators', contextPolicy: 'never' })
