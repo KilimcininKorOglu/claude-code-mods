@@ -15,7 +15,7 @@
        config-parse: 1 file(s) still do not parse: package.json. Fix them.
 
    Bu not her turn için bir kez gönderilir, her prompt için değil. Bu not olmasaydı bulgu yalnız düzenleme anında bir kez bildirilir, ardından pane'de kalır ve model onu unuturdu. Size yeni bir satır gösterilmez, çünkü pane aynı bulguyu zaten gösterir.
-8. `deny` modunda bir dosya parse edilemediği sürece `git commit`, `git push` ve `git merge` komutları da durdurulur. Mod bir komutu durdurmadan önce açık bütün dosyaları yeniden parse eder. Model dosyaları düzelttiyse komut kendiliğinden çalışır. Bir `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`). Commit açık dosyaların hiçbirini içermiyorsa çalışır ve kaç bulgunun hâlâ açık olduğu tek bir satırla bildirilir. `push` ve `merge` için okunacak bir index yoktur. Bu yüzden bu komutlarda bütün bulgular geçerlidir. Bu kontrolü atlamanın bir yolu yoktur: `--dry-run`, `--help` ve `-h` çalışır, ancak bozuk bir dosyanın gerçek commit'i dosya düzeltilene kadar bekler. Varsayılan mod `note` modudur ve hiçbir işlemi durdurmaz.
+8. `deny` modunda bir dosya parse edilemediği sürece `git commit`, `git push` ve `git merge` komutları da durdurulur. Mod bir komutu durdurmadan önce açık bütün dosyaları yeniden parse eder. Model dosyaları düzelttiyse komut kendiliğinden çalışır. Bir `git commit` yalnız kendi dosyalarından sorumludur: mod index'i okur (`git diff --cached --name-only -z`). Commit açık dosyaların hiçbirini içermiyorsa çalışır ve kaç bulgunun hâlâ açık olduğu tek bir satırla bildirilir. `push` ve `merge` için okunacak bir index yoktur. Bu yüzden bu komutlarda bütün bulgular geçerlidir. Bu gate'i atlamanın bir yolu yoktur: `--dry-run`, `--help` ve `-h` çalışır, ancak bozuk bir dosyanın gerçek commit'i dosya düzeltilene kadar bekler. Varsayılan mod `note` modudur ve hiçbir işlemi durdurmaz.
 
 Canlı denemede sonunda fazladan bir virgül bulunan JSON dosyası için not gönderildi (`Property name must be a string literal`). `a: 1: 2` ile bozulan YAML dosyası için python hatası bildirildi. Ardından yapılan `a: 1` Write çağrısı bulguyu `parses as YAML again` ile kapattı.
 
@@ -56,8 +56,8 @@ Reach L2: dosya okur ve bir process çalıştırır.
 ## Sınırlar
 
 - Kontrol, yazma işleminden sonra çalışır. Bu yüzden bozuk dosya, bir sonraki düzenleme onu düzeltene kadar diskte kalır. Hiçbir düzenleme reddedilmez. `deny` modunda yalnız commit, push ve merge durdurulur.
-- `deny` modunu atlamanın bir yolu yoktur. Bir bulgu düzeltilemiyorsa kontrolü `/config-parse mode note` ile siz kapatırsınız.
-- Modun `git commit|push|merge` olarak tanıyamadığı bir wrapper, alias ya da script ile çalıştırılan bir git komutu kontrolden geçer.
+- `deny` modunu atlamanın bir yolu yoktur. Bir bulgu düzeltilemiyorsa gate'i `/config-parse mode note` ile siz kapatırsınız.
+- Modun `git commit|push|merge` olarak tanıyamadığı bir wrapper, alias ya da script ile çalıştırılan bir git komutu gate'ten geçer.
 - `git commit -a`, `-am` ve `--` işaretinden sonra pathspec verilen commit'ler index'e göre daraltılmaz, çünkü bu komutlar index'te henüz olmayan dosyaları da commit eder. Bu commit'lerde açık bulguların hepsi geçerlidir.
 - Index, komut çalışmadan önce okunur. Dosyaları bu okuma ile komutun çalışması arasında değişen bir commit, okuma anındaki index'e göre ölçülür.
 - `.env` satırının yalnız biçimi kontrol edilir. Yanlış bir değer, eksik bir tırnak ya da tekrarlanan bir key bulgu sayılmaz.
