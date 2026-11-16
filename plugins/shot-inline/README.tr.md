@@ -17,7 +17,7 @@ iTerm2'nin kendi inline image protokolü vardır, ancak engine bu protokolü kul
 
 Daha ince sextant (2'ye 3) ve octant (2'ye 4) karakterleri kullanılamaz. Bu karakterler Basic Multilingual Plane dışındadır ve `Raster` onları reddeder (2.1.283 üzerinde ölçüldü: `cell 42 holds code point 118089, beyond the Basic Multilingual Plane; the engine drew its own`).
 
-Canlı denemede bir PNG'yi ve bir JPG'yi okuyan `Read` çağrılarının her biri resmi kendi satırının altına çizdi. JPG bir `sips` kopyası üzerinden çizildi ve debug log'da reddedilmiş bir ağaç yoktu. kitty protokolü olmayan tmux'ta aynı `Read` çağrısı, 23 foreground ve 18 background rengiyle 24 satır half-block hücre çizdi. 2.1.283 üzerinde 320'ye 200 pixel'lik bir test resmi tmux'ta 40'a 13 quadrant hücre olarak çizildi ve reddedilmiş bir ağaç olmadı.
+Canlı denemede bir PNG'yi ve bir JPG'yi okuyan `Read` çağrılarının her biri resmi kendi satırının altına çizdi. JPG bir `sips` kopyası üzerinden çizildi ve debug log'da reddedilmiş bir render tree yoktu. kitty protokolü olmayan tmux'ta aynı `Read` çağrısı, 23 foreground ve 18 background rengiyle 24 satır half-block hücre çizdi. 2.1.283 üzerinde 320'ye 200 pixel'lik bir test resmi tmux'ta 40'a 13 quadrant hücre olarak çizildi ve reddedilmiş bir render tree olmadı.
 
 ## Komut
 
