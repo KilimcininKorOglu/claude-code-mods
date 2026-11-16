@@ -156,6 +156,15 @@ describe('a reminder with the prompt', () => {
     assert.ok(ranking.rejected.every(r => r.gate === 'belowScore'))
     w.close()
   })
+
+  test('without embeddings, a default memory one shared word relates to stays out', async () => {
+    const w = world()
+    const loose = (await w.remember({ text: 'A staging banner shows on every page of the preview site' })).memory
+    const ranking = rankForPrompt(w.readers('s1', 'main'), { query: 'banner', limit: 8 })
+    assert.deepEqual(ranking.candidates, [], 'words are the only evidence here, so the score still weighs how important the memory is')
+    assert.equal(ranking.rejected.find(r => r.id === loose.id)?.gate, 'belowScore')
+    w.close()
+  })
 })
 
 describe('what a subagent starts with', () => {

@@ -86,13 +86,18 @@ function toolScoreGate(item: Ranked): Rejection | undefined {
 }
 
 /**
- * A prompt reminder holds back on relevance and on the importance floor alone. A score gate held back
- * 22 of 112 wanted memories of 57 measured prompts: a memory of the default importance (0.6) without an
- * anchor scored 0.647 at the strongest meaning match, under the 0.65 gate, so it never went with a prompt.
+ * A prompt reminder holds back on relevance, then, with embeddings, on the importance floor alone. A
+ * score gate held back 22 of 112 wanted memories of 57 measured prompts: a memory of the default
+ * importance (0.6) without an anchor scored 0.647 at the strongest meaning match, under the 0.65 gate.
+ * Without embeddings shared words are the only evidence, and the score keeps a weakly related default
+ * memory out, as before.
  */
-function turnScoreGate(item: Ranked): Rejection | undefined {
-  if (item.relationStrength < TURN_MIN_RELEVANCE) return rejection(item, 'belowScore', `relevance ${fixed(item.relationStrength)} is below ${fixed(TURN_MIN_RELEVANCE)}`)
-  return item.memory.importance < MIN_IMPORTANCE ? rejection(item, 'belowScore', `importance ${fixed(item.memory.importance)} is below ${fixed(MIN_IMPORTANCE)}`) : undefined
+function turnScoreGate(withMeaning: boolean): Gate {
+  return item => {
+    if (item.relationStrength < TURN_MIN_RELEVANCE) return rejection(item, 'belowScore', `relevance ${fixed(item.relationStrength)} is below ${fixed(TURN_MIN_RELEVANCE)}`)
+    if (!withMeaning) return item.score < MIN_SCORE ? rejection(item, 'belowScore', `score ${fixed(item.score)} is below ${fixed(MIN_SCORE)}`) : undefined
+    return item.memory.importance < MIN_IMPORTANCE ? rejection(item, 'belowScore', `importance ${fixed(item.memory.importance)} is below ${fixed(MIN_IMPORTANCE)}`) : undefined
+  }
 }
 
 /** Runs each candidate, best first, through the gates in order; the first gate that holds it back says why. */
@@ -246,7 +251,7 @@ export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking
       return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
     })
     .sort(byMeaning(cosines))
-  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
+  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate(readers.semantic !== undefined), remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
   return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
 }
 
