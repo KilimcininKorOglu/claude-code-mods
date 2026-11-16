@@ -93,6 +93,48 @@ export const NAMED: ReadonlyArray<{ want: string; lang: Language; text: string }
   { want: 'm1', lang: 'tr', text: 'minSdk neden 29?' },
 ]
 
+/**
+ * A project name many memories hold, as a real store's own name sits in many of its notes: these
+ * keys end their text with it, so a name that singles out nothing can be tested.
+ */
+export const SHARED_NAME = 'harbor-api'
+export const SHARED_NAME_KEYS: ReadonlySet<string> = new Set(['p3', 'p4', 'p5', 'a3', 'a4', 'a5', 'd3', 'd4', 'd5'])
+
+/** A second anchor on a file name another note's anchor also holds, under another path. */
+export const EXTRA_ANCHORS: Readonly<Record<string, Anchor[]>> = { m3: [{ type: 'file', path: 'app/config.ts' }] }
+
+/** Prompts with a name several memories hold: `want` is one of them, `also` the others the name points at. */
+export const SHARED: ReadonlyArray<{ want: string | undefined; also: readonly string[]; text: string }> = [
+  { want: undefined, also: [...SHARED_NAME_KEYS], text: `What does ${SHARED_NAME} do on staging?` },
+  { want: 'a1', also: ['m3'], text: 'What is set in config.ts?' },
+]
+
+/** Questions in a store's own language whose words carry a suffix or stand inside a run of Japanese text. */
+export const IN_LANGUAGE: ReadonlyArray<{ store: 'tr' | 'ja'; want: string; text: string }> = [
+  { store: 'tr', want: 'l1', text: 'logların saklanma süresi ne kadar?' },
+  { store: 'tr', want: 'a3', text: 'parolaları nasıl saklıyoruz?' },
+  { store: 'tr', want: 'd2', text: 'migrationlar ne zaman çalışıyor?' },
+  { store: 'ja', want: 'l1', text: 'ログは何日間保存しますか' },
+  { store: 'ja', want: 'l2', text: 'ディスク使用率のアラートはいつですか' },
+]
+
+const LOG_LINES = Array.from({ length: 40 }, (_, i) => `2026-11-16T10:${String(i).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i * 17} in ${100 + i}ms`).join('\n')
+
+/** Long pasted prompts: a log excerpt with a question at its end. */
+export const LONG: ReadonlyArray<{ want: string; text: string }> = [
+  { want: 'a1', text: `${LOG_LINES}\nSessions drop after a quarter of an hour. Is TOKEN_TTL_SECONDS too low?` },
+  { want: 'm1', text: `${LOG_LINES}\nThe crash reports come from old phones. Why is minSdk 29?` },
+  { want: 'p1', text: `${LOG_LINES}\nBu log’a göre büyük iadeler bekliyor. Büyük bir para iadesi için kimin onayı gerekiyor?` },
+]
+
+/** Tasks a subagent starts with. */
+export const SUBAGENT_TASKS: ReadonlyArray<{ want: string; text: string }> = [
+  { want: 'p1', text: 'Investigate why refunds above the limit wait before they reach the provider, and report what decides it.' },
+  { want: 'p2', text: 'Ödeme sağlayıcısından gelen webhook çağrılarının nasıl doğrulandığını incele ve rapor ver.' },
+  { want: 'a1', text: 'Find where TOKEN_TTL_SECONDS is set and change it to 20 minutes.' },
+  { want: 'l2', text: 'サーバーのディスクが一杯になったときの警告の条件を調べてください。' },
+]
+
 /** Questions about something the project's memories do not cover. */
 export const UNRELATED: Readonly<Record<Language, readonly string[]>> = {
   en: ['What is a good recipe for lentil soup?', 'Who won the football match last night?', 'Will it rain in Berlin tomorrow?', 'Write a short poem about the sea.', 'When was the Roman Empire founded?', 'How do I teach my dog to sit?', 'What is the capital of Australia?', 'How many calories are in a banana?'],
@@ -119,6 +161,8 @@ export const TOOL_PATHS: ReadonlyArray<{ path: string; want: string | undefined 
   { path: 'src/search/reindex.ts', want: 's2' },
   { path: 'app/build.gradle', want: 'm1' },
   { path: 'src/orders/cart.ts', want: undefined },
+  // No memory is anchored here: only the meaning of the path's words can find s3.
+  { path: 'src/search/sku-ranking.ts', want: 's3' },
 ]
 
 /** The tags a consolidator gives a topic's memories, the same in every store language. */

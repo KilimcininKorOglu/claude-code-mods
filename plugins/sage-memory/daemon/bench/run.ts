@@ -9,7 +9,7 @@
  */
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { CHOOSE, LANGUAGES, LONG_LEAD, NAMED, NOTES, QUESTIONS, TOOL_PATHS, TOPICLESS, TOPIC_TAGS, TRANSLATED, UNRELATED, filler, type Language, type Note, type StoreLanguage } from './fixtures.ts'
+import { CHOOSE, EXTRA_ANCHORS, IN_LANGUAGE, LANGUAGES, LONG, LONG_LEAD, NAMED, NOTES, QUESTIONS, SHARED, SHARED_NAME, SHARED_NAME_KEYS, SUBAGENT_TASKS, TOOL_PATHS, TOPICLESS, TOPIC_TAGS, TRANSLATED, UNRELATED, filler, type Language, type Note, type StoreLanguage } from './fixtures.ts'
 
 type Memory = { id: string; scope: string }
 type Ranked = { memory: Memory }
@@ -31,7 +31,7 @@ const wordsOnly = args.includes('--words-only')
 const why = args.includes('--why')
 
 const { world } = await import(join(build, 'daemon/test/world.ts'))
-const { rankForPrompt, rankForTools } = await import(join(build, 'daemon/remind.ts'))
+const { rankForPrompt, rankForTools, rankForSubagent } = await import(join(build, 'daemon/remind.ts'))
 const { createEmbeddings } = await import(join(build, 'daemon/embeddings.ts'))
 const { transformersRuntime } = await import(join(build, 'daemon/embedder.ts'))
 const { layoutOf } = await import(join(build, 'hooks/shared/layout.ts'))
@@ -39,8 +39,8 @@ const hooks = await import(join(build, 'hooks/remind.ts'))
 
 /** A note as the store under test holds it: translated, or in English with its long lead. */
 function textOf(note: Note): string {
-  if (storeLanguage !== 'en') return TRANSLATED[storeLanguage][note.key] ?? note.text
-  return (LONG_LEAD[note.key] ?? '') + note.text
+  const text = storeLanguage === 'en' ? (LONG_LEAD[note.key] ?? '') + note.text : (TRANSLATED[storeLanguage][note.key] ?? note.text)
+  return SHARED_NAME_KEYS.has(note.key) ? `${text} (${SHARED_NAME})` : text
 }
 
 const runtime = transformersRuntime(layoutOf(join(homedir(), '.claude', 'sage-memory')))
@@ -49,7 +49,8 @@ const embeddings = createEmbeddings(runtime)
 const notes: Note[] = [...NOTES, ...filler(Math.max(0, size - NOTES.length))]
 const keyOf = new Map<string, Note>()
 for (const note of notes) {
-  const written = await w.remember({ text: textOf(note), anchors: note.anchors, tags: [...(TOPIC_TAGS[note.topic] ?? [])], distinct: true })
+  const anchors = [...(note.anchors ?? []), ...(EXTRA_ANCHORS[note.key] ?? [])]
+  const written = await w.remember({ text: textOf(note), anchors, tags: [...(TOPIC_TAGS[note.topic] ?? [])], distinct: true })
   keyOf.set(written.memory.id, note)
 }
 if (!wordsOnly) await embeddings.fill(w.project)
@@ -114,7 +115,9 @@ async function bestCosine(texts: readonly string[]): Promise<number> {
 }
 
 const fresh = (): Score => ({ asked: 0, hit: 0, sibling: 0, other: 0 })
-const groups = { choose: fresh(), accept: fresh(), same: fresh(), named: fresh(), unrelated: fresh(), topicless: fresh(), tool: fresh() }
+const groups = { choose: fresh(), accept: fresh(), same: fresh(), named: fresh(), shared: fresh(), suffixed: fresh(), long: fresh(), subagent: fresh(), unrelated: fresh(), topicless: fresh(), tool: fresh() }
+/** Notes the shared-name prompts sent that the name points at, besides the one wanted. */
+let sharedAlso = 0
 const byLanguage = Object.fromEntries(LANGUAGES.map(lang => [lang, fresh()])) as Record<Language, Score>
 
 for (const [want, texts] of Object.entries(QUESTIONS)) {
@@ -130,6 +133,22 @@ for (const prompt of NAMED) {
   const { ranking, sent } = await promptSent(prompt.text)
   tally(groups.named, sent, prompt.want)
   if (why && !sent.some(note => note.key === prompt.want)) await explain(prompt.text, prompt.want, ranking, sent)
+}
+for (const prompt of SHARED) {
+  const { sent } = await promptSent(prompt.text)
+  tally(groups.shared, sent, prompt.want)
+  sharedAlso += sent.filter(note => prompt.also.includes(note.key)).length
+}
+for (const prompt of IN_LANGUAGE.filter(row => row.store === storeLanguage)) {
+  const { ranking, sent } = await promptSent(prompt.text)
+  tally(groups.suffixed, sent, prompt.want)
+  if (why && !sent.some(note => note.key === prompt.want)) await explain(prompt.text, prompt.want, ranking, sent)
+}
+for (const prompt of LONG) tally(groups.long, (await promptSent(prompt.text)).sent, prompt.want)
+for (const task of SUBAGENT_TASKS) {
+  const ranking = rankForSubagent(await readers(task.text), { task: task.text, audienceLimit: 20, taskLimit: 8 }) as { audience: Memory[]; task: Ranked[] }
+  const sent = (hooks.subagentReminder([], ranking.audience, ranking.task) as { sent: Memory[] }).sent
+  tally(groups.subagent, sent.map(memory => keyOf.get(memory.id)!), task.want)
 }
 for (const lang of LANGUAGES) {
   for (const text of UNRELATED[lang]) tally(groups.unrelated, (await promptSent(text)).sent, undefined)
@@ -150,6 +169,7 @@ const line = (name: string, s: Score): string =>
   `${name.padEnd(10)} asked ${String(s.asked).padStart(3)}  wanted sent ${String(s.hit).padStart(3)}  same-topic others ${(s.sibling / Math.max(1, s.asked)).toFixed(2)}/prompt  other ${(s.other / Math.max(1, s.asked)).toFixed(2)}/prompt`
 console.log(`build ${build}  notes ${notes.length} in ${storeLanguage}  ${wordsOnly ? 'words only' : 'embeddings'}`)
 for (const [name, score] of Object.entries(groups)) console.log(line(name, score))
+console.log(`shared-name prompts sent ${sharedAlso} notes the name points at besides the wanted one`)
 for (const lang of LANGUAGES) console.log(line(`  ${lang}`, byLanguage[lang]))
 if (embedder) console.log(`best cosine of an unrelated message ${unrelatedBest.toFixed(2)}, of a topic-less one ${topiclessBest.toFixed(2)}`)
 timings.sort((a, b) => a - b)
