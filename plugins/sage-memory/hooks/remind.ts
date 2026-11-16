@@ -198,7 +198,7 @@ export function memoryEntry(memory: Memory): string {
 const FIX =
   'When you confirm a note is wrong, fix it at once: rewrite its text with mcp__sage-memory__update when you know the current fact, else remove it with mcp__sage-memory__delete (force: true, with a reason).'
 
-export const FRAME = `This is saved project memory from the sage-memory plugin the user installed: notes earlier sessions of this project kept. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
+export const FRAME = `This is saved memory from the sage-memory plugin the user installed: notes earlier sessions kept, about this project or, in the user scope, rules of the user that hold in every project. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
 
 /** How the model asks for notes itself, beyond those the reminders bring. */
 const LOOKUP =
@@ -235,14 +235,15 @@ export function reminderBlock(header: string, memories: readonly Memory[], chars
 export function toolReminder(ranked: readonly Ranked[], visible: string, budget: Budget, framed: boolean, taskAware: boolean): { text: string; sent: Memory[] } {
   const fresh = ranked.filter(item => !isVisible(item.memory, visible))
   const picked = pickDiverse(fresh, budget.count).map(item => item.memory)
-  const header = taskAware ? 'task-aware project memory for the files just used' : 'project memory for the files just used'
+  // Every block reads both stores, so a header names memory, never project memory alone.
+  const header = taskAware ? 'task-aware memory for the files just used' : 'memory for the files just used'
   return reminderBlock(header, picked, budget.chars, framed)
 }
 
 /** The reminder with the person's prompt. */
 export function promptReminder(ranked: readonly Ranked[], visible: string): { text: string; sent: Memory[] } {
   const fresh = ranked.filter(item => !isVisible(item.memory, visible)).slice(0, PROMPT_BUDGET.count)
-  return reminderBlock('project memory related to this prompt', fresh.map(item => item.memory), PROMPT_BUDGET.chars, false)
+  return reminderBlock('memory related to this prompt', fresh.map(item => item.memory), PROMPT_BUDGET.chars, false)
 }
 
 /**
@@ -262,7 +263,7 @@ export function subagentReminder(rules: readonly Memory[], audience: readonly Me
   const global = globalReminder(rules, true)
   const all = [...audience, ...task.map(item => item.memory)].filter(memory => !rules.some(rule => rule.id === memory.id))
   const memories = all.filter((memory, i) => all.findIndex(other => other.id === memory.id) === i)
-  const own = reminderBlock('project memory for this agent and its task', memories, SUBAGENT_CHARS, global.sent.length === 0)
+  const own = reminderBlock('memory for this agent and its task', memories, SUBAGENT_CHARS, global.sent.length === 0)
   const blocks = [global, own].filter(block => block.sent.length > 0)
   return { text: blocks.map(block => block.text).join('\n\n'), sent: blocks.flatMap(block => block.sent), rules: global.sent }
 }

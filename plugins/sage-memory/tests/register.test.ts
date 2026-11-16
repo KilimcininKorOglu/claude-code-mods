@@ -400,6 +400,16 @@ describe('memory reminders', () => {
     expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1 · added 0 · used 0 · global rules 0')
   })
 
+  withSidebar('a prompt reminder that carries a user rule does not call it project memory', async ($, on) => {
+    const w = readyWorld(on)
+    const RULE = memory('g1', 'All text the user reads must be in Turkish.', { scope: 'user', kind: 'preference' })
+    w.routes.set('/remind/prompt', { candidates: [ranked(PNPM), ranked(RULE)], rejected: [] })
+    await $.session.start(START)
+    const block = (await $.prompt.submit(typed('which package manager do we use here?'))).context?.join('\n') ?? ''
+    expect(block).toContain('<memory id="g1" kind="preference" scope="user"')
+    expect(block).not.toContain('project memory')
+  })
+
   withSidebar('a slash command and a turned-off mod ask the daemon nothing', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/remind/prompt', { candidates: [ranked(PNPM)], rejected: [] })
@@ -471,7 +481,7 @@ describe('memory reminders', () => {
     await $.session.start(START)
     await $.agent.spawn({ tool_use_id: 't9', prompt: 'Find the idle timeout.', description: 'find', subagentType: 'Explore', permissionMode: 'default' } as never)
     const prompt = w.spawned[0] ?? ''
-    expect(prompt.startsWith('[sage-memory] project memory for this agent and its task\nThis is saved project memory')).toBe(true)
+    expect(prompt.startsWith('[sage-memory] memory for this agent and its task\nThis is saved memory')).toBe(true)
     expect(prompt.endsWith('\n\nFind the idle timeout.')).toBe(true)
     expect(bodiesOf(w, '/remind/subagent')[0]).toMatchObject({ role: 'Explore', mode: 'default', task: 'Find the idle timeout.' })
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'agent-7', trigger: 'subagent', ids: ['m1', 'm2'] })
@@ -499,10 +509,10 @@ describe('memory reminders', () => {
     expect((await $.prompt.submit(typed('and 4 + 4?'))).context).toBe(undefined)
     await $.agent.spawn({ tool_use_id: 't9', prompt: 'Find the idle timeout.', description: 'find', subagentType: 'Explore', permissionMode: 'default' } as never)
     const prompt = w.spawned[0] ?? ''
-    expect(prompt.startsWith("[sage-memory] the user's global rules, which hold in every project and every task\nThis is saved project memory")).toBe(true)
+    expect(prompt.startsWith("[sage-memory] the user's global rules, which hold in every project and every task\nThis is saved memory")).toBe(true)
     expect(prompt).toContain('<memory id="g2"')
     expect(prompt.match(/<memory id="g1"/g)).toHaveLength(1)
-    expect(prompt).toContain('[sage-memory] project memory for this agent and its task\n<memory id="m2"')
+    expect(prompt).toContain('[sage-memory] memory for this agent and its task\n<memory id="m2"')
     // The rules go under the global trigger, which counts no reminder; the agent's own memory under subagent.
     expect(bodiesOf(w, '/memory/reminded').slice(-2)).toMatchObject([
       { loop: 'agent-7', trigger: 'global', ids: ['g1', 'g2'] },
