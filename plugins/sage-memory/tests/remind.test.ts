@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, promptReminder, queryOf, reminderBlock, toolBudget, usedBy } from '../hooks/remind'
+import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, promptReminder, queryOf, reminderBlock, toolBudget, toolReminder, usedBy } from '../hooks/remind'
 import type { Kind, Memory } from '../hooks/shared/model'
 
 tier('user')
@@ -34,10 +34,15 @@ describe('remind', () => {
     expect(pathsOf(call)).toEqual(['/r', '/r/a.ts', 'src/b.ts'])
   })
 
+  test('a tool block with an empty context carries four memories of the measured average length, 900 characters', () => {
+    const ranked = ['t1', 't2', 't3', 't4'].map(id => item(memory(id, 'x'.repeat(900), 'warning', true), 'anchor:file'))
+    expect(toolReminder(ranked, '', toolBudget(undefined), false, false).sent.map(m => m.id)).toEqual(['t1', 't2', 't3', 't4'])
+  })
+
   test('the budget shrinks as the context fills', () => {
     expect([undefined, 64, 65, 82, 95].map(toolBudget)).toEqual([
-      { count: 8, chars: 2800 },
-      { count: 8, chars: 2800 },
+      { count: 8, chars: 4200 },
+      { count: 8, chars: 4200 },
       { count: 3, chars: 1400 },
       { count: 1, chars: 600 },
       { count: 0, chars: 0 },

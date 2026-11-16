@@ -92,13 +92,17 @@ export function tasksInProgress(result: unknown): string[] {
 
 export type Budget = { count: number; chars: number }
 
-/** How much a reminder on one tool's result may carry, by how full the context is (SAGE's steps). */
+/**
+ * How much a reminder on one tool's result may carry, by how full the context is (SAGE's steps). Below
+ * 65% the block takes 4,200 characters: on 21 real file paths 2,800 sent 23 of 32 memories anchored at
+ * the file, 4,200 sent 28; the diversity pick dropped none. The user chose 4,200.
+ */
 export function toolBudget(percent: number | undefined): Budget {
   const full = percent ?? 0
   if (full >= 95) return { count: 0, chars: 0 }
   if (full >= 82) return { count: 1, chars: 600 }
   if (full >= 65) return { count: 3, chars: 1400 }
-  return { count: 8, chars: 2800 }
+  return { count: 8, chars: 4200 }
 }
 
 /**
