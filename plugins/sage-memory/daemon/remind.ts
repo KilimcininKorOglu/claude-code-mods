@@ -85,9 +85,14 @@ function toolScoreGate(item: Ranked): Rejection | undefined {
   return item.score < MIN_SCORE ? rejection(item, 'belowScore', `score ${fixed(item.score)} is below ${fixed(MIN_SCORE)}`) : undefined
 }
 
+/**
+ * A prompt reminder holds back on relevance and on the importance floor alone. A score gate held back
+ * 22 of 112 wanted memories of 57 measured prompts: a memory of the default importance (0.6) without an
+ * anchor scored 0.647 at the strongest meaning match, under the 0.65 gate, so it never went with a prompt.
+ */
 function turnScoreGate(item: Ranked): Rejection | undefined {
   if (item.relationStrength < TURN_MIN_RELEVANCE) return rejection(item, 'belowScore', `relevance ${fixed(item.relationStrength)} is below ${fixed(TURN_MIN_RELEVANCE)}`)
-  return item.score < MIN_SCORE ? rejection(item, 'belowScore', `score ${fixed(item.score)} is below ${fixed(MIN_SCORE)}`) : undefined
+  return item.memory.importance < MIN_IMPORTANCE ? rejection(item, 'belowScore', `importance ${fixed(item.memory.importance)} is below ${fixed(MIN_IMPORTANCE)}`) : undefined
 }
 
 /** Runs each candidate, best first, through the gates in order; the first gate that holds it back says why. */
@@ -218,18 +223,29 @@ export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
 export type PromptRequest = { query: string; limit: number }
 
 /**
- * The memories a reminder with the person's prompt may carry: what the prompt's text finds in
- * either store, relevant enough and scored high enough, best first.
+ * Stronger relevance first, then the closer meaning, the score breaking what is left. The semantic line
+ * reaches its cap at a cosine of about 0.62, so every closer match ties on relevance; ordered by score,
+ * importance then decided which of them went.
+ */
+function byMeaning(cosines: ReadonlyMap<string, number>): (left: Ranked, right: Ranked) => number {
+  return (left, right) =>
+    right.relationStrength - left.relationStrength || (cosines.get(right.memory.id) ?? 0) - (cosines.get(left.memory.id) ?? 0) || byScore(left, right)
+}
+
+/**
+ * The memories a reminder with the person's prompt may carry: what the prompt's text or meaning finds
+ * in either store, relevant enough and important enough, most relevant first.
  */
 export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking {
   if (request.query.trim() === '') return { candidates: [], rejected: [] }
-  const ranked = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2)
-    .filter(hit => hit.memory.kind !== 'memory_review')
+  const hits = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2).filter(hit => hit.memory.kind !== 'memory_review')
+  const cosines = new Map(hits.map(hit => [hit.memory.id, hit.vectorScore ?? 0]))
+  const ranked = hits
     .map(hit => {
       const relevance = hitRelevance(hit, request.query)
       return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
     })
-    .sort(byScore)
+    .sort(byMeaning(cosines))
   const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
   return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
 }

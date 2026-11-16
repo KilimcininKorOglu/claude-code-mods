@@ -337,6 +337,26 @@ describe('reminders through the vector channel', () => {
     w.close()
   })
 
+  test('a prompt reminder takes a default memory the meaning matches, closer meaning first whatever the importance', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const plain = (await w.remember({ text: 'Invoices are numbered per tenant and never reuse a number' })).memory
+    const weighty = (await w.remember({ text: 'Receipts print the store address in the footer', importance: 1, confidence: 1 })).memory
+    fake.vectors.set(plain.text, toward(0, 1))
+    fake.vectors.set(weighty.text, toward(2, 1))
+    await embeddings.afterWrite(w.project, [plain, weighty])
+    const prompt = 'fatura numaraları nasıl veriliyor'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.8
+    vector[2] = 0.6
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [plain.id, weighty.id], 'importance 0.6 and no anchor do not hold back a 0.80 match, and it ranks before a 0.60 one')
+    w.close()
+  })
+
   test('a tool reminder takes a vector hit through the relation floor only from the pivot up', async () => {
     const w = world()
     const fake = fakeRuntime()
