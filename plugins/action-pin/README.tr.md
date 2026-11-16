@@ -11,7 +11,7 @@ GitHub Actions'ta `actions/checkout@v4` olarak yazılan bir adım, workflow'un �
 
        action-pin: this edit uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8. A tag or a branch can be moved to other code after a review, so a workflow with write access runs whatever it points at then. Write each as the SHA with the tag as a comment, for example: uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v4
 
-   Notta en fazla 10 action adıyla yazılır ve yalnız bunlar GitHub'da sorgulanır. Geri kalanlar sayı olarak verilir. GitHub cevap vermezse action SHA olmadan yazılır, ancak not yine sabitlemeyi ister. Hata log'a bir kez yazılır. Aynı hata tekrar geldiğinde yazılmaz, farklı bir hata geldiğinde yeniden yazılır.
+   Notta en fazla 10 action'ın adı yazılır ve yalnız bunlar GitHub'da sorgulanır. Geri kalanlar sayı olarak verilir. GitHub cevap vermezse action SHA olmadan yazılır, ancak not yine sabitlemeyi ister. Hata log'a bir kez yazılır. Aynı hata tekrar geldiğinde yazılmaz, farklı bir hata geldiğinde yeniden yazılır.
 5. Aynı anda transcript'e tek bir satır yazılır. Bu sayede modele ne söylendiğini görürsünüz. Satır workflow'un adını ve action'larını içerir, talimat içermez. Workflow'un adı yazılır, çünkü düzenlemeyi model gördü, siz görmediniz:
 
        action-pin: .github/workflows/ci.yml uses actions by a moving ref: actions/checkout@v4 → 08c6903cd8c0fde910a37f88322edcfb5dd907a8
