@@ -90,28 +90,26 @@ export function tasksInProgress(result: unknown): string[] {
   return rows.filter(row => field(row, 'status') === 'in_progress').map(row => stringField(row, 'subject')).filter((subject): subject is string => subject !== undefined)
 }
 
-export type Budget = { count: number; chars: number }
-
 /**
- * How much a reminder on one tool's result may carry, by how full the context is (SAGE's steps). Below
- * 65% the block takes 4,200 characters: on 21 real file paths 2,800 sent 23 of 32 memories anchored at
- * the file, 4,200 sent 28; the diversity pick dropped none. The user chose 4,200.
+ * How many memories a block carries. A block is bounded by its count alone and takes each memory
+ * whole, never skipping one for its length (the user's choice): a memory holds at most 250 characters.
  */
+export type Budget = { count: number }
+
+/** How many memories a reminder on one tool's result carries, by how full the context is (SAGE's steps). */
 export function toolBudget(percent: number | undefined): Budget {
   const full = percent ?? 0
-  if (full >= 95) return { count: 0, chars: 0 }
-  if (full >= 82) return { count: 1, chars: 600 }
-  if (full >= 65) return { count: 3, chars: 1400 }
-  return { count: 8, chars: 4200 }
+  if (full >= 95) return { count: 0 }
+  if (full >= 82) return { count: 1 }
+  if (full >= 65) return { count: 3 }
+  return { count: 8 }
 }
 
 /**
- * The prompt block. A memory averaged 900 characters in a measured store, so 2,400 characters carried
- * 1 to 1.5 of them; on 57 real prompts 3,600 delivered 40 of 112 wanted memories against 32, with no
- * memory for a topic-less message. The user chose 3,600.
+ * The prompt block, and the task part of a subagent's block. On 51 real prompts 8 memories delivered
+ * 46 wanted ones at 3.45 unwanted per prompt, 10 delivered 50 at 4.02; the user chose 10.
  */
-export const PROMPT_BUDGET: Budget = { count: 8, chars: 3600 }
-export const SUBAGENT_CHARS = 4000
+export const PROMPT_BUDGET: Budget = { count: 10 }
 
 /** The shortest memory text whose appearance in the context counts as already visible. */
 const VISIBLE_MIN = 24
@@ -220,40 +218,28 @@ const SAVE =
 /** The main system prompt's note about the plugin, set once per session in the environment section. */
 export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Every note of the user scope is a global rule of the user: all of them come with the first prompt of a context and again after a compaction, and they hold in every task. ${LOOKUP} Use the notes as background; a note may be out of date, so check it against the files before relying on it. ${FIX} ${SAVE}`
 
-/**
- * The block a reminder sends: a header, then as many entries as fit `chars`, best first. Returns the
- * text and the memories it carries; nothing fits, nothing is sent.
- */
-export function reminderBlock(header: string, memories: readonly Memory[], chars: number, framed: boolean): { text: string; sent: Memory[] } {
+/** The block a reminder sends: a header, then an entry for each memory, best first, each whole. */
+export function reminderBlock(header: string, memories: readonly Memory[], framed: boolean): { text: string; sent: Memory[] } {
   const head = framed ? `[sage-memory] ${header}\n${FRAME}` : `[sage-memory] ${header}`
-  const sent: Memory[] = []
-  let text = head
-  // An entry too long for what is left is skipped, not the end: one long memory ranked first used to empty the block.
-  for (const memory of memories) {
-    const next = `${text}\n${memoryEntry(memory)}`
-    if (next.length > chars) continue
-    text = next
-    sent.push(memory)
-  }
-  return { text, sent }
+  return { text: [head, ...memories.map(memoryEntry)].join('\n'), sent: [...memories] }
 }
 
 /**
  * The reminder on a file tool's result: the ranked memories the context does not show yet, picked for
- * diversity and fitted to the budget.
+ * diversity, up to the budget's count.
  */
 export function toolReminder(ranked: readonly Ranked[], visible: string, budget: Budget, framed: boolean, taskAware: boolean): { text: string; sent: Memory[] } {
   const fresh = ranked.filter(item => !isVisible(item.memory, visible))
   const picked = pickDiverse(fresh, budget.count).map(item => item.memory)
   // Every block reads both stores, so a header names memory, never project memory alone.
   const header = taskAware ? 'task-aware memory for the files just used' : 'memory for the files just used'
-  return reminderBlock(header, picked, budget.chars, framed)
+  return reminderBlock(header, picked, framed)
 }
 
 /** The reminder with the person's prompt. */
 export function promptReminder(ranked: readonly Ranked[], visible: string): { text: string; sent: Memory[] } {
   const fresh = ranked.filter(item => !isVisible(item.memory, visible)).slice(0, PROMPT_BUDGET.count)
-  return reminderBlock('memory related to this prompt', fresh.map(item => item.memory), PROMPT_BUDGET.chars, false)
+  return reminderBlock('memory related to this prompt', fresh.map(item => item.memory), false)
 }
 
 /**
@@ -261,19 +247,19 @@ export function promptReminder(ranked: readonly Ranked[], visible: string): { te
  * that they reach each context on their own, not only when a prompt or a file makes them relevant.
  */
 export function globalReminder(rules: readonly Memory[], framed: boolean): { text: string; sent: Memory[] } {
-  return reminderBlock("the user's global rules, which hold in every project and every task", rules, Number.POSITIVE_INFINITY, framed)
+  return reminderBlock("the user's global rules, which hold in every project and every task", rules, framed)
 }
 
 /**
  * What a subagent starts with: the user's global rules in full, then the memories written for its
- * role or mode and the ones about its task, each once and within the subagent budget. `rules` names
+ * role or mode and the ones about its task, each once; the daemon bounds their counts. `rules` names
  * the global rules it sent, which are recorded apart from the rest.
  */
 export function subagentReminder(rules: readonly Memory[], audience: readonly Memory[], task: readonly Ranked[]): { text: string; sent: Memory[]; rules: Memory[] } {
   const global = globalReminder(rules, true)
   const all = [...audience, ...task.map(item => item.memory)].filter(memory => !rules.some(rule => rule.id === memory.id))
   const memories = all.filter((memory, i) => all.findIndex(other => other.id === memory.id) === i)
-  const own = reminderBlock('memory for this agent and its task', memories, SUBAGENT_CHARS, global.sent.length === 0)
+  const own = reminderBlock('memory for this agent and its task', memories, global.sent.length === 0)
   const blocks = [global, own].filter(block => block.sent.length > 0)
   return { text: blocks.map(block => block.text).join('\n\n'), sent: blocks.flatMap(block => block.sent), rules: global.sent }
 }

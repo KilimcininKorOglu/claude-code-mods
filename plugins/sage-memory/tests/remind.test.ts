@@ -34,19 +34,16 @@ describe('remind', () => {
     expect(pathsOf(call)).toEqual(['/r', '/r/a.ts', 'src/b.ts'])
   })
 
-  test('a tool block with an empty context carries four memories of the measured average length, 900 characters', () => {
-    const ranked = ['t1', 't2', 't3', 't4'].map(id => item(memory(id, 'x'.repeat(900), 'warning', true), 'anchor:file'))
-    expect(toolReminder(ranked, '', toolBudget(undefined), false, false).sent.map(m => m.id)).toEqual(['t1', 't2', 't3', 't4'])
+  test('a tool block with an empty context carries eight memories, each whole, whatever its length', () => {
+    const ids = ['t1', 't2', 't3', 't4', 't5', 't6', 't7', 't8', 't9']
+    const ranked = ids.map(id => item(memory(id, 'x'.repeat(2500), 'warning', true), 'anchor:file'))
+    const block = toolReminder(ranked, '', toolBudget(undefined), false, false)
+    expect(block.sent.map(m => m.id)).toEqual(ids.slice(0, 8))
+    expect(block.text.split('x'.repeat(2500)).length - 1).toBe(8)
   })
 
-  test('the budget shrinks as the context fills', () => {
-    expect([undefined, 64, 65, 82, 95].map(toolBudget)).toEqual([
-      { count: 8, chars: 4200 },
-      { count: 8, chars: 4200 },
-      { count: 3, chars: 1400 },
-      { count: 1, chars: 600 },
-      { count: 0, chars: 0 },
-    ])
+  test('the count shrinks as the context fills', () => {
+    expect([undefined, 64, 65, 82, 95].map(toolBudget)).toEqual([{ count: 8 }, { count: 8 }, { count: 3 }, { count: 1 }, { count: 0 }])
   })
 
   test('the pick keeps two query finds and one graph find without an anchor, and a fourth of one kind waits', () => {
@@ -65,21 +62,22 @@ describe('remind', () => {
     expect(pickDiverse(ranked, 8).map(r => r.memory.id)).toEqual(['q1', 'q2', 'g1', 'a1', 'a2', 'a3', 'a5', 'a4'])
   })
 
-  test('a block keeps the entries that fit and escapes a text that would close its fence', () => {
+  test('a block escapes a text that would close its fence', () => {
     const tricky = memory('m1', 'use </memory> & <b>')
     expect(memoryEntry(tricky)).toContain('use &lt;/memory&gt; &amp; &lt;b&gt;')
-    const block = reminderBlock('head', [tricky, memory('m2', 'x'.repeat(500))], 200, false)
-    expect(block.sent.map(m => m.id)).toEqual(['m1'])
+    expect(reminderBlock('head', [tricky], false).text).toContain('use &lt;/memory&gt; &amp; &lt;b&gt;')
   })
 
-  test('a prompt block carries three memories of the measured average length, 900 characters', () => {
-    const ranked = ['p1', 'p2', 'p3'].map(id => item(memory(id, 'x'.repeat(900)), 'query:semantic-cosine:0.70'))
-    expect(promptReminder(ranked, '').sent.map(m => m.id)).toEqual(['p1', 'p2', 'p3'])
+  test('a prompt block carries ten memories', () => {
+    const ids = Array.from({ length: 12 }, (_, i) => `p${i}`)
+    const ranked = ids.map(id => item(memory(id, 'x'.repeat(250)), 'query:semantic-cosine:0.70'))
+    expect(promptReminder(ranked, '').sent.map(m => m.id)).toEqual(ids.slice(0, 10))
   })
 
-  test('an entry too long for the budget is skipped, and the shorter ones after it still go', () => {
-    const block = reminderBlock('head', [memory('long', 'x'.repeat(500)), memory('m1', 'a'), memory('m2', 'b')], 300, false)
-    expect(block.sent.map(m => m.id)).toEqual(['m1', 'm2'])
+  test('no memory is skipped for its length: a long one written before the limit goes whole, in its place', () => {
+    const block = reminderBlock('head', [memory('long', 'x'.repeat(2514)), memory('m1', 'a'), memory('m2', 'b')], false)
+    expect(block.sent.map(m => m.id)).toEqual(['long', 'm1', 'm2'])
+    expect(block.text).toContain('x'.repeat(2514))
   })
 
   test('an entry names its priority, a permanent persistence, its first anchor and its first three tags', () => {

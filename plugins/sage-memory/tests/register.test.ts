@@ -512,7 +512,8 @@ describe('memory reminders', () => {
     const prompt = w.spawned[0] ?? ''
     expect(prompt.startsWith('[sage-memory] memory for this agent and its task\nThis is saved memory')).toBe(true)
     expect(prompt.endsWith('\n\nFind the idle timeout.')).toBe(true)
-    expect(bodiesOf(w, '/remind/subagent')[0]).toMatchObject({ role: 'Explore', mode: 'default', task: 'Find the idle timeout.' })
+    // The task part of a subagent's block holds as many memories as the prompt block, ten.
+    expect(bodiesOf(w, '/remind/subagent')[0]).toMatchObject({ role: 'Explore', mode: 'default', task: 'Find the idle timeout.', taskLimit: 10 })
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'agent-7', trigger: 'subagent', ids: ['m1', 'm2'] })
   })
 

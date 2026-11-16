@@ -970,7 +970,7 @@ async function recordSpawn($: EngineInterface, state: State, agentId: string, bl
 /** The memories written for a subagent and the ones about its task; none while the person turned them off. */
 async function subagentRanking($: EngineInterface, state: State, e: Spawn): Promise<SubagentRanking> {
   if ((await $.store.get('remindSubagent')) === false) return { audience: [], task: [] }
-  const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt }
+  const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt, taskLimit: PROMPT_BUDGET.count }
   return ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
 }
 
