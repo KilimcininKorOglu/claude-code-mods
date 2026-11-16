@@ -8,8 +8,9 @@ import { cjkPairs } from './searchable.ts'
  * counted in the text index at each request, with no word list and no language rule. A memory has
  * word evidence when the prompt terms it holds are too rare to meet by chance: with N memories, the
  * number of memories expected to hold all of them, N x the product of df/N, times the number of
- * ways to pick that many of the prompt's k known terms, C(k, held), is below 1. One shared word is
- * never enough (df x k is at least 1), and a store of one memory gives none.
+ * ways to pick that many of the prompt's k known terms, C(k, held), is below 1. k and held count the
+ * same units: the pairs of one Chinese, Japanese or Korean word the memory holds count once in both.
+ * One shared word is never enough (df x k is at least 1), and a store of one memory gives none.
  *
  * On the bench's 40 and 300 memories this took 2 and 4 of 16 English questions and 7 and 9 of 16
  * Turkish ones to their memory without embeddings (2 of 16 or fewer before), while 2 to 3 of 40
@@ -100,7 +101,9 @@ export function wordEvidence(db: DatabaseSync, query: string, visibility: Visibi
   const evidence = new Map<string, WordEvidence>()
   for (const [id, pairs] of held) {
     const own = runs.length > 0 ? joinPairs(db, pairs, runs, id, params) : pairs
-    const chance = own.reduce((expected, term) => expected * (term.holders.size / size), size) * choose(terms.length, own.length)
+    // The prompt's terms in the memory's units: the pairs joined into one word count once in k too.
+    const known = terms.length - pairs.length + own.length
+    const chance = own.reduce((expected, term) => expected * (term.holders.size / size), size) * choose(known, own.length)
     if (chance < 1) evidence.set(id, { chance, terms: own.map(term => term.term.replace(/^"|"\*?$/g, '')) })
   }
   return evidence

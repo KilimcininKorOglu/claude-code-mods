@@ -75,6 +75,18 @@ describe('word evidence from the store', () => {
     w.close()
   })
 
+  test('the prompt terms of a Japanese question count in the units the memory is weighed in', async () => {
+    // The rule picks `held` of the prompt's k known terms. When the pairs of one word count as one
+    // term for the memory, k counts that word once as well: the nine pairs of two words made k 11
+    // and C(11, 2) 55, so two words only this memory holds did not single it out.
+    const disk = 'サーバーのディスク使用率が85パーセントを超えるとアラートが出ます。'
+    const others = ['ログは90日間保存されます。', '検索インデックスは毎週日曜日に再構築されます。', '返金には承認が必要です。', 'トークンは15分で切れます。']
+    const { w, texts } = await store([...ENGLISH, disk, ...others])
+    assert.deepEqual(singledOut(w, texts, 'ディスク使用率のアラートはいつですか'), [disk])
+    assert.deepEqual(singledOut(w, texts, 'ディスクはいつですか'), [], 'one word the memory holds is still never enough')
+    w.close()
+  })
+
   test('a search finds a memory through the stem of a suffixed word', async () => {
     const { w, texts } = await store(ENGLISH)
     const found = searchStore(w.project.db, 'logların süresi', SHOWN, 10).map(memory => texts.get(memory.id))
