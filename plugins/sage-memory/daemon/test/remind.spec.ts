@@ -64,6 +64,19 @@ describe("a reminder on a file tool's result", () => {
     w.close()
   })
 
+  test('a memory anchored to a directory above the file ranks before one only the query words found', async () => {
+    const w = world()
+    // The command anchor `server` is spelled by the path words by accident, an exact query match.
+    const worded = (await w.remember({ text: 'Start the dev server with the watch flag', anchors: [{ type: 'command', command: 'server' }] })).memory
+    const placed = (await w.remember({ text: 'Handlers under lib/server return plain objects, never responses', anchors: [{ type: 'directory', path: 'lib/server' }] })).memory
+    const path = 'lib/server/routes/user.ts'
+    const ranking = rankForTools(w.readers('s1', 'main'), { paths: [path], query: 'lib server routes user ts', mutation: false, limit: 8 })
+    const ids = ranking.candidates.map(c => c.memory.id)
+    assert.ok(ids.includes(worded.id), 'the query match is still a candidate')
+    assert.ok(ids.indexOf(placed.id) < ids.indexOf(worded.id), 'where a memory is anchored outranks what the path words happen to match')
+    w.close()
+  })
+
   test('the gates hold back a low importance, a never policy, and a repeated text', async () => {
     const w = world()
     const anchors = [{ type: 'file' as const, path: 'src/app.ts' }]

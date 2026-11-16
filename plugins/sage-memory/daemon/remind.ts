@@ -120,6 +120,20 @@ function byRelation(left: Ranked, right: Ranked): number {
   return right.relationStrength - left.relationStrength || byScore(left, right)
 }
 
+/** Whether a memory's anchors place it at the touched path: the file itself, a symbol in it, or a directory above it. */
+function isPlaced(item: Ranked): boolean {
+  return item.reasons.some(reason => reason.startsWith('anchor:'))
+}
+
+/**
+ * A memory anchored where the tool worked first, then one the query alone found, each by relation. The
+ * query of a tool reminder is the path spelled as words, so its matches (a word, a tag, a cosine) reached
+ * 0.94 for memories of other files and outranked a directory anchor's 0.92.
+ */
+function byPlacement(left: Ranked, right: Ranked): number {
+  return Number(isPlaced(right)) - Number(isPlaced(left)) || byRelation(left, right)
+}
+
 export type ToolsRequest = {
   /** The paths the file tool touched, absolute or relative to the project root. */
   paths: readonly string[]
@@ -195,7 +209,7 @@ export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
   const ranked = [...found.values()]
     .filter(item => statuses.includes(item.memory.status) && item.memory.kind !== 'memory_review')
     .map(item => ({ memory: item.memory, relationStrength: item.relationStrength, score: reminderScore(item.memory, item.relationStrength), reasons: item.reasons }))
-    .sort(byRelation)
+    .sort(byPlacement)
   return applyGates(ranked, [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
 }
 
