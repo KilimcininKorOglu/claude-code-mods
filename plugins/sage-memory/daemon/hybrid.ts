@@ -12,11 +12,11 @@ import { vectorHits, type SemanticQuery } from './vectors.ts'
  * left a text hit outside it without its cosine, so `vectorScore` null read as no meaning at all.
  * Null now means the memory has no current vector.
  */
-export function searchHybrid(dbs: readonly [DatabaseSync, DatabaseSync], query: string, visibility: Visibility, limit: number, semantic: SemanticQuery | undefined): SearchHit[] {
+export function searchHybrid(dbs: readonly [DatabaseSync, DatabaseSync], query: string, visibility: Visibility, limit: number, semantic: SemanticQuery | undefined, floor: number): SearchHit[] {
   const [project, user] = dbs
   const lexical = interleave(searchStore(project, query, visibility, limit), searchStore(user, query, visibility, limit))
   if (semantic === undefined || query.trim() === '') return lexicalHits(lexical.slice(0, limit))
   const every = Number.POSITIVE_INFINITY
   const vectors = [...vectorHits(project, semantic, visibility, every, true), ...vectorHits(user, semantic, visibility, every, true)].sort((a, b) => b.cosine - a.cosine)
-  return fuse(lexical, vectors, limit)
+  return fuse(lexical, vectors, limit, floor)
 }

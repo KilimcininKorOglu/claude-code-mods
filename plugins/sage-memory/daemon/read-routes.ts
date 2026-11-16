@@ -7,6 +7,7 @@ import { searchHybrid } from './hybrid.ts'
 import { listPage, storeStats, type ListOptions } from './listing.ts'
 import { opFor, placesOf, type Places } from './places.ts'
 import { findRelated, graphFor } from './related.ts'
+import { MEANING_FLOOR_COSINE } from './relevance.ts'
 import { flag, flagOr, optionalCount, optionalKind, optionalScope, optionalString, optionalText, requiredString, statusList, stringList, type Body } from './request.ts'
 import { memoriesForPaths, relativePaths } from './retrieve.ts'
 import type { Route, Routes } from './routes.ts'
@@ -38,7 +39,7 @@ async function search(stores: Stores, embeddings: Embeddings, body: Body): Promi
   const limit = optionalCount(body, 'limit', 100) ?? 20
   const visibility = readerVisibility(body, flag(body, 'includeStale') ? ['active', 'stale'] : ['active'])
   const semantic = await embeddings.semantic(query, [places.project, places.global])
-  return searchHybrid([places.project.db, places.global.db], query, visibility, limit, semantic)
+  return searchHybrid([places.project.db, places.global.db], query, visibility, limit, semantic, MEANING_FLOOR_COSINE)
 }
 
 /**

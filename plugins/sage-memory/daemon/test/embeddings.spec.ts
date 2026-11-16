@@ -7,7 +7,8 @@ import type { ProjectRef } from '../../hooks/shared/protocol.ts'
 import { closePairs } from '../close-pairs.ts'
 import { createEmbeddings } from '../embeddings.ts'
 import { fuse, lexicalHits } from '../fusion.ts'
-import { hitRelevance, memorySemanticRelevance } from '../relevance.ts'
+import { searchHybrid } from '../hybrid.ts'
+import { hitRelevance, MEANING_FLOOR_COSINE, memorySemanticRelevance } from '../relevance.ts'
 import { remember, SIMILAR_COSINE } from '../remember.ts'
 import { rankForPrompt, rankForTools } from '../remind.ts'
 import { EVERY_POLICY, REMINDED_POLICY, type Visibility } from '../search.ts'
@@ -64,9 +65,9 @@ describe('semantic relevance', () => {
 })
 
 describe('fusion', () => {
-  test('a vector hit lifts a memory the text index found; one it missed enters only from the floor', () => {
+  test('a vector hit lifts a memory the text index found; one it missed enters only above the floor', () => {
     const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(id => memoryOf(id))
-    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.56 }, { memory: d!, cosine: 0.5 }, { memory: b!, cosine: 0.3 }], 10)
+    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.56 }, { memory: d!, cosine: 0.5 }, { memory: b!, cosine: 0.3 }], 10, 0.55)
     assert.deepEqual(
       fused.map(hit => [hit.memory.id, hit.source, hit.vectorScore]),
       [
@@ -77,16 +78,37 @@ describe('fusion', () => {
     )
   })
 
+  test('a memory only the vector channel finds enters above the floor it is given, never at it', () => {
+    const [a, d, e] = ['A', 'D', 'E'].map(id => memoryOf(id))
+    const fused = fuse([a!], [{ memory: d!, cosine: 0.5 }, { memory: e!, cosine: 0.44 }], 10, MEANING_FLOOR_COSINE)
+    assert.deepEqual(fused.map(hit => hit.memory.id).sort(), ['A', 'D'])
+  })
+
+  test('a search returns a memory whose meaning is above the meaning floor, though no word of the query matches it', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const refunds = (await w.remember({ text: 'Refunds are booked against the original invoice' })).memory
+    fake.vectors.set(refunds.text, toward(0, 1))
+    await embeddings.afterWrite(w.project, [refunds])
+    const query = 'iadeler hangi belgeye yazılıyor'
+    fake.vectors.set(query, toward(0, 0.5))
+    const readers = w.readers('s1', 'main')
+    const hits = searchHybrid([readers.project.store.db, readers.user.store.db], query, SHOWN, 20, await embeddings.semantic(query, []), MEANING_FLOOR_COSINE)
+    assert.deepEqual(hits.map(hit => hit.memory.id), [refunds.id])
+    w.close()
+  })
+
   test('a memory only the vector channel finds keeps a place when the text index fills the list', () => {
     const text = Array.from({ length: 96 }, (_, index) => memoryOf(`T${index}`))
     const meant = memoryOf('V')
-    const fused = fuse(text, [{ memory: meant, cosine: 0.8 }], 48)
+    const fused = fuse(text, [{ memory: meant, cosine: 0.8 }], 48, MEANING_FLOOR_COSINE)
     assert.ok(fused.some(hit => hit.memory.id === 'V'), 'the best vector hit ranks with the best text hit, not behind every one')
   })
 
   test('at most twelve memories enter from the vector channel alone, and a text-only list is scored by place', () => {
     const alone = Array.from({ length: 13 }, (_, index) => ({ memory: memoryOf(`V${index}`), cosine: 0.9 - index * 0.01 }))
-    assert.equal(fuse([], alone, 50).length, 12)
+    assert.equal(fuse([], alone, 50, MEANING_FLOOR_COSINE).length, 12)
     assert.deepEqual(
       lexicalHits([memoryOf('A'), memoryOf('B'), memoryOf('C')]).map(hit => hit.finalScore),
       [1, 0.5, 0],
@@ -327,13 +349,13 @@ describe('reminders through the vector channel', () => {
     const prompt = 'yayına çıkmadan önce hangi bağlantı profilini açmalıyım'
     const vector = new Array<number>(16).fill(0)
     vector[0] = 0.6
-    vector[1] = Math.sqrt(1 - 0.36 - 0.16)
-    vector[2] = 0.4
+    vector[1] = Math.sqrt(1 - 0.36 - 0.39 * 0.39)
+    vector[2] = 0.39
     fake.vectors.set(prompt, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
     const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => [c.memory.id, c.reasons]), [[vpn.id, ['query:semantic-cosine:0.60']]])
-    assert.deepEqual(ranking.rejected, [], 'the banner at 0.40 is under the floor, so it never became a candidate')
+    assert.deepEqual(ranking.rejected, [], 'the banner at 0.39 is under the noise floor, so it never became a candidate')
     w.close()
   })
 
@@ -394,21 +416,48 @@ describe('reminders through the vector channel', () => {
     w.close()
   })
 
-  test('shared words bring a memory to a prompt when its meaning is above the noise band', async () => {
+  test('a prompt reminder takes meaning alone above the meaning floor, shared words between the noise floor and it, and neither under the noise floor', async () => {
     const w = world()
     const fake = fakeRuntime()
     const embeddings = createEmbeddings(fake)
-    const near = (await w.remember({ text: 'The staging deploy banner shows on every preview page', importance: 0.9, tags: ['staging', 'deploy'] })).memory
-    fake.vectors.set(near.text, toward(0, 1))
-    await embeddings.afterWrite(w.project, [near])
+    const near = (await w.remember({ text: 'Refunds are booked against the original invoice' })).memory
+    const quiet = (await w.remember({ text: 'Invoices are numbered per tenant and never reuse a number' })).memory
+    const worded = (await w.remember({ text: 'The staging deploy banner shows on every preview page', importance: 0.9, tags: ['staging', 'deploy'] })).memory
+    const far = (await w.remember({ text: 'Staging deploy keys rotate every quarter', importance: 0.9, tags: ['staging', 'deploy'] })).memory
+    for (const [memory, axis] of [[near, 0], [quiet, 2], [worded, 4], [far, 6]] as const) fake.vectors.set(memory.text, toward(axis, 1))
+    await embeddings.afterWrite(w.project, [near, quiet, worded, far])
     const prompt = 'staging deploy'
     const vector = new Array<number>(16).fill(0)
-    vector[0] = 0.45
-    vector[4] = Math.sqrt(1 - 0.45 * 0.45)
+    vector[0] = 0.5
+    vector[2] = 0.43
+    vector[4] = 0.43
+    vector[6] = 0.39
+    vector[7] = Math.sqrt(1 - 0.5 * 0.5 - 2 * 0.43 * 0.43 - 0.39 * 0.39)
     fake.vectors.set(prompt, vector)
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
     const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
-    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id], 'a 0.45 meaning under the semantic floor still lets two shared words and tags count')
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id, worded.id])
+    w.close()
+  })
+
+  test('a prompt reminder puts the closer meaning first, whatever words a farther memory shares with the prompt', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const worded = (await w.remember({ text: 'The staging deploy banner shows on every preview page', importance: 0.9, tags: ['staging', 'deploy'] })).memory
+    const meant = (await w.remember({ text: 'Releases wait for the sign-off of the product owner' })).memory
+    fake.vectors.set(worded.text, toward(0, 1))
+    fake.vectors.set(meant.text, toward(2, 1))
+    await embeddings.afterWrite(w.project, [worded, meant])
+    const prompt = 'staging deploy'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.45
+    vector[2] = 0.5
+    vector[4] = Math.sqrt(1 - 0.45 * 0.45 - 0.5 * 0.5)
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [meant.id, worded.id])
     w.close()
   })
 

@@ -1,11 +1,10 @@
 import type { Memory, SearchHit } from '../hooks/shared/model.ts'
-import { SEMANTIC_FLOOR_COSINE } from './relevance.ts'
 import type { VectorHit } from './vectors.ts'
 
 /**
  * Reciprocal-rank fusion of the text index and the vector channel: a memory gains weight / (K + rank)
  * from each list it is in, both lists weighing alike. A vector hit the text index also found lifts that
- * memory; one it missed enters only from the cosine a reminder could still use. SAGE weighed the vector
+ * memory; one it missed enters only above the noise floor the caller gives. SAGE weighed the vector
  * list 0.3, so a memory only the vector found ranked behind the first 82 text hits and never entered a
  * list the text index filled: none did in 57 measured prompts, whose word search, with an OR fallback,
  * matched more memories than the 48 places.
@@ -28,14 +27,14 @@ export function lexicalHits(lexical: readonly Memory[]): SearchHit[] {
   })
 }
 
-/** The vector hits that take a rank: each one the text index found, and the best vector-only ones from the floor up. */
-function fusable(lexicalIds: ReadonlySet<string>, vectors: readonly VectorHit[]): VectorHit[] {
+/** The vector hits that take a rank: each one the text index found, and the best vector-only ones above the floor. */
+function fusable(lexicalIds: ReadonlySet<string>, vectors: readonly VectorHit[], floor: number): VectorHit[] {
   const kept: VectorHit[] = []
   let alone = 0
   for (const hit of vectors) {
     if (lexicalIds.has(hit.memory.id)) {
       kept.push(hit)
-    } else if (hit.cosine >= SEMANTIC_FLOOR_COSINE && alone < MAX_VECTOR_ONLY) {
+    } else if (hit.cosine > floor && alone < MAX_VECTOR_ONLY) {
       alone++
       kept.push(hit)
     }
@@ -43,13 +42,17 @@ function fusable(lexicalIds: ReadonlySet<string>, vectors: readonly VectorHit[])
   return kept
 }
 
-/** Both lists as one, best fused score first; `vectors` comes best cosine first, each memory once. */
-export function fuse(lexical: readonly Memory[], vectors: readonly VectorHit[], limit: number): SearchHit[] {
+/**
+ * Both lists as one, best fused score first; `vectors` comes best cosine first, each memory once. A
+ * memory only the vector channel finds enters above `floor`, the cosine at or under which a text shares
+ * no topic with the query (the noise band).
+ */
+export function fuse(lexical: readonly Memory[], vectors: readonly VectorHit[], limit: number, floor: number): SearchHit[] {
   const fused = new Map<string, SearchHit>()
   lexical.forEach((memory, index) => {
     fused.set(memory.id, { memory, lexicalScore: rankScore(index, lexical.length), vectorScore: null, finalScore: (1 - VECTOR_WEIGHT) / (RRF_K + index + 1), source: 'lexical' })
   })
-  fusable(new Set(fused.keys()), vectors).forEach((hit, rank) => {
+  fusable(new Set(fused.keys()), vectors, floor).forEach((hit, rank) => {
     const share = VECTOR_WEIGHT / (RRF_K + rank + 1)
     const known = fused.get(hit.memory.id)
     const next: SearchHit = known

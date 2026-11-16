@@ -198,7 +198,8 @@ export const SEMANTIC_PIVOT_COSINE = 0.6
  * The cosine at which a vector hit is as strong as a prompt reminder's relevance floor: 20 of 30
  * sentence questions and 15 of 20 topic questions reach it with their own memory, and 1 of 30
  * unrelated ones with some memory (the whole-text vector alone at 0.46: 11 of 30, 11 of 20 and 5 of
- * 30). A vector hit below it can pass no reminder gate.
+ * 30). On a file tool's reminder a vector hit below it can pass no gate; a prompt and a search take
+ * memories from the lower `MEANING_FLOOR_COSINE` up.
  */
 export const SEMANTIC_FLOOR_COSINE = 0.55
 const SEMANTIC_SLOPE = (RELATION_FLOOR - TURN_MIN_RELEVANCE) / (SEMANTIC_PIVOT_COSINE - SEMANTIC_FLOOR_COSINE)
@@ -232,20 +233,31 @@ export function hitRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, que
 export const NOISE_COSINE = 0.4
 
 /**
- * A prompt hit's relevance. With embeddings the meaning decides; shared words count only for a memory
- * whose meaning is above the noise band, and an anchor the prompt names (a file, a symbol, a command)
- * counts alone. Words alone admitted a memory in any language they happened to match: in 57 measured
- * prompts, 230 of 253 unwanted memories came with word evidence. Without embeddings the words are the
- * only evidence there is.
+ * The cosine above which a memory reaches a prompt or a search on its meaning alone. At 0.55, 16 of
+ * 48 bench questions in English, Turkish and Japanese lost a memory whose cosine was 0.40 to 0.55. At
+ * the noise floor (0.40), on 300 bench memories, each question also brought 1.54 to 1.97 memories of
+ * another topic and 5 of 40 topic-less messages brought some memory; at 0.45, 0.56 to 0.75 and 4 of
+ * 40, with 32, 27 and 31 of 48 questions reaching their memory against 36, 31 and 32 at 0.40.
  */
-export function promptRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string, withMeaning: boolean): Relevance {
+export const MEANING_FLOOR_COSINE = 0.45
+
+/**
+ * A prompt hit's relevance. With embeddings the meaning decides: a memory whose cosine is above the
+ * meaning floor (`floor`) is relevant enough for a prompt, whatever words it shares; between the noise
+ * floor and the meaning floor its shared words decide; at or under the noise floor only an anchor the
+ * prompt names (a file, a symbol, a command) counts. Words alone admitted a memory in any language they
+ * happened to match: in 57 measured prompts, 230 of 253 unwanted memories came with word evidence.
+ * Without embeddings the words are the only evidence there is.
+ */
+export function promptRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string, withMeaning: boolean, floor: number): Relevance {
   // A memory without a current vector waits for its fill; until then its words are the evidence, as without embeddings.
   if (!withMeaning || hit.vectorScore === null) return hitRelevance(hit, query)
   const lexical = memoryQueryRelevance(hit.memory, query)
-  const isNamed = lexical.reasons.some(reason => reason.startsWith('query:exact-'))
-  const named = isNamed || (hit.vectorScore ?? 0) > NOISE_COSINE ? lexical : NONE
+  if (hit.vectorScore <= NOISE_COSINE) return lexical.reasons.some(reason => reason.startsWith('query:exact-')) ? lexical : NONE
+  if (hit.vectorScore <= floor) return lexical
   const semantic = memorySemanticRelevance(hit.vectorScore)
-  return { strength: Math.max(named.strength, semantic.strength), reasons: [...named.reasons, ...semantic.reasons] }
+  const strength = Math.max(TURN_MIN_RELEVANCE, lexical.strength, semantic.strength)
+  return { strength, reasons: [...lexical.reasons, `query:semantic-cosine:${hit.vectorScore.toFixed(2)}`] }
 }
 
 function structuralKeys(memory: Memory): Set<string> {

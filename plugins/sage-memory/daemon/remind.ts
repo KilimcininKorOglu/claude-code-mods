@@ -5,7 +5,7 @@ import { searchHybrid } from './hybrid.ts'
 import type { Op } from './op.ts'
 import { descending } from './order.ts'
 import { findRelated } from './related.ts'
-import { MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, promptRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
+import { MEANING_FLOOR_COSINE, MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, promptRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
 import { namedMemories, type Named } from './named.ts'
 import { memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
 import { selectMemories } from './rows.ts'
@@ -91,7 +91,8 @@ function toolScoreGate(item: Ranked): Rejection | undefined {
  * score gate held back 22 of 112 wanted memories of 57 measured prompts: a memory of the default
  * importance (0.6) without an anchor scored 0.647 at the strongest meaning match, under the 0.65 gate.
  * Without embeddings, or for a memory with no current vector (`wordsOnly`), shared words are the only
- * evidence, and the score keeps a weakly related default memory out, as before.
+ * evidence, and the score keeps a weakly related default memory out, as before. A memory the prompt
+ * names is never `wordsOnly`: its name is the evidence.
  */
 function turnScoreGate(wordsOnly: (id: string) => boolean): Gate {
   return item => {
@@ -175,7 +176,7 @@ function opOf(readers: Readers, memory: Memory): Op {
 }
 
 function hitsFor(readers: Readers, query: string, visibility: Visibility, limit: number): SearchHit[] {
-  return searchHybrid([readers.project.store.db, readers.user.store.db], query, visibility, limit, readers.semantic)
+  return searchHybrid([readers.project.store.db, readers.user.store.db], query, visibility, limit, readers.semantic, MEANING_FLOOR_COSINE)
 }
 
 /** Memories the query finds in either store, each weighed by the stronger of its lexical and semantic evidence. */
@@ -233,24 +234,24 @@ export type PromptRequest = { query: string; limit: number; blockCount: number }
 const NAMED_STRENGTH = 0.96
 
 /**
- * Named memories first, the ones whose name fewer memories hold before the others; then stronger
- * relevance, then the closer meaning, the score breaking what is left. The semantic line reaches its
- * cap at a cosine of about 0.62, so every closer match ties on relevance; ordered by score,
- * importance then decided which of them went.
+ * Named memories first, the ones whose name fewer memories hold before the others; then the closer
+ * meaning, then stronger relevance, the score breaking what is left. Meaning comes before relevance,
+ * because shared words lifted a farther memory's relevance over a closer one's; a memory without a
+ * vector (no embeddings, or one waiting for its fill) is ordered by its relevance.
  */
 function byMeaning(cosines: ReadonlyMap<string, number>, named: ReadonlyMap<string, Named>): (left: Ranked, right: Ranked) => number {
   const holders = (item: Ranked): number => named.get(item.memory.id)?.holders ?? Number.POSITIVE_INFINITY
   return (left, right) =>
     holders(left) - holders(right) ||
-    right.relationStrength - left.relationStrength ||
     (cosines.get(right.memory.id) ?? 0) - (cosines.get(left.memory.id) ?? 0) ||
+    right.relationStrength - left.relationStrength ||
     byScore(left, right)
 }
 
 /** A search hit's ranking entry; a named memory takes the named relevance whatever its words or meaning say. */
 function promptEntry(hit: SearchHit, request: PromptRequest, withMeaning: boolean, named: ReadonlyMap<string, Named>): Ranked {
   const name = named.get(hit.memory.id)
-  const relevance = name ? { strength: NAMED_STRENGTH, reasons: [`query:exact-name:${name.name}`] } : promptRelevance(hit, request.query, withMeaning)
+  const relevance = name ? { strength: NAMED_STRENGTH, reasons: [`query:exact-name:${name.name}`] } : promptRelevance(hit, request.query, withMeaning, MEANING_FLOOR_COSINE)
   return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
 }
 
