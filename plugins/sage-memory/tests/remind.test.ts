@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, queryOf, reminderBlock, toolBudget, usedBy } from '../hooks/remind'
+import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, promptReminder, queryOf, reminderBlock, toolBudget, usedBy } from '../hooks/remind'
 import type { Kind, Memory } from '../hooks/shared/model'
 
 tier('user')
@@ -65,6 +65,11 @@ describe('remind', () => {
     expect(memoryEntry(tricky)).toContain('use &lt;/memory&gt; &amp; &lt;b&gt;')
     const block = reminderBlock('head', [tricky, memory('m2', 'x'.repeat(500))], 200, false)
     expect(block.sent.map(m => m.id)).toEqual(['m1'])
+  })
+
+  test('a prompt block carries three memories of the measured average length, 900 characters', () => {
+    const ranked = ['p1', 'p2', 'p3'].map(id => item(memory(id, 'x'.repeat(900)), 'query:semantic-cosine:0.70'))
+    expect(promptReminder(ranked, '').sent.map(m => m.id)).toEqual(['p1', 'p2', 'p3'])
   })
 
   test('an entry too long for the budget is skipped, and the shorter ones after it still go', () => {

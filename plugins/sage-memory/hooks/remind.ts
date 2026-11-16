@@ -101,7 +101,12 @@ export function toolBudget(percent: number | undefined): Budget {
   return { count: 8, chars: 2800 }
 }
 
-export const PROMPT_BUDGET: Budget = { count: 8, chars: 2400 }
+/**
+ * The prompt block. A memory averaged 900 characters in a measured store, so 2,400 characters carried
+ * 1 to 1.5 of them; on 57 real prompts 3,600 delivered 40 of 112 wanted memories against 32, with no
+ * memory for a topic-less message. The user chose 3,600.
+ */
+export const PROMPT_BUDGET: Budget = { count: 8, chars: 3600 }
 export const SUBAGENT_CHARS = 4000
 
 /** The shortest memory text whose appearance in the context counts as already visible. */
