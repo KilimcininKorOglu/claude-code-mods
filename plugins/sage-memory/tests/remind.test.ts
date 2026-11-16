@@ -67,6 +67,11 @@ describe('remind', () => {
     expect(block.sent.map(m => m.id)).toEqual(['m1'])
   })
 
+  test('an entry too long for the budget is skipped, and the shorter ones after it still go', () => {
+    const block = reminderBlock('head', [memory('long', 'x'.repeat(500)), memory('m1', 'a'), memory('m2', 'b')], 300, false)
+    expect(block.sent.map(m => m.id)).toEqual(['m1', 'm2'])
+  })
+
   test('an entry names its priority, a permanent persistence, its first anchor and its first three tags', () => {
     const critical = { ...memory('m1', 'x'), importance: 0.95, persistence: 'permanent' as const, tags: ['build', 'ci', 'make', 'extra'], anchors: [{ type: 'symbol' as const, path: 'src/a.ts', symbol: 'run' }, { type: 'file' as const, path: 'b.ts' }] }
     expect(memoryEntry(critical)).toMatch(/^<memory id="m1" kind="convention" scope="project" status="active" priority="critical" persistence="permanent" about="symbol src\/a.ts#run" tags="build,ci,make">\n/)

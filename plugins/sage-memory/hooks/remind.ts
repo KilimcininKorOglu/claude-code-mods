@@ -219,9 +219,10 @@ export function reminderBlock(header: string, memories: readonly Memory[], chars
   const head = framed ? `[sage-memory] ${header}\n${FRAME}` : `[sage-memory] ${header}`
   const sent: Memory[] = []
   let text = head
+  // An entry too long for what is left is skipped, not the end: one long memory ranked first used to empty the block.
   for (const memory of memories) {
     const next = `${text}\n${memoryEntry(memory)}`
-    if (next.length > chars) break
+    if (next.length > chars) continue
     text = next
     sent.push(memory)
   }
