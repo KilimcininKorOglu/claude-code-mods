@@ -25,5 +25,5 @@ export function searchWithCosines(dbs: readonly DatabaseSync[], query: string, v
   if (semantic === undefined || query.trim() === '') return { hits: lexicalHits(lexical.slice(0, limit)), cosines: new Map() }
   const every = Number.POSITIVE_INFINITY
   const vectors = dbs.flatMap(db => vectorHits(db, semantic, visibility, every, true)).sort((a, b) => b.cosine - a.cosine)
-  return { hits: fuse(lexical, vectors, limit, floor), cosines: new Map(vectors.map(hit => [hit.memory.id, hit.cosine])) }
+  return { hits: fuse(lexical, vectors, limit, floor), cosines: new Map(vectors.map(hit => [hit.id, hit.cosine])) }
 }

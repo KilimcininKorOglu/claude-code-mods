@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import type { Memory } from '../hooks/shared/model.ts'
-import { parseMemory, sql } from './rows.ts'
+import { parseMemory, readMemory, sql } from './rows.ts'
 import { visibilityParams, type Visibility } from './search.ts'
 
 /**
@@ -18,13 +18,29 @@ import { visibilityParams, type Visibility } from './search.ts'
  */
 export type SemanticQuery = { modelId: string; vector: Float32Array; pieces?: readonly Float32Array[] }
 
-export type VectorHit = { memory: Memory; cosine: number }
+/** A memory's best cosine to a query; `memory` is read from the store on first use (see `hitOf`), so use `id` where it is enough. */
+export type VectorHit = { id: string; cosine: number; readonly memory: Memory }
 
 /** What one embedding of a memory made: the whole text's vector and one per sentence. */
 export type MadeVectors = { id: string; hash: string; vector: Float32Array; sentences: readonly Float32Array[] }
 
 export function textHash(text: string): string {
   return createHash('sha256').update(text).digest('hex')
+}
+
+/** The hash of each memory text a search last checked, by memory id; a changed text is hashed again. */
+const checked = new Map<string, { text: string; hash: string }>()
+
+/**
+ * `textHash` of a memory's text, kept between searches: every search checks the hash of each stored
+ * vector against its memory's text, and hashing 3,000 texts at each request cost a tenth of a ranking.
+ */
+function currentHash(id: string, text: string): string {
+  const known = checked.get(id)
+  if (known !== undefined && known.text === text) return known.hash
+  const hash = textHash(text)
+  checked.set(id, { text, hash })
+  return hash
 }
 
 /** A sentence ends at `.`, `;`, `!` or `?` before an upper-case letter, a digit, a backquote or a parenthesis. */
@@ -104,8 +120,9 @@ function toBlob(vector: Float32Array): Uint8Array {
   return new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength)
 }
 
-/** A stored vector, copied so its bytes start on a 4-byte boundary. */
+/** A stored vector; its bytes are copied only when they do not start on a 4-byte boundary. */
 export function fromBlob(blob: Uint8Array): Float32Array {
+  if (blob.byteOffset % 4 === 0) return new Float32Array(blob.buffer, blob.byteOffset, blob.byteLength / 4)
   const bytes = new Uint8Array(blob)
   return new Float32Array(bytes.buffer, 0, bytes.byteLength / 4)
 }
@@ -127,20 +144,43 @@ export function dropVectors(db: DatabaseSync, memoryId: string): void {
   sql(db, 'DELETE FROM sentence_vectors WHERE memory_id = ?').run(memoryId)
 }
 
-/** The vectors are normalized, so their dot product is their cosine. */
+/**
+ * The vectors are normalized, so their dot product is their cosine. A position only one vector has
+ * adds nothing, so the loop stops at the shorter one; it runs for every stored vector at every
+ * request, and a `?? 0` on each element made it the costliest step of a ranking.
+ */
 export function dot(a: Float32Array, b: Float32Array): number {
+  const length = Math.min(a.length, b.length)
   let sum = 0
-  for (let i = 0; i < a.length; i++) sum += (a[i] ?? 0) * (b[i] ?? 0)
+  for (let i = 0; i < length; i++) sum += a[i]! * b[i]!
   return sum
 }
 
 const VISIBLE = `
-  SELECT m.id AS id, m.data AS data, v.vector AS vector, v.text_hash AS text_hash FROM vectors v JOIN memories m ON m.id = v.memory_id
+  SELECT m.id AS id, m.text AS text, v.vector AS vector, v.text_hash AS text_hash FROM vectors v JOIN memories m ON m.id = v.memory_id
   WHERE v.model_id = ?
     AND m.status IN (SELECT value FROM json_each(?)) AND m.context_policy IN (SELECT value FROM json_each(?))
     AND (? IS NULL OR m.scope = ?) AND (? = 1 OR m.scope != 'session' OR m.owner_session_id = ?) AND (? = 1 OR m.audience IS NULL)`
 
-type VectorRow = { id: string; data: string; vector: Uint8Array; text_hash: string }
+type VectorRow = { id: string; text: string; vector: Uint8Array; text_hash: string }
+
+/**
+ * A hit whose memory is read and parsed on first use: a search scores every stored vector, and
+ * reading and parsing all 3,000 memories of a store at each request was most of a ranking's time,
+ * while only the hits a ranking keeps are ever read.
+ */
+function hitOf(db: DatabaseSync, id: string, cosine: number): VectorHit {
+  let memory: Memory | undefined
+  return {
+    id,
+    cosine,
+    get memory(): Memory {
+      memory ??= readMemory(db, id)
+      if (memory === undefined) throw new Error(`the memory ${id} left the store during a search`)
+      return memory
+    },
+  }
+}
 
 type SentenceRow = { memory_id: string; vector: Uint8Array; text_hash: string }
 
@@ -148,7 +188,12 @@ type SentenceRow = { memory_id: string; vector: Uint8Array; text_hash: string }
 export function sentenceVectors(db: DatabaseSync, modelId: string): Map<string, Array<{ vector: Float32Array; hash: string }>> {
   const rows = sql(db, 'SELECT memory_id, vector, text_hash FROM sentence_vectors WHERE model_id = ?').all(modelId) as SentenceRow[]
   const byMemory = new Map<string, Array<{ vector: Float32Array; hash: string }>>()
-  for (const row of rows) byMemory.set(row.memory_id, [...(byMemory.get(row.memory_id) ?? []), { vector: fromBlob(row.vector), hash: row.text_hash }])
+  for (const row of rows) {
+    const own = byMemory.get(row.memory_id)
+    const sentence = { vector: fromBlob(row.vector), hash: row.text_hash }
+    if (own === undefined) byMemory.set(row.memory_id, [sentence])
+    else own.push(sentence)
+  }
   return byMemory
 }
 
@@ -163,12 +208,11 @@ export function vectorHits(db: DatabaseSync, query: SemanticQuery, visibility: V
   const queries = [query.vector, ...(query.pieces ?? [])]
   const hits: VectorHit[] = []
   for (const row of rows) {
-    const memory = parseMemory(row)
     const vector = fromBlob(row.vector)
-    const hash = textHash(memory.text)
+    const hash = currentHash(row.id, row.text)
     if (vector.length !== query.vector.length || row.text_hash !== hash) continue
     const own = (sentences.get(row.id) ?? []).filter(sentence => sentence.hash === hash && sentence.vector.length === query.vector.length)
-    hits.push({ memory, cosine: bestCosine(queries, [vector, ...own.map(sentence => sentence.vector)]) })
+    hits.push(hitOf(db, row.id, bestCosine(queries, [vector, ...own.map(sentence => sentence.vector)])))
   }
   return hits.sort((a, b) => b.cosine - a.cosine).slice(0, limit)
 }

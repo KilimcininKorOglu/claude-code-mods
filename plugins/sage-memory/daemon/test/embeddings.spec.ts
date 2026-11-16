@@ -17,7 +17,7 @@ import { createStores, transaction, type Store } from '../stores.ts'
 import { updateMemory } from '../update.ts'
 import { dropMemory } from '../move.ts'
 import { sql } from '../rows.ts'
-import { piecesOf, sentencesOf, unembedded, vectorHits, type SemanticQuery } from '../vectors.ts'
+import { piecesOf, sentencesOf, unembedded, vectorHits, type SemanticQuery, type VectorHit } from '../vectors.ts'
 import { fakeRuntime, queryOf, toward } from './fake-runtime.ts'
 import { cleanUp, tempDir, waitFor } from './support.ts'
 import { world, type World } from './world.ts'
@@ -64,10 +64,13 @@ describe('semantic relevance', () => {
   })
 })
 
+/** A vector hit as `vectorHits` answers it. */
+const hit = (memory: Memory, cosine: number): VectorHit => ({ id: memory.id, memory, cosine })
+
 describe('fusion', () => {
   test('a vector hit above the floor lifts a memory the text index found; one it missed enters only above the floor', () => {
     const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(id => memoryOf(id))
-    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.6 }, { memory: b!, cosine: 0.56 }, { memory: d!, cosine: 0.5 }], 10, 0.55)
+    const fused = fuse([a!, b!], [hit(c!, 0.6), hit(b!, 0.56), hit(d!, 0.5)], 10, 0.55)
     assert.deepEqual(
       fused.map(hit => [hit.memory.id, hit.source, hit.vectorScore]),
       [
@@ -80,7 +83,7 @@ describe('fusion', () => {
 
   test('a text match whose cosine is under the floor keeps its cosine and gains no rank from it', () => {
     const [a, b, c] = ['A', 'B', 'C'].map(id => memoryOf(id))
-    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.7 }, { memory: b!, cosine: 0.3 }], 10, 0.45)
+    const fused = fuse([a!, b!], [hit(c!, 0.7), hit(b!, 0.3)], 10, 0.45)
     assert.deepEqual(
       fused.map(hit => [hit.memory.id, hit.source, hit.vectorScore]),
       [
@@ -94,14 +97,14 @@ describe('fusion', () => {
   test('a memory the words miss outranks text matches whose meaning is under the floor', () => {
     const text = Array.from({ length: 50 }, (_, index) => memoryOf(`T${index}`))
     const meant = memoryOf('V')
-    const vectors = [{ memory: meant, cosine: 0.72 }, ...text.map((memory, index) => ({ memory, cosine: 0.4 - index * 0.005 }))]
+    const vectors = [hit(meant, 0.72), ...text.map((memory, index) => hit(memory, 0.4 - index * 0.005))]
     const fused = fuse(text, vectors, 10, MEANING_FLOOR_COSINE)
     assert.ok(fused.slice(0, 2).some(hit => hit.memory.id === 'V'), 'the only memory above the floor is among the first two of ten')
   })
 
   test('a memory only the vector channel finds enters above the floor it is given, never at it', () => {
     const [a, d, e] = ['A', 'D', 'E'].map(id => memoryOf(id))
-    const fused = fuse([a!], [{ memory: d!, cosine: 0.5 }, { memory: e!, cosine: 0.44 }], 10, MEANING_FLOOR_COSINE)
+    const fused = fuse([a!], [hit(d!, 0.5), hit(e!, 0.44)], 10, MEANING_FLOOR_COSINE)
     assert.deepEqual(fused.map(hit => hit.memory.id).sort(), ['A', 'D'])
   })
 
@@ -123,12 +126,12 @@ describe('fusion', () => {
   test('a memory only the vector channel finds keeps a place when the text index fills the list', () => {
     const text = Array.from({ length: 96 }, (_, index) => memoryOf(`T${index}`))
     const meant = memoryOf('V')
-    const fused = fuse(text, [{ memory: meant, cosine: 0.8 }], 48, MEANING_FLOOR_COSINE)
+    const fused = fuse(text, [hit(meant, 0.8)], 48, MEANING_FLOOR_COSINE)
     assert.ok(fused.some(hit => hit.memory.id === 'V'), 'the best vector hit ranks with the best text hit, not behind every one')
   })
 
   test('at most twelve memories enter from the vector channel alone, and a text-only list is scored by place', () => {
-    const alone = Array.from({ length: 13 }, (_, index) => ({ memory: memoryOf(`V${index}`), cosine: 0.9 - index * 0.01 }))
+    const alone = Array.from({ length: 13 }, (_, index) => hit(memoryOf(`V${index}`), 0.9 - index * 0.01))
     assert.equal(fuse([], alone, 50, MEANING_FLOOR_COSINE).length, 12)
     assert.deepEqual(
       lexicalHits([memoryOf('A'), memoryOf('B'), memoryOf('C')]).map(hit => hit.finalScore),

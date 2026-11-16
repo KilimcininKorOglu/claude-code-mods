@@ -69,8 +69,11 @@ function holdersOf(db: DatabaseSync, name: string, visibility: Visibility, ancho
  */
 export function namedMemories(dbs: readonly DatabaseSync[], prompt: string, visibility: Visibility, blockCount: number): Named[] {
   const found = new Map<string, Named>()
+  const names = namesOf(prompt)
+  // The anchor index reads every anchor of a store, so a prompt that names nothing does not build it.
+  if (names.length === 0) return []
   const indexes = dbs.map(db => ({ db, anchors: anchorIndex(db, visibility) }))
-  for (const name of namesOf(prompt)) {
+  for (const name of names) {
     const holders = indexes.flatMap(({ db, anchors }) => holdersOf(db, name, visibility, anchors))
     if (holders.length === 0 || holders.length > blockCount) continue
     for (const memory of holders) {

@@ -39,7 +39,7 @@ function fusable(lexicalIds: ReadonlySet<string>, vectors: readonly VectorHit[],
   let alone = 0
   for (const hit of vectors) {
     if (hit.cosine <= floor) continue
-    if (lexicalIds.has(hit.memory.id)) {
+    if (lexicalIds.has(hit.id)) {
       kept.push(hit)
     } else if (alone < MAX_VECTOR_ONLY) {
       alone++
@@ -61,16 +61,16 @@ export function fuse(lexical: readonly Memory[], vectors: readonly VectorHit[], 
   })
   fusable(new Set(fused.keys()), vectors, floor).forEach((hit, rank) => {
     const share = VECTOR_WEIGHT / (RRF_K + rank + 1)
-    const known = fused.get(hit.memory.id)
+    const known = fused.get(hit.id)
     const next: SearchHit = known
       ? { ...known, vectorScore: hit.cosine, finalScore: known.finalScore + share, source: 'both' }
       : { memory: hit.memory, lexicalScore: null, vectorScore: hit.cosine, finalScore: share, source: 'vector' }
-    fused.set(hit.memory.id, next)
+    fused.set(hit.id, next)
   })
   // A text match under the floor keeps its cosine, which the relevance rules read, and gains no rank from it.
   for (const hit of vectors) {
-    const known = fused.get(hit.memory.id)
-    if (known !== undefined && known.vectorScore === null) fused.set(hit.memory.id, { ...known, vectorScore: hit.cosine })
+    const known = fused.get(hit.id)
+    if (known !== undefined && known.vectorScore === null) fused.set(hit.id, { ...known, vectorScore: hit.cosine })
   }
   return [...fused.values()].sort((a, b) => b.finalScore - a.finalScore).slice(0, limit)
 }
