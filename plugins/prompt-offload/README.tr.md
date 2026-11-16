@@ -1,16 +1,16 @@
 # prompt-offload
 
-Prompt'a uzun bir log, bir stack trace ya da koca bir dosya yapıştırırsın; modelin işine yalnız bir kısmı yarasa da hepsi session'ın geri kalanında context'te kalır. Bu mod uzun bir yapıştırılmış prompt'u bir dosyaya yazar ve modele ilk satırlarını path ile birlikte gönderir; böylece tek bir yapıştırma context'i doldurmaz.
+Prompt'a uzun bir log, bir stack trace ya da bütün bir dosya yapıştırdığınızda metnin tamamı session sonuna kadar context'te kalır. Model bu metnin yalnız bir kısmına ihtiyaç duysa bile durum değişmez. Bu mod uzun bir prompt'u bir dosyaya yazar ve modele yalnız ilk satırlarını, dosyanın path'iyle birlikte gönderir. Böylece tek bir yapıştırma context'i doldurmaz.
 
 ## Ne yapar
 
-1. Yazdığın ya da Remote Control üzerinden gönderdiğin her prompt ölçülür. Bir notification, bir peer mesajı, bir schedule ya da başka bir plugin'in prompt'u olduğu gibi bırakılır.
-2. Sınırdan (varsayılan 2000 karakter) uzun bir prompt `$TMPDIR/prompt-offload/<hash>.txt`'ye bütün ve değişmeden yazılır. Hash metni ve gönderildiği zamanı kapsar.
-3. Model prompt'un ilk 200 karakterini okur; ardından dosyayı, karakter sayısını ve satır sayısını söyleyen ve cevap vermeden önce dosyayı okumasını isteyen tek bir satır gelir. Bu 200 karakterin ortasından sonra bir satır sonu varsa baş kısım sonuncusunda kesilir.
-4. Transcript'e tek bir satır düşer: dosyaya kaç karakter gittiği ve nereye.
-5. Başarısız bir yazma prompt'u kaybettirmez: prompt'un tamamı modele olduğu gibi ulaşır, neden de farklı bir hata gelene kadar bir kez yazılır.
+1. Yazdığınız ya da Remote Control ile gönderdiğiniz her prompt'un uzunluğu ölçülür. Notification, peer mesajı, schedule ve başka plugin'lerin prompt'ları olduğu gibi bırakılır.
+2. Sınırı (varsayılan 2000 karakter) aşan bir prompt, tamamı ve değiştirilmeden `$TMPDIR/prompt-offload/<hash>.txt` dosyasına yazılır. Hash, metinden ve gönderildiği zamandan hesaplanır.
+3. Model prompt'un ilk 200 karakterini okur. Ardından tek bir satır gelir: bu satır dosyanın adını, karakter ve satır sayısını verir ve modelden cevap vermeden önce dosyayı okumasını ister. Bu 200 karakterin ikinci yarısında bir satır sonu varsa baş kısım son satır sonunda kesilir.
+4. Transcript'e tek bir satır yazılır: dosyaya kaç karakter gittiği ve dosyanın yeri.
+5. Dosyaya yazma başarısız olursa prompt kaybolmaz. Prompt'un tamamı modele olduğu gibi gider. Hatanın nedeni bir kez yazılır ve farklı bir hata gelene kadar tekrarlanmaz.
 
-Canlı denemede 2980 karakterlik bir prompt dosyaya yazıldı; model dosyayı `Read` ile okudu ve yalnız prompt'un son kısmında duran soruyu cevapladı.
+Canlı denemede 2980 karakterlik bir prompt dosyaya yazıldı. Model dosyayı `Read` ile okudu ve yalnız prompt'un son kısmında duran soruyu cevapladı.
 
 ## Komut
 
@@ -23,14 +23,14 @@ Canlı denemede 2980 karakterlik bir prompt dosyaya yazıldı; model dosyayı `R
     claude plugin marketplace add KilimcininKorOglu/claude-code-mods
     claude plugin install prompt-offload@kilimcininkoroglu-mods
 
-Function hook'lar henüz early access aşamasında. Claude Code 2.1.288 ve üzerinde varsayılan olarak yüklenir, açılacak bir ayar yok.
+Function hook'lar early access aşamasında. Claude Code 2.1.288 ve sonrası onları varsayılan olarak yükler, bu yüzden açmanız gereken bir ayar yoktur.
 
 ## Kurulumdan sonra
 
-1. `$TMPDIR/prompt-offload`'u okumaya izin ver, ya da bir dosyanın ilk `Read`'inin sorduğu izin sorusunu cevapla.
-2. Claude Code'u yeniden başlat.
+1. `$TMPDIR/prompt-offload` dizinini okuma izni verin. Ya da bir dosyanın ilk `Read` çağrısında gelen izin sorusunu cevaplayın.
+2. Claude Code'u yeniden başlatın.
 
-## Nereye uzanır
+## Nelere erişir
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
@@ -41,22 +41,22 @@ Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
 Reach L2: dosya yazar ve bir process çalıştırır.
 
-    1. Okur:     gönderilen her prompt'un metnini ve origin'ini, TMPDIR'ı
-    2. Çalıştırır: mkdir -p, argv ile
-    3. Gönderir: prompt'un ilk 200 karakterini ve path'i modele; makineden hiçbir şey çıkmaz
-    4. Saklar:   bütün prompt'u $TMPDIR/prompt-offload altında, on/off ayarını ve limiti $.store içinde
-    5. Düşman girdi: yalnız composer ya da Remote Control'den gelen bir prompt yazılır, dosya adı mod'un kurduğu bir hash'tir ve path hiçbir zaman bir shell'e ulaşmaz
+    1. Okur:         gönderilen her prompt'un metnini ve kaynağını, TMPDIR'ı
+    2. Çalıştırır:   mkdir -p, argv ile
+    3. Gönderir:     prompt'un ilk 200 karakterini ve path'i modele; makineden dışarı hiçbir şey çıkmaz
+    4. Saklar:       prompt'un tamamını $TMPDIR/prompt-offload altında; açık/kapalı ayarını ve sınırı $.store içinde
+    5. Düşman girdi: yalnız composer'dan ya da Remote Control'den gelen prompt yazılır; dosya adı modun hesapladığı bir hash'tir ve path hiçbir zaman bir shell'e verilmez
 
 ## Sınırlar
 
-- Mod dosyayı silmez; temp dizinini sistem temizler.
-- Prompt'taki bir attachment, bir görsel ya da bir dosya referansı sayılmaz ve taşınmaz: mod yalnız metni ölçer.
-- Model prompt'un tamamını görmek için bir `Read` yapmak zorundadır; yani hemen cevaplayacağı bir prompt bir tool çağrısına mal olur.
-- 500 karakterin altındaki bir sınır reddedilir, çünkü 200 karakterlik bir baş kısım prompt'un çok azını geride bırakır.
+- Mod dosyayı silmez. Temp dizinini işletim sistemi temizler.
+- Prompt'taki attachment, görsel ya da dosya referansı sayılmaz ve dosyaya taşınmaz. Mod yalnız metni ölçer.
+- Modelin prompt'un tamamını görmesi için bir `Read` çağrısı gerekir. Bu yüzden hemen cevaplanabilecek bir prompt bir tool çağrısına mal olur.
+- 500 karakterin altındaki bir sınır reddedilir, çünkü 200 karakterlik baş kısımdan sonra prompt'un çok azı geride kalır.
 
 ## Geliştirme
 
     make install     # eslint, typescript-eslint, typescript
-    make lint        # complexity sınırı 10; aşılırsa build kırılır
+    make lint        # complexity sınırı 10; aşılırsa build başarısız olur
     make validate
     make test        # claude plugin test
