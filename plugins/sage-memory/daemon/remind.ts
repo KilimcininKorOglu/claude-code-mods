@@ -110,6 +110,16 @@ function byScore(left: Ranked, right: Ranked): number {
   return right.score - left.score
 }
 
+/**
+ * Stronger relation first, the reminder score breaking a tie. The score weighs importance about seven
+ * times a relation step (importance 1 against 0.6 moved it 0.1, a relation of 0.95 against 0.92 0.014)
+ * and stops at 1, so by score alone the important memories of a directory above a file ranked before
+ * the file's own memory.
+ */
+function byRelation(left: Ranked, right: Ranked): number {
+  return right.relationStrength - left.relationStrength || byScore(left, right)
+}
+
 export type ToolsRequest = {
   /** The paths the file tool touched, absolute or relative to the project root. */
   paths: readonly string[]
@@ -185,7 +195,7 @@ export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
   const ranked = [...found.values()]
     .filter(item => statuses.includes(item.memory.status) && item.memory.kind !== 'memory_review')
     .map(item => ({ memory: item.memory, relationStrength: item.relationStrength, score: reminderScore(item.memory, item.relationStrength), reasons: item.reasons }))
-    .sort(byScore)
+    .sort(byRelation)
   return applyGates(ranked, [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
 }
 

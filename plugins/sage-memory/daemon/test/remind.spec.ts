@@ -55,6 +55,15 @@ describe("a reminder on a file tool's result", () => {
     w.close()
   })
 
+  test("the file's own memory ranks first, above more important memories of a directory above it", async () => {
+    const w = world()
+    for (let i = 0; i < 3; i++) await w.remember({ text: `Source tree rule ${i}: keep every module free of side effects`, anchors: [{ type: 'directory', path: 'src' }], importance: 1, persistence: 'permanent', distinct: true })
+    const own = (await w.remember({ text: 'The app entry must register the router before the store', anchors: [{ type: 'file', path: 'src/app.ts' }], importance: 0.6 })).memory
+    const ranking = rankForTools(w.readers('s1', 'main'), { ...READ_APP, query: 'src app ts' })
+    assert.equal(ranking.candidates[0]?.memory.id, own.id, 'a stronger relation outranks a higher importance')
+    w.close()
+  })
+
   test('the gates hold back a low importance, a never policy, and a repeated text', async () => {
     const w = world()
     const anchors = [{ type: 'file' as const, path: 'src/app.ts' }]
