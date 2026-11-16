@@ -56,7 +56,7 @@ Mod `gemini-core`'a bağlıdır ve `claude plugin install` onu da yükler. Funct
 
 ## Kurulumdan sonra
 
-1. Gemini key'ini ve tier'ı gemini-core'da, gemini-core'un [Kurulumdan sonra](../gemini-core/README.md#after-installing) bölümünde anlatıldığı gibi ayarlayın. Ardından Claude Code'u yeniden başlatın.
+1. Gemini key'ini ve tier'ı gemini-core'da, gemini-core'un [Kurulumdan sonra](../gemini-core/README.tr.md#kurulumdan-sonra) bölümünde anlatıldığı gibi ayarlayın. Ardından Claude Code'u yeniden başlatın.
 2. `/gemini-plan-review on` komutunu çalıştırın. Key yoksa komut `still off: gemini-core has no Gemini key` cevabını verir ve inceleme kapalı kalır.
 3. `/gemini-plan-review` komutunu çalıştırın. İlk satır `on · <model> · thinking ... · <tier> tier · key set` olmalıdır.
 4. Bir plan size `Gemini HTTP 429` ya da tekrar eden `Gemini HTTP 503` ile ulaşırsa `/gemini-core model plan-review` ile başka bir model seçin.
