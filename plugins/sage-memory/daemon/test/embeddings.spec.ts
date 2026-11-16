@@ -77,6 +77,13 @@ describe('fusion', () => {
     )
   })
 
+  test('a memory only the vector channel finds keeps a place when the text index fills the list', () => {
+    const text = Array.from({ length: 96 }, (_, index) => memoryOf(`T${index}`))
+    const meant = memoryOf('V')
+    const fused = fuse(text, [{ memory: meant, cosine: 0.8 }], 48)
+    assert.ok(fused.some(hit => hit.memory.id === 'V'), 'the best vector hit ranks with the best text hit, not behind every one')
+  })
+
   test('at most twelve memories enter from the vector channel alone, and a text-only list is scored by place', () => {
     const alone = Array.from({ length: 13 }, (_, index) => ({ memory: memoryOf(`V${index}`), cosine: 0.9 - index * 0.01 }))
     assert.equal(fuse([], alone, 50).length, 12)

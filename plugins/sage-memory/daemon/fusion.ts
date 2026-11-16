@@ -3,13 +3,15 @@ import { SEMANTIC_FLOOR_COSINE } from './relevance.ts'
 import type { VectorHit } from './vectors.ts'
 
 /**
- * Reciprocal-rank fusion of the text index and the vector channel, ported from SAGE's
- * `augmentLexicalWithVectorRecall`: a memory gains weight / (K + rank) from each list it is in,
- * the vector list weighing 0.3. A vector hit the text index also found lifts that memory; one it
- * missed enters only from the cosine a reminder could still use.
+ * Reciprocal-rank fusion of the text index and the vector channel: a memory gains weight / (K + rank)
+ * from each list it is in, both lists weighing alike. A vector hit the text index also found lifts that
+ * memory; one it missed enters only from the cosine a reminder could still use. SAGE weighed the vector
+ * list 0.3, so a memory only the vector found ranked behind the first 82 text hits and never entered a
+ * list the text index filled: none did in 57 measured prompts, whose word search, with an OR fallback,
+ * matched more memories than the 48 places.
  */
 
-const VECTOR_WEIGHT = 0.3
+const VECTOR_WEIGHT = 0.5
 const RRF_K = 60
 /** At most this many memories enter from the vector channel alone. */
 const MAX_VECTOR_ONLY = 12
