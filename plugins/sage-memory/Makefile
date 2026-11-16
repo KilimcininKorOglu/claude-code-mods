@@ -1,4 +1,12 @@
-.PHONY: install lint typecheck validate test check
+.PHONY: install lint typecheck validate test check bench
+
+# The relevance benchmark: synthetic stores, the real embedding model (after /sage-memory setup) and
+# the blocks the hooks really send. SIZE adds generated filler memories; BUILD scores another release.
+SIZE ?= 40
+BUILD ?= .
+bench:
+	node --import ./daemon/bench/resolve.mjs daemon/bench/run.ts $(BUILD) --size $(SIZE)
+	node --import ./daemon/bench/resolve.mjs daemon/bench/run.ts $(BUILD) --size $(SIZE) --words-only
 
 install:
 	npm install
