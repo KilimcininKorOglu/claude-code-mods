@@ -1,6 +1,6 @@
 # gemini-advisor
 
-The model makes a plan, picks one of two approaches or says the work is done, and nobody looks at it a second time. This mod gives the model a Gemini advisor it calls by itself. The model writes what it did or is about to do and its question; Gemini reads the whole conversation so far, tool calls and outputs included, and its second opinion comes back as the tool result.
+The model makes a plan, picks one of two approaches or says the work is done, and nobody looks at it a second time. This mod gives the model a Gemini advisor it calls by itself. The model writes what it did or is about to do and its question; Gemini reads the conversation so far, tool calls and outputs included, and its second opinion comes back as the tool result. A conversation over `maxInputChars` (2,000,000 by default) is cut in the middle, and a subagent's call sends its message only.
 
 The idea follows the advisor tool of the Claude API, where the executor model calls a stronger model that reads its transcript. Here Gemini answers, and the model also sends a message of its own.
 
@@ -87,11 +87,11 @@ Reach L3, reaches the network.
 
 - Whether the model calls the advisor is its own decision. The live check covered one kind of turn.
 - The tool description names no model. The engine keeps the description it first sent for the whole session: a tool registered again after a model change still reached the model with the old text (measured on 2.1.278). The toast and `/gemini-advisor` name the model a call went to.
-- The engine serves the tool with a 60-second MCP timeout (debug log, 2.1.277). A call that takes longer fails, and the model reads the error.
+- A plugin tool call ran 333 seconds without a timeout (measured on 2.1.283), so a slow Gemini answer is waited for.
 - The note goes into the `env_info_simple` section. A setup whose system prompt has no such section gets no note, and the model sees the tool's name only. Only one setup was checked.
 - A subagent's call sends only its message, because which transcript `$.session.messages()` answers inside a subagent was not verified.
 - `$.session.messages()` answers the newest 4096 messages of a long transcript.
-- Every call sends the whole conversation, so a long session makes each call larger and slower.
+- Every call sends the conversation up to `maxInputChars`, so a long session makes each call larger and slower.
 
 ## Development
 

@@ -35,7 +35,7 @@ const WHEN = [
  * a /gemini-core change.
  */
 export const TOOL_DESCRIPTION = [
-  'Ask Gemini, a second model, for advice. It reads the whole conversation, tool output included, and your message, and answers with a second opinion.',
+  "Ask Gemini, a second model, for advice. It reads the conversation, tool output included (a long one is cut in the middle; a subagent's call sends no conversation), and your message, and answers with a second opinion.",
   ...WHEN,
 ].join('\n')
 
@@ -46,7 +46,7 @@ export const TOOL_DESCRIPTION = [
  */
 export const SYSTEM_GUIDANCE = [
   '# Gemini advisor',
-  `You have a second-opinion tool, ${TOOL_ID}: Gemini reads the whole conversation so far, tool calls and outputs included, and your message, and answers with advice. When it is listed only by name, load it with ToolSearch (query "select:${TOOL_ID}").`,
+  `You have a second-opinion tool, ${TOOL_ID}: Gemini reads the conversation so far, tool calls and outputs included (a long one is cut in the middle; a subagent's call sends no conversation), and your message, and answers with advice. When it is listed only by name, load it with ToolSearch (query "select:${TOOL_ID}").`,
   ...WHEN,
 ].join('\n')
 

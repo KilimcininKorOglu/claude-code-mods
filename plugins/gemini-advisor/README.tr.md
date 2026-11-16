@@ -1,6 +1,6 @@
 # gemini-advisor
 
-Model bir plan kurar, iki yaklaşımdan birini seçer ya da işin bittiğini söyler; buna ikinci kez bakan olmaz. Bu mod modele, kendi kendine çağırdığı bir Gemini danışmanı verir. Model ne yaptığını ya da ne yapacağını ve sorusunu yazar. Gemini o ana kadarki bütün konuşmayı, tool çağrıları ve çıktılarıyla birlikte okur; ikinci görüşü tool sonucu olarak geri gelir.
+Model bir plan kurar, iki yaklaşımdan birini seçer ya da işin bittiğini söyler; buna ikinci kez bakan olmaz. Bu mod modele, kendi kendine çağırdığı bir Gemini danışmanı verir. Model ne yaptığını ya da ne yapacağını ve sorusunu yazar. Gemini o ana kadarki konuşmayı, tool çağrıları ve çıktılarıyla birlikte okur. Gemini'nin ikinci görüşü tool sonucu olarak geri gelir. `maxInputChars` sınırını (varsayılan 2.000.000) aşan bir konuşmanın orta kısmı kesilir. Bir subagent'ın çağrısında yalnız mesajı gönderilir.
 
 Fikir Claude API'nin advisor tool'undan geliyor. Orada işi yapan model, kendi transcript'ini okuyan daha güçlü bir modeli çağırır. Burada cevabı Gemini verir, model de kendi mesajını ekler.
 
@@ -87,11 +87,11 @@ Reach L3: network'e çıkar.
 
 - Danışmanı çağırıp çağırmamak modelin kendi kararıdır. Canlı deneme tek bir turn türünü kapsadı.
 - Tool açıklaması hiçbir modelin adını anmaz. Engine ilk gönderdiği açıklamayı session boyunca korur: model değiştikten sonra yeniden kaydedilen bir tool modele yine eski metinle ulaştı (2.1.278 üzerinde ölçüldü). Bir çağrının hangi modele gittiğini toast ve `/gemini-advisor` söyler.
-- Engine tool'u 60 saniyelik bir MCP timeout'uyla sunar (debug log, 2.1.277). Daha uzun süren bir çağrı başarısız olur ve model hatayı okur.
+- Bir plugin tool çağrısı 333 saniye sürdü ve timeout'a uğramadı (2.1.283'te ölçüldü). Bu yüzden yavaş gelen bir Gemini cevabı beklenir.
 - Not `env_info_simple` section'ına eklenir. System prompt'unda bu section olmayan bir kurulum not almaz; model yalnız tool'un adını görür. Yalnız bir kurulum denendi.
 - Bir subagent'ın çağrısı yalnız kendi mesajını gönderir, çünkü `$.session.messages()`'ın subagent içinde hangi transcript'i verdiği doğrulanmadı.
 - `$.session.messages()` uzun bir transcript'in en yeni 4096 mesajını verir.
-- Her çağrı bütün konuşmayı gönderir; session uzadıkça her çağrı büyür ve yavaşlar.
+- Her çağrı konuşmayı `maxInputChars` sınırına kadar gönderir. Session uzadıkça her çağrı büyür ve yavaşlar.
 
 ## Geliştirme
 
