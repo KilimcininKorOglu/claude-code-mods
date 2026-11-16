@@ -12,7 +12,7 @@ Model bir akışı ya da bir mimariyi anlatırken çoğu zaman bir mermaid diyag
 
 Resim yalnız kitty grafik protokolünü destekleyen terminallerde (kitty, Ghostty) görünür. Diğer terminallerde resmin yerinde `mermaid diagram 1` yazısı görünür. Resmi yalnız terminal arayüzü çizer.
 
-`mmdc` yüklü değilken yapılan canlı denemede kurulum satırı cevaptan sonra bir kez geldi. PATH'te `mmdc` varken üç düğümlü bir flowchart 1,1 saniyede çizildi. tmux'ta cevabın altında `mermaid diagram 1` göründü ve debug log'da reddedilmiş bir ağaç yoktu.
+`mmdc` yüklü değilken yapılan canlı denemede kurulum satırı cevaptan sonra bir kez geldi. PATH'te `mmdc` varken üç düğümlü bir flowchart 1,1 saniyede çizildi. tmux'ta cevabın altında `mermaid diagram 1` göründü ve debug log'da reddedilmiş bir render tree yoktu.
 
 ## Komut
 
