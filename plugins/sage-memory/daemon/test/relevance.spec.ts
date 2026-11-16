@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'node:test'
 import type { Memory } from '../../hooks/shared/model.ts'
-import { memoryQueryRelevance, memoryStructuralRelevance, pathAnchorRelation, reminderScore, turnScore } from '../relevance.ts'
+import { RELATION_FLOOR, memoryQueryRelevance, memoryStructuralRelevance, pathAnchorRelation, reminderScore, turnScore } from '../relevance.ts'
 
 function memoryOf(fields: Partial<Memory>): Memory {
   return {
@@ -77,14 +77,30 @@ describe('how an anchor relates to a touched path', () => {
     }
   })
 
-  test('a directory above the path relates to every path below it, weaker with each level but above the reminder floor', () => {
+  test('a directory relates above the reminder floor to the paths as far below it as it lies under the root, the closer first', () => {
     const memory = memoryOf({ anchors: [{ type: 'directory', path: 'packages/api' }] })
-    assert.equal(pathAnchorRelation(memory, 'packages/api/db.ts')?.strength.toFixed(2), '0.94')
-    assert.equal(pathAnchorRelation(memory, 'packages/api/src/lib/db.ts')?.strength.toFixed(2), '0.90')
-    assert.equal(pathAnchorRelation(memory, 'packages/api/a/b/c/d/e/f/db.ts')?.strength.toFixed(2), '0.86')
-    assert.equal(pathAnchorRelation(memoryOf({ anchors: [{ type: 'directory', path: 'src' }] }), 'src/db.ts')?.strength.toFixed(2), '0.94')
+    const near = pathAnchorRelation(memory, 'packages/api/db.ts')?.strength ?? 0
+    const second = pathAnchorRelation(memory, 'packages/api/src/db.ts')?.strength ?? 0
+    assert.ok(near >= RELATION_FLOOR && second >= RELATION_FLOOR, 'two levels down from a directory two levels deep')
+    assert.ok(near > second, 'the closer file relates more strongly')
+    assert.ok((pathAnchorRelation(memoryOf({ anchors: [{ type: 'directory', path: 'src' }] }), 'src/db.ts')?.strength ?? 0) >= RELATION_FLOOR, 'a top-level directory and a file right under it')
     assert.equal(pathAnchorRelation(memory, 'packages/apiserver/db.ts'), undefined)
     assert.equal(pathAnchorRelation(memory, '.'), undefined)
+  })
+
+  test('past that reach a directory relates below the reminder floor, so a directory near the root does not remind of the whole project', () => {
+    const below = (dir: string, path: string) => (pathAnchorRelation(memoryOf({ anchors: [{ type: 'directory', path: dir }] }), path)?.strength ?? 1) < RELATION_FLOOR
+    assert.ok(below('src', 'src/lib/db.ts'), 'a top-level directory and a file two levels down')
+    assert.ok(below('plugins', 'plugins/context-restore/README.md'), 'the measured case: a note on every mod and one mod\'s README')
+    assert.ok(below('packages/api', 'packages/api/src/lib/db.ts'))
+    assert.ok(!below('plugins/sage-memory', 'plugins/sage-memory/daemon/remind.ts'), 'one mod\'s note still reaches its own files')
+  })
+
+  test('a query that spells a top-level directory\'s one word is no exact match of its anchor; a deeper directory\'s path is', () => {
+    const top = memoryOf({ text: 'Every mod keeps its own Makefile', anchors: [{ type: 'directory', path: 'plugins' }] })
+    assert.ok(memoryQueryRelevance(top, 'plugins context restore README md').strength < RELATION_FLOOR)
+    const mod = memoryOf({ text: 'The daemon runs on Node 22', anchors: [{ type: 'directory', path: 'plugins/sage-memory' }] })
+    assert.deepEqual(memoryQueryRelevance(mod, 'why does plugins/sage-memory need node').reasons, ['query:exact-directory'])
   })
 })
 

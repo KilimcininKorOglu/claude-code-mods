@@ -89,8 +89,10 @@ function informativeTerms(text: string): string[] {
 function exactAnchorValue(anchor: Anchor): string | undefined {
   const value = anchor.symbol ?? anchor.command ?? anchor.path ?? anchor.role
   if (!value) return undefined
-  const normalized = value.normalize('NFKC').toLowerCase().replace(/\\/g, '/').replace(/^\.\//, '')
-  return normalized === '.' || normalized.length < 4 ? undefined : normalized
+  const normalized = value.normalize('NFKC').toLowerCase().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/+$/, '')
+  if (normalized === '.' || normalized.length < 4) return undefined
+  // A directory right under the project root is one word, which a file tool's query spells for every path below it.
+  return anchor.type === 'directory' && !normalized.includes('/') ? undefined : normalized
 }
 
 function exactAnchorMatch(memory: Memory, normalizedQuery: string): Relevance | undefined {
@@ -255,13 +257,24 @@ export function memoryStructuralRelevance(memory: Memory, seeds: readonly Memory
 }
 
 /**
- * A directory anchor relates to every path below it, a top-level one included: a file right under it
- * at 0.94, less for each level deeper, and never below 0.86, so every path below it passes the
- * reminder's relation floor (0.85) while the closer directory still ranks first.
+ * A directory anchor relates to the paths below it as far down as the directory itself lies under the
+ * project root: a top-level directory to the files right under it, a directory two levels down to two
+ * levels below it. Within that reach a file right under it relates at 0.94, less for each level
+ * deeper, never below 0.86, so it passes the reminder's relation floor (0.85) while the closer
+ * directory still ranks first. Past that reach the relation falls below the floor, 0.05 for each
+ * level, because a directory near the root holds most of the project, and its memories then come
+ * only when the query or the embeddings find them.
  */
 const ANCESTOR_START = 0.96
 const ANCESTOR_DECAY_PER_LEVEL = 0.02
 const ANCESTOR_MIN = RELATION_FLOOR + 0.01
+const PAST_REACH_DECAY = 0.05
+
+function ancestorStrength(anchorDepth: number, distance: number): number {
+  const past = distance - anchorDepth
+  if (past > 0) return Math.max(0, RELATION_FLOOR - past * PAST_REACH_DECAY)
+  return Math.max(ANCESTOR_MIN, ANCESTOR_START - distance * ANCESTOR_DECAY_PER_LEVEL)
+}
 
 function anchorPathRelation(anchor: Anchor, relPath: string, depth: number): Relevance | undefined {
   const path = anchor.path
@@ -270,8 +283,9 @@ function anchorPathRelation(anchor: Anchor, relPath: string, depth: number): Rel
     return { strength: anchor.type === 'symbol' || anchor.type === 'command' ? 0.98 : 0.95, reasons: [`anchor:exact-${anchor.type}:${path}`] }
   }
   if (!relPath.startsWith(`${path}/`)) return undefined
-  const distance = depth - path.split('/').filter(Boolean).length
-  return { strength: Math.max(ANCESTOR_MIN, ANCESTOR_START - distance * ANCESTOR_DECAY_PER_LEVEL), reasons: [`anchor:ancestor:${path}+${distance}`] }
+  const anchorDepth = path.split('/').filter(Boolean).length
+  const distance = depth - anchorDepth
+  return { strength: ancestorStrength(anchorDepth, distance), reasons: [`anchor:ancestor:${path}+${distance}`] }
 }
 
 /**
