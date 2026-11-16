@@ -120,18 +120,14 @@ function byRelation(left: Ranked, right: Ranked): number {
   return right.relationStrength - left.relationStrength || byScore(left, right)
 }
 
-/** Whether a memory's anchors place it at the touched path: the file itself, a symbol in it, or a directory above it. */
-function isPlaced(item: Ranked): boolean {
-  return item.reasons.some(reason => reason.startsWith('anchor:'))
-}
-
 /**
  * A memory anchored where the tool worked first, then one the query alone found, each by relation. The
  * query of a tool reminder is the path spelled as words, so its matches (a word, a tag, a cosine) reached
- * 0.94 for memories of other files and outranked a directory anchor's 0.92.
+ * 0.94 for memories of other files and outranked a directory anchor's 0.92. `placed` holds the memories
+ * whose anchor alone reaches the relation floor; an anchor past its reach places nothing.
  */
-function byPlacement(left: Ranked, right: Ranked): number {
-  return Number(isPlaced(right)) - Number(isPlaced(left)) || byRelation(left, right)
+function byPlacement(placed: ReadonlySet<string>): (left: Ranked, right: Ranked) => number {
+  return (left, right) => Number(placed.has(right.memory.id)) - Number(placed.has(left.memory.id)) || byRelation(left, right)
 }
 
 export type ToolsRequest = {
@@ -145,14 +141,19 @@ export type ToolsRequest = {
   limit: number
 }
 
-/** Memories anchored to a touched path, a symbol in it or a directory above it. */
-function pathChannel(readers: Readers, request: ToolsRequest, statuses: readonly Status[], found: Map<string, Found>): void {
+/**
+ * Memories anchored to a touched path, a symbol in it or a directory above it. Each one whose anchor
+ * alone reaches the relation floor joins `placed`.
+ */
+function pathChannel(readers: Readers, request: ToolsRequest, statuses: readonly Status[], found: Map<string, Found>, placed: Set<string>): void {
   const { root } = readers.project
   if (root === undefined) return
   for (const path of relativePaths(root, request.paths)) {
     for (const memory of memoriesForPaths(readers.project, [path], visibilityFor(readers, statuses), PATH_FETCH)) {
       const relation = pathAnchorRelation(memory, path)
-      if (relation) addFound(found, { memory, op: readers.project, relationStrength: relation.strength, reasons: relation.reasons })
+      if (!relation) continue
+      addFound(found, { memory, op: readers.project, relationStrength: relation.strength, reasons: relation.reasons })
+      if (relation.strength >= RELATION_FLOOR) placed.add(memory.id)
     }
   }
 }
@@ -203,13 +204,14 @@ function graphChannel(readers: Readers, request: ToolsRequest, statuses: readonl
 export function rankForTools(readers: Readers, request: ToolsRequest): Ranking {
   const statuses: Status[] = request.mutation ? ['active', 'stale'] : ['active']
   const found = new Map<string, Found>()
-  pathChannel(readers, request, statuses, found)
+  const placed = new Set<string>()
+  pathChannel(readers, request, statuses, found, placed)
   queryChannel(readers, request, found)
   graphChannel(readers, request, statuses, found)
   const ranked = [...found.values()]
     .filter(item => statuses.includes(item.memory.status) && item.memory.kind !== 'memory_review')
     .map(item => ({ memory: item.memory, relationStrength: item.relationStrength, score: reminderScore(item.memory, item.relationStrength), reasons: item.reasons }))
-    .sort(byPlacement)
+    .sort(byPlacement(placed))
   return applyGates(ranked, [duplicateGate(), toolScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
 }
 

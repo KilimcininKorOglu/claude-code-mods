@@ -77,6 +77,18 @@ describe("a reminder on a file tool's result", () => {
     w.close()
   })
 
+  test('an anchor too far above the file to relate on its own does not count as placing the memory there', async () => {
+    const w = world()
+    // `lib` lies three levels above the file, past its reach; the query lifts the memory through its command anchor.
+    const far = (await w.remember({ text: 'Start the dev server with the watch flag', anchors: [{ type: 'directory', path: 'lib' }, { type: 'command', command: 'server' }] })).memory
+    const near = (await w.remember({ text: 'Handlers under lib/server return plain objects, never responses', anchors: [{ type: 'directory', path: 'lib/server' }] })).memory
+    const ranking = rankForTools(w.readers('s1', 'main'), { paths: ['lib/server/routes/user.ts'], query: 'lib server routes user ts', mutation: false, limit: 8 })
+    const ids = ranking.candidates.map(c => c.memory.id)
+    assert.ok(ids.includes(far.id))
+    assert.ok(ids.indexOf(near.id) < ids.indexOf(far.id), 'only an anchor that relates on its own places a memory')
+    w.close()
+  })
+
   test('the gates hold back a low importance, a never policy, and a repeated text', async () => {
     const w = world()
     const anchors = [{ type: 'file' as const, path: 'src/app.ts' }]
