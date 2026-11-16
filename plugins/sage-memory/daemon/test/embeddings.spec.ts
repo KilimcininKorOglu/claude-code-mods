@@ -65,17 +65,38 @@ describe('semantic relevance', () => {
 })
 
 describe('fusion', () => {
-  test('a vector hit lifts a memory the text index found; one it missed enters only above the floor', () => {
+  test('a vector hit above the floor lifts a memory the text index found; one it missed enters only above the floor', () => {
     const [a, b, c, d] = ['A', 'B', 'C', 'D'].map(id => memoryOf(id))
-    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.56 }, { memory: d!, cosine: 0.5 }, { memory: b!, cosine: 0.3 }], 10, 0.55)
+    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.6 }, { memory: b!, cosine: 0.56 }, { memory: d!, cosine: 0.5 }], 10, 0.55)
     assert.deepEqual(
       fused.map(hit => [hit.memory.id, hit.source, hit.vectorScore]),
       [
-        ['B', 'both', 0.3],
+        ['B', 'both', 0.56],
         ['A', 'lexical', null],
-        ['C', 'vector', 0.56],
+        ['C', 'vector', 0.6],
       ],
     )
+  })
+
+  test('a text match whose cosine is under the floor keeps its cosine and gains no rank from it', () => {
+    const [a, b, c] = ['A', 'B', 'C'].map(id => memoryOf(id))
+    const fused = fuse([a!, b!], [{ memory: c!, cosine: 0.7 }, { memory: b!, cosine: 0.3 }], 10, 0.45)
+    assert.deepEqual(
+      fused.map(hit => [hit.memory.id, hit.source, hit.vectorScore]),
+      [
+        ['A', 'lexical', null],
+        ['C', 'vector', 0.7],
+        ['B', 'lexical', 0.3],
+      ],
+    )
+  })
+
+  test('a memory the words miss outranks text matches whose meaning is under the floor', () => {
+    const text = Array.from({ length: 50 }, (_, index) => memoryOf(`T${index}`))
+    const meant = memoryOf('V')
+    const vectors = [{ memory: meant, cosine: 0.72 }, ...text.map((memory, index) => ({ memory, cosine: 0.4 - index * 0.005 }))]
+    const fused = fuse(text, vectors, 10, MEANING_FLOOR_COSINE)
+    assert.ok(fused.slice(0, 2).some(hit => hit.memory.id === 'V'), 'the only memory above the floor is among the first two of ten')
   })
 
   test('a memory only the vector channel finds enters above the floor it is given, never at it', () => {
@@ -490,6 +511,31 @@ describe('reminders through the vector channel', () => {
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
     const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id, worded.id])
+    w.close()
+  })
+
+  test('a memory above the meaning floor reaches a prompt although text matches under the floor fill the search list', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const meant = (await w.remember({ text: 'Bulk alerts are throttled to fifty' })).memory
+    fake.vectors.set(meant.text, toward(0, 1))
+    const worded: Memory[] = []
+    for (let i = 0; i < 10; i++) {
+      const memory = (await w.remember({ text: `Staging deploy step ${i + 1} posts to the deploy channel`, distinct: true })).memory
+      fake.vectors.set(memory.text, toward(2, 1))
+      worded.push(memory)
+    }
+    await embeddings.afterWrite(w.project, [meant, ...worded])
+    const prompt = 'staging deploy channel posts: how quickly may we send them'
+    const vector = new Array<number>(16).fill(0)
+    vector[0] = 0.7
+    vector[2] = 0.3
+    vector[4] = Math.sqrt(1 - 0.49 - 0.09)
+    fake.vectors.set(prompt, vector)
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 2, blockCount: 8 })
+    assert.equal(ranking.candidates[0]?.memory.id, meant.id, 'the ten text matches share no topic (cosine 0.30), so they do not push the memory at 0.70 out of a search list of four')
     w.close()
   })
 

@@ -27,14 +27,21 @@ export function lexicalHits(lexical: readonly Memory[]): SearchHit[] {
   })
 }
 
-/** The vector hits that take a rank: each one the text index found, and the best vector-only ones above the floor. */
+/**
+ * The vector hits that take a rank: each one above the floor the text index found, and the best
+ * vector-only ones above it. A cosine at or under the floor says the text shares no topic with the
+ * query, so it lifts no memory: when every text match took a vector share, the word search of one
+ * English question matched 50 of 300 memories with cosines down to 0.1, and those outranked the one
+ * memory at 0.72 the words missed, in the prompt's list and in the search tool's.
+ */
 function fusable(lexicalIds: ReadonlySet<string>, vectors: readonly VectorHit[], floor: number): VectorHit[] {
   const kept: VectorHit[] = []
   let alone = 0
   for (const hit of vectors) {
+    if (hit.cosine <= floor) continue
     if (lexicalIds.has(hit.memory.id)) {
       kept.push(hit)
-    } else if (hit.cosine > floor && alone < MAX_VECTOR_ONLY) {
+    } else if (alone < MAX_VECTOR_ONLY) {
       alone++
       kept.push(hit)
     }
@@ -60,5 +67,10 @@ export function fuse(lexical: readonly Memory[], vectors: readonly VectorHit[], 
       : { memory: hit.memory, lexicalScore: null, vectorScore: hit.cosine, finalScore: share, source: 'vector' }
     fused.set(hit.memory.id, next)
   })
+  // A text match under the floor keeps its cosine, which the relevance rules read, and gains no rank from it.
+  for (const hit of vectors) {
+    const known = fused.get(hit.memory.id)
+    if (known !== undefined && known.vectorScore === null) fused.set(hit.memory.id, { ...known, vectorScore: hit.cosine })
+  }
   return [...fused.values()].sort((a, b) => b.finalScore - a.finalScore).slice(0, limit)
 }
