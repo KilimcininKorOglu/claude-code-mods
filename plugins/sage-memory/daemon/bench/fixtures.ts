@@ -118,7 +118,8 @@ export const IN_LANGUAGE: ReadonlyArray<{ store: 'tr' | 'ja'; want: string; text
   { store: 'ja', want: 'l2', text: 'ディスク使用率のアラートはいつですか' },
 ]
 
-const LOG_LINES = Array.from({ length: 40 }, (_, i) => `2026-11-16T10:${String(i).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i * 17} in ${100 + i}ms`).join('\n')
+/** A pasted log excerpt; alone it is a prompt with no question, which wants no note. */
+export const LOG_LINES = Array.from({ length: 40 }, (_, i) => `2026-11-16T10:${String(i).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i * 17} in ${100 + i}ms`).join('\n')
 
 /** Long pasted prompts: a log excerpt with a question at its end. */
 export const LONG: ReadonlyArray<{ want: string; text: string }> = [

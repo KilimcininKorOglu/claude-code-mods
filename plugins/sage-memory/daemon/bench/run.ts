@@ -9,7 +9,7 @@
  */
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { CHOOSE, EXTRA_ANCHORS, IN_LANGUAGE, LANGUAGES, LONG, LONG_LEAD, NAMED, NOTES, QUESTIONS, SHARED, SHARED_NAME, SHARED_NAME_KEYS, SUBAGENT_TASKS, TOOL_PATHS, TOPICLESS, TOPIC_TAGS, TRANSLATED, UNRELATED, filler, type Language, type Note, type StoreLanguage } from './fixtures.ts'
+import { CHOOSE, EXTRA_ANCHORS, IN_LANGUAGE, LANGUAGES, LOG_LINES, LONG, LONG_LEAD, NAMED, NOTES, QUESTIONS, SHARED, SHARED_NAME, SHARED_NAME_KEYS, SUBAGENT_TASKS, TOOL_PATHS, TOPICLESS, TOPIC_TAGS, TRANSLATED, UNRELATED, filler, type Language, type Note, type StoreLanguage } from './fixtures.ts'
 
 type Memory = { id: string; scope: string }
 type Ranked = { memory: Memory; reasons?: string[] }
@@ -57,9 +57,17 @@ for (const note of notes) {
 }
 if (!wordsOnly) await embeddings.fill(w.project)
 
-async function readers(query: string): Promise<unknown> {
+/** How long each query took to embed, the prompt's own vector and its pieces, apart from the ranking. */
+const embedTimings: number[] = []
+
+/** The readers of one query; `byPiece` as the prompt and subagent routes ask, the tool route not. */
+async function readers(query: string, byPiece = true): Promise<unknown> {
   const base = w.readers('bench', 'main')
-  return wordsOnly ? base : { ...base, semantic: await embeddings.semantic(query, []) }
+  if (wordsOnly) return base
+  const started = performance.now()
+  const semantic = await embeddings.semantic(query, [], byPiece)
+  embedTimings.push(performance.now() - started)
+  return { ...base, semantic }
 }
 
 const timings: number[] = []
@@ -137,7 +145,7 @@ async function bestCosine(texts: readonly string[]): Promise<number> {
 }
 
 const fresh = (): Score => ({ asked: 0, hit: 0, sibling: 0, other: 0 })
-const groups = { choose: fresh(), accept: fresh(), same: fresh(), named: fresh(), shared: fresh(), suffixed: fresh(), long: fresh(), subagent: fresh(), unrelated: fresh(), topicless: fresh(), tool: fresh() }
+const groups = { choose: fresh(), accept: fresh(), same: fresh(), named: fresh(), shared: fresh(), suffixed: fresh(), long: fresh(), logonly: fresh(), subagent: fresh(), unrelated: fresh(), topicless: fresh(), tool: fresh() }
 /** Notes the shared-name prompts sent that the name points at, besides the one wanted. */
 let sharedAlso = 0
 const byLanguage = Object.fromEntries(LANGUAGES.map(lang => [lang, fresh()])) as Record<Language, Score>
@@ -168,15 +176,21 @@ for (const prompt of IN_LANGUAGE.filter(row => row.store === storeLanguage)) {
 }
 /** The ranking time of each long pasted prompt: three of about 180 prompts, so the p95 line hides them. */
 const longTimings: number[] = []
+const longEmbedTimings: number[] = []
 for (const prompt of LONG) {
   const { ranking, sent } = await promptSent(prompt.text)
   longTimings.push(timings.at(-1)!)
+  if (embedTimings.length > 0) longEmbedTimings.push(embedTimings.at(-1)!)
   count('long', sent, prompt.want, ranking.candidates)
 }
 for (const task of SUBAGENT_TASKS) {
   const ranking = rankForSubagent(await readers(task.text), { task: task.text, audienceLimit: 20, taskLimit: 8 }) as { audience: Memory[]; task: Ranked[] }
   const sent = (hooks.subagentReminder([], ranking.audience, ranking.task) as { sent: Memory[] }).sent
   count('subagent', sent.map(memory => keyOf.get(memory.id)!), task.want, ranking.task)
+}
+{
+  const { ranking, sent } = await promptSent(LOG_LINES)
+  count('logonly', sent, undefined, ranking.candidates)
 }
 for (const lang of LANGUAGES) {
   for (const [group, texts] of [['unrelated', UNRELATED[lang]], ['topicless', TOPICLESS[lang]]] as const) {
@@ -189,7 +203,7 @@ for (const lang of LANGUAGES) {
 for (const { path, want } of TOOL_PATHS) {
   const file = join(w.root, path)
   const query = hooks.queryOf([{ tool_name: 'Read', tool_input: { file_path: file } }], [file], [], w.root) as string
-  const ranking = rankForTools(await readers(query), { paths: [file], query, mutation: false, limit: 24 }) as Ranking
+  const ranking = rankForTools(await readers(query, false), { paths: [file], query, mutation: false, limit: 24 }) as Ranking
   const sent = (hooks.toolReminder(ranking.candidates, '', hooks.toolBudget(undefined), false, false) as { sent: Memory[] }).sent
   count('tool', sent.map(memory => keyOf.get(memory.id)!), want, ranking.candidates, path)
 }
@@ -205,5 +219,7 @@ console.log(`shared-name prompts sent ${sharedAlso} notes the name points at bes
 for (const lang of LANGUAGES) console.log(line(`  ${lang}`, byLanguage[lang]))
 if (embedder) console.log(`best cosine of an unrelated message ${unrelatedBest.toFixed(2)}, of a topic-less one ${topiclessBest.toFixed(2)}`)
 console.log(`rankForPrompt ms of the long prompts: ${longTimings.map(ms => ms.toFixed(1)).join(', ')}`)
+if (longEmbedTimings.length > 0) console.log(`embedding ms of the long prompts: ${longEmbedTimings.map(ms => ms.toFixed(1)).join(', ')}`)
+if (embedTimings.length > 0) console.log(`embedding ms of every query: max ${Math.max(...embedTimings).toFixed(1)}`)
 timings.sort((a, b) => a - b)
 console.log(`rankForPrompt ms: median ${timings[Math.floor(timings.length / 2)]!.toFixed(1)}  p95 ${timings[Math.floor(timings.length * 0.95)]!.toFixed(1)}`)
