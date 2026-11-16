@@ -13,10 +13,17 @@ import { vectorHits, type SemanticQuery } from './vectors.ts'
  * Null now means the memory has no current vector.
  */
 export function searchHybrid(dbs: readonly [DatabaseSync, DatabaseSync], query: string, visibility: Visibility, limit: number, semantic: SemanticQuery | undefined, floor: number): SearchHit[] {
+  return searchWithCosines(dbs, query, visibility, limit, semantic, floor).hits
+}
+
+/** The search's hits, and the cosine of every memory with a current vector, also the ones the hits leave out. */
+export type ScoredSearch = { hits: SearchHit[]; cosines: ReadonlyMap<string, number> }
+
+export function searchWithCosines(dbs: readonly [DatabaseSync, DatabaseSync], query: string, visibility: Visibility, limit: number, semantic: SemanticQuery | undefined, floor: number): ScoredSearch {
   const [project, user] = dbs
   const lexical = interleave(searchStore(project, query, visibility, limit), searchStore(user, query, visibility, limit))
-  if (semantic === undefined || query.trim() === '') return lexicalHits(lexical.slice(0, limit))
+  if (semantic === undefined || query.trim() === '') return { hits: lexicalHits(lexical.slice(0, limit)), cosines: new Map() }
   const every = Number.POSITIVE_INFINITY
   const vectors = [...vectorHits(project, semantic, visibility, every, true), ...vectorHits(user, semantic, visibility, every, true)].sort((a, b) => b.cosine - a.cosine)
-  return fuse(lexical, vectors, limit, floor)
+  return { hits: fuse(lexical, vectors, limit, floor), cosines: new Map(vectors.map(hit => [hit.memory.id, hit.cosine])) }
 }

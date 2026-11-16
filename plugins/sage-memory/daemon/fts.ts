@@ -6,7 +6,7 @@ const MAX_TERMS = 64
  * memories with a Turkish word: `ne` matched 128 of 206 memories of one store (`never`, `new`), `bu`
  * 64 (`build`), so it matches only as a whole word, which keeps terms such as `ci` and `pr`.
  */
-const MIN_PREFIX = 3
+export const MIN_PREFIX = 3
 
 /**
  * A free text as distinct FTS5 terms, each quoted (`"term"*`) so neither punctuation nor a bare

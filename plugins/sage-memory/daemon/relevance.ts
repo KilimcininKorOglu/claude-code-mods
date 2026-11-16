@@ -1,6 +1,6 @@
 import type { Anchor, Kind, Memory, Persistence, SearchHit } from '../hooks/shared/model.ts'
-import { tokenize } from '../hooks/shared/text.ts'
 import { clamp01 } from './rules.ts'
+import type { WordEvidence } from './words.ts'
 
 /**
  * How strongly a memory relates to what a reminder is about, on the one scale every retrieval
@@ -20,70 +20,6 @@ export const MIN_SCORE = 0.65
 export const MIN_IMPORTANCE = 0.5
 /** A prompt reminder needs this much relevance before its score counts. */
 export const TURN_MIN_RELEVANCE = 0.62
-
-/** Coding words that match nearly every memory, so they are no evidence of a relation. */
-const GENERIC_TERMS = new Set([
-  'add',
-  'after',
-  'and',
-  'are',
-  'backfill',
-  'bash',
-  'before',
-  'change',
-  'code',
-  'command',
-  'context',
-  'edit',
-  'file',
-  'files',
-  'find',
-  'fix',
-  'for',
-  'from',
-  'glob',
-  'grep',
-  'imported',
-  'inject',
-  'injected',
-  'injector',
-  'legacy',
-  'memory',
-  'model',
-  'node',
-  'output',
-  'package',
-  'packages',
-  'path',
-  'project',
-  'provider',
-  'read',
-  'recovered',
-  'recovery',
-  'remove',
-  'result',
-  'results',
-  'restored',
-  'run',
-  'source',
-  'src',
-  'test',
-  'tests',
-  'that',
-  'the',
-  'this',
-  'tool',
-  'tree',
-  'update',
-  'using',
-  'with',
-  'write',
-])
-
-function informativeTerms(text: string): string[] {
-  const terms = tokenize(text).map(term => term.replace(/^[._-]+|[._-]+$/g, ''))
-  return [...new Set(terms.filter(term => term.length >= 3 && !GENERIC_TERMS.has(term)))]
-}
 
 /** An anchor's own value as a query would spell it; too short a value matches by accident. */
 function exactAnchorValue(anchor: Anchor): string | undefined {
@@ -105,86 +41,21 @@ function exactAnchorMatch(memory: Memory, normalizedQuery: string): Relevance | 
   return undefined
 }
 
-type Matches = { matched: string[]; anchor: string[]; tag: string[]; answers: boolean; queryCount: number }
-
 /**
- * A memory's terms, each identifier also split into its words (`RETRY_LIMIT`, `retryLimit` and
- * `retry-limit` also hold `retry` and `limit`), so a question in plain words finds it.
- */
-function memoryTerms(text: string): Set<string> {
-  const words = text.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2').replace(/[_.-]+/g, ' ')
-  return new Set([...informativeTerms(text), ...informativeTerms(words)])
-}
-
-/** The longest suffix a query word may add to a memory term and still match it, as Turkish `limiti` does to `limit`. */
-const MAX_SUFFIX = 4
-const MIN_STEM = 4
-
-/** A query term the memory holds as is, or as the stem of a suffixed word. */
-function holds(terms: ReadonlySet<string>, term: string): boolean {
-  if (terms.has(term)) return true
-  for (let end = term.length - 1; end >= Math.max(MIN_STEM, term.length - MAX_SUFFIX); end--) if (terms.has(term.slice(0, end))) return true
-  return false
-}
-
-/**
- * The query terms a memory holds in its text, tags, and symbol, command or role anchors. An
- * anchor path is matched as a path, never word by word, or a memory about one `store.ts` would
- * match every other.
- */
-function termMatches(memory: Memory, queryTerms: readonly string[]): Matches {
-  const text = memoryTerms(memory.text)
-  const tags = new Set(memory.tags.flatMap(tag => [...memoryTerms(tag)]))
-  const anchors = memoryTerms(memory.anchors.map(anchor => [anchor.symbol, anchor.command, anchor.role].filter(Boolean).join(' ')).join(' '))
-  const matched = queryTerms.filter(term => holds(text, term) || holds(tags, term) || holds(anchors, term))
-  return {
-    matched,
-    anchor: matched.filter(term => holds(anchors, term)),
-    tag: matched.filter(term => holds(tags, term)),
-    answers: matched.length / queryTerms.length >= 0.6 || matched.length >= 4,
-    queryCount: queryTerms.length,
-  }
-}
-
-type Tier = { applies: (matches: Matches) => boolean; strength: (matches: Matches) => number }
-
-/**
- * Evidence tiers, first match wins. What lifts a tier is how much of the question the shared
- * words answer: three of a three-word search is the memory asked for, three of a twelve-term
- * path query is a coincidence. One word out of a short query sits below the relation floor, so
- * it can reach a prompt reminder and never a tool reminder.
- */
-const TIERS: readonly Tier[] = [
-  { applies: m => m.anchor.length >= 2, strength: m => Math.min(0.92, 0.78 + m.anchor.length * 0.05) },
-  { applies: m => m.anchor.length === 1, strength: m => (m.answers ? 0.82 : 0.72) },
-  { applies: m => m.tag.length >= 2, strength: m => Math.min(0.88, 0.74 + m.tag.length * 0.05) },
-  { applies: m => m.tag.length === 1, strength: m => (m.answers ? 0.78 : 0.7) },
-  { applies: m => m.matched.length >= 3, strength: m => (m.answers ? Math.min(0.86, 0.76 + m.matched.length * 0.02) : 0.72) },
-  { applies: m => m.matched.length === 2, strength: m => (m.answers ? 0.72 : 0.68) },
-  { applies: m => m.queryCount <= 2, strength: () => 0.66 },
-]
-
-function evidenceOf(matches: Matches): string[] {
-  const reasons: string[] = []
-  if (matches.anchor.length > 0) reasons.push(`query:anchor-terms:${matches.anchor.slice(0, 3).join(',')}`)
-  if (matches.tag.length > 0) reasons.push(`query:tag-terms:${matches.tag.slice(0, 3).join(',')}`)
-  reasons.push(`query:text-terms:${matches.matched.slice(0, 4).join(',')}`)
-  return reasons
-}
-
-/**
- * The concrete evidence a query holds for a memory: an anchor value spelled out in the query, or
- * shared informative terms. Metadata never manufactures relevance.
+ * What a query names of a memory: one of its anchor values spelled out in the query. Shared words are
+ * weighed against the store they come from (`daemon/words.ts`), so a memory alone has no word evidence.
  */
 export function memoryQueryRelevance(memory: Memory, query: string): Relevance {
-  const queryTerms = informativeTerms(query)
-  if (queryTerms.length === 0) return NONE
-  const exact = exactAnchorMatch(memory, query.normalize('NFKC').toLowerCase().replace(/\\/g, '/'))
-  if (exact) return exact
-  const matches = termMatches(memory, queryTerms)
-  if (matches.matched.length === 0) return NONE
-  const tier = TIERS.find(candidate => candidate.applies(matches))
-  return tier ? { strength: tier.strength(matches), reasons: evidenceOf(matches) } : NONE
+  return exactAnchorMatch(memory, query.normalize('NFKC').toLowerCase().replace(/\\/g, '/')) ?? NONE
+}
+
+/** The relevance of word evidence: enough for a prompt reminder, never for a tool reminder's relation floor. */
+function wordRelevance(words: WordEvidence | undefined): Relevance {
+  return words ? { strength: TURN_MIN_RELEVANCE, reasons: [`query:words:${words.terms.slice(0, 4).join(',')}`] } : NONE
+}
+
+function stronger(first: Relevance, second: Relevance): Relevance {
+  return { strength: Math.max(first.strength, second.strength), reasons: [...first.reasons, ...second.reasons] }
 }
 
 /**
@@ -247,13 +118,15 @@ export const MEANING_FLOOR_COSINE = 0.45
  * floor and the meaning floor its shared words decide; at or under the noise floor only an anchor the
  * prompt names (a file, a symbol, a command) counts. Words alone admitted a memory in any language they
  * happened to match: in 57 measured prompts, 230 of 253 unwanted memories came with word evidence.
- * Without embeddings the words are the only evidence there is.
+ * Without embeddings the words are the only evidence there is. `words` is the memory's word evidence
+ * from the store (`wordEvidence`), undefined when its shared words are too common to single it out.
  */
-export function promptRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string, withMeaning: boolean, floor: number): Relevance {
+export function promptRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string, words: WordEvidence | undefined, withMeaning: boolean, floor: number): Relevance {
+  const exact = memoryQueryRelevance(hit.memory, query)
+  const lexical = stronger(exact, wordRelevance(words))
   // A memory without a current vector waits for its fill; until then its words are the evidence, as without embeddings.
-  if (!withMeaning || hit.vectorScore === null) return hitRelevance(hit, query)
-  const lexical = memoryQueryRelevance(hit.memory, query)
-  if (hit.vectorScore <= NOISE_COSINE) return lexical.reasons.some(reason => reason.startsWith('query:exact-')) ? lexical : NONE
+  if (!withMeaning || hit.vectorScore === null) return lexical
+  if (hit.vectorScore <= NOISE_COSINE) return exact
   if (hit.vectorScore <= floor) return lexical
   const semantic = memorySemanticRelevance(hit.vectorScore)
   const strength = Math.max(TURN_MIN_RELEVANCE, lexical.strength, semantic.strength)
@@ -282,11 +155,12 @@ export function memoryStructuralRelevance(memory: Memory, seeds: readonly Memory
   const linked = relatedSeed(memory, seeds)
   if (linked) return { strength: 0.88, reasons: [`graph:related:${linked.id}`] }
   const keys = structuralKeys(memory)
-  const tags = new Set(memory.tags.flatMap(informativeTerms))
+  const tagsOf = (owner: Memory): string[] => owner.tags.map(tag => tag.normalize('NFKC').toLowerCase())
+  const tags = new Set(tagsOf(memory))
   for (const seed of seeds) {
     const shared = [...structuralKeys(seed)].find(key => keys.has(key))
     if (shared) return { strength: 0.86, reasons: [`graph:shared-anchor:${shared}`] }
-    const sharedTags = [...new Set(seed.tags.flatMap(informativeTerms))].filter(tag => tags.has(tag))
+    const sharedTags = [...new Set(tagsOf(seed))].filter(tag => tags.has(tag))
     if (sharedTags.length >= 2) return { strength: 0.72, reasons: [`graph:shared-tags:${sharedTags.slice(0, 3).join(',')}`] }
   }
   return NONE

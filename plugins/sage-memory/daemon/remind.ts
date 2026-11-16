@@ -1,16 +1,17 @@
 import type { Memory, Ranked, Ranking, Rejection, SearchHit, Status, SubagentRanking } from '../hooks/shared/model.ts'
 import { textKey } from '../hooks/shared/text.ts'
 import { remindedAt, remindedIn } from './contexts.ts'
-import { searchHybrid } from './hybrid.ts'
+import { searchHybrid, searchWithCosines } from './hybrid.ts'
 import type { Op } from './op.ts'
 import { descending } from './order.ts'
 import { findRelated } from './related.ts'
 import { MEANING_FLOOR_COSINE, MIN_IMPORTANCE, MIN_SCORE, RELATION_FLOOR, TURN_MIN_RELEVANCE, hitRelevance, memoryStructuralRelevance, promptRelevance, pathAnchorRelation, reminderScore, turnScore } from './relevance.ts'
 import { namedMemories, type Named } from './named.ts'
-import { memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
+import { memoriesAmong, memoriesForAudience, memoriesForPaths, relativePaths } from './retrieve.ts'
 import { selectMemories } from './rows.ts'
 import { REMINDED_POLICY, type Visibility } from './search.ts'
 import type { SemanticQuery } from './vectors.ts'
+import { wordEvidence, type WordEvidence } from './words.ts'
 
 /**
  * Ranking the memories a reminder may carry, for the three moments a reminder goes out: on a file
@@ -87,19 +88,14 @@ function toolScoreGate(item: Ranked): Rejection | undefined {
 }
 
 /**
- * A prompt reminder holds back on relevance, then, with embeddings, on the importance floor alone. A
- * score gate held back 22 of 112 wanted memories of 57 measured prompts: a memory of the default
- * importance (0.6) without an anchor scored 0.647 at the strongest meaning match, under the 0.65 gate.
- * Without embeddings, or for a memory with no current vector (`wordsOnly`), shared words are the only
- * evidence, and the score keeps a weakly related default memory out, as before. A memory the prompt
- * names is never `wordsOnly`: its name is the evidence.
+ * A prompt reminder holds back on relevance, then on the importance floor alone. A score gate held
+ * back 22 of 112 wanted memories of 57 measured prompts: a memory of the default importance (0.6)
+ * without an anchor scored 0.647 at the strongest meaning match, under the 0.65 gate. Word evidence
+ * needs no score either: the store's own counts already decide whether the words single it out.
  */
-function turnScoreGate(wordsOnly: (id: string) => boolean): Gate {
-  return item => {
-    if (item.relationStrength < TURN_MIN_RELEVANCE) return rejection(item, 'belowScore', `relevance ${fixed(item.relationStrength)} is below ${fixed(TURN_MIN_RELEVANCE)}`)
-    if (wordsOnly(item.memory.id)) return item.score < MIN_SCORE ? rejection(item, 'belowScore', `score ${fixed(item.score)} is below ${fixed(MIN_SCORE)}`) : undefined
-    return item.memory.importance < MIN_IMPORTANCE ? rejection(item, 'belowScore', `importance ${fixed(item.memory.importance)} is below ${fixed(MIN_IMPORTANCE)}`) : undefined
-  }
+function turnScoreGate(item: Ranked): Rejection | undefined {
+  if (item.relationStrength < TURN_MIN_RELEVANCE) return rejection(item, 'belowScore', `relevance ${fixed(item.relationStrength)} is below ${fixed(TURN_MIN_RELEVANCE)}`)
+  return item.memory.importance < MIN_IMPORTANCE ? rejection(item, 'belowScore', `importance ${fixed(item.memory.importance)} is below ${fixed(MIN_IMPORTANCE)}`) : undefined
 }
 
 /** Runs each candidate, best first, through the gates in order; the first gate that holds it back says why. */
@@ -238,51 +234,68 @@ function namesAnchor(item: Ranked): boolean {
   return item.reasons.some(reason => reason.startsWith('query:exact-') && !reason.startsWith('query:exact-name:'))
 }
 
+/** What a prompt's ranking reads besides each hit: the named memories, the word evidence and the cosines of the project store's memories. */
+type PromptEvidence = { named: ReadonlyMap<string, Named>; words: ReadonlyMap<string, WordEvidence>; cosines: ReadonlyMap<string, number> }
+
 /**
  * Named memories first, the ones whose name fewer memories hold before the others; then a memory
- * whose anchor the prompt spells out; then the closer meaning, then stronger relevance, the score
- * breaking what is left. Meaning comes before relevance, because shared words lifted a farther
- * memory's relevance over a closer one's; a memory without a vector (no embeddings, or one waiting
- * for its fill) is ordered by its relevance.
+ * whose anchor the prompt spells out; then the closer meaning, then the rarer word evidence, then
+ * stronger relevance, the score breaking what is left. Meaning comes before relevance, because shared
+ * words lifted a farther memory's relevance over a closer one's.
  */
-function byMeaning(cosines: ReadonlyMap<string, number>, named: ReadonlyMap<string, Named>): (left: Ranked, right: Ranked) => number {
-  const holders = (item: Ranked): number => named.get(item.memory.id)?.holders ?? Number.POSITIVE_INFINITY
+function byMeaning(evidence: PromptEvidence): (left: Ranked, right: Ranked) => number {
+  const holders = (item: Ranked): number => evidence.named.get(item.memory.id)?.holders ?? Number.POSITIVE_INFINITY
+  const chance = (item: Ranked): number => evidence.words.get(item.memory.id)?.chance ?? Number.POSITIVE_INFINITY
+  const cosine = (item: Ranked): number => evidence.cosines.get(item.memory.id) ?? 0
   return (left, right) =>
     holders(left) - holders(right) ||
     Number(namesAnchor(right)) - Number(namesAnchor(left)) ||
-    (cosines.get(right.memory.id) ?? 0) - (cosines.get(left.memory.id) ?? 0) ||
+    cosine(right) - cosine(left) ||
+    chance(left) - chance(right) ||
     right.relationStrength - left.relationStrength ||
     byScore(left, right)
 }
 
 /** A search hit's ranking entry; a named memory takes the named relevance whatever its words or meaning say. */
-function promptEntry(hit: SearchHit, request: PromptRequest, withMeaning: boolean, named: ReadonlyMap<string, Named>): Ranked {
-  const name = named.get(hit.memory.id)
-  const relevance = name ? { strength: NAMED_STRENGTH, reasons: [`query:exact-name:${name.name}`] } : promptRelevance(hit, request.query, withMeaning, MEANING_FLOOR_COSINE)
+function promptEntry(hit: SearchHit, request: PromptRequest, withMeaning: boolean, evidence: PromptEvidence): Ranked {
+  const name = evidence.named.get(hit.memory.id)
+  const relevance = name
+    ? { strength: NAMED_STRENGTH, reasons: [`query:exact-name:${name.name}`] }
+    : promptRelevance(hit, request.query, evidence.words.get(hit.memory.id), withMeaning, MEANING_FLOOR_COSINE)
   return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
 }
 
-/** The search hits, and each named memory the search did not return, so a name reaches a memory whatever its rank in the search. */
-function promptHits(readers: Readers, request: PromptRequest, named: ReadonlyMap<string, Named>): SearchHit[] {
-  const hits = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2).filter(hit => hit.memory.kind !== 'memory_review')
+/**
+ * The search hits, then each named memory and each memory with word evidence the search did not
+ * return, with the cosine the vector scan gave it: a name or rare words reach a memory whatever its
+ * rank in the search, which the best 48 by bm25 left out on a store of 300.
+ */
+function promptHits(readers: Readers, request: PromptRequest, named: ReadonlyMap<string, Named>, words: ReadonlyMap<string, WordEvidence>): { hits: SearchHit[]; cosines: ReadonlyMap<string, number> } {
+  const visibility = visibilityFor(readers, ['active'])
+  const search = searchWithCosines([readers.project.store.db, readers.user.store.db], request.query, visibility, request.limit * 2, readers.semantic, MEANING_FLOOR_COSINE)
+  const hits = search.hits.filter(hit => hit.memory.kind !== 'memory_review')
   const found = new Set(hits.map(hit => hit.memory.id))
-  const missing = [...named.values()].filter(item => !found.has(item.memory.id))
-  return [...hits, ...missing.map(item => ({ memory: item.memory, lexicalScore: null, vectorScore: null, finalScore: 0, source: 'lexical' as const }))]
+  const unfound = (memory: Memory): boolean => !found.has(memory.id) && memory.kind !== 'memory_review'
+  const extra = [...[...named.values()].map(item => item.memory), ...memoriesAmong(readers.project, [...words.keys()].filter(id => !named.has(id)), visibility, words.size)].filter(unfound)
+  const added = extra.map(memory => ({ memory, lexicalScore: null, vectorScore: search.cosines.get(memory.id) ?? null, finalScore: 0, source: 'lexical' as const }))
+  return { hits: [...hits, ...added], cosines: search.cosines }
 }
 
 /**
  * The memories a reminder with the person's prompt may carry: the memories the prompt names, then
- * what the prompt's text or meaning finds in either store, relevant enough and important enough.
- * Only the project store is named: the user store's memories reach every context on their own.
+ * what the prompt's words or meaning find in either store, relevant enough and important enough.
+ * Only the project store is named and counted for words: the user store's memories reach every
+ * context on their own.
  */
 export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking {
   if (request.query.trim() === '') return { candidates: [], rejected: [] }
-  const named = new Map(namedMemories(readers.project.store.db, request.query, visibilityFor(readers, ['active']), request.blockCount).map(item => [item.memory.id, item]))
-  const hits = promptHits(readers, request, named)
-  const cosines = new Map(hits.flatMap(hit => (hit.vectorScore === null ? [] : [[hit.memory.id, hit.vectorScore] as const])))
-  const ranked = hits.map(hit => promptEntry(hit, request, readers.semantic !== undefined, named)).sort(byMeaning(cosines, named))
-  const wordsOnly = (id: string): boolean => !named.has(id) && (readers.semantic === undefined || !cosines.has(id))
-  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate(wordsOnly), remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
+  const visibility = visibilityFor(readers, ['active'])
+  const named = new Map(namedMemories(readers.project.store.db, request.query, visibility, request.blockCount).map(item => [item.memory.id, item]))
+  const words = wordEvidence(readers.project.store.db, request.query, visibility)
+  const { hits, cosines } = promptHits(readers, request, named, words)
+  const evidence = { named, words, cosines }
+  const ranked = hits.map(hit => promptEntry(hit, request, readers.semantic !== undefined, evidence)).sort(byMeaning(evidence))
+  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate, remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
   return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
 }
 

@@ -54,7 +54,8 @@ describe('a prompt reminder for a named memory', () => {
     const app = (await w.remember({ text: 'Mobile builds are signed in CI.', anchors: [{ type: 'file', path: 'app/config.ts' }] })).memory
     assert.deepEqual(sentFor(w, 'What does reindex.ts do?'), [reindex.id])
     assert.deepEqual(sentFor(w, 'What is set in config.ts?').sort(), [auth.id, app.id].sort())
-    assert.deepEqual(sentFor(w, 'What does the index do?'), [])
+    const part = rankForPrompt(w.readers('s1', 'main'), { query: 'What does the index do?', limit: 24, blockCount: 8 })
+    assert.ok(part.candidates.every(c => !c.reasons.some(reason => reason.startsWith('query:exact-name:'))), 'a part of a file name names no memory')
     w.close()
   })
 

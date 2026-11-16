@@ -58,9 +58,9 @@ describe('semantic relevance', () => {
     assert.deepEqual(memorySemanticRelevance(null), { strength: 0, reasons: [] })
   })
 
-  test('a hit is as relevant as its stronger channel, with the reasons of both', () => {
+  test("a file tool's hit is as relevant as its meaning or an anchor the query spells out; a shared word adds nothing", () => {
     const relevance = hitRelevance({ memory: memoryOf('M1', POOL), vectorScore: 0.7 }, 'sockets')
-    assert.deepEqual(relevance, { strength: 0.94, reasons: ['query:text-terms:sockets', 'query:semantic-cosine:0.70'] })
+    assert.deepEqual(relevance, { strength: 0.94, reasons: ['query:semantic-cosine:0.70'] })
   })
 })
 
@@ -475,7 +475,10 @@ describe('reminders through the vector channel', () => {
     const worded = (await w.remember({ text: 'The staging deploy banner shows on every preview page', importance: 0.9, tags: ['staging', 'deploy'] })).memory
     const far = (await w.remember({ text: 'Staging deploy keys rotate every quarter', importance: 0.9, tags: ['staging', 'deploy'] })).memory
     for (const [memory, axis] of [[near, 0], [quiet, 2], [worded, 4], [far, 6]] as const) fake.vectors.set(memory.text, toward(axis, 1))
-    await embeddings.afterWrite(w.project, [near, quiet, worded, far])
+    // Six more memories without the prompt's words: in a store of ten, two words two memories hold are rare enough (10 x 0.2 x 0.2 < 1).
+    const others = []
+    for (const word of ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot']) others.push((await w.remember({ text: `The ${word} report keeps its own column order`, distinct: true })).memory)
+    await embeddings.afterWrite(w.project, [near, quiet, worded, far, ...others])
     const prompt = 'staging deploy'
     const vector = new Array<number>(16).fill(0)
     vector[0] = 0.5
@@ -487,6 +490,23 @@ describe('reminders through the vector channel', () => {
     const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
     const ranking = rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 })
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [near.id, worded.id])
+    w.close()
+  })
+
+  test('rare shared words bring no memory whose meaning is under the noise floor', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    const worded = (await w.remember({ text: 'Refunds above 500 euros need a second approval from finance' })).memory
+    fake.vectors.set(worded.text, toward(0, 1))
+    const others = []
+    for (const word of ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india']) others.push((await w.remember({ text: `The ${word} report keeps its own column order`, distinct: true })).memory)
+    await embeddings.afterWrite(w.project, [worded, ...others])
+    const prompt = 'refunds finance'
+    fake.vectors.set(prompt, toward(0, 0.3))
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    assert.deepEqual(rankForPrompt(readers, { query: prompt, limit: 8, blockCount: 8 }).candidates, [])
+    assert.deepEqual(rankForPrompt(w.readers('s1', 'main'), { query: prompt, limit: 8, blockCount: 8 }).candidates.map(c => c.memory.id), [worded.id], 'without embeddings the same words bring it')
     w.close()
   })
 

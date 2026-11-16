@@ -18,7 +18,7 @@ describe("a reminder on a file tool's result", () => {
     const ranking = rankForTools(w.readers('s1', 'main'), READ_APP)
     assert.deepEqual(ranking.candidates.map(c => c.memory.id), [anchored.id])
     assert.deepEqual(ranking.candidates[0]?.reasons, ['anchor:exact-file:src/app.ts', 'query:exact-file'], 'the path channel and the query both found it')
-    assert.match(ranking.rejected.find(r => r.id === loose.id)?.reason ?? '', /relation 0\.66 is below 0\.85/, 'one word of a two-word query')
+    assert.match(ranking.rejected.find(r => r.id === loose.id)?.reason ?? '', /relation 0\.00 is below 0\.85/, 'a shared word is no relation on a file tool')
     w.close()
   })
 
@@ -173,6 +173,9 @@ describe('what a subagent starts with', () => {
     const role = (await w.remember({ text: 'Explore agents read the ADR folder first', audience: { roles: ['explore'] } })).memory
     const user = (await w.remember({ text: 'Explore agents answer with file paths and line numbers', scope: 'user', audience: { roles: ['explore'] }, importance: 0.9 }, w.global)).memory
     const task = (await w.remember({ text: 'Payment webhooks retry with exponential backoff up to six times', importance: 0.9, confidence: 0.9, anchors: [{ type: 'file', path: 'src/app.ts' }] })).memory
+    // Words single a memory out only against others: a store of one memory holds nothing rare.
+    await w.remember({ text: 'Invoices are numbered per tenant' })
+    await w.remember({ text: 'The search index is rebuilt every Sunday' })
     const start = rankForSubagent(w.readers('s1'), { role: 'Explore', task: 'find where payment webhooks retry', audienceLimit: 20, taskLimit: 8 })
     assert.deepEqual(start.audience.map(m => m.id), [user.id, role.id])
     assert.deepEqual(start.task.map(c => c.memory.id), [task.id])

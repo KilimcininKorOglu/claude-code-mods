@@ -33,27 +33,11 @@ describe('what a query says about a memory', () => {
     assert.equal(memoryQueryRelevance(file, 'read src/db.ts').strength, 0.96)
   })
 
-  test('generic coding words are no evidence, and one word out of a long query is none either', () => {
-    const memory = memoryOf({ text: 'Fix the test file before you run the code' })
-    assert.equal(memoryQueryRelevance(memory, 'fix test file code').strength, 0)
-    assert.equal(memoryQueryRelevance(memoryOf({}), 'sockets deploy staging branch release notes').strength, 0)
-  })
-
-  test('shared anchor terms, tags and text reach their tiers', () => {
-    const anchored = memoryOf({ anchors: [{ type: 'command', command: 'pnpm migrate:deploy' }] })
-    assert.equal(memoryQueryRelevance(anchored, 'pnpm migrate').strength, 0.88, 'two anchor terms')
-    const tagged = memoryOf({ tags: ['postgres', 'pooling'] })
-    assert.equal(memoryQueryRelevance(tagged, 'postgres pooling').strength, 0.84, 'two tags')
-    assert.equal(memoryQueryRelevance(memoryOf({}), 'connection pool sockets worker').strength, 0.84, 'four text terms answer the query')
-    assert.equal(memoryQueryRelevance(memoryOf({}), 'sockets').strength, 0.66, 'one word of a one-word query')
-  })
-
-  test('a question in plain or suffixed words finds a memory that names an identifier', () => {
-    const memory = memoryOf({ text: 'RETRY_LIMIT value must not be changed without consulting the ops team first.' })
-    assert.equal(memoryQueryRelevance(memory, 'retry limit kaç').strength, 0.72, 'the identifier holds its words')
-    assert.equal(memoryQueryRelevance(memory, 'Retry limiti kaç ve değiştirmek için kime sormalıyım?').strength, 0.68, 'a Turkish suffix keeps its stem')
-    assert.equal(memoryQueryRelevance(memoryOf({ text: 'Call retryLimit before each send' }), 'retry limit').strength, 0.72, 'camelCase splits too')
-    assert.equal(memoryQueryRelevance(memory, 'retrying limitations elsewhere').strength, 0, 'a suffix longer than four letters is another word')
+  test('shared words, tags and anchor words alone are no evidence of a memory: the store weighs them', () => {
+    assert.equal(memoryQueryRelevance(memoryOf({ text: 'Fix the test file before you run the code' }), 'fix test file code').strength, 0)
+    assert.equal(memoryQueryRelevance(memoryOf({ anchors: [{ type: 'command', command: 'pnpm migrate:deploy' }] }), 'pnpm migrate').strength, 0)
+    assert.equal(memoryQueryRelevance(memoryOf({ tags: ['postgres', 'pooling'] }), 'postgres pooling').strength, 0)
+    assert.equal(memoryQueryRelevance(memoryOf({}), 'connection pool sockets worker').strength, 0)
   })
 
   test('a graph neighbour needs a shared anchor or two shared tags', () => {
