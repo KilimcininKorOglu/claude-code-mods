@@ -166,8 +166,11 @@ for (const prompt of IN_LANGUAGE.filter(row => row.store === storeLanguage)) {
   count('suffixed', sent, prompt.want, ranking.candidates)
   if (why && !sent.some(note => note.key === prompt.want)) await explain(prompt.text, prompt.want, ranking, sent)
 }
+/** The ranking time of each long pasted prompt: three of about 180 prompts, so the p95 line hides them. */
+const longTimings: number[] = []
 for (const prompt of LONG) {
   const { ranking, sent } = await promptSent(prompt.text)
+  longTimings.push(timings.at(-1)!)
   count('long', sent, prompt.want, ranking.candidates)
 }
 for (const task of SUBAGENT_TASKS) {
@@ -201,5 +204,6 @@ for (const [name, score] of Object.entries(groups)) console.log(line(name, score
 console.log(`shared-name prompts sent ${sharedAlso} notes the name points at besides the wanted one`)
 for (const lang of LANGUAGES) console.log(line(`  ${lang}`, byLanguage[lang]))
 if (embedder) console.log(`best cosine of an unrelated message ${unrelatedBest.toFixed(2)}, of a topic-less one ${topiclessBest.toFixed(2)}`)
+console.log(`rankForPrompt ms of the long prompts: ${longTimings.map(ms => ms.toFixed(1)).join(', ')}`)
 timings.sort((a, b) => a - b)
 console.log(`rankForPrompt ms: median ${timings[Math.floor(timings.length / 2)]!.toFixed(1)}  p95 ${timings[Math.floor(timings.length * 0.95)]!.toFixed(1)}`)
