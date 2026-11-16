@@ -45,7 +45,7 @@ Model bir paket yüklerken paketin adını hafızasından yazar. Bu ad yanlış 
 
    Bu not her turn için bir kez gönderilir, her prompt için değil. Bu not olmasaydı model bulguyu yalnız yükleme anında bir kez duyar ve ardından unuturdu. Bulgu da pane'de kalırdı. Size yeni bir satır gösterilmez, çünkü pane aynı bulguyu zaten gösterir.
 
-10. `deny` modunda bir paket kontrol edilmeden kaldığı sürece mod `git commit`, `git push` ve `git merge` komutlarını da durdurur. Kontrol, önce eksik kalan paket kontrolünü çalıştırır. Paket yalnız network bağlantısı kesildiği için kontrol edilememişse kontrol kendiliğinden açılır. Registry'nin hâlâ cevap vermediği bir paket komutu durdurur. Bu kontrolü atlamanın bir yolu yoktur. Kontrolü yalnız siz `/dep-sentinel mode note` ile kapatabilirsiniz. Varsayılan mod `note` modudur ve hiçbir git komutunu durdurmaz. Ancak bu modda da git komutu sırasında aynı kontrol çalışır. Böylece çözülmüş bir bulgu pane'de kalmaz. Yükleme ise yukarıda anlatıldığı gibi iki modda da durdurulur.
+10. `deny` modunda bir paket kontrol edilmeden kaldığı sürece mod `git commit`, `git push` ve `git merge` komutlarını da durdurur. Gate, önce eksik kalan paket kontrolünü çalıştırır. Paket yalnız network bağlantısı kesildiği için kontrol edilememişse gate kendiliğinden açılır. Registry'nin hâlâ cevap vermediği bir paket komutu durdurur. Gate'i atlamanın bir yolu yoktur. Gate'i yalnız siz `/dep-sentinel mode note` ile kapatabilirsiniz. Varsayılan mod `note` modudur ve hiçbir git komutunu durdurmaz. Ancak bu modda da git komutu sırasında aynı kontrol çalışır. Böylece çözülmüş bir bulgu pane'de kalmaz. Yükleme ise yukarıda anlatıldığı gibi iki modda da durdurulur.
 
 Canlı denemede `npm install --dry-run lodash@4.17.15` komutu, en güncel sürüm 4.18.1 ve 6 OSV id'siyle durduruldu. `npm install --dry-run lodahs` komutu, MAL-2025-25502 OSV id'siyle lodash taklidi olarak durduruldu. `npm install --dry-run left-pad` komutu çalıştı.
 
@@ -88,9 +88,9 @@ Reach L3: network'e erişir.
 - Bir sürüm aralığı (`^18`, `>=4`, `cargo add serde@1.0`) eski olduğu için durdurulmaz, çünkü aralığı yükleme aracı çözer. Aralığın en güncel sürümü OSV.dev'de kontrol edilir.
 - npm paket dokümanları büyüktür (typescript için 16 MB, ölçüldü). Bu yüzden bir kontrol birkaç saniye sürebilir.
 - Bir script'in, alias'ın ya da lockfile'ın çalıştırdığı yükleme (`npm ci`, `pip install -r`) kontrol edilmez.
-- `deny` modunu atlamanın bir yolu yoktur. Registry'ye ulaşılamadığı sürece kontrolü `/dep-sentinel mode note` ile siz kapatırsınız.
+- `deny` modunu atlamanın bir yolu yoktur. Registry'ye ulaşılamadığı sürece gate'i `/dep-sentinel mode note` ile siz kapatırsınız.
 - Bir bulgu açıkken çalışan bir git komutu bu kontrolün bitmesini bekler. Bu yüzden başarısız bir yüklemeden sonraki ilk commit, registry'nin cevap süresi kadar uzar.
-- Kontrol komutun metnini okur. `git commit` komutunu gizleyen bir script ya da alias ile yapılan bir commit durdurulmaz.
+- Gate komutun metnini okur. `git commit` komutunu gizleyen bir script ya da alias ile yapılan bir commit durdurulmaz.
 
 ## Geliştirme
 
