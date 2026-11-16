@@ -239,7 +239,8 @@ export const NOISE_COSINE = 0.4
  * only evidence there is.
  */
 export function promptRelevance(hit: Pick<SearchHit, 'memory' | 'vectorScore'>, query: string, withMeaning: boolean): Relevance {
-  if (!withMeaning) return hitRelevance(hit, query)
+  // A memory without a current vector waits for its fill; until then its words are the evidence, as without embeddings.
+  if (!withMeaning || hit.vectorScore === null) return hitRelevance(hit, query)
   const lexical = memoryQueryRelevance(hit.memory, query)
   const isNamed = lexical.reasons.some(reason => reason.startsWith('query:exact-'))
   const named = isNamed || (hit.vectorScore ?? 0) > NOISE_COSINE ? lexical : NONE

@@ -337,6 +337,22 @@ describe('reminders through the vector channel', () => {
     w.close()
   })
 
+  test('a memory without a vector yet still reaches a prompt through its words, behind the score gate', async () => {
+    const w = world()
+    const fake = fakeRuntime()
+    const embeddings = createEmbeddings(fake)
+    // Neither memory is embedded: their vectors wait for the next fill.
+    const important = (await w.remember({ text: 'Staging deploys need the VPN profile named ops-eu', importance: 0.9, confidence: 0.9, tags: ['deploy', 'vpn'] })).memory
+    const loose = (await w.remember({ text: 'A staging banner shows on every page of the preview site' })).memory
+    const prompt = 'staging deploy vpn profile'
+    fake.vectors.set(prompt, toward(4, 1))
+    const readers = { ...w.readers('s1', 'main'), semantic: await embeddings.semantic(prompt, []) }
+    const ranking = rankForPrompt(readers, { query: prompt, limit: 8 })
+    assert.deepEqual(ranking.candidates.map(c => c.memory.id), [important.id], 'a missing vector is no evidence against a memory; its words decide, and the score keeps the weak one out')
+    assert.ok(!ranking.candidates.some(c => c.memory.id === loose.id))
+    w.close()
+  })
+
   test('a prompt reminder takes a default memory the meaning matches, closer meaning first whatever the importance', async () => {
     const w = world()
     const fake = fakeRuntime()

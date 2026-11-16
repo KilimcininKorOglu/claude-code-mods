@@ -89,13 +89,13 @@ function toolScoreGate(item: Ranked): Rejection | undefined {
  * A prompt reminder holds back on relevance, then, with embeddings, on the importance floor alone. A
  * score gate held back 22 of 112 wanted memories of 57 measured prompts: a memory of the default
  * importance (0.6) without an anchor scored 0.647 at the strongest meaning match, under the 0.65 gate.
- * Without embeddings shared words are the only evidence, and the score keeps a weakly related default
- * memory out, as before.
+ * Without embeddings, or for a memory with no current vector (`wordsOnly`), shared words are the only
+ * evidence, and the score keeps a weakly related default memory out, as before.
  */
-function turnScoreGate(withMeaning: boolean): Gate {
+function turnScoreGate(wordsOnly: (id: string) => boolean): Gate {
   return item => {
     if (item.relationStrength < TURN_MIN_RELEVANCE) return rejection(item, 'belowScore', `relevance ${fixed(item.relationStrength)} is below ${fixed(TURN_MIN_RELEVANCE)}`)
-    if (!withMeaning) return item.score < MIN_SCORE ? rejection(item, 'belowScore', `score ${fixed(item.score)} is below ${fixed(MIN_SCORE)}`) : undefined
+    if (wordsOnly(item.memory.id)) return item.score < MIN_SCORE ? rejection(item, 'belowScore', `score ${fixed(item.score)} is below ${fixed(MIN_SCORE)}`) : undefined
     return item.memory.importance < MIN_IMPORTANCE ? rejection(item, 'belowScore', `importance ${fixed(item.memory.importance)} is below ${fixed(MIN_IMPORTANCE)}`) : undefined
   }
 }
@@ -244,14 +244,14 @@ function byMeaning(cosines: ReadonlyMap<string, number>): (left: Ranked, right: 
 export function rankForPrompt(readers: Readers, request: PromptRequest): Ranking {
   if (request.query.trim() === '') return { candidates: [], rejected: [] }
   const hits = hitsFor(readers, request.query, visibilityFor(readers, ['active']), request.limit * 2).filter(hit => hit.memory.kind !== 'memory_review')
-  const cosines = new Map(hits.map(hit => [hit.memory.id, hit.vectorScore ?? 0]))
+  const cosines = new Map(hits.flatMap(hit => (hit.vectorScore === null ? [] : [[hit.memory.id, hit.vectorScore] as const])))
   const ranked = hits
     .map(hit => {
       const relevance = promptRelevance(hit, request.query, readers.semantic !== undefined)
       return { memory: hit.memory, relationStrength: relevance.strength, score: turnScore(hit.memory, relevance.strength), reasons: relevance.reasons }
     })
     .sort(byMeaning(cosines))
-  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate(readers.semantic !== undefined), remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
+  const ranking = applyGates(ranked, [duplicateGate(), turnScoreGate(id => readers.semantic === undefined || !cosines.has(id)), remindedGate(remindedIn(readers.project.store.db, readers.sessionId, readers.loop))])
   return { candidates: ranking.candidates.slice(0, request.limit), rejected: ranking.rejected }
 }
 
