@@ -6,8 +6,10 @@
 /**
  * Raised whenever a route or a payload changes shape; a daemon on another protocol is not used.
  * 2: `remember` answers `similar` without writing, and its answer has no `nearDuplicate`.
+ * 3: `/remind/global` with `sessionId` and `loop` answers only the rules that loop's context was not
+ *    reminded of yet or that changed since; an older daemon would answer every rule at every prompt.
  */
-export const PROTOCOL = 2
+export const PROTOCOL = 3
 
 /** What `GET /hello` answers without a token: enough to tell that a daemon runs, and which build. */
 export type Hello = {

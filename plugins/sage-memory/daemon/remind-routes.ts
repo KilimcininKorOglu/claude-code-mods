@@ -50,7 +50,10 @@ export function remindRoutes(stores: Stores, embeddings: Embeddings): Routes {
     }),
     '/remind/global': post(body => {
       const places = placesOf(stores, body)
-      return globalRules(opFor(places, places.global))
+      const sessionId = optionalString(body, 'sessionId')
+      const loop = optionalString(body, 'loop')
+      const context = sessionId === undefined || loop === undefined ? undefined : { project: opFor(places, places.project), sessionId, loop }
+      return globalRules(opFor(places, places.global), context)
     }),
     '/context/new': post(async body => {
       const places = placesOf(stores, body)

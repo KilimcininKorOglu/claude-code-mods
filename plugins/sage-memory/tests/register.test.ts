@@ -351,6 +351,19 @@ function bodiesOf(w: World, path: string): Record<string, unknown>[] {
   return w.fetches.filter(f => f.url === path).map(f => f.body)
 }
 
+/**
+ * Answers `/remind/global` as the daemon does: a request for one loop gets the rules that loop was not
+ * reminded of since its context last started over; a request for no loop gets them all.
+ */
+function globalRoute(w: World, rules: () => Memory[]): (body: Record<string, unknown>) => Memory[] {
+  return body => {
+    if (body.loop === undefined) return rules()
+    const start = w.fetches.findLastIndex(f => f.url === '/context/new' && f.body.loop === body.loop)
+    const sent = new Set(w.fetches.slice(start + 1).filter(f => f.url === '/memory/reminded' && f.body.loop === body.loop).flatMap(f => f.body.ids as string[]))
+    return rules().filter(rule => !sent.has(rule.id))
+  }
+}
+
 /** The texts of the stream entries one key wrote, in order. */
 const streamOf = (w: World, key: string): string[] => (w.byKey.get(key) ?? []).map(line => line.text)
 
@@ -468,10 +481,11 @@ describe('memory reminders', () => {
     const w = readyWorld(on)
     const TURKISH = memory('g1', 'All text the user reads must be in Turkish.', { scope: 'user', kind: 'preference' })
     const LONG = memory('g2', `Keep technical terms in their original form. ${'x'.repeat(5000)}`, { scope: 'user', kind: 'convention' })
-    w.routes.set('/remind/global', [TURKISH, LONG])
+    w.routes.set('/remind/global', globalRoute(w, () => [TURKISH, LONG]))
     w.routes.set('/remind/subagent', { audience: [TURKISH], task: [ranked(DAEMON)] })
     await $.session.start(START)
     const first = await $.prompt.submit(typed('what is 2 + 2?'))
+    expect(bodiesOf(w, '/remind/global')[0]).toMatchObject({ sessionId: 'sess-1', loop: 'main' })
     expect(first.context?.[0]).toMatch(/^\[sage-memory\] the user's global rules, which hold in every project and every task\n<memory id="g1"/)
     expect(first.context?.[0]).toContain('<memory id="g2"')
     expect(bodiesOf(w, '/memory/reminded')[0]).toMatchObject({ loop: 'main', trigger: 'global', ids: ['g1', 'g2'] })
@@ -494,6 +508,22 @@ describe('memory reminders', () => {
       { loop: 'agent-7', trigger: 'global', ids: ['g1', 'g2'] },
       { loop: 'agent-7', trigger: 'subagent', ids: ['m2'] },
     ])
+  })
+
+  withSidebar('a user rule written while the context is open comes with the next prompt, alone', async ($, on) => {
+    const w = readyWorld(on)
+    const TURKISH = memory('g1', 'All text the user reads must be in Turkish.', { scope: 'user', kind: 'preference' })
+    const LATER = memory('g3', 'Never push to a shared remote without running the tests.', { scope: 'user', kind: 'preference' })
+    let rules = [TURKISH]
+    w.routes.set('/remind/global', globalRoute(w, () => rules))
+    await $.session.start(START)
+    await $.prompt.submit(typed('what is 2 + 2?'))
+    // Another window saved a rule; this context never held it.
+    rules = [TURKISH, LATER]
+    const next = (await $.prompt.submit(typed('and 3 + 3?'))).context?.[0] ?? ''
+    expect(next).toContain('<memory id="g3"')
+    expect(next).not.toContain('<memory id="g1"')
+    expect((await $.prompt.submit(typed('and 4 + 4?'))).context).toBe(undefined)
   })
 
   withSidebar('an answer that names a reminded memory counts one use, once', async ($, on) => {

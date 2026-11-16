@@ -1,6 +1,6 @@
 import type { Memory, Ranked, Ranking, Rejection, SearchHit, Status, SubagentRanking } from '../hooks/shared/model.ts'
 import { textKey } from '../hooks/shared/text.ts'
-import { remindedIn } from './contexts.ts'
+import { remindedAt, remindedIn } from './contexts.ts'
 import { searchHybrid } from './hybrid.ts'
 import type { Op } from './op.ts'
 import { descending } from './order.ts'
@@ -219,13 +219,24 @@ const GLOBAL_RULES = `
   WHERE scope = 'user' AND status = 'active' AND context_policy = 'auto' AND audience IS NULL
   ORDER BY importance DESC, updated_at DESC`
 
+/** The loop a global rules request is for: its session, its loop, and the project store that records its reminders. */
+export type GlobalContext = { project: Op; sessionId: string; loop: string }
+
 /**
  * The user's global rules: every active user memory, whatever the prompt or the task, with no count
  * or size limit. The user chose that a rule of the user scope reaches every context on its own
- * instead of waiting for a relevant prompt or file.
+ * instead of waiting for a relevant prompt or file. For one loop's context, only the rules it was not
+ * reminded of yet, or whose text changed since: a rule written or rewritten in another window while
+ * the context was open comes with its next prompt, and the rest are not sent twice.
  */
-export function globalRules(user: Op): Memory[] {
-  return selectMemories(user.store.db, GLOBAL_RULES)
+export function globalRules(user: Op, context?: GlobalContext): Memory[] {
+  const rules = selectMemories(user.store.db, GLOBAL_RULES)
+  if (context === undefined) return rules
+  const sent = remindedAt(context.project.store.db, context.sessionId, context.loop)
+  return rules.filter(rule => {
+    const at = sent.get(rule.id)
+    return at === undefined || rule.updatedAt > at
+  })
 }
 
 export type SubagentRequest ={ role?: string; mode?: string; task: string; audienceLimit: number; taskLimit: number }

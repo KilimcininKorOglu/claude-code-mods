@@ -888,16 +888,18 @@ function joined(first: string | undefined, second: string | undefined): string |
 }
 
 /**
- * The user's global rules, once per main-loop context: with its first prompt, or with the first
- * file tool after a compaction started it over in the middle of a turn. A subagent's loop gets them
- * in its spawn prompt instead. A failed read leaves the context without them, so the next prompt or
- * tool tries again.
+ * The user's global rules the main-loop context does not hold yet: all of them with its first prompt,
+ * or with the first file tool after a compaction started it over in the middle of a turn; with each
+ * later prompt, a rule written or rewritten since (in this window or another). The daemon answers from
+ * what it recorded for this loop, so a reloaded module does not send the held rules again. A
+ * subagent's loop gets them in its spawn prompt instead. A failed read leaves the context without
+ * them, so the next prompt or tool tries again.
  */
-async function globalRules($: EngineInterface, state: State, loopKey: string = MAIN_LOOP): Promise<string | undefined> {
+async function globalRules($: EngineInterface, state: State, loopKey: string, atPrompt: boolean): Promise<string | undefined> {
   if (loopKey !== MAIN_LOOP) return undefined
   const loop = loopOf(state, MAIN_LOOP)
-  if (loop.global || !(await isReady(state))) return undefined
-  const rules = await ask<Memory[]>($, state, '/remind/global', {}, REMIND_MS)
+  if ((loop.global && !atPrompt) || !(await isReady(state))) return undefined
+  const rules = await ask<Memory[]>($, state, '/remind/global', { sessionId: await $.session.id(), loop: MAIN_LOOP }, REMIND_MS)
   loop.global = true
   return deliver($, state, MAIN_LOOP, 'global', globalReminder(rules, false))
 }
@@ -917,7 +919,7 @@ const REMINDING_TOOLS = /^(Read|Grep|Glob|LSP|Edit|Write|NotebookEdit|MultiEdit|
  */
 async function beforePrompt($: EngineInterface, state: State, text: string): Promise<string | undefined> {
   await follow($, state)
-  const rules = await guarded($, 'the global rules', () => globalRules($, state))
+  const rules = await guarded($, 'the global rules', () => globalRules($, state, MAIN_LOOP, true))
   const related = await guarded($, 'the reminder with the prompt', () => promptRelated($, state, text))
   return joined(rules, related)
 }
@@ -1904,7 +1906,7 @@ export const register: Register = on => {
     // Counted before this call's own reminder joins the loop, so a memory is not used by the call that brought it.
     await guarded($, 'counting the used memories', () => countUse($, state, e.agentId ?? MAIN_LOOP, 'tool_anchor', reminded => actedOn(call, reminded)))
     // A compaction in the middle of a turn started the main loop over: its first file tool brings the global rules back.
-    const rules = await guarded($, 'the global rules', () => globalRules($, state, e.agentId ?? MAIN_LOOP))
+    const rules = await guarded($, 'the global rules', () => globalRules($, state, e.agentId ?? MAIN_LOOP, false))
     return withToolContext(r, joined(rules, await guarded($, 'the reminder after the tool', () => afterCall($, state, call, e.agentId ?? MAIN_LOOP))))
   })
 

@@ -21,7 +21,12 @@ const DROP_EARLIER = 'DELETE FROM reminders WHERE session_id = ? AND loop_id = ?
 
 const REMINDED = 'SELECT memory_id FROM reminders WHERE session_id = ? AND loop_id = ? AND epoch = ?'
 
-const MARK = 'INSERT OR IGNORE INTO reminders (session_id, loop_id, epoch, memory_id, trigger, at) VALUES (?, ?, ?, ?, ?, ?)'
+/** A memory reminded again in one epoch (its text changed since) keeps its first trigger and takes the new time. */
+const MARK = `
+  INSERT INTO reminders (session_id, loop_id, epoch, memory_id, trigger, at) VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT (session_id, loop_id, epoch, memory_id) DO UPDATE SET at = excluded.at`
+
+const REMINDED_AT = 'SELECT memory_id, at FROM reminders WHERE session_id = ? AND loop_id = ? AND epoch = ?'
 
 /** A loop's current epoch; one that never started over is at 0. */
 export function epochOf(db: DatabaseSync, sessionId: string, loop: string): number {
@@ -41,6 +46,12 @@ export function remindedIn(db: DatabaseSync, sessionId: string | undefined, loop
   if (sessionId === undefined || loop === undefined) return new Set()
   const rows = sql(db, REMINDED).all(sessionId, loop, epochOf(db, sessionId, loop)) as Array<{ memory_id: string }>
   return new Set(rows.map(row => row.memory_id))
+}
+
+/** When this loop's current context was last reminded of each memory, by memory id. */
+export function remindedAt(db: DatabaseSync, sessionId: string, loop: string): Map<string, string> {
+  const rows = sql(db, REMINDED_AT).all(sessionId, loop, epochOf(db, sessionId, loop)) as Array<{ memory_id: string; at: string }>
+  return new Map(rows.map(row => [row.memory_id, row.at]))
 }
 
 /** Records that the loop's current context was reminded of these memories. */

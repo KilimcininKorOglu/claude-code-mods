@@ -259,6 +259,25 @@ describe('read and reminder routes', () => {
       assert.ok(got.every(memory => memory.scope === 'user' && memory.status === 'active' && memory.audience === undefined))
     }))
 
+  test('a loop gets each global rule once, a rule added or rewritten later with its next ask, and all again once its context starts over', () =>
+    withDaemon(async d => {
+      const first = await d.remember(d.alpha, { text: 'All text the user reads must be in Turkish', scope: 'user' })
+      const ask = { project: d.alpha, sessionId: 's1', loop: 'main' }
+      const ids = async (body: object) => (await d.value<Memory[]>('/remind/global', body)).map(memory => memory.id)
+      assert.deepEqual(await ids(ask), [first.id])
+      await d.value('/memory/reminded', { ...ask, ids: [first.id], trigger: 'global' })
+      assert.deepEqual(await ids(ask), [], 'a rule the context holds is not sent twice')
+      const later = await d.remember(d.alpha, { text: 'Never push to a shared remote without running the tests', scope: 'user' })
+      assert.deepEqual(await ids(ask), [later.id], 'a rule written while the context was open')
+      await d.value('/memory/reminded', { ...ask, ids: [later.id], trigger: 'global' })
+      await d.value('/memory/update', { project: d.alpha, id: first.id, patch: { text: 'All text the user reads must be in Turkish, code comments in English' } })
+      assert.deepEqual(await ids(ask), [first.id], 'a rule whose text changed after it was sent')
+      assert.deepEqual((await ids({ ...ask, loop: 'agent-1' })).sort(), [first.id, later.id].sort(), 'another loop holds none of them')
+      assert.equal((await ids({ project: d.beta })).length, 2, 'a request for no loop gets every rule')
+      await d.value('/context/new', ask)
+      assert.equal((await ids(ask)).length, 2, 'a context that started over gets every rule again')
+    }))
+
   test('what a context was reminded of is held back until the context starts over', () =>
     withDaemon(async d => {
       mkdirSync(join(d.alpha.root, 'src'), { recursive: true })
