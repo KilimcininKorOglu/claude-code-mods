@@ -400,6 +400,27 @@ describe('memory reminders', () => {
     expect(w.lines.at(-2)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 1 · added 0 · used 0 · global rules 0')
   })
 
+  withSidebar('a long prompt goes to the daemon whole, so a question after a pasted log is read', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/remind/prompt', { candidates: [], rejected: [] })
+    await $.session.start(START)
+    const log = Array.from({ length: 120 }, (_, i) => `2026-11-16T10:${String(i % 60).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i} in ${100 + i}ms`).join('\n')
+    const prompt = `${log}\nWho approves a large refund?`
+    expect(prompt.length).toBeGreaterThan(6000)
+    await $.prompt.submit(typed(prompt))
+    expect(bodiesOf(w, '/remind/prompt')[0]).toMatchObject({ query: prompt })
+  })
+
+  withSidebar('a subagent task goes to the daemon whole', async ($, on) => {
+    const w = readyWorld(on)
+    w.routes.set('/remind/subagent', { audience: [], task: [] })
+    await $.session.start(START)
+    const task = `${'Read the build log and list each failing step. '.repeat(120)}Then find the idle timeout.`
+    expect(task.length).toBeGreaterThan(5000)
+    await $.agent.spawn({ tool_use_id: 't8', prompt: task, description: 'find', subagentType: 'Explore', permissionMode: 'default' } as never)
+    expect(bodiesOf(w, '/remind/subagent')[0]).toMatchObject({ task })
+  })
+
   withSidebar('a prompt reminder that carries a user rule does not call it project memory', async ($, on) => {
     const w = readyWorld(on)
     const RULE = memory('g1', 'All text the user reads must be in Turkish.', { scope: 'user', kind: 'preference' })

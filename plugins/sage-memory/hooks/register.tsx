@@ -925,10 +925,13 @@ async function beforePrompt($: EngineInterface, state: State, text: string): Pro
   return joined(rules, related)
 }
 
-/** The reminder of the memories a prompt's text finds, or nothing. */
+/**
+ * The reminder of the memories a prompt's text finds, or nothing. The whole prompt goes: a cut at
+ * its first 4,000 characters left out the question at the end of a longer pasted log.
+ */
 async function promptRelated($: EngineInterface, state: State, text: string): Promise<string | undefined> {
   if (!(await isReady(state)) || (await $.store.get('remindPrompt')) === false) return undefined
-  const body = { sessionId: await $.session.id(), loop: MAIN_LOOP, query: text.slice(0, 4000), limit: CANDIDATES, blockCount: PROMPT_BUDGET.count }
+  const body = { sessionId: await $.session.id(), loop: MAIN_LOOP, query: text, limit: CANDIDATES, blockCount: PROMPT_BUDGET.count }
   const ranking = await ask<Ranking>($, state, '/remind/prompt', body, REMIND_MS)
   return deliver($, state, MAIN_LOOP, 'prompt', promptReminder(ranking.candidates, loopOf(state, MAIN_LOOP).visible))
 }
@@ -960,7 +963,7 @@ async function recordSpawn($: EngineInterface, state: State, agentId: string, bl
 /** The memories written for a subagent and the ones about its task; none while the person turned them off. */
 async function subagentRanking($: EngineInterface, state: State, e: Spawn): Promise<SubagentRanking> {
   if ((await $.store.get('remindSubagent')) === false) return { audience: [], task: [] }
-  const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt.slice(0, 4000) }
+  const body = { sessionId: await $.session.id(), role: e.subagentType, mode: e.permissionMode, task: e.prompt }
   return ask<SubagentRanking>($, state, '/remind/subagent', body, REMIND_MS)
 }
 
