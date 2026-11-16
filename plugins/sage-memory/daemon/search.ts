@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite'
 import type { ContextPolicy, Memory, Scope, Status } from '../hooks/shared/model.ts'
-import { ftsTerms, MIN_PREFIX } from './fts.ts'
+import { ftsTerms, MAX_TERMS, MIN_PREFIX } from './fts.ts'
 import { selectMemories, sql } from './rows.ts'
 
 /**
@@ -70,6 +70,32 @@ function isHeld(db: DatabaseSync, match: string, params: SQLInputValue[]): boole
   return Number((sql(db, HELD).get(match, ...params) as { held: number }).held) === 1
 }
 
+const HOLDER_COUNT = `
+  SELECT COUNT(*) AS n FROM memories_fts f CROSS JOIN memories m ON m.rowid = f.rowid
+  WHERE memories_fts MATCH ?
+    AND m.status IN (SELECT value FROM json_each(?)) AND m.context_policy IN (SELECT value FROM json_each(?))
+    AND (? IS NULL OR m.scope = ?) AND (? = 1 OR m.scope != 'session' OR m.owner_session_id = ?) AND (? = 1 OR m.audience IS NULL)`
+
+/** A query's terms in the form the store holds them, with how many visible memories hold each. */
+export type HeldTerm = { term: string; count: number }
+
+/**
+ * The `MAX_TERMS` terms of a query the store holds, each in its held form, the rarest first: a term
+ * fewer memories hold says more about which one the query means. Picked by rarity, not by place, so
+ * the question at the end of a pasted log keeps its terms while the log's timestamps, which no memory
+ * holds, take none. `unheld` counts the terms the store does not hold in any form.
+ */
+export function heldTerms(db: DatabaseSync, query: string, params: SQLInputValue[], column?: string): { terms: HeldTerm[]; unheld: number } {
+  const forms = new Map<string, HeldTerm>()
+  let unheld = 0
+  for (const raw of ftsTerms(query)) {
+    const term = heldForm(db, raw, params, column)
+    if (term === undefined) unheld++
+    else if (!forms.has(term)) forms.set(term, { term, count: Number((sql(db, HOLDER_COUNT).get(column ? `${column} : ${term}` : term, ...params) as { n: number }).n) })
+  }
+  return { terms: [...forms.values()].sort((a, b) => a.count - b.count).slice(0, MAX_TERMS), unheld }
+}
+
 /**
  * A query term as the store holds it: a prefix term no visible memory holds is cut, letter by
  * letter, to its longest prefix of at least three letters one holds, so `logların` finds `log` and
@@ -89,18 +115,21 @@ export function heldForm(db: DatabaseSync, term: string, params: SQLInputValue[]
 
 /**
  * The memories of one store that match a free-text query, best match first: every term first,
- * any term when that finds nothing. A term is taken in the form the store holds (`heldForm`); a term
- * the store does not hold in any form stays as it is, so the every-term search fails and the
- * any-term search runs. A blank query lists the most important memories; a query with no
- * searchable term finds nothing.
+ * any term when that finds nothing. The terms are the rarest the store holds, each in its held form
+ * (`heldTerms`). A term the store does not hold in any form is no match, so the every-term search
+ * cannot succeed and the any-term search runs. A blank query lists the most important memories; a
+ * query with no held term finds nothing.
  */
 export function searchStore(db: DatabaseSync, query: string, visibility: Visibility, limit: number): Memory[] {
   const params = visibilityParams(visibility)
   if (query.trim() === '') return selectMemories(db, BY_RANK, ...params, limit)
-  const terms = ftsTerms(query).map(term => heldForm(db, term, params) ?? term)
+  const held = heldTerms(db, query, params)
+  const terms = held.terms.map(item => item.term)
   if (terms.length === 0) return []
-  const every = selectMemories(db, BY_TEXT, terms.join(' '), ...params, limit)
-  if (every.length > 0 || terms.length === 1) return every
+  if (held.unheld === 0) {
+    const every = selectMemories(db, BY_TEXT, terms.join(' '), ...params, limit)
+    if (every.length > 0 || terms.length === 1) return every
+  }
   return selectMemories(db, BY_TEXT, terms.join(' OR '), ...params, limit)
 }
 

@@ -111,7 +111,7 @@ describe('score caps for defaulted scores', () => {
 describe('text search terms', () => {
   test('every term is quoted, so an operator word or punctuation cannot change the query, and a repeat counts once', () => {
     assert.deepEqual(ftsTerms('NOT "x" OR near: Cache cache'), ['"not"*', '"or"', '"near"*', '"cache"*'], 'a two-letter word is an exact term')
-    assert.equal(ftsTerms(Array.from({ length: 100 }, (_, i) => `term${i}`).join(' ')).length, 64)
+    assert.equal(ftsTerms(Array.from({ length: 100 }, (_, i) => `term${i}`).join(' ')).length, 100, 'every term; the caller picks the 64 it matches with')
   })
 })
 

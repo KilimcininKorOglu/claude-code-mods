@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { after, describe, test } from 'node:test'
-import { EVERY_POLICY, searchStore, type Visibility } from '../search.ts'
+import { EVERY_POLICY, heldTerms, searchStore, visibilityParams, type Visibility } from '../search.ts'
 import { wordEvidence } from '../words.ts'
 import { cleanUp } from './support.ts'
 import { world, type World } from './world.ts'
@@ -79,6 +79,24 @@ describe('word evidence from the store', () => {
     const { w, texts } = await store(ENGLISH)
     const found = searchStore(w.project.db, 'logların süresi', SHOWN, 10).map(memory => texts.get(memory.id))
     assert.deepEqual(found, [ENGLISH[6]], '`logların` is cut to `log`, which `Log files` holds')
+    w.close()
+  })
+
+  test('the question at the end of a long pasted log keeps its words', async () => {
+    const { w, texts } = await store(ENGLISH)
+    const log = Array.from({ length: 80 }, (_, i) => `2026-11-16T10:${String(i % 60).padStart(2, '0')}:00Z worker-${i % 4} processed batch ${i * 17} in ${100 + i}ms`).join('\n')
+    const prompt = `${log}\nWho approves big refunds in finance?`
+    assert.deepEqual(singledOut(w, texts, prompt), [ENGLISH[1]], 'the log terms no memory holds take none of the 64 places')
+    assert.equal(texts.get(searchStore(w.project.db, prompt, SHOWN, 10)[0]!.id), ENGLISH[1], 'the search ranks the memory of the question first')
+    w.close()
+  })
+
+  test('a query matches with at most 64 held terms, the rarest first', async () => {
+    const many = Array.from({ length: 100 }, (_, i) => `word${i}`)
+    const { w } = await store([many.join(' '), ...ENGLISH.slice(0, 3).map((text, i) => `${text} ${many.slice(0, 10 * (i + 1)).join(' ')}`)])
+    const held = heldTerms(w.project.db, many.join(' '), visibilityParams(SHOWN))
+    assert.equal(held.terms.length, 64)
+    assert.ok(held.terms.every(term => term.count === 1), 'the 70 terms only one memory holds come before the 30 more memories hold')
     w.close()
   })
 

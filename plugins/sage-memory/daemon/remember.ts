@@ -2,7 +2,7 @@ import type { Anchor, Audience, ContextPolicy, Kind, Memory, Persistence, Rememb
 import { canonicalText, normalizeTags } from '../hooks/shared/text.ts'
 import { distinct, normalizeAnchors, normalizeSources } from './anchors.ts'
 import { refused } from './errors.ts'
-import { ftsTerms } from './fts.ts'
+import { ftsTerms, MAX_TERMS } from './fts.ts'
 import { syncEdges } from './graph.ts'
 import { storeLabel, type Op } from './op.ts'
 import { assessQuality, checkRemember, clamp01, isNearDuplicate, normalizeAudience, rejectSecrets, takesEndDate } from './rules.ts'
@@ -130,7 +130,7 @@ function wordSimilar(op: Op, draft: Draft): Memory[] {
   const owner = draft.ownerSessionId ?? null
   const audience = audienceKey(draft)
   const pool = new Map(selectMemories(op.store.db, BY_IMPORTANCE, draft.scope, audience, owner, owner).map(memory => [memory.id, memory]))
-  const terms = ftsTerms(draft.text)
+  const terms = ftsTerms(draft.text).slice(0, MAX_TERMS)
   if (terms.length > 0) {
     for (const memory of selectMemories(op.store.db, BY_TEXT, terms.join(' OR '), draft.scope, audience, owner, owner)) pool.set(memory.id, memory)
   }

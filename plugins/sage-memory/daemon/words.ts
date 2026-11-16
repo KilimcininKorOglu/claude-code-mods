@@ -1,7 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
-import { ftsTerms } from './fts.ts'
 import { selectIds, sql } from './rows.ts'
-import { heldForm, visibilityParams, type Visibility } from './search.ts'
+import { heldTerms, visibilityParams, type Visibility } from './search.ts'
 import { cjkPairs } from './searchable.ts'
 
 /**
@@ -70,19 +69,13 @@ function joinPairs(db: DatabaseSync, own: readonly Term[], runs: readonly string
   return [...own.filter(term => !joined.has(term.term)), ...phrases]
 }
 
-/** A prompt term in the form the memories' text holds it (`heldForm`), with its holders. */
-function heldTerm(db: DatabaseSync, term: string, params: ReturnType<typeof visibilityParams>): Term | undefined {
-  const form = heldForm(db, term, params, 'search_text')
-  return form === undefined ? undefined : { term: form, holders: holdersOf(db, form, params) }
-}
-
-/** The prompt's terms the store holds, once each: a prefix term another one starts with stands for both, as `deploy` does for `deploys`. */
+/**
+ * The prompt's rarest terms the memories' text holds (`heldTerms`), once each: a prefix term another
+ * one starts with stands for both, as `deploy` does for `deploys`.
+ */
 function knownTerms(db: DatabaseSync, query: string, params: ReturnType<typeof visibilityParams>): Term[] {
   const terms = new Map<string, Term>()
-  for (const raw of ftsTerms(query)) {
-    const held = heldTerm(db, raw, params)
-    if (held) terms.set(held.term, held)
-  }
+  for (const { term } of heldTerms(db, query, params, 'search_text').terms) terms.set(term, { term, holders: holdersOf(db, term, params) })
   const prefixOf = (term: string): string | undefined => (term.endsWith('*') ? term.slice(1, -2) : undefined)
   return [...terms.values()].filter(({ term }) => {
     const own = term.slice(1).replace(/"\*?$/, '')
