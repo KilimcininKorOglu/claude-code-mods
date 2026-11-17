@@ -1641,8 +1641,8 @@ describe('pane', () => {
 })
 
 describe('the write day in a memory text', () => {
-  const OLD = memory('m8', 'Kerem chose (2026-11-16): migrations use Flyway, and the vendor key expires on 2026-12-31.', { revision: 2, createdAt: '2026-11-16T07:30:00.000Z' })
-  const CLEAN = 'Kerem chose: migrations use Flyway, and the vendor key expires on 2026-12-31.'
+  const OLD = memory('m8', 'The team chose (2026-11-16): migrations use Flyway, and the vendor key expires on 2026-12-31.', { revision: 2, createdAt: '2026-11-16T07:30:00.000Z' })
+  const CLEAN = 'The team chose: migrations use Flyway, and the vendor key expires on 2026-12-31.'
 
   /** A daemon that hands out `OLD` once, then no more dated memories. */
   function datedWorld(on: On): World {

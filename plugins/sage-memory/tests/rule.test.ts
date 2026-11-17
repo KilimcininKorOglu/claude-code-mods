@@ -13,7 +13,7 @@ describe('the rule question verdict', () => {
   })
 
   test('ADD carries the joined text whole, and NEWPART the new part', () => {
-    const joined = 'Kerem hates gradients and drop shadows in UI design: use flat solid colors only, in every project.'
+    const joined = 'UI design uses flat solid colors only, never gradients or drop shadows, in every project.'
     expect(ruleVerdictOf(`ADD ${IDS[0]}: ${joined}`, IDS)).toEqual({ kind: 'add', id: IDS[0], text: joined })
     expect(ruleVerdictOf('NEWPART: Never copy or read his other stores without asking first.', IDS)).toEqual({ kind: 'newpart', text: 'Never copy or read his other stores without asking first.' })
   })

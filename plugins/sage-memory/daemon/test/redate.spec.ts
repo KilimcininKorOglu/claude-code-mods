@@ -21,7 +21,7 @@ async function dated(w: World, text: string): Promise<Memory> {
 
 describe('write days', () => {
   test('a date within a day of the creation is a write day, in either form; any other date is part of the fact', () => {
-    const memory = { createdAt: CREATED, text: 'Kerem chose (2026-11-16) and confirmed on 17.11.2026; the key expires on 2026-12-31 and was issued 2026-11-14.' }
+    const memory = { createdAt: CREATED, text: 'The team chose (2026-11-16) and confirmed on 17.11.2026; the key expires on 2026-12-31 and was issued 2026-11-14.' }
     assert.deepEqual(writeDays(memory), ['2026-11-16', '17.11.2026'])
     assert.deepEqual(writeDays({ createdAt: CREATED, text: 'Deploys go through staging; no date here.' }), [])
     assert.deepEqual(writeDays({ createdAt: CREATED, text: 'A day that does not exist: 2026-02-31.' }), [])
@@ -53,8 +53,8 @@ describe('live ids', () => {
 describe('taking the write day out of a memory', () => {
   test('the text loses its write day and keeps id, anchors, creation time and the fact date', async () => {
     const w = world()
-    const old = await dated(w, 'Kerem chose (2026-11-16): the vendor key in `config/keys.ts` expires on 2026-12-31.')
-    const text = 'Kerem chose: the vendor key in `config/keys.ts` expires on 2026-12-31.'
+    const old = await dated(w, 'The team chose (2026-11-16): the vendor key in `config/keys.ts` expires on 2026-12-31.')
+    const text = 'The team chose: the vendor key in `config/keys.ts` expires on 2026-12-31.'
     const memory = await w.run(op => redateMemory(op, { id: old.id, revision: old.revision, text }))
     assert.deepEqual([memory.id, memory.text, memory.createdAt, memory.anchors], [old.id, text, CREATED, old.anchors])
     w.close()
@@ -62,12 +62,12 @@ describe('taking the write day out of a memory', () => {
 
   test('a text that drops a fact date, drops another name, adds a name, or keeps the write day is refused', async () => {
     const w = world()
-    const old = await dated(w, 'Kerem chose (2026-11-16): the vendor key in `config/keys.ts` expires on 2026-12-31.')
+    const old = await dated(w, 'The team chose (2026-11-16): the vendor key in `config/keys.ts` expires on 2026-12-31.')
     const tries: Array<[string, RegExp]> = [
-      ['Kerem chose: the vendor key in `config/keys.ts` expires soon.', /leaves out 2026-12-31/],
-      ['Kerem chose: the vendor key expires on 2026-12-31.', /leaves out config\/keys.ts/],
-      ['Kerem chose: the vendor key in `config/keys.ts` and `config/old.ts` expires on 2026-12-31.', /adds config\/old.ts/],
-      ['Kerem chose on 2026-11-16: the vendor key in `config/keys.ts` expires on 2026-12-31.', /still holds 2026-11-16/],
+      ['The team chose: the vendor key in `config/keys.ts` expires soon.', /leaves out 2026-12-31/],
+      ['The team chose: the vendor key expires on 2026-12-31.', /leaves out config\/keys.ts/],
+      ['The team chose: the vendor key in `config/keys.ts` and `config/old.ts` expires on 2026-12-31.', /adds config\/old.ts/],
+      ['The team chose on 2026-11-16: the vendor key in `config/keys.ts` expires on 2026-12-31.', /still holds 2026-11-16/],
     ]
     for (const [text, refusal] of tries) await assert.rejects(w.run(op => redateMemory(op, { id: old.id, revision: old.revision, text })), refusal)
     assert.equal(w.read(old.id).text, old.text)
