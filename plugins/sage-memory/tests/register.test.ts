@@ -812,6 +812,16 @@ describe('memory tools', () => {
     expect(fields.filter(field => (schema.properties[field]?.description ?? '') === '')).toEqual([])
   })
 
+  test('every parameter of every tool says what it takes, and search and for_file say when to call them', () => {
+    const bare = TOOLS.flatMap(tool => {
+      const properties = (tool.inputSchema as { properties?: Record<string, { description?: string }> }).properties ?? {}
+      return Object.entries(properties).filter(([, field]) => (field.description ?? '') === '').map(([name]) => `${tool.name}.${name}`)
+    })
+    expect(bare).toEqual([])
+    expect(TOOLS.find(tool => tool.name === 'search')?.description).toContain('Call it before you write a memory')
+    expect(TOOLS.find(tool => tool.name === 'for_file')?.description).toContain('Call it before you change the file')
+  })
+
   withSidebar('a delete without force and a two-letter forget are refused before the daemon is asked', async ($, on) => {
     const w = readyWorld(on)
     await $.session.start(START)

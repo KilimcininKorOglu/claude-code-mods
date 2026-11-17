@@ -15,6 +15,7 @@ export type ToolDef = { name: string; description: string; inputSchema: Schema; 
 export const TOOL_PREFIX = 'mcp__sage-memory__'
 
 const object = (properties: Record<string, Schema>, required: string[] = []): Schema => ({ type: 'object', properties, required, additionalProperties: false })
+const describedObject = (description: string, properties: Record<string, Schema>): Schema => ({ ...object(properties), description })
 const text = (description: string): Schema => ({ type: 'string', minLength: 1, description })
 const number = (minimum: number, maximum: number, description?: string): Schema => ({ type: 'number', minimum, maximum, ...(description === undefined ? {} : { description }) })
 const choice = (values: readonly string[], description?: string): Schema => ({ type: 'string', enum: [...values], ...(description === undefined ? {} : { description }) })
@@ -37,10 +38,13 @@ const ANCHORS: Schema = {
   ),
 }
 
-const AUDIENCE: Schema = object({
-  roles: texts('Subagent types that get the memory when they start, such as Explore for a rule only a search agent needs; it then stays out of search and reminders.'),
-  modes: texts('Permission modes the memory is for, such as plan for a rule that holds only while planning.'),
-})
+const AUDIENCE: Schema = {
+  ...object({
+    roles: texts('Subagent types that get the memory when they start, such as Explore for a rule only a search agent needs; it then stays out of search and reminders.'),
+    modes: texts('Permission modes the memory is for, such as plan for a rule that holds only while planning.'),
+  }),
+  description: 'Who the memory is for; leave it out for every reader.',
+}
 
 const PERSISTENCE = choice(
   PERSISTENCES,
@@ -95,7 +99,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'search',
     listed: true,
-    description: "Search memories by the words of their text and tags, and by meaning once embeddings are set up. Anchors are not searched: for a file's memories call for_file.",
+    description: "Search memories by the words of their text and tags, and by meaning once embeddings are set up. Call it before you write a memory, and when you need what the store holds on a topic, symbol or command. Anchors are not searched: for a file's memories call for_file.",
     inputSchema: object({ query: text('Words, a name, a tag or a question.'), limit: number(1, 100, '20 by default.'), include_stale: yes('Include stale memories.') }, ['query']),
   },
   {
@@ -107,7 +111,7 @@ export const TOOLS: readonly ToolDef[] = [
   {
     name: 'for_file',
     listed: true,
-    description: 'Every memory on a file: anchored to it or its directory, anchored to its symbols (those in lineStart-lineEnd first), and the ones that mention it.',
+    description: 'Every memory on a file: anchored to it or its directory, anchored to its symbols (those in lineStart-lineEnd first), and the ones that mention it. Call it before you change the file.',
     inputSchema: object(
       {
         path: text('Project-relative file path.'),
@@ -124,13 +128,13 @@ export const TOOLS: readonly ToolDef[] = [
     name: 'for_path',
     listed: false,
     description: 'Memories on a path and its parent directories.',
-    inputSchema: object({ path: text('Project-relative file or directory path.'), limit: number(1, 50) }, ['path']),
+    inputSchema: object({ path: text('Project-relative file or directory path.'), limit: number(1, 50, '20 by default.') }, ['path']),
   },
   {
     name: 'graph',
     listed: false,
     description: 'Walk the links between memories, files, symbols and commands.',
-    inputSchema: object({ query: text('Memory id, path, symbol or search text.'), depth: number(1, 6), limit: number(1, 500) }, ['query']),
+    inputSchema: object({ query: text('Memory id, path, symbol or search text.'), depth: number(1, 6, 'Link steps to follow, 2 by default.'), limit: number(1, 500, 'Edges at most, 100 by default.') }, ['query']),
   },
   {
     name: 'gather',
@@ -138,9 +142,9 @@ export const TOOLS: readonly ToolDef[] = [
     description: 'List memories page by page by status, kind or text, for bulk review; the first ten carry their links.',
     inputSchema: object({
       statuses: { type: 'array', items: choice(STATUSES), description: 'All but deleted by default.' },
-      kind: choice(KINDS),
+      kind: choice(KINDS, 'Only memories of this kind.'),
       query: text('Substring of the text, any case.'),
-      limit: number(1, 500),
+      limit: number(1, 500, 'Memories per page, 50 by default.'),
       cursor: text("The previous page's nextCursor."),
       includeRelations: yes('true by default.'),
     }),
@@ -161,11 +165,11 @@ export const TOOLS: readonly ToolDef[] = [
         audience: AUDIENCE,
         importance: IMPORTANCE,
         confidence: CONFIDENCE,
-        freshness: number(0, 1),
+        freshness: number(0, 1, '1: just checked against its source; a lower value marks it as aging.'),
         persistence: PERSISTENCE,
         expiresAt: EXPIRES_AT,
         contextPolicy: choice(['never', 'auto'], 'never: no automatic reminder; auto: when relevant.'),
-        status: choice(STATUSES),
+        status: choice(STATUSES, 'The new state, such as stale for a memory that needs a check against its source; deleted needs force.'),
         supersedes: texts('Ids this replaces.'),
         contradicts: texts('Ids this contradicts.'),
         force: yes('Required for status deleted.'),
@@ -211,7 +215,7 @@ export const TOOLS: readonly ToolDef[] = [
     listed: false,
     description: 'Find deleted memories that can still be restored. It previews them; with apply: true it restores each as a new active version that supersedes the original.',
     inputSchema: object({
-      filter: object({
+      filter: describedObject('Which deleted memories to look at; leave it out for all.', {
         kinds: { type: 'array', items: choice(KINDS), description: 'Only these kinds.' },
         scopes: { type: 'array', items: choice(SCOPES), description: 'Only these scopes.' },
         updatedAfter: text('ISO-8601 lower bound of the update time.'),
@@ -235,9 +239,9 @@ export const TOOLS: readonly ToolDef[] = [
     inputSchema: object({
       verify: yes('true by default.'),
       verifyDepth: choice(VERIFY_DEPTHS, 'existence by default.'),
-      staleReviewDays: number(0, 3650),
-      lowConfidenceReviewDays: number(0, 3650),
-      sessionRetentionDays: number(0, 3650),
+      staleReviewDays: number(0, 3650, 'Open a review for a memory stale this many days, 90 by default.'),
+      lowConfidenceReviewDays: number(0, 3650, 'Open a review for a low-confidence memory this old, 30 by default.'),
+      sessionRetentionDays: number(0, 3650, 'Remove session memories older than this, 7 by default.'),
       purgeDeletedAfterDays: number(0, 3650, 'Remove the deleted memories older than this for good; leave it out to keep them.'),
     }),
   },
