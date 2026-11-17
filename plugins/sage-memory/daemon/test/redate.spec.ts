@@ -3,6 +3,7 @@ import { after, describe, test } from 'node:test'
 import type { Memory } from '../../hooks/shared/model.ts'
 import { writeDays } from '../../hooks/shared/days.ts'
 import { datedMemories, MAX_REDATE_TRIES, redateFailed, redateMemory } from '../redate.ts'
+import { liveIds } from '../remember.ts'
 import { writeMemory } from '../rows.ts'
 import { cleanUp } from './support.ts'
 import { world, type World } from './world.ts'
@@ -33,6 +34,19 @@ describe('write days', () => {
       text: 'Rules moved to AGENTS.md (merged 2026-11-17), checked 2026-10-20, reminded 2026-11-05, used 2026-11-08; the key expires on 2026-12-31.',
     }
     assert.deepEqual(writeDays(memory), ['2026-11-17', '2026-10-20', '2026-11-05', '2026-11-08'])
+  })
+})
+
+describe('live ids', () => {
+  test('a memory a write may name is one present in the store and not deleted; a superseded one still counts', async () => {
+    const w = world()
+    const kept = await dated(w, 'Deploys go through staging first.')
+    const retired = await dated(w, 'Deploys go straight to production.')
+    const dropped = await dated(w, 'Staging resets every night.')
+    await w.run(op => writeMemory(op.store.db, { ...retired, status: 'superseded' }))
+    await w.run(op => writeMemory(op.store.db, { ...dropped, status: 'deleted' }))
+    assert.deepEqual(await w.run(op => liveIds(op, [kept.id, retired.id, dropped.id, '01NOSUCHMEMORY0000000000000'])), [kept.id, retired.id])
+    w.close()
   })
 })
 

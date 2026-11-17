@@ -12,8 +12,10 @@
  *    how many memories a name may single out; an older daemon would ignore it.
  * 5: `/memory/dated`, `/memory/redate` and `/memory/redate-failed` take the write day out of old
  *    memory texts; an older daemon has no such routes.
+ * 6: `/memory/live` answers which of the named ids are live in a scope's store; an older daemon has
+ *    no such route.
  */
-export const PROTOCOL = 5
+export const PROTOCOL = 6
 
 /** What `GET /hello` answers without a token: enough to tell that a daemon runs, and which build. */
 export type Hello = {

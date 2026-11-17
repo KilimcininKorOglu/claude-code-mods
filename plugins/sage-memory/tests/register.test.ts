@@ -101,7 +101,7 @@ function answerFor(w: World, system: string, prompt: string): string | undefined
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []], ['/memory/dated', []]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []], ['/memory/dated', []], ['/memory/live', (body: Record<string, unknown>) => body.ids]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -971,6 +971,23 @@ describe('consolidator', () => {
     await settled(w)
     expect(bodiesOf(w, '/memory/remember').slice(1).map(body => body.input)).toMatchObject([{ text: OTHER }, { text: OTHER, distinct: true }])
     expect(streamOf(w, 'consolidator').at(-1)).toBe(`added (project): ${OTHER}`)
+  })
+
+  // The user's report: a consolidator memory was lost because it named a replaced entry that was gone by the write.
+  withSidebar('a consolidator memory that names a replaced entry no longer live is still written, without that id', async ($, on) => {
+    const w = readyWorld(on)
+    const GONE = memory('gone1', 'The daemon closed after ten idle minutes.', { kind: 'fact' })
+    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+    w.routes.set('/memory/search', [GONE])
+    w.routes.set('/memory/live', [])
+    w.routes.set('/memory/remember', (body: Record<string, unknown>) => ({ memory: memory('m7', (body.input as { text: string }).text), outcome: 'added' }))
+    const TEXT = 'The daemon closes itself five minutes after its last request.'
+    w.modelText = JSON.stringify({ candidates: [{ text: 'idle', is: 'keep', memory: { text: TEXT, kind: 'fact', supersedes: ['gone1'] } }] })
+    await consolidate($, w)
+    expect(bodiesOf(w, '/memory/live')).toMatchObject([{ ids: ['gone1'] }])
+    const input = bodiesOf(w, '/memory/remember')[0]?.input as { text: string; supersedes?: string[] }
+    expect([input.text, input.supersedes]).toEqual([TEXT, undefined])
+    expect(streamOf(w, 'consolidator').at(-1)).toBe(`added (project): ${TEXT}`)
   })
 
   withSidebar('a held consolidator memory with no verdict is not written and named in red', async ($, on) => {

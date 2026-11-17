@@ -10,7 +10,7 @@ import { candidateStore, memoryStore, opFor, placesOf, storeForScope, type Place
 import { backfill, recoverMemory } from './recover.ts'
 import { datedMemories, redateFailed, redateMemory, type RedateRequest } from './redate.ts'
 import { refused } from './errors.ts'
-import { remember, supersede } from './remember.ts'
+import { liveIds, remember, supersede } from './remember.ts'
 import { longMemories, replaceMemory, shortenFailed, type ReplaceRequest, type ReplaceResult } from './replace.ts'
 import { clear, deleteMemory, forget } from './remove.ts'
 import { flag, optionalCount, optionalObject, optionalScope, optionalString, requiredObject, requiredString, stringList, type Body } from './request.ts'
@@ -151,6 +151,10 @@ export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
     '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
     '/memory/replace': post(body => replaceRoute(stores, embeddings, body)),
     '/memory/long': post(body => lease(stores, leases, version, body, longMemories)),
+    '/memory/live': post(body => {
+      const scope = optionalScope(body) ?? 'project'
+      return run(stores, body, places => storeForScope(places, scope), op => liveIds(op, stringList(body, 'ids')))
+    }),
     '/memory/dated': post(body => lease(stores, leases, version, body, datedMemories)),
     '/memory/redate': post(body => redateRoute(stores, embeddings, body)),
     '/memory/redate-failed': post(body =>

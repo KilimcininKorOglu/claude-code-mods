@@ -105,6 +105,14 @@ export function checkRelations(op: Op, lists: { supersedes?: readonly string[]; 
   }
 }
 
+/** The ids of `ids` that a memory of this store may still name: present and not deleted, the test the checks above apply. */
+export function liveIds(op: Op, ids: readonly string[]): string[] {
+  return ids.filter(id => {
+    const target = readMemory(op.store.db, id)
+    return target !== undefined && target.status !== 'deleted'
+  })
+}
+
 const EXACT = `
   SELECT id, data FROM memories
   WHERE status IN ('active', 'stale') AND scope = ? AND canonical_text = ? AND audience IS ? AND (? IS NULL OR owner_session_id = ?)

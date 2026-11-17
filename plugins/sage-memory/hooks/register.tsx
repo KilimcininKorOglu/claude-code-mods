@@ -1212,9 +1212,26 @@ async function writeParts($: EngineInterface, state: State, input: RememberInput
 }
 
 /** Writes one memory; a refusal (a progress note, a secret, a missing anchor) is a red line, and the rest still go. */
-async function writeOne($: EngineInterface, state: State, input: RememberInput): Promise<boolean> {
-  if (input.text.length > MAX_NOTE_CHARS) return writeParts($, state, input)
+/**
+ * The input without the related and replaced ids that are no longer live in its store: the entries the
+ * model was shown were read before its answer, and one another job retired or deleted since then has
+ * nothing left to link or retire, while the daemon would refuse the whole new memory for it.
+ */
+async function withLiveLinks($: EngineInterface, state: State, input: RememberInput): Promise<RememberInput> {
+  const named = [...(input.supersedes ?? []), ...(input.related ?? [])]
+  if (named.length === 0) return input
+  const live = new Set(await ask<string[]>($, state, '/memory/live', { ids: named, scope: input.scope }))
+  const kept = (ids: readonly string[] | undefined): string[] | undefined => {
+    const left = (ids ?? []).filter(id => live.has(id))
+    return left.length > 0 ? left : undefined
+  }
+  return { ...input, supersedes: kept(input.supersedes), related: kept(input.related) }
+}
+
+async function writeOne($: EngineInterface, state: State, given: RememberInput): Promise<boolean> {
+  if (given.text.length > MAX_NOTE_CHARS) return writeParts($, state, given)
   try {
+    const input = await withLiveLinks($, state, given)
     const result = await ask<RememberResult>($, state, '/memory/remember', { input })
     if (result.outcome === 'added') await countAdded($, state, result.memory)
     if (result.outcome === 'similar') await settleSimilar($, state, input, result.similar)
