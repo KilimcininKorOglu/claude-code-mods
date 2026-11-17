@@ -121,7 +121,10 @@ Drop a candidate that only says:
   the project uses, because the code already shows it;
 - a convention or a workflow inferred from one action of this turn;
 - general programming knowledge that holds in any project, such as what an
-  error message means or how a language feature works.
+  error message means or how a language feature works;
+- a rule, command or fact an instruction file (AGENTS.md, CLAUDE.md) states,
+  also when the answer repeats it, explains it, or names the file as where it
+  comes from, because every session already reads that file.
 
 Examples, none of them from this project:
 - "Created src/utils/date.ts and committed it." Drop: this turn's work.
@@ -135,6 +138,8 @@ Examples, none of them from this project:
   code shows it.
 - "A null pointer error means the value was never set; check it first." Drop:
   true in every project.
+- "Per AGENTS.md, run make lint before each commit." Drop: the instruction
+  file states it.
 - "Webhook handlers must answer within 5 s, because the payment provider
   retries after that." Keep: a constraint and its reason.
 - "Token refresh failed when the server clock ran ahead; the client now pads
@@ -192,9 +197,8 @@ or the same rule seen from another side. Touching the same file is not enough.
 Use only ids from the existing entries, and leave the list out when none fits.
 
 "source" says where the fact comes from: "user" when the person stated it,
-"file", "test", "command" or "tool_result" when the evidence shows it,
-"project_instruction" when an instruction file says it. Leave it out when the
-answer concluded it.
+"file", "test", "command" or "tool_result" when the evidence shows it. Leave it
+out when the answer concluded it.
 
 Memory kinds, pick the most specific:
 ${KIND_LINES}
