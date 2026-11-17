@@ -176,7 +176,30 @@ function aboutOf(memory: Memory): string | undefined {
   return `${anchor.type} ${target}`
 }
 
-/** The optional attributes: priority, a permanent persistence, the first anchor and up to three tags. */
+/** The day of an ISO time, or undefined for a time the record does not hold. */
+function dayOf(at: string | undefined): string | undefined {
+  return at !== undefined && /^\d{4}-\d{2}-\d{2}/.test(at) ? at.slice(0, 10) : undefined
+}
+
+/**
+ * The dates and counts the record holds, so the model sees how old a note is, when its anchors were
+ * last checked against the code (none: never) and how often it was reminded and used. A value the
+ * record lacks is left out.
+ */
+function historyAttributes(memory: Memory): string {
+  const fields: Array<[string, string | undefined]> = [
+    ['created', dayOf(memory.createdAt)],
+    ['updated', dayOf(memory.updatedAt)],
+    ['verified', dayOf(memory.lastVerifiedAt)],
+    ['reminded', dayOf(memory.lastAccessedAt)],
+    ['used', dayOf(memory.lastUsedAt)],
+    ['reminders', memory.reminderCount === undefined ? undefined : String(memory.reminderCount)],
+    ['uses', memory.useCount === undefined ? undefined : String(memory.useCount)],
+  ]
+  return fields.map(([name, value]) => (value === undefined ? '' : attribute(name, value))).join('')
+}
+
+/** The optional attributes: priority, a permanent persistence, the first anchor, up to three tags, then the record's dates and counts. */
 function detailAttributes(memory: Memory): string {
   const priority = priorityOf(memory)
   const about = aboutOf(memory)
@@ -186,6 +209,7 @@ function detailAttributes(memory: Memory): string {
     memory.persistence === 'permanent' ? attribute('persistence', 'permanent') : '',
     about ? attribute('about', about) : '',
     tags.length > 0 ? attribute('tags', tags.join(',')) : '',
+    historyAttributes(memory),
   ].join('')
 }
 
@@ -205,7 +229,11 @@ export function memoryEntry(memory: Memory): string {
 const FIX =
   'When you confirm a note is wrong, fix it at once: rewrite its text with mcp__sage-memory__update when you know the current fact, else remove it with mcp__sage-memory__delete (force: true, with a reason).'
 
-export const FRAME = `This is saved memory from the sage-memory plugin the user installed: notes earlier sessions kept, about this project or, in the user scope, rules of the user that hold in every project. Use them as background; a note may be out of date, so check it against the files before relying on it. ${FIX}`
+/** What the dates on a note mean, so the model checks an old or never verified note. */
+const DATES =
+  'Each <memory> carries the dates its record holds: created (first written), updated (any last change to the record), verified (its anchors last checked against the code; absent means never checked), reminded and used, with their counts. The note text itself carries no write date. Check a note that is old or was never verified against its source before you rely on it.'
+
+export const FRAME = `This is saved memory from the sage-memory plugin the user installed: notes earlier sessions kept, about this project or, in the user scope, rules of the user that hold in every project. Use them as background; a note may be out of date, so check it against the files before relying on it. ${DATES} ${FIX}`
 
 /** How the model asks for notes itself, beyond those the reminders bring. */
 const LOOKUP =
@@ -216,7 +244,7 @@ const SAVE =
   'Save proactively, not only at the turn\'s end. Whenever you learn something durable that the next session needs — a convention, a decision with its reason, a warning, a bug root cause, a limitation, or a preference the user states — save it at once, in the middle of the turn, with mcp__sage-memory__remember; do not wait for the turn to end or for the plugin\'s own consolidation. In a project whose memory is still small, a first exploration is exactly when to save: what the project is built with, how its code is organised, which tools and commands drive it, and the conventions a first session must follow. Pick the scope from the reason behind the fact, not from how strongly it was said: a reason that names this project\'s structure, files or tools makes it project, anchored to its file or symbol; a preference that holds in every project makes it user, with no anchor. To move a note to the other scope, call mcp__sage-memory__update with scope; it keeps its id.'
 
 /** The main system prompt's note about the plugin, set once per session in the environment section. */
-export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Every note of the user scope is a global rule of the user: all of them come with the first prompt of a context and again after a compaction, and they hold in every task. ${LOOKUP} Use the notes as background; a note may be out of date, so check it against the files before relying on it. ${FIX} ${SAVE}`
+export const SYSTEM_NOTE = `The user installed the sage-memory plugin. It keeps notes about this project across sessions and adds the relevant ones to the conversation in [sage-memory] blocks, each note inside a <memory> element: after file tools, with the user's prompt, and when a subagent starts. Every note of the user scope is a global rule of the user: all of them come with the first prompt of a context and again after a compaction, and they hold in every task. ${LOOKUP} Use the notes as background; a note may be out of date, so check it against the files before relying on it. ${DATES} ${FIX} ${SAVE}`
 
 /** The block a reminder sends: a header, then an entry for each memory, best first, each whole. */
 export function reminderBlock(header: string, memories: readonly Memory[], framed: boolean): { text: string; sent: Memory[] } {

@@ -1,5 +1,5 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
-import { actedOn, isReminding, memoryEntry, pathsOf, pickDiverse, promptReminder, queryOf, reminderBlock, toolBudget, toolReminder, usedBy } from '../hooks/remind'
+import { actedOn, FRAME, isReminding, memoryEntry, pathsOf, pickDiverse, promptReminder, queryOf, reminderBlock, SYSTEM_NOTE, toolBudget, toolReminder, usedBy } from '../hooks/remind'
 import type { Kind, Memory } from '../hooks/shared/model'
 
 tier('user')
@@ -87,6 +87,18 @@ describe('remind', () => {
     expect(memoryEntry(command)).toMatch(/^<memory id="m2" kind="convention" scope="project" status="active" priority="high" about="command make &quot;test&quot;">\n/)
     const plain = { ...memory('m3', 'x'), importance: 0.5 }
     expect(memoryEntry(plain)).toMatch(/^<memory id="m3" kind="convention" scope="project" status="active">\n/)
+  })
+
+  test('an entry carries every date and count the record holds, so the model sees an old or never verified note', () => {
+    const checked = {
+      ...memory('m4', 'x'), importance: 0.5, createdAt: '2026-09-28T16:05:02.982Z', updatedAt: '2026-11-17T04:20:00.000Z',
+      lastVerifiedAt: '2026-10-01T08:00:00.000Z', lastAccessedAt: '2026-11-16T10:00:00.000Z', lastUsedAt: '2026-11-15T09:00:00.000Z', reminderCount: 7, useCount: 2,
+    }
+    expect(memoryEntry(checked)).toMatch(/^<memory id="m4" kind="convention" scope="project" status="active" created="2026-09-28" updated="2026-11-17" verified="2026-10-01" reminded="2026-11-16" used="2026-11-15" reminders="7" uses="2">\n/)
+    const never = { ...memory('m5', 'x'), importance: 0.5, createdAt: '2026-09-28T16:05:02.982Z', updatedAt: '2026-09-28T16:05:02.982Z' }
+    expect(memoryEntry(never)).toMatch(/^<memory id="m5" kind="convention" scope="project" status="active" created="2026-09-28" updated="2026-09-28">\n/)
+    expect(FRAME).toContain('absent means never checked')
+    expect(SYSTEM_NOTE).toContain('absent means never checked')
   })
 
   test('a call acts on a memory by editing its file or a file under its directory, or by running its command', () => {
