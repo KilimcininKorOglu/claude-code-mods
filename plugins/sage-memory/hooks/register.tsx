@@ -142,6 +142,7 @@ import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, 
 import { notesOf, problemOf, SHORTEN_MS, SHORTEN_SYSTEM, SHORTEN_TOKENS, shortenPrompt } from './shorten'
 import { REDATE_MS, REDATE_SYSTEM, REDATE_TOKENS, redatedOf, redatePrompt } from './redate'
 import { writeDays } from './shared/days'
+import { attributionsOf } from './shared/attribution'
 import { namesOf } from './shared/names'
 import { RULE_SYSTEM, RULE_TOKENS, rulePrompt, ruleVerdictOf, settledLine, settledText, type RuleVerdict, type Settled } from './rule'
 import { MAX_NOTE_CHARS, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
@@ -1769,9 +1770,10 @@ function shortenLine(tally: { replaced: number; failed: number }): string {
  */
 async function redated($: EngineInterface, memory: Memory): Promise<string> {
   const days = writeDays(memory)
+  const phrases = attributionsOf(memory.text)
   let problem: string | undefined
   for (let attempt = 0; attempt < 2; attempt++) {
-    const r = await completeWithRetry($, { model: await jobModel($), system: REDATE_SYSTEM, prompt: redatePrompt(memory.text, days, problem), maxTokens: REDATE_TOKENS, timeoutMs: REDATE_MS })
+    const r = await completeWithRetry($, { model: await jobModel($), system: REDATE_SYSTEM, prompt: redatePrompt(memory.text, days, phrases, problem), maxTokens: REDATE_TOKENS, timeoutMs: REDATE_MS })
     if (!r.isAnswered) throw new Error(`the job model gave no text (${r.reason}${apiErrorDetail(r)})`)
     const text = redatedOf(r.text)
     problem = text === undefined ? 'the answer was not {"text":"..."} JSON' : days.find(day => text.toLowerCase().includes(day)) === undefined ? undefined : `the text still holds ${days.join(', ')}`
@@ -1796,7 +1798,7 @@ async function redateOne($: EngineInterface, state: State, memory: Memory): Prom
 }
 
 function redateLine(tally: { rewritten: number; failed: number }): string {
-  return `took the write day out of ${tally.rewritten} memories${tally.failed > 0 ? `, ${tally.failed} failed` : ''}`
+  return `took the record day and who decided out of ${tally.rewritten} memories${tally.failed > 0 ? `, ${tally.failed} failed` : ''}`
 }
 
 /** Rewrites every live memory of both stores whose text holds its write day, as the shorten job does. */

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { after, describe, test } from 'node:test'
 import type { Memory } from '../../hooks/shared/model.ts'
+import { attributionsOf } from '../../hooks/shared/attribution.ts'
 import { writeDays } from '../../hooks/shared/days.ts'
-import { datedMemories, MAX_REDATE_TRIES, redateFailed, redateMemory } from '../redate.ts'
+import { datedMemories, MAX_REDATE_TRIES, redateFailed, redateMemory, redateProblem } from '../redate.ts'
 import { liveIds } from '../remember.ts'
 import { writeMemory } from '../rows.ts'
 import { cleanUp } from './support.ts'
@@ -34,6 +35,38 @@ describe('write days', () => {
       text: 'Rules moved to AGENTS.md (merged 2026-11-17), checked 2026-10-20, reminded 2026-11-05, used 2026-11-08; the key expires on 2026-12-31.',
     }
     assert.deepEqual(writeDays(memory), ['2026-11-17', '2026-10-20', '2026-11-05', '2026-11-08'])
+  })
+})
+
+// The user's rule: a note states the fact, not who decided it; the source field records the person.
+describe('who decided a fact, in its text', () => {
+  test('a name or "the user" before a verb of deciding, a possessive rule or a label is found; a program\'s verb that is no person\'s is not', () => {
+    assert.deepEqual(attributionsOf('Alex chose Flyway; the user wants RFC 7807 errors; Sam\'s rule holds.'), ['Alex chose', 'the user wants', 'Sam\'s rule'])
+    assert.deepEqual(attributionsOf('Decision: migrations use Flyway.'), ['Decision:'])
+    assert.deepEqual(attributionsOf('Deploy requires a signed tag, and the user account folder is created on disk.'), [])
+  })
+
+  test('a note that names who decided it is handed to the job; a rewrite that still names them is refused, and one the job model left as it is is not handed again', async () => {
+    const w = world()
+    const named = await dated(w, 'Alex chose Flyway for the migrations in `db/migrate`.')
+    const plain = await dated(w, 'Migrations under `db/migrate` use Flyway, never Liquibase XML.')
+    const program = await dated(w, 'Cloudflare rejects a token without the Zone scope.')
+    assert.deepEqual(await w.run(op => datedMemories(op, 10, '1.0.0').map(memory => memory.id).sort()), [named.id, program.id].sort())
+    await assert.rejects(w.run(op => redateMemory(op, { id: named.id, revision: named.revision, text: 'Alex chose Flyway for `db/migrate`.' })), /still names who decided it: Alex chose/)
+    const clean = await w.run(op => redateMemory(op, { id: named.id, revision: named.revision, text: 'The migrations in `db/migrate` use Flyway.' }))
+    assert.equal(clean.text, 'The migrations in `db/migrate` use Flyway.')
+    const kept = await w.run(op => redateMemory(op, { id: program.id, revision: program.revision, text: program.text }))
+    assert.deepEqual([kept.text, kept.revision], [program.text, program.revision])
+    assert.deepEqual(await w.run(op => datedMemories(op, 10, '1.0.0')), [])
+    assert.equal(w.read(plain.id).text, plain.text)
+    w.close()
+  })
+
+  test('a rewrite that still names the person or calls them he or her is refused; a name inside quotes is the fact\'s own wording', () => {
+    const old = { createdAt: '2026-10-01T00:00:00.000Z', text: 'Alex wants every reply to start with "Alex Bey," and he expects it in every project.' }
+    assert.match(redateProblem(old, 'Every reply starts with "Alex Bey," because Alex wants it.') ?? '', /still names who decided it: Alex/)
+    assert.match(redateProblem(old, 'Start every reply with "Alex Bey,", because he expects it.') ?? '', /still names who decided it: he/)
+    assert.equal(redateProblem(old, 'Start every reply with "Alex Bey," in every project.'), undefined)
   })
 })
 

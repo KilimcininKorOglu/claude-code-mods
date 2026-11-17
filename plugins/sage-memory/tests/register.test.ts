@@ -1662,7 +1662,7 @@ describe('the write day in a memory text', () => {
     expect(w.asked[0]?.prompt).toContain('Dates to remove: 2026-11-16')
     expect(w.asked[0]?.prompt).toContain(OLD.text)
     expect(bodiesOf(w, '/memory/redate')).toEqual([expect.objectContaining({ id: 'm8', revision: 2, text: CLEAN })])
-    expect(streamOf(w, 'redate').at(-1)).toBe('took the write day out of 1 memories; done')
+    expect(streamOf(w, 'redate').at(-1)).toBe('took the record day and who decided out of 1 memories; done')
   })
 
   withSidebar('an answer that keeps the write day is asked again, and a second one records the failure and writes nothing', async ($, on) => {
