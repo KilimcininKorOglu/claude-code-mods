@@ -146,7 +146,7 @@ function touch(core: Core, store: Store): void {
   fill(core, store).catch((err: unknown) => log(`embeddings: the background fill of ${store.name} stopped: ${messageOf(err)}`))
 }
 
-async function semantic(core: Core, text: string, stores: readonly Store[], byPiece: boolean): Promise<SemanticQuery | undefined> {
+async function querySemantic(core: Core, text: string, stores: readonly Store[], byPiece: boolean): Promise<SemanticQuery | undefined> {
   if (text.trim() === '') return undefined
   const model = await ready(core)
   if (model === undefined) return undefined
@@ -188,7 +188,7 @@ export function createEmbeddings(runtime: Runtime): Embeddings {
   const core: Core = { runtime, closing: false, queue: Promise.resolve(), filled: new Set(), fills: new Map() }
   return {
     state: () => stateOf(core),
-    semantic: (text, stores, byPiece = false) => semantic(core, text, stores, byPiece),
+    semantic: (text, stores, byPiece = false) => querySemantic(core, text, stores, byPiece),
     afterWrite: (store, memories) => afterWrite(core, store, memories),
     fill: store => fill(core, store),
     load: (allowRemote, onProgress) => startLoad(core, allowRemote, onProgress),
