@@ -1086,7 +1086,7 @@ describe('consolidator', () => {
     expect(prompt).toContain('Memories the assistant was reminded of in this turn:\n- m1: Install packages with pnpm')
     expect(prompt).not.toContain('g1')
     expect(prompt).toContain('return the candidates and the judged memories as JSON')
-    expect(bodiesOf(w, '/memory/judged')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', judged: ['m1'], followed: ['m1'] }])
+    expect(bodiesOf(w, '/memory/judged')).toEqual([{ project: expect.anything(), sessionId: 'sess-1', judged: ['m1'], followed: ['m1'], evidence: { m1: 'Run pnpm add lodash' } }])
     expect(bodiesOf(w, '/memory/used')).toEqual([])
     // The next consolidation judges only what was reminded after the last one: nothing, so no verdict is sent.
     await $.prompt.submit(typed('and what else?'))

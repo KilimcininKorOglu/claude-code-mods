@@ -296,7 +296,7 @@ export function consolidatorPrompt(asked: readonly string[], answer: string, evi
 }
 
 /** An entry the model labelled applied with evidence, on an id it was shown. */
-function isApplied(entry: unknown, shown: ReadonlySet<string>): entry is { id: string } {
+function isApplied(entry: unknown, shown: ReadonlySet<string>): entry is { id: string; evidence: string } {
   if (typeof entry !== 'object' || entry === null) return false
   const { id, is, evidence } = entry as { id?: unknown; is?: unknown; evidence?: unknown }
   return typeof id === 'string' && shown.has(id) && is === 'applied' && typeof evidence === 'string' && evidence.trim() !== ''
@@ -311,6 +311,16 @@ export function followedOf(text: string, reminded: readonly Memory[]): string[] 
   if (!Array.isArray(judged)) return []
   const shown = new Set(reminded.map(memory => memory.id))
   return [...new Set(judged.filter(entry => isApplied(entry, shown)).map(entry => entry.id))]
+}
+
+/** The evidence a consolidator answer gave for each memory it says the turn followed, by id; the first entry of an id wins. */
+export function followedEvidence(text: string, reminded: readonly Memory[]): Record<string, string> {
+  const judged = objectOf(text)?.judged
+  if (!Array.isArray(judged)) return {}
+  const shown = new Set(reminded.map(memory => memory.id))
+  const evidence: Record<string, string> = {}
+  for (const entry of judged) if (isApplied(entry, shown) && !(entry.id in evidence)) evidence[entry.id] = entry.evidence
+  return evidence
 }
 
 /** The most important entries first: the model sees what the stores hold already. */

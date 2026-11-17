@@ -268,11 +268,14 @@ describe('usage counters', () => {
   test("the consolidator's verdict is audited and moves no counter", async () => {
     const w = world()
     const { memory } = await w.remember({ text: MIGRATIONS })
-    await w.run(op => recordJudged(op, [memory.id, 'other', memory.id], [memory.id], 's1'))
+    // The evidence is kept so the verdict can be measured against real turns: only for a followed id,
+    // only a string, cut to 300 characters.
+    const long = 'x'.repeat(400)
+    await w.run(op => recordJudged(op, [memory.id, 'other', memory.id], [memory.id], 's1', { [memory.id]: long, other: 'not followed', zz: 7 }))
     const stored = w.read(memory.id)
     assert.deepEqual([stored.useCount, stored.reminderCount], [undefined, undefined])
     const row = await w.run(op => op.store.db.prepare("SELECT detail FROM audit_log WHERE action = 'memory.judged'").get() as { detail: string })
-    assert.deepEqual(JSON.parse(row.detail), { memoryIds: [memory.id, 'other'], followed: [memory.id] })
+    assert.deepEqual(JSON.parse(row.detail), { memoryIds: [memory.id, 'other'], followed: [memory.id], evidence: { [memory.id]: 'x'.repeat(300) } })
     w.close()
   })
 })

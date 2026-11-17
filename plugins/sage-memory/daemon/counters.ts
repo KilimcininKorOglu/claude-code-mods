@@ -34,11 +34,17 @@ export function recordReminder(op: Op, ids: readonly string[], trigger: string, 
 
 /**
  * Logs the consolidator's verdict on the memories relevance reminded a turn of: which it followed.
- * No counter changes: the verdict is audited alone until it is measured against real turns.
+ * No counter changes: the verdict is audited alone until it is measured against real turns, which
+ * is why the evidence the job model gave for each followed memory is kept with it.
  */
-export function recordJudged(op: Op, judged: readonly string[], followed: readonly string[], sessionId: string | undefined): void {
-  audit(op.store, op.now, 'memory.judged', { sessionId, detail: { memoryIds: [...new Set(judged)], followed: [...new Set(followed)] } })
+export function recordJudged(op: Op, judged: readonly string[], followed: readonly string[], sessionId: string | undefined, evidence: Readonly<Record<string, unknown>> = {}): void {
+  const kept = [...new Set(followed)]
+  const cited = Object.fromEntries(kept.flatMap(id => (typeof evidence[id] === 'string' ? [[id, (evidence[id] as string).slice(0, MAX_EVIDENCE)]] : [])))
+  audit(op.store, op.now, 'memory.judged', { sessionId, detail: { memoryIds: [...new Set(judged)], followed: kept, evidence: cited } })
 }
+
+/** The most of one memory's evidence the log keeps. */
+const MAX_EVIDENCE = 300
 
 /** Counts one use for each reminded memory the model's answer drew on. */
 export function recordUse(op: Op, ids: readonly string[], source: string, sessionId: string | undefined): void {

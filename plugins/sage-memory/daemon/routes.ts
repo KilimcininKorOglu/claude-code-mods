@@ -233,7 +233,7 @@ function counterRoutes(stores: Stores, post: Post): Routes {
     '/memory/reminded': post(reminded),
     '/memory/used': post(async body => ({ counted: (await count(body, (op, ids) => recordUse(op, ids, requiredString(body, 'source'), sessionOf(body)))).counted })),
     // The verdict of one turn lands in the project's log, whichever store holds each memory.
-    '/memory/judged': post(body => run(stores, body, places => places.project, op => recordJudged(op, stringList(body, 'judged'), stringList(body, 'followed'), sessionOf(body)))),
+    '/memory/judged': post(body => run(stores, body, places => places.project, op => recordJudged(op, stringList(body, 'judged'), stringList(body, 'followed'), sessionOf(body), optionalObject<Record<string, unknown>>(body, 'evidence')))),
   }
 }
 

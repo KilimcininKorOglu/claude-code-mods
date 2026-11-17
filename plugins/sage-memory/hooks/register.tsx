@@ -66,6 +66,7 @@ import {
   emptyEvidence,
   evidenceText,
   followedOf,
+  followedEvidence,
   judgedNext,
   MIN_ANSWER,
   noted,
@@ -1342,7 +1343,7 @@ async function consolidate($: EngineInterface, state: State, answer: string, sin
   const r = await consolidatorAnswer($, state, prompt, since)
   if (!r.isAnswered) return
   const sessionId = await $.session.id()
-  if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant) })
+  if (since.relevant.length > 0) await ask($, state, '/memory/judged', { sessionId, judged: since.relevant.map(memory => memory.id), followed: followedOf(r.text, since.relevant), evidence: followedEvidence(r.text, since.relevant) })
   const additions = additionsOf(r.text, { sessionId, root, existing, now })
   if (additions.length > 0) await working($, state, jobText('saving', additions.length))
   for (const input of additions) await writeOne($, state, input)
