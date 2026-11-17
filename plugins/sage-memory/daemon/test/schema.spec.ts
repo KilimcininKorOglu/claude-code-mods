@@ -39,6 +39,42 @@ function versionOf(db: DatabaseSync): string | undefined {
   return row === undefined ? undefined : String(row.value)
 }
 
+/** A memory row with its creation time in both the column and the record. */
+function insertDated(db: DatabaseSync, id: string, createdAt: string): void {
+  db.prepare(INSERT_V2).run(id, id, '[]', id, createdAt, createdAt, id)
+  db.prepare("UPDATE memories SET data = json_object('createdAt', ?) WHERE id = ?").run(createdAt, id)
+}
+
+function createdOf(db: DatabaseSync, id: string): [string, string] {
+  const row = db.prepare("SELECT created_at AS col, json_extract(data, '$.createdAt') AS rec FROM memories WHERE id = ?").get(id) as { col: string; rec: string }
+  return [row.col, row.rec]
+}
+
+describe('split parts dated back', () => {
+  test('a part takes the creation time of the memory it replaced, through a second split, and other memories keep theirs', () => {
+    const db = openDatabase(join(tempDir(), 'split.db'))
+    try {
+      const first = '2026-09-28T16:05:02.982Z'
+      const split = '2026-11-17T04:20:00.000Z'
+      insertDated(db, 'old', first)
+      insertDated(db, 'p1', split)
+      insertDated(db, 'p2', split)
+      insertDated(db, 'q1', '2026-11-18T09:00:00.000Z')
+      insertDated(db, 'alone', split)
+      const log = db.prepare("INSERT INTO audit_log (at, action, memory_id, detail) VALUES (?, 'memory.replaced', ?, ?)")
+      log.run(split, 'old', JSON.stringify({ parts: ['p1', 'p2'] }))
+      log.run('2026-11-18T09:00:00.000Z', 'p2', JSON.stringify({ parts: ['q1'] }))
+      migrate(db)
+      for (const id of ['p1', 'p2', 'q1']) assert.deepEqual(createdOf(db, id), [first, first])
+      assert.deepEqual(createdOf(db, 'alone'), [split, split])
+      migrate(db)
+      assert.deepEqual(createdOf(db, 'q1'), [first, first])
+    } finally {
+      db.close()
+    }
+  })
+})
+
 describe('schema', () => {
   test('a new database gets the pragmas and the current schema', () => {
     const db = openDatabase(join(tempDir(), 'a.db'))

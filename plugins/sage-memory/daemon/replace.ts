@@ -91,15 +91,19 @@ function inputOf(old: Memory, text: string): RememberInput {
   }
 }
 
-/** One part written; a part of a stale memory stays stale, unless it joined a live memory of the same text. */
+/**
+ * One part written. A new part keeps the old memory's creation time, because the fact is as old as
+ * the memory it was split from; a part of a stale memory stays stale. A part that joined a live
+ * memory of the same text is that memory and keeps its own fields.
+ */
 function writtenPart(op: Op, old: Memory, text: string): Memory {
   const result = remember(op, inputOf(old, text))
   if (!('memory' in result)) throw refused(`a part of ${old.id} was not written: ${text}`)
-  if (old.status !== 'stale' || result.outcome !== 'added') return result.memory
-  const stale: Memory = { ...result.memory, status: 'stale', staleReason: old.staleReason }
-  writeMemory(op.store.db, stale)
-  syncEdges(op.store.db, stale, op.now)
-  return stale
+  if (result.outcome !== 'added') return result.memory
+  const part: Memory = old.status === 'stale' ? { ...result.memory, createdAt: old.createdAt, status: 'stale', staleReason: old.staleReason } : { ...result.memory, createdAt: old.createdAt }
+  writeMemory(op.store.db, part)
+  syncEdges(op.store.db, part, op.now)
+  return part
 }
 
 /** The memory to replace, as the writer read it; anything else is refused. */

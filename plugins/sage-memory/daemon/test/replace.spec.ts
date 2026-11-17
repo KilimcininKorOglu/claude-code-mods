@@ -89,6 +89,17 @@ describe('replacing a long memory with shorter ones', () => {
     w.close()
   })
 
+  test('each part keeps the creation time of the memory it was split from, a stale one too', async () => {
+    const w = world()
+    const written = '2026-09-28T16:05:02.982Z'
+    for (const status of ['active', 'stale'] as const) {
+      const old = await oldLong(w, `${LONG_TEXT}${status === 'stale' ? ' ' : ''}`, { createdAt: written, status })
+      const result = await w.run(op => replaceMemory(op, { id: old.id, revision: old.revision, texts: PARTS.map(text => `${text} (${status})`) }))
+      assert.deepEqual(result.parts.map(part => w.read(part.id).createdAt), PARTS.map(() => written))
+    }
+    w.close()
+  })
+
   test('the parts of a stale memory stay stale with its reason', async () => {
     const w = world()
     const old = await oldLong(w, LONG_TEXT, { status: 'stale', staleReason: 'verification' })

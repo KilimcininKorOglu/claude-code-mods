@@ -202,6 +202,26 @@ const SENTENCE_VECTORS = `
   );
 `
 
+/**
+ * The parts a split (`memory.replaced` in the audit log) wrote before they carried the old memory's
+ * creation time got the time of the split, so a 250-character rewrite dated every split memory to
+ * that day. Each part takes the creation time of the memory it replaced, in log order, so a part
+ * split again inherits the first one's. Idempotent and without a version raise: a part already
+ * carrying the older time is left alone, and a daemon of an older release still opens the database.
+ */
+const SPLIT_PARTS = `
+  SELECT a.memory_id AS old, j.value AS part FROM audit_log a, json_each(json_extract(a.detail, '$.parts')) j
+  WHERE a.action = 'memory.replaced' ORDER BY a.id`
+
+function datePartsBack(db: DatabaseSync): void {
+  const createdOf = db.prepare('SELECT created_at AS at FROM memories WHERE id = ?')
+  const set = db.prepare("UPDATE memories SET created_at = ?, data = json_set(data, '$.createdAt', ?) WHERE id = ? AND created_at > ?")
+  for (const { old, part } of db.prepare(SPLIT_PARTS).all() as Array<{ old: string; part: string }>) {
+    const at = (createdOf.get(old) as { at: string } | undefined)?.at
+    if (at !== undefined) set.run(at, at, part, at)
+  }
+}
+
 function inTransaction(db: DatabaseSync, work: () => void): void {
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -213,7 +233,7 @@ function inTransaction(db: DatabaseSync, work: () => void): void {
   }
 }
 
-/** Brings a database to `SCHEMA_VERSION` in one transaction, or throws when it is newer; then retires the unused kinds and adds the sentence vectors. */
+/** Brings a database to `SCHEMA_VERSION` in one transaction, or throws when it is newer; then retires the unused kinds, adds the sentence vectors and dates split parts back. */
 export function migrate(db: DatabaseSync): void {
   const current = versionOf(db)
   if (current > SCHEMA_VERSION) {
@@ -226,5 +246,8 @@ export function migrate(db: DatabaseSync): void {
       db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION))
     })
   }
-  inTransaction(db, () => db.exec(RETIRE_KINDS + SENTENCE_VECTORS))
+  inTransaction(db, () => {
+    db.exec(RETIRE_KINDS + SENTENCE_VECTORS)
+    datePartsBack(db)
+  })
 }
