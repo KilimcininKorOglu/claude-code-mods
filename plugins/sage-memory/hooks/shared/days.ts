@@ -1,7 +1,8 @@
 /**
- * The write days of a memory: the dates its text holds that fall within a day of its creation, the
- * day it was learned or decided, which the record keeps. Time zones move the day by one, so a date
- * a day before or after counts too; every other date is part of the fact. Shared by the daemon,
+ * The record days of a memory: the dates its text holds that fall within a day of a date the record
+ * keeps in its own field (created, updated, verified, reminded, used). The reminder shows those
+ * fields, so the text must not repeat them. Time zones move the day by one, so a date a day before
+ * or after counts too; every other date is part of the fact. Shared by the daemon,
  * which enforces the rewrite, and the hooks, which name the days to the job model.
  */
 
@@ -18,14 +19,22 @@ function dayOf(match: RegExpMatchArray): number | undefined {
   return back.getUTCDate() === Number(day) && back.getUTCMonth() === Number(month) - 1 ? at : undefined
 }
 
-/** The dates of `text` within a day of `createdAt`, as the text writes them, lower case. */
-export function writeDays(memory: { text: string; createdAt: string }): string[] {
-  const created = Date.parse(memory.createdAt.slice(0, 10))
-  if (Number.isNaN(created)) return []
+/** The dates a memory's record keeps in its own fields; the text must not repeat any of them. */
+export type RecordDates = { text: string; createdAt: string; updatedAt?: string; lastVerifiedAt?: string; lastAccessedAt?: string; lastUsedAt?: string }
+
+function recordDays(memory: RecordDates): number[] {
+  return [memory.createdAt, memory.updatedAt, memory.lastVerifiedAt, memory.lastAccessedAt, memory.lastUsedAt]
+    .map(at => (at === undefined ? NaN : Date.parse(at.slice(0, 10))))
+    .filter(day => !Number.isNaN(day))
+}
+
+/** The dates of `text` within a day of a date the record keeps, as the text writes them, lower case. */
+export function writeDays(memory: RecordDates): string[] {
+  const kept = recordDays(memory)
   const found = new Set<string>()
   for (const match of memory.text.matchAll(DATE)) {
     const day = dayOf(match)
-    if (day !== undefined && Math.abs(day - created) <= DAY_MS) found.add(match[0].toLowerCase())
+    if (day !== undefined && kept.some(at => Math.abs(day - at) <= DAY_MS)) found.add(match[0].toLowerCase())
   }
   return [...found]
 }

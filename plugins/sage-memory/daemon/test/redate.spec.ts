@@ -25,6 +25,15 @@ describe('write days', () => {
     assert.deepEqual(writeDays({ createdAt: CREATED, text: 'Deploys go through staging; no date here.' }), [])
     assert.deepEqual(writeDays({ createdAt: CREATED, text: 'A day that does not exist: 2026-02-31.' }), [])
   })
+
+  test('a date the record keeps in any of its date fields is a record day, not only the creation day', () => {
+    const memory = {
+      createdAt: '2026-10-01T09:00:00.000Z', updatedAt: '2026-11-17T10:00:00.000Z', lastVerifiedAt: '2026-10-20T10:00:00.000Z',
+      lastAccessedAt: '2026-11-05T10:00:00.000Z', lastUsedAt: '2026-11-08T10:00:00.000Z',
+      text: 'Rules moved to AGENTS.md (merged 2026-11-17), checked 2026-10-20, reminded 2026-11-05, used 2026-11-08; the key expires on 2026-12-31.',
+    }
+    assert.deepEqual(writeDays(memory), ['2026-11-17', '2026-10-20', '2026-11-05', '2026-11-08'])
+  })
 })
 
 describe('taking the write day out of a memory', () => {

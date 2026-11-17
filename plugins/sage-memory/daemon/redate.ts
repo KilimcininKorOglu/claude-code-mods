@@ -1,5 +1,5 @@
 import type { Memory } from '../hooks/shared/model.ts'
-import { writeDays } from '../hooks/shared/days.ts'
+import { writeDays, type RecordDates } from '../hooks/shared/days.ts'
 import { namesOf } from '../hooks/shared/names.ts'
 import { refused } from './errors.ts'
 import type { Op } from './op.ts'
@@ -51,7 +51,7 @@ export function redateFailed(op: Op, request: { id: string; reason: string; vers
 }
 
 /** What is wrong with `text` as the old memory without its write days, or undefined when nothing is. */
-export function redateProblem(old: Pick<Memory, 'text' | 'createdAt'>, text: string): string | undefined {
+export function redateProblem(old: RecordDates, text: string): string | undefined {
   const days = new Set(writeDays(old))
   const names = new Set(namesOf(text))
   const lost = namesOf(old.text).filter(name => !days.has(name) && !names.has(name))
