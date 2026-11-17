@@ -990,6 +990,25 @@ describe('consolidator', () => {
     expect(streamOf(w, 'consolidator').at(-1)).toBe(`added (project): ${TEXT}`)
   })
 
+  // The user's report: a joined text that dropped arm64-v8a and armeabi-v7a was refused by the daemon and the new information was lost.
+  withSidebar('a joined text that drops a name of the stored memory is not sent as a replacement; the new text is written on its own', async ($, on) => {
+    const STORED = memory('m3', 'The Magisk zip bundles hermessimd for arm64-v8a and armeabi-v7a.', { kind: 'fact', revision: 2 })
+    const NEW = 'The Magisk zip also bundles module.prop.'
+    const w = readyWorld(on)
+    w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })
+    w.routes.set('/memory/get', STORED)
+    w.routes.set('/memory/remember', (body: Record<string, unknown>) => {
+      const input = body.input as { text: string; distinct?: boolean }
+      return input.distinct === true ? { memory: memory('m8', input.text), outcome: 'added' } : { outcome: 'similar', similar: [{ id: 'm3', kind: 'fact', text: STORED.text, cosine: 0.8 }] }
+    })
+    w.modelText = JSON.stringify({ candidates: [{ text: 'zip', is: 'keep', memory: { text: NEW, kind: 'fact' } }] })
+    w.rule = () => 'ADD m3: The Magisk zip bundles hermessimd and module.prop.'
+    w.contains = () => 'YES'
+    await consolidate($, w)
+    expect(bodiesOf(w, '/memory/replace')).toEqual([])
+    expect(bodiesOf(w, '/memory/remember').map(body => body.input)).toMatchObject([{ text: NEW }, { text: NEW, distinct: true }])
+  })
+
   withSidebar('a held consolidator memory with no verdict is not written and named in red', async ($, on) => {
     const w = readyWorld(on)
     w.routes.set('/memory/list', { memories: [], nextCursor: null, total: 0, statusCounts: {} })

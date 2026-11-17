@@ -142,6 +142,7 @@ import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, 
 import { notesOf, problemOf, SHORTEN_MS, SHORTEN_SYSTEM, SHORTEN_TOKENS, shortenPrompt } from './shorten'
 import { REDATE_MS, REDATE_SYSTEM, REDATE_TOKENS, redatedOf, redatePrompt } from './redate'
 import { writeDays } from './shared/days'
+import { namesOf } from './shared/names'
 import { RULE_SYSTEM, RULE_TOKENS, rulePrompt, ruleVerdictOf, settledLine, settledText, type RuleVerdict, type Settled } from './rule'
 import { MAX_NOTE_CHARS, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
@@ -1132,6 +1133,9 @@ async function ruleVerdict($: EngineInterface, text: string, related: readonly S
  */
 async function extended($: EngineInterface, state: State, input: RememberInput, stored: SimilarMemory, text: string): Promise<Memory | undefined> {
   if (text.length > MAX_NOTE_CHARS) return undefined
+  // The daemon refuses a replacement that drops a name of the stored text, which would lose the new information too.
+  const names = new Set(namesOf(text))
+  if ([...namesOf(stored.text), ...namesOf(input.text)].some(name => !names.has(name))) return undefined
   if ((await states($, stored.text, text)) !== true || (await states($, input.text, text)) !== true) return undefined
   const memory = await ask<Memory | undefined>($, state, '/memory/get', { id: stored.id })
   if (memory === undefined || memory === null) return undefined
