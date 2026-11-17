@@ -80,13 +80,22 @@ describe('remind', () => {
     expect(block.text).toContain('x'.repeat(2514))
   })
 
-  test('an entry names its priority, a permanent persistence, its first anchor and its first three tags', () => {
-    const critical = { ...memory('m1', 'x'), importance: 0.95, persistence: 'permanent' as const, tags: ['build', 'ci', 'make', 'extra'], anchors: [{ type: 'symbol' as const, path: 'src/a.ts', symbol: 'run' }, { type: 'file' as const, path: 'b.ts' }] }
-    expect(memoryEntry(critical)).toMatch(/^<memory id="m1" kind="convention" scope="project" status="active" priority="critical" persistence="permanent" about="symbol src\/a.ts#run" tags="build,ci,make">\n/)
-    const command = { ...memory('m2', 'x'), anchors: [{ type: 'command' as const, command: 'make "test"' }] }
-    expect(memoryEntry(command)).toMatch(/^<memory id="m2" kind="convention" scope="project" status="active" priority="high" about="command make &quot;test&quot;">\n/)
-    const plain = { ...memory('m3', 'x'), importance: 0.5 }
-    expect(memoryEntry(plain)).toMatch(/^<memory id="m3" kind="convention" scope="project" status="active">\n/)
+  // The user's choice: the tag shows what changes how the model treats a note, never the inner fields.
+  test('an entry names its priority, every anchor, its first three tags, and how far to trust it', () => {
+    const critical = {
+      ...memory('m1', 'x'), importance: 0.95, persistence: 'permanent' as const, confidence: 1, tags: ['build', 'ci', 'make', 'extra'],
+      anchors: [{ type: 'symbol' as const, path: 'src/a.ts', symbol: 'run' }, { type: 'file' as const, path: 'b.ts' }],
+      sources: [{ type: 'user' as const, sessionId: 's1' }, { type: 'file' as const, path: 'b.ts' }, { type: 'user' as const, sessionId: 's2' }],
+    }
+    expect(memoryEntry(critical)).toMatch(/^<memory id="m1" kind="convention" scope="project" status="active" priority="critical" about="symbol src\/a.ts#run; file b.ts" tags="build,ci,make" source="user,file" confidence="1" persistence="permanent">\n/)
+    const state = {
+      ...memory('m2', 'x'), importance: 0.5, confidence: 0.5, persistence: 'short_lived' as const, expiresAt: '2026-12-01T00:00:00.000Z', status: 'stale' as const,
+      staleReason: 'verification' as const, contradicts: ['m7'], related: ['m8', 'm9'], anchors: [{ type: 'command' as const, command: 'make "test"' }],
+    }
+    expect(memoryEntry(state)).toMatch(/^<memory id="m2" kind="convention" scope="project" status="stale" about="command make &quot;test&quot;" confidence="0.5" persistence="short_lived" expires="2026-12-01" stale="verification" contradicts="m7" related="m8,m9">\n/)
+    const inner = { ...memory('m3', 'x'), importance: 0.62, freshness: 0.4, revision: 9, contextPolicy: 'auto' as const, audience: { roles: ['Explore'] }, ownerSessionId: 's1', supersedes: ['m0'] }
+    expect(memoryEntry(inner)).toMatch(/^<memory id="m3" kind="convention" scope="project" status="active" confidence="0.9" persistence="long_lived">\n/)
+    expect(SYSTEM_NOTE).toContain('who decided or said it belongs to source, not to the text')
   })
 
   test('an entry carries every date and count the record holds, so the model sees an old or never verified note', () => {
@@ -94,9 +103,9 @@ describe('remind', () => {
       ...memory('m4', 'x'), importance: 0.5, createdAt: '2026-09-28T16:05:02.982Z', updatedAt: '2026-11-17T04:20:00.000Z',
       lastVerifiedAt: '2026-10-01T08:00:00.000Z', lastAccessedAt: '2026-11-16T10:00:00.000Z', lastUsedAt: '2026-11-15T09:00:00.000Z', reminderCount: 7, useCount: 2,
     }
-    expect(memoryEntry(checked)).toMatch(/^<memory id="m4" kind="convention" scope="project" status="active" created="2026-09-28" updated="2026-11-17" verified="2026-10-01" reminded="2026-11-16" used="2026-11-15" reminders="7" uses="2">\n/)
+    expect(memoryEntry(checked)).toMatch(/^<memory id="m4" kind="convention" scope="project" status="active" confidence="0.9" persistence="long_lived" created="2026-09-28" updated="2026-11-17" verified="2026-10-01" reminded="2026-11-16" used="2026-11-15" reminders="7" uses="2">\n/)
     const never = { ...memory('m5', 'x'), importance: 0.5, createdAt: '2026-09-28T16:05:02.982Z', updatedAt: '2026-09-28T16:05:02.982Z' }
-    expect(memoryEntry(never)).toMatch(/^<memory id="m5" kind="convention" scope="project" status="active" created="2026-09-28" updated="2026-09-28">\n/)
+    expect(memoryEntry(never)).toMatch(/^<memory id="m5" kind="convention" scope="project" status="active" confidence="0.9" persistence="long_lived" created="2026-09-28" updated="2026-09-28">\n/)
     expect(FRAME).toContain('absent means never checked')
     expect(SYSTEM_NOTE).toContain('absent means never checked')
   })

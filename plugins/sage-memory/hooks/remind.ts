@@ -168,12 +168,35 @@ function priorityOf(memory: Memory): string | undefined {
   return memory.importance >= 0.75 ? 'high' : undefined
 }
 
-/** What the first anchor names: a path with its symbol, a path, a symbol, a command or an agent role. */
+/** What every anchor names, `; ` between them: a path with its symbol, a path, a symbol, a command or an agent role. */
 function aboutOf(memory: Memory): string | undefined {
-  const anchor = memory.anchors.find(a => a.path ?? a.symbol ?? a.command ?? a.role)
-  if (!anchor) return undefined
-  const target = anchor.path && anchor.symbol ? `${anchor.path}#${anchor.symbol}` : (anchor.path ?? anchor.symbol ?? anchor.command ?? anchor.role)
-  return `${anchor.type} ${target}`
+  const named = memory.anchors
+    .filter(a => a.path ?? a.symbol ?? a.command ?? a.role)
+    .map(anchor => `${anchor.type} ${anchor.path && anchor.symbol ? `${anchor.path}#${anchor.symbol}` : (anchor.path ?? anchor.symbol ?? anchor.command ?? anchor.role)}`)
+  return named.length > 0 ? named.join('; ') : undefined
+}
+
+/** The kinds of source a memory names, once each: who or what the fact comes from. */
+function sourceOf(memory: Memory): string | undefined {
+  const types = [...new Set(memory.sources.map(source => source.type))]
+  return types.length > 0 ? types.join(',') : undefined
+}
+
+/**
+ * What the record says about how far to trust a note: where it comes from, how sure the writer was,
+ * how long it lasts and until when, why it went stale, and the notes it contradicts or goes with.
+ */
+function trustAttributes(memory: Memory): string {
+  const fields: Array<[string, string | undefined]> = [
+    ['source', sourceOf(memory)],
+    ['confidence', String(memory.confidence)],
+    ['persistence', memory.persistence],
+    ['expires', dayOf(memory.expiresAt)],
+    ['stale', memory.staleReason],
+    ['contradicts', memory.contradicts?.length ? memory.contradicts.join(',') : undefined],
+    ['related', memory.related?.length ? memory.related.join(',') : undefined],
+  ]
+  return fields.map(([name, value]) => (value === undefined ? '' : attribute(name, value))).join('')
 }
 
 /** The day of an ISO time, or undefined for a time the record does not hold. */
@@ -206,9 +229,9 @@ function detailAttributes(memory: Memory): string {
   const tags = memory.tags.slice(0, 3)
   return [
     priority ? attribute('priority', priority) : '',
-    memory.persistence === 'permanent' ? attribute('persistence', 'permanent') : '',
     about ? attribute('about', about) : '',
     tags.length > 0 ? attribute('tags', tags.join(',')) : '',
+    trustAttributes(memory),
     historyAttributes(memory),
   ].join('')
 }
@@ -231,7 +254,7 @@ const FIX =
 
 /** What the dates on a note mean, so the model checks an old or never verified note. */
 const DATES =
-  'Each <memory> carries the dates its record holds: created (first written), updated (any last change to the record), verified (its anchors last checked against the code; absent means never checked), reminded and used, with their counts. When you save or rewrite a note, leave the day it was learned or decided out of its text, because the record keeps it; keep a date that is part of the fact, such as a deadline or an expiry. Check a note that is old or was never verified against its source before you rely on it.'
+  'Each <memory> carries the dates its record holds: created (first written), updated (any last change to the record), verified (its anchors last checked against the code; absent means never checked), reminded and used, with their counts. When you save or rewrite a note, leave the day it was learned or decided out of its text, because the record keeps it; keep a date that is part of the fact, such as a deadline or an expiry. Check a note that is old or was never verified against its source before you rely on it. It also carries source (where the fact comes from: user means the person stated it), confidence (0.5 inferred, 1 verified in code or output), persistence with expires (a short_lived state ends then), stale (why its source changed), about (every file, symbol or command to check it against), and the ids it contradicts or goes with (related). Write a note as the fact or rule itself: who decided or said it belongs to source, not to the text.'
 
 export const FRAME = `This is saved memory from the sage-memory plugin the user installed: notes earlier sessions kept, about this project or, in the user scope, rules of the user that hold in every project. Use them as background; a note may be out of date, so check it against the files before relying on it. ${DATES} ${FIX}`
 
