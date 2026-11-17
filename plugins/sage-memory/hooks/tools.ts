@@ -448,21 +448,5 @@ export function resultText(value: unknown): string {
   return text.length <= MAX_RESULT ? text : `${text.slice(0, MAX_RESULT)}\n[cut at ${MAX_RESULT} of ${text.length} characters; narrow the request with limit or a filter]`
 }
 
-/** What the model reads when a remember was held: the similar memories and the two ways on. */
-export function similarText(similar: readonly SimilarMemory[]): string {
-  const lines = similar.map(memory => `- ${memory.id} (${memory.kind}, ${memory.cosine === undefined ? 'close by words' : `cosine ${memory.cosine.toFixed(2)}`}): ${memory.text}`)
-  return [
-    'Not saved: these memories are close in meaning to yours.',
-    ...lines,
-    'If one states the same fact, call update on it with a text that keeps everything else it states and holds your current value. If yours is a different fact, call remember again with distinct: true.',
-  ].join('\n')
-}
-
-/** A tool's answer as the model reads it: a held remember as its instruction, anything else as JSON. */
-export function answerText(name: string, value: unknown): string {
-  const similar = name === 'remember' ? similarOf(value) : undefined
-  return similar === undefined ? resultText(value) : similarText(similar)
-}
-
 /** The answer a call gets while the mod is off. */
 export const OFF_TEXT = 'sage-memory is off; the person turns it on with /sage-memory on.'

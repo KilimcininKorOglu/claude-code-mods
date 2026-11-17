@@ -138,7 +138,7 @@ import {
   type Report,
   type Score,
 } from './triage'
-import { addedBy, answerText, callOf, editLine, OFF_TEXT, toolName, TOOLS, type Input } from './tools'
+import { addedBy, callOf, resultText, editLine, OFF_TEXT, toolName, TOOLS, type Input } from './tools'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
 import { notesOf, problemOf, SHORTEN_MS, SHORTEN_SYSTEM, SHORTEN_TOKENS, shortenPrompt } from './shorten'
 import { REDATE_MS, REDATE_SYSTEM, REDATE_TOKENS, redatedOf, redatePrompt } from './redate'
@@ -1064,7 +1064,7 @@ async function serveTool($: EngineInterface, state: State, name: string, input: 
     const related = name === 'remember' ? relatedOf(value) : undefined
     if (related !== undefined) return settledTool($, state, call.body.input as RememberInput, related)
     await noteEdit($, state, name, input, value)
-    return { result: answerText(name, value) }
+    return { result: resultText(value) }
   } catch (err) {
     return { result: errorText(err), isError: true }
   }
