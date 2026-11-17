@@ -4,7 +4,7 @@ import { isProjectKey, layoutOf, projectDirOf } from '../hooks/shared/layout.ts'
 import type { ProjectRef } from '../hooks/shared/protocol.ts'
 import { writeAtomic } from './files.ts'
 import { log, messageOf } from './log.ts'
-import { mergeSameRoot } from './merge.ts'
+import { mergeInto, ownerOf } from './merge.ts'
 import { nestedRefs, projectRefs } from './nested.ts'
 import { applyPragmas, migrate } from './schema.ts'
 
@@ -24,6 +24,8 @@ export type Stores = {
   project: (ref: ProjectRef) => Store
   /** The stores of the projects above and below `ref`'s root (`nested.ts`), opened as they are, without writing their `project.json`. */
   nested: (ref: ProjectRef) => Store[]
+  /** The project whose store a session in `ref`'s folder uses: the outermost store above it (`merge.ts`), else `ref` itself. */
+  owner: (ref: ProjectRef) => ProjectRef
   /** Closes every store unused for `maxIdleMs`; answers how many closed. */
   closeIdle: (now: number, maxIdleMs: number) => number
   closeAll: () => void
@@ -128,7 +130,7 @@ export function createStores(dir: string): Stores {
     if (roots.get(ref.key) !== ref.root) {
       recordProject(dir, ref)
       roots.set(ref.key, ref.root)
-      mergeSameRoot(dir, ref, projectRefs(dir), store, close)
+      mergeInto(dir, ref, projectRefs(dir), store, close)
       listed = { at: 0, refs: [] }
     }
     return store
@@ -148,6 +150,7 @@ export function createStores(dir: string): Stores {
   return {
     global: () => use('global', layoutOf(dir).globalDb),
     project,
+    owner: ref => ownerOf(ref, projectRefs(dir)) ?? ref,
     nested,
     closeIdle,
     closeAll: () => [...open.keys()].forEach(close),

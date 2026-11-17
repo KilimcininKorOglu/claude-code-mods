@@ -14,8 +14,10 @@
  *    memory texts; an older daemon has no such routes.
  * 6: `/memory/live` answers which of the named ids are live in a scope's store; an older daemon has
  *    no such route.
+ * 7: `/project/owner` answers the project whose store a session's folder uses; an older daemon has
+ *    no such route.
  */
-export const PROTOCOL = 6
+export const PROTOCOL = 7
 
 /** What `GET /hello` answers without a token: enough to tell that a daemon runs, and which build. */
 export type Hello = {

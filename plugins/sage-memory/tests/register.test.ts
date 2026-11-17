@@ -101,7 +101,7 @@ function answerFor(w: World, system: string, prompt: string): string | undefined
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []], ['/memory/dated', []], ['/memory/live', (body: Record<string, unknown>) => body.ids]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []], ['/memory/dated', []], ['/memory/live', (body: Record<string, unknown>) => body.ids], ['/project/owner', (body: Record<string, unknown>) => body.project]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -211,14 +211,23 @@ describe('sage-memory', () => {
     await $.session.start(START)
     expect(w.lines.at(-1)).toBe('daemon ready · my app / embeddings off · /sage-memory setup / this session: reminded 0 · added 0 · used 0 · global rules 0')
     expect(w.argvs.find(a => a.includes('--dir'))?.slice(-2)).toEqual(['--dir', '/Users/k/.claude/sage-memory'])
-    const status = w.fetches[0]
-    if (status === undefined) throw new Error('no fetch reached the daemon')
-    expect(status.url).toBe('/status')
+    const status = w.fetches.find(fetch => fetch.url === '/status')
+    if (status === undefined) throw new Error('no status request reached the daemon')
     expect(status.socketPath).toBe('/Users/k/.claude/sage-memory/daemon.sock')
     expect(status.auth).toBe('Bearer secret-token')
     const project = status.body.project as { key: string; name: string; root: string; commonDir: string }
     expect(project.key).toMatch(/^my-app-[0-9a-f]{8}$/)
     expect(project).toMatchObject({ name: 'my app', root: '/src/my app', commonDir: '/src/my app/.git' })
+  })
+
+  // The user's rule: a git repository inside a project folder keeps its notes in that project's store.
+  withSidebar('a session in a folder a project store above it owns sends every later request as that project', async ($, on) => {
+    const w = world(on)
+    const OWNER = { key: 'src-0000aaaa', name: 'src', root: '/src', commonDir: '/src/.git' }
+    w.routes.set('/project/owner', OWNER)
+    await $.session.start(START)
+    expect(bodiesOf(w, '/project/owner')[0]?.project).toMatchObject({ name: 'my app', root: '/src/my app' })
+    expect(bodiesOf(w, '/status')[0]?.project).toEqual(OWNER)
   })
 
   withSidebar('a request that lands while the daemon is closing relinks and asks again, with no error line', async ($, on) => {

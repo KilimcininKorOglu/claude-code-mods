@@ -435,6 +435,8 @@ async function linkUp($: EngineInterface, state: State): Promise<void> {
     state.project = await resolveProject($)
     state.layout = await layoutFor($)
     state.token = await launch($, state.layout)
+    // A folder inside a project that has a store (a git repository in `app/client-ios`) keeps its notes in that store.
+    state.project = await ask<ProjectRef>($, state, '/project/owner', {})
     const daemon = await ask<Status>($, state, '/status', {})
     const status = await ask<EmbedStatus>($, state, '/embed/status', {})
     state.link = { state: 'ready', pid: daemon.pid, embedding: status.embedding, setup: status.setup }

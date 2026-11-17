@@ -13,7 +13,7 @@ import { refused } from './errors.ts'
 import { liveIds, remember, supersede } from './remember.ts'
 import { longMemories, replaceMemory, shortenFailed, type ReplaceRequest, type ReplaceResult } from './replace.ts'
 import { clear, deleteMemory, forget } from './remove.ts'
-import { flag, optionalCount, optionalObject, optionalScope, optionalString, requiredObject, requiredString, stringList, type Body } from './request.ts'
+import { flag, optionalCount, projectOf, optionalObject, optionalScope, optionalString, requiredObject, requiredString, stringList, type Body } from './request.ts'
 import { readAudit, readMemory } from './rows.ts'
 import { transaction, type Store, type Stores } from './stores.ts'
 import { updateMemory, type UpdateRequest } from './update.ts'
@@ -151,6 +151,7 @@ export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
     '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
     '/memory/replace': post(body => replaceRoute(stores, embeddings, body)),
     '/memory/long': post(body => lease(stores, leases, version, body, longMemories)),
+    '/project/owner': post(body => stores.owner(projectOf(body))),
     '/memory/live': post(body => {
       const scope = optionalScope(body) ?? 'project'
       return run(stores, body, places => storeForScope(places, scope), op => liveIds(op, stringList(body, 'ids')))
