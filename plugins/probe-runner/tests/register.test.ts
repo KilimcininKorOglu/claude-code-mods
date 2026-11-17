@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 import type { CommandRunInput, On } from 'claude-code'
 
-import { parseArgs, pluginDir, probeOf, scriptArgv, USAGE } from '../hooks/probe'
+import { parseArgs, pluginDir, probeOf, scriptArgv, TOOL_DESCRIPTION, USAGE } from '../hooks/probe'
 
 tier('user')
 
@@ -44,6 +44,11 @@ describe('arguments', () => {
     expect(probeOf({ plugins: ['a'] })).toBe('steps is required: at least one prompt or slash command')
     expect(probeOf({ steps: ['a'] })).toBe('plugins is required: at least one plugin name or path')
     expect(probeOf({ plugins: ['a'], steps: ['b'], model: 'opus' })).toEqual({ plugins: ['a'], steps: ['b'], model: 'opus' })
+  })
+
+  test('the tool description says what the tool does and when the model calls it', () => {
+    expect(TOOL_DESCRIPTION).toContain('Live-check plugins in a fresh Claude Code session')
+    expect(TOOL_DESCRIPTION).toContain('Call it after you change a mod, before you report the work done')
   })
 
   test('the script gets each plugin directory and each step as its own argument', () => {

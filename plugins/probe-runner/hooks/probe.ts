@@ -49,6 +49,7 @@ export const TOOL_NAME = 'probe'
 export const TOOL_DESCRIPTION = [
   'Live-check plugins in a fresh Claude Code session: a temp git repository, tmux, only the given plugins loaded, and the steps typed one after another, each after the one before finished.',
   'Answers with the final pane text, the transcript (with the context hooks added) and what it deleted afterwards. Stops at 10 minutes.',
+  'Call it after you change a mod, before you report the work done, when `claude plugin test` cannot show the behavior: what the pane draws, the order of hooks in a real session, or what a real model does with a note.',
 ].join(' ')
 
 export const INPUT_SCHEMA = {
