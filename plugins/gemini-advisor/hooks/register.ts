@@ -129,10 +129,12 @@ export const register: Register = (on, options) => {
 
   on('command.run', { command: 'gemini-advisor' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))
 
-  // The engine puts a plugin's tool behind ToolSearch, where the model sees
-  // only its name and never the description that says when to call it
-  // (measured on 2.1.277). The system prompt says it instead, at the end of
-  // a section every session has; the text is stable, so the cache holds.
+  // A plugin's tool waits behind ToolSearch by default; this one is listed, so the model reads its
+  // description, which says when to call it, and can call it at once.
+  on('tool.describe', { tool: /^mcp__gemini-advisor__advise$/ }, async (_, e, next) => ({ ...(await next(e)), isDeferred: false }))
+
+  // The system prompt also says when to call the tool, at the end of a section every session has;
+  // the text is stable, so the cache holds.
   on('prompt.section', { name: 'env_info_simple' }, async (_, e, next) => {
     const r = await next(e)
     return r.text === null || !state.guidance ? r : { text: `${r.text}\n\n${SYSTEM_GUIDANCE}` }

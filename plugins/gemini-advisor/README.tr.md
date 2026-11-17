@@ -7,7 +7,7 @@ Fikir, Claude API'nin advisor tool'undan alındı. Orada işi yapan model, kendi
 ## Ne yapar
 
 1. Danışman açıksa mod, session başında tek input'lu (`message`) `mcp__gemini-advisor__advise` tool'unu tanımlar.
-2. Engine bir plugin'in tool'unu ToolSearch arkasında listeler. Model orada yalnız tool'un adını görür (2.1.277 üzerinde ölçüldü). Bu yüzden mod, system prompt'un `env_info_simple` section'ının sonuna bir `# Gemini advisor` notu ekler. Not, tool'un ne yaptığını, nasıl yüklendiğini ve ne zaman çağrılacağını söyler. Not session boyunca değişmez. Bu yüzden prompt cache korunur.
+2. Engine bir plugin'in tool'unu varsayılan olarak ToolSearch arkasında listeler. Model orada yalnız tool'un adını görür. Bir `tool.describe` hook'u bu tool'u doğrudan listeler. Böylece model, ne zaman çağrılacağını söyleyen açıklamayı okur. Mod ayrıca system prompt'un `env_info_simple` section'ının sonuna bir `# Gemini advisor` notu ekler. Not, tool'un ne yaptığını ve ne zaman çağrılacağını söyler. Not session boyunca değişmez. Bu yüzden prompt cache korunur.
 3. Not, çağrıyı siz istemeden dört durumda zorunlu kılar: önemli bir değişiklikten ya da çok adımlı bir plandan önce, model takıldığında (aynı hata iki kez), iki yaklaşım arasında seçim yaparken ve işin bittiğini söylemeden önce. Not ayrıca modelden tavsiyeyi kodla karşılaştırmasını ve katılmadığı noktaları size söylemesini ister.
 4. Bir çağrı geldiğinde mod konuşmayı `$.session.messages()` ile okur. Çalışan turn da buna dahildir (ölçüldü). Mod her mesajı ve her tool çağrısını input'u ve output'uyla birlikte yazar. Bu metni, modelin mesajıyla birlikte tek bir `generateContent` isteğiyle gönderir. Metin `maxInputChars` sınırını (varsayılan 2.000.000 karakter) aşarsa en uzun tool çıktıları ortak bir uzunluğa kısaltılır. Her çıktının başı ve sonu korunur. Bütün çıktılar çıkarıldığında bile sınırı aşan bir konuşma hatadır. İsteği gemini-core oluşturur: `gemini-advisor` için tuttuğu key, model ve thinking seviyesiyle. Cevabı da gemini-core okur.
 5. Tavsiye tool sonucu olarak döner. Her başarısızlık, nedenini söyleyen bir hata sonucu olarak döner ve model bu hatayı görür. Hiçbir hata gizlenmez. Boş bir tavsiye ve Gemini'nin `maxOutputTokens` sınırında kestiği bir tavsiye de hatadır.
@@ -72,7 +72,7 @@ Aralık dışındaki ya da tam sayı olmayan bir değerin yerine varsayılan de�
 
 Claude Code 2.1.283 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
+    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=gemini-advisor}, tool.describe{tool=/"^mcp__gemini-advisor__advise$"/}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
     ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via runCommand, storeEnabled), $.http.fetch (via askGemini), $.session.messages (via conversation), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.tool.register (via declareTool), $.ui.toast (via advise)
 
 Reach L3: network'e erişir.

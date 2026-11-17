@@ -1,6 +1,6 @@
 {
   "name": "gemini-advisor",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "Gives the model a Gemini advisor tool it calls by itself: Gemini reads the conversation and the model's message and answers with a second opinion. Off until /gemini-advisor on; gemini-core holds the key, tier, model and thinking level.",
   "author": {
     "name": "Kerem Gok",

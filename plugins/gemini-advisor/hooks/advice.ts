@@ -46,7 +46,7 @@ export const TOOL_DESCRIPTION = [
  */
 export const SYSTEM_GUIDANCE = [
   '# Gemini advisor',
-  `You have a second-opinion tool, ${TOOL_ID}: Gemini reads the conversation so far, tool calls and outputs included (a long one is cut in the middle; a subagent's call sends no conversation), and your message, and answers with advice. When it is listed only by name, load it with ToolSearch (query "select:${TOOL_ID}").`,
+  `You have a second-opinion tool, ${TOOL_ID}: Gemini reads the conversation so far, tool calls and outputs included (a long one is cut in the middle; a subagent's call sends no conversation), and your message, and answers with advice.`,
   ...WHEN,
 ].join('\n')
 

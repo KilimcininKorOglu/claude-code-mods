@@ -127,6 +127,15 @@ describe('gemini-advisor', () => {
     expect(w.tools[0]?.inputSchema).toMatchObject({ required: ['message'] })
   })
 
+  it('lists the advise tool at once, so the model reads when to call it without a ToolSearch step', async ($, on) => {
+    world(on, { key: 'KEY' })
+    on('tool.describe', (_, e) => ({ description: e.description }))
+    await $.session.start(start)
+    const described = async (tool: string) => (await $.tool.describe({ tool, description: 'd', provider: { kind: 'plugin', name: 'gemini-advisor' } } as never)).isDeferred
+    expect(await described(TOOL)).toBe(false)
+    expect(await described('mcp__other__tool')).toBe(undefined)
+  })
+
   it('is off on a fresh install: no tool, no system prompt note, and nothing sent', async ($, on) => {
     const w = world(on, { key: 'KEY', store: [] })
     on('prompt.section', (_, e) => ({ text: e.text }))
@@ -163,7 +172,7 @@ describe('gemini-advisor', () => {
     await $.session.start(start)
     const r = await $.prompt.section({ name: 'env_info_simple', text: 'Working directory: /src' })
     expect(r.text).toBe(`Working directory: /src\n\n${SYSTEM_GUIDANCE}`)
-    expect(SYSTEM_GUIDANCE).toContain('select:mcp__gemini-advisor__advise')
+    expect(SYSTEM_GUIDANCE).not.toContain('ToolSearch')
     expect(SYSTEM_GUIDANCE).toContain('when you choose between two approaches')
     expect((await $.prompt.section({ name: 'memory', text: 'm' })).text).toBe('m')
     expect((await $.prompt.section({ name: 'env_info_simple', text: null })).text).toBe(null)

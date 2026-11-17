@@ -7,7 +7,7 @@ The idea follows the advisor tool of the Claude API, where the executor model ca
 ## What it does
 
 1. At session start, while the advisor is on, the mod declares the tool `mcp__gemini-advisor__advise` with one input, `message`.
-2. The engine lists a plugin's tool behind ToolSearch, where the model sees only its name (measured on 2.1.277). So the mod adds a `# Gemini advisor` note to the end of the `env_info_simple` section of the system prompt: what the tool does, how to load it, and when to call it. The note does not change during a session, so the prompt cache holds.
+2. The engine puts a plugin's tool behind ToolSearch by default, where the model sees only its name. A `tool.describe` hook lists this tool at once, so the model reads its description, which says when to call it. The mod also adds a `# Gemini advisor` note to the end of the `env_info_simple` section of the system prompt: what the tool does and when to call it. The note does not change during a session, so the prompt cache holds.
 3. The note makes the call required, without you asking, at four moments: before a substantial change or a multi-step plan, when the model is stuck (the same error twice), when it chooses between two approaches, and before it says the work is done. It also tells the model to check the advice against the code and to tell you where it disagrees.
 4. At a call, the mod reads the conversation with `$.session.messages()`, which includes the running turn (measured). It writes out every message and each tool call with its input and output, and sends that with the model's message in one `generateContent` request. When the text is over `maxInputChars` (2,000,000 characters by default), the longest tool outputs are cut to one common length, each keeping its head and tail; a conversation over the limit even without any output is an error. gemini-core builds the request with the key, the model and the thinking level it holds for `gemini-advisor`, and reads the answer.
 5. The advice comes back as the tool result. Every failure comes back as an error result that says why, so the model sees it; nothing is swallowed. An empty advice, and one Gemini cut at `maxOutputTokens`, are errors too.
@@ -72,7 +72,7 @@ A value outside its range, or one that is not a whole number, falls back to the 
 
 Validated with `claude plugin validate` on Claude Code 2.1.283:
 
-    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=gemini-advisor}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
+    ❯ ./register.ts hooks: session.start, turn.start, classic.SessionStart, command.run{command=gemini-advisor}, tool.describe{tool=/"^mcp__gemini-advisor__advise$"/}, prompt.section{name=env_info_simple}, tool.call{tool=mcp__gemini-advisor__advise}
     ❯ ./register.ts calls: $.clock.now (via askGemini), $.clock.sleep (via askGemini), $.command.register, $.gemini.enroll, $.gemini.read (via askGemini), $.gemini.request (via askGemini), $.gemini.settings (via runCommand, storeEnabled), $.http.fetch (via askGemini), $.session.messages (via conversation), $.store.delete (via runCommand), $.store.get (via isEnabled), $.store.set (via storeEnabled), $.tool.register (via declareTool), $.ui.toast (via advise)
 
 Reach L3, reaches the network.
