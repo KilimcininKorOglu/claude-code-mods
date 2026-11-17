@@ -8,6 +8,7 @@ import { dropMemory, insertMoved, movedMemory, removeMoved } from './move.ts'
 import { storeLabel, type Op } from './op.ts'
 import { candidateStore, memoryStore, opFor, placesOf, storeForScope, type Places } from './places.ts'
 import { backfill, recoverMemory } from './recover.ts'
+import { datedMemories, redateFailed, redateMemory, type RedateRequest } from './redate.ts'
 import { refused } from './errors.ts'
 import { remember, supersede } from './remember.ts'
 import { longMemories, replaceMemory, shortenFailed, type ReplaceRequest, type ReplaceResult } from './replace.ts'
@@ -108,6 +109,14 @@ async function replaceRoute(stores: Stores, embeddings: Embeddings, body: Body):
   return result
 }
 
+/** Rewrites a memory's text without its write days in the store that holds it, then embeds it again. */
+function redateRoute(stores: Stores, embeddings: Embeddings, body: Body): Promise<{ memory: Memory }> {
+  const revision = optionalCount(body, 'revision', Number.MAX_SAFE_INTEGER)
+  if (revision === undefined) throw refused('revision is required: the revision of the memory as it was read')
+  const request: RedateRequest = { id: requiredString(body, 'id'), revision, text: requiredString(body, 'text'), sessionId: sessionOf(body) }
+  return write(stores, embeddings, body, places => memoryStore(places, request.id), op => ({ memory: redateMemory(op, request) }))
+}
+
 /**
  * How long a long memory handed to one window is kept from the others: one daemon serves every
  * window, and a rewrite took up to 25.9 s (two tries of the longest note measured), so ten minutes
@@ -115,12 +124,15 @@ async function replaceRoute(stores: Stores, embeddings: Embeddings, body: Body):
  */
 const LEASE_MS = 10 * 60_000
 
-/** The long memories of both stores no other window holds, each held for this one for `LEASE_MS`. */
-async function leaseLong(stores: Stores, leases: Map<string, number>, version: string, body: Body): Promise<Memory[]> {
+/** A query for the memories a rewrite job works on: at most `limit`, without those `held` names. */
+type Finder = (op: Op, limit: number, version: string, held: (id: string) => boolean) => Memory[]
+
+/** The memories of both stores `find` answers that no other window holds, each held for this one for `LEASE_MS`. */
+async function lease(stores: Stores, leases: Map<string, number>, version: string, body: Body, find: Finder): Promise<Memory[]> {
   const limit = optionalCount(body, 'limit', 1000) ?? 50
   const now = Date.now()
   const held = (id: string): boolean => (leases.get(id) ?? 0) > now
-  const found = await both(stores, body, op => longMemories(op, limit, version, held))
+  const found = await both(stores, body, op => find(op, limit, version, held))
   const memories = [...found.project, ...found.user].slice(0, limit)
   for (const memory of memories) leases.set(memory.id, now + LEASE_MS)
   for (const [id, until] of leases) if (until <= now) leases.delete(id)
@@ -138,7 +150,16 @@ export function memoryRoutes(stores: Stores, embeddings: Embeddings): Routes {
     '/memory/get': post(body => run(stores, body, byId(body), op => readMemory(op.store.db, requiredString(body, 'id')))),
     '/memory/update': post(body => updateOrMove(stores, embeddings, body)),
     '/memory/replace': post(body => replaceRoute(stores, embeddings, body)),
-    '/memory/long': post(body => leaseLong(stores, leases, version, body)),
+    '/memory/long': post(body => lease(stores, leases, version, body, longMemories)),
+    '/memory/dated': post(body => lease(stores, leases, version, body, datedMemories)),
+    '/memory/redate': post(body => redateRoute(stores, embeddings, body)),
+    '/memory/redate-failed': post(body =>
+      run(stores, body, byId(body), op => {
+        redateFailed(op, { id: requiredString(body, 'id'), reason: requiredString(body, 'reason'), version, sessionId: sessionOf(body) })
+        leases.delete(requiredString(body, 'id'))
+        return { recorded: true }
+      }),
+    ),
     '/memory/shorten-failed': post(body =>
       run(stores, body, byId(body), op => {
         shortenFailed(op, { id: requiredString(body, 'id'), reason: requiredString(body, 'reason'), version, sessionId: sessionOf(body) })

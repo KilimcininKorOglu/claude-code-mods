@@ -63,6 +63,8 @@ type World = {
   conflictText?: string
   /** The rewrite of a long memory, by the question's prompt. */
   shorten?: (prompt: string) => string | undefined
+  /** The text of a memory without its write days, by the question's prompt. */
+  redate?: (prompt: string) => string | undefined
   /** The answer to the rule question (does a new text add anything to its related memories?), by its prompt. */
   rule?: (prompt: string) => string | undefined
   files: Map<string, string>
@@ -94,11 +96,12 @@ function modelAnswer(w: World, system: string): string | undefined {
 function answerFor(w: World, system: string, prompt: string): string | undefined {
   if (system.startsWith('Two project memories, A and B, follow. Does B')) return w.contains?.(prompt)
   if (system.startsWith('Stored memories follow, each after its id')) return w.rule?.(prompt)
+  if (system.startsWith('You edit one stored memory note')) return w.redate?.(prompt)
   return system.startsWith('You rewrite one stored memory note') ? w.shorten?.(prompt) : modelAnswer(w, system)
 }
 
 function world(on: On): World {
-  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
+  const w: World = { node: NODE_OK, routes: new Map<string, unknown>([['/status', { pid: 4242 }], ['/embed/status', OFF], ['/memory/close-pairs', []], ['/memory/long', []], ['/memory/dated', []]]), argvs: [], fetches: [], lines: [], logs: [], store: new Map(), spawned: [], tasks: [], toolFails: false, toolText: 'ok', tools: [], asked: [], emptyReplies: 0, files: new Map(), panes: [], buttons: [], byKey: new Map(), clock: mock.clock(on, { now: Date.parse('2026-09-28T12:00:00Z') }) }
   on('store.get', (_, e) => ({ value: w.store.get(e.key) }))
   on('store.set', (_, e) => {
     w.store.set(e.key, e.value)
@@ -1589,6 +1592,43 @@ describe('pane', () => {
     await settled(w)
     expect(bodiesOf(w, '/candidates/resolve')[0]).toMatchObject({ id: 'c1', decision: 'archive' })
     expect(await ui.find({ type: 'Text', text: /resolved c1: archive/ })).toBeDefined()
+  })
+})
+
+describe('the write day in a memory text', () => {
+  const OLD = memory('m8', 'Kerem chose (2026-11-16): migrations use Flyway, and the vendor key expires on 2026-12-31.', { revision: 2, createdAt: '2026-11-16T07:30:00.000Z' })
+  const CLEAN = 'Kerem chose: migrations use Flyway, and the vendor key expires on 2026-12-31.'
+
+  /** A daemon that hands out `OLD` once, then no more dated memories. */
+  function datedWorld(on: On): World {
+    const w = readyWorld(on)
+    let handed = false
+    w.routes.set('/memory/dated', () => (handed ? [] : ((handed = true), [OLD])))
+    w.routes.set('/memory/redate', { memory: { ...OLD, text: CLEAN } })
+    w.routes.set('/memory/redate-failed', { recorded: true })
+    return w
+  }
+
+  withSidebar('a memory that holds its write day is rewritten without it, the job model told which date to drop', async ($, on) => {
+    const w = datedWorld(on)
+    w.redate = () => JSON.stringify({ text: CLEAN })
+    await $.session.start(START)
+    await settled(w)
+    expect(w.asked[0]?.prompt).toContain('Dates to remove: 2026-11-16')
+    expect(w.asked[0]?.prompt).toContain(OLD.text)
+    expect(bodiesOf(w, '/memory/redate')).toEqual([expect.objectContaining({ id: 'm8', revision: 2, text: CLEAN })])
+    expect(streamOf(w, 'redate').at(-1)).toBe('took the write day out of 1 memories; done')
+  })
+
+  withSidebar('an answer that keeps the write day is asked again, and a second one records the failure and writes nothing', async ($, on) => {
+    const w = datedWorld(on)
+    w.redate = () => JSON.stringify({ text: OLD.text })
+    await $.session.start(START)
+    await settled(w)
+    expect(w.asked).toHaveLength(2)
+    expect(w.asked[1]?.prompt).toContain('the text still holds 2026-11-16')
+    expect(bodiesOf(w, '/memory/redate')).toEqual([])
+    expect(String(bodiesOf(w, '/memory/redate-failed')[0]?.reason)).toContain('refused twice')
   })
 })
 

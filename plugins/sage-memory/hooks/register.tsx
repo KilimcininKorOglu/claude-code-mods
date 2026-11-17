@@ -140,6 +140,8 @@ import {
 import { addedBy, answerText, callOf, editLine, OFF_TEXT, toolName, TOOLS, type Input } from './tools'
 import { emptyPane, listBody, PAGE_SIZE, PANE_ID, paneTree, patchFor, refilter, turnPage, type CandidateAction, type Handlers, type PaneAction, type PaneState } from './pane'
 import { notesOf, problemOf, SHORTEN_MS, SHORTEN_SYSTEM, SHORTEN_TOKENS, shortenPrompt } from './shorten'
+import { REDATE_MS, REDATE_SYSTEM, REDATE_TOKENS, redatedOf, redatePrompt } from './redate'
+import { writeDays } from './shared/days'
 import { RULE_SYSTEM, RULE_TOKENS, rulePrompt, ruleVerdictOf, settledLine, settledText, type RuleVerdict, type Settled } from './rule'
 import { MAX_NOTE_CHARS, type AuditEntry, type Candidate, type ClosePair, type FileMemories, type GraphEdge, type HygieneRun, type Memory, type MemoryPage, type StoreStats, type Ranking, type RememberInput, type RememberResult, type RemapReport, type SimilarMemory, type SubagentRanking, type VerifyReport } from './shared/model'
 import { layoutOf, MAX_SOCKET_BYTES, utf8Bytes, type Layout } from './shared/layout'
@@ -220,6 +222,8 @@ type State = {
   triaging: boolean
   /** Whether this window rewrites the memories written before the length limit. */
   shortening: boolean
+  /** A rewrite of memories that hold their write day runs in this window. */
+  redating: boolean
   /** What the memory manager pane shows. */
   pane: PaneState
   /** This session's reminded, used and added memories, shown under the daemon line. */
@@ -1734,6 +1738,60 @@ function shortenLine(tally: { replaced: number; failed: number }): string {
   return `rewrote ${tally.replaced} memories longer than ${MAX_NOTE_CHARS} characters as short ones${tally.failed > 0 ? `, ${tally.failed} failed` : ''}`
 }
 
+// ── Memories that hold the day they were written ──────────────────────
+
+/**
+ * The job model's text of a memory without its write days; a refused answer is asked once more
+ * with what was wrong, and the daemon checks the answer again. Throws when no answer passes.
+ */
+async function redated($: EngineInterface, memory: Memory): Promise<string> {
+  const days = writeDays(memory)
+  let problem: string | undefined
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await completeWithRetry($, { model: await jobModel($), system: REDATE_SYSTEM, prompt: redatePrompt(memory.text, days, problem), maxTokens: REDATE_TOKENS, timeoutMs: REDATE_MS })
+    if (!r.isAnswered) throw new Error(`the job model gave no text (${r.reason}${apiErrorDetail(r)})`)
+    const text = redatedOf(r.text)
+    problem = text === undefined ? 'the answer was not {"text":"..."} JSON' : days.find(day => text.toLowerCase().includes(day)) === undefined ? undefined : `the text still holds ${days.join(', ')}`
+    if (problem === undefined && text !== undefined) return text
+  }
+  throw new Error(`the job model's text was refused twice: ${problem ?? ''}`)
+}
+
+/** Rewrites one memory without its write days; answers whether it was rewritten, and records a failure. */
+async function redateOne($: EngineInterface, state: State, memory: Memory): Promise<boolean> {
+  try {
+    await ask($, state, '/memory/redate', { id: memory.id, revision: memory.revision, text: await redated($, memory) })
+    return true
+  } catch (err) {
+    try {
+      await ask($, state, '/memory/redate-failed', { id: memory.id, reason: errorText(err) })
+    } catch (recordError) {
+      await toStream($, 'error', { text: `the failed rewrite of ${memory.id} was not recorded: ${errorText(recordError)}`, kind: 'error' })
+    }
+    return false
+  }
+}
+
+function redateLine(tally: { rewritten: number; failed: number }): string {
+  return `took the write day out of ${tally.rewritten} memories${tally.failed > 0 ? `, ${tally.failed} failed` : ''}`
+}
+
+/** Rewrites every live memory of both stores whose text holds its write day, as the shorten job does. */
+async function redateJob($: EngineInterface, state: State): Promise<void> {
+  if (state.redating || !(await isReady(state))) return
+  state.redating = true
+  const tally = { rewritten: 0, failed: 0 }
+  try {
+    for (let batch = await ask<Memory[]>($, state, '/memory/dated', { limit: SHORTEN_BATCH }); batch.length > 0; batch = await ask<Memory[]>($, state, '/memory/dated', { limit: SHORTEN_BATCH })) {
+      for (const done of await mapLimited(batch, JOB_PARALLEL, memory => redateOne($, state, memory))) tally[done ? 'rewritten' : 'failed'] += 1
+      await toStream($, 'redate', { text: redateLine(tally), kind: 'warn' })
+    }
+  } finally {
+    state.redating = false
+  }
+  if (tally.rewritten + tally.failed > 0) await toStream($, 'redate', { text: `${redateLine(tally)}; done`, kind: tally.failed > 0 ? 'error' : 'ok' })
+}
+
 /** The daily cleanup is on unless the person turned it off. */
 async function isDailyOn($: EngineInterface): Promise<boolean> {
   return (await $.store.get('daily')) !== false
@@ -1964,7 +2022,7 @@ function isTyped(e: { text: string; origin: { kind: string } }): boolean {
 }
 
 export const register: Register = on => {
-  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), triaging: false, shortening: false, pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
+  const state: State = { enabled: true, link: { state: 'off' }, polling: false, guidance: false, loops: new Map(), declared: false, turn: emptyEvidence(), worth: false, turnMid: false, asked: [], relevant: [], captured: new Map(), triaging: false, shortening: false, redating: false, pane: emptyPane(), counts: { reminded: 0, rules: 0, used: 0, added: 0 }, redrawing: false }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -1977,7 +2035,12 @@ export const register: Register = on => {
     if (state.enabled) await linked($, state)
     else await show($, state)
     // A -p run ends before a rewrite of many memories would, so only an interactive window takes the job.
-    if (e.isInteractive && state.enabled) $.clock.after(0, () => void guarded($, 'the rewrite of long memories', () => shortenJob($, state)))
+    // The write days go after the split, so a memory too long to rewrite in one piece is short first.
+    if (e.isInteractive && state.enabled) {
+      $.clock.after(0, () =>
+        void guarded($, 'the rewrite of long memories', () => shortenJob($, state)).then(() => guarded($, 'the rewrite of dated memories', () => redateJob($, state))),
+      )
+    }
     return r
   })
 
