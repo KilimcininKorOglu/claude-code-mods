@@ -69,6 +69,7 @@ const REMEMBER_DESCRIPTION = [
   'Save one durable fact for later sessions: a convention, a decision with its reason, a warning, a bug root cause, a command, or a user preference.',
   `Write it in English, in at most ${MAX_NOTE_CHARS} characters (spaces included; a longer text is refused), with the exact paths, symbols or commands, and anchor it to them; save a larger fact as several memories, each stating one part on its own. file_note, symbol_note and command_note need an anchor.`,
   'Not for task progress (WIP or TODO text is refused), one-off debugging, or what the code already shows. To change a memory, call update instead of saving a near-duplicate.',
+  'Leave out the day the fact was learned or decided: the record keeps when it was written and changed, and every reminder shows it. Keep a date that is part of the fact, such as a deadline, an expiry, or the day something started or was released.',
   'A fact a stored memory already states, in any words or language or as a case of its rule, is not saved again; new information joins the memory on its subject when both fit, and the answer says which happened.',
 ].join(' ')
 

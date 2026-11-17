@@ -231,7 +231,7 @@ const FIX =
 
 /** What the dates on a note mean, so the model checks an old or never verified note. */
 const DATES =
-  'Each <memory> carries the dates its record holds: created (first written), updated (any last change to the record), verified (its anchors last checked against the code; absent means never checked), reminded and used, with their counts. The note text itself carries no write date. Check a note that is old or was never verified against its source before you rely on it.'
+  'Each <memory> carries the dates its record holds: created (first written), updated (any last change to the record), verified (its anchors last checked against the code; absent means never checked), reminded and used, with their counts. When you save or rewrite a note, leave the day it was learned or decided out of its text, because the record keeps it; keep a date that is part of the fact, such as a deadline or an expiry. Check a note that is old or was never verified against its source before you rely on it.'
 
 export const FRAME = `This is saved memory from the sage-memory plugin the user installed: notes earlier sessions kept, about this project or, in the user scope, rules of the user that hold in every project. Use them as background; a note may be out of date, so check it against the files before relying on it. ${DATES} ${FIX}`
 

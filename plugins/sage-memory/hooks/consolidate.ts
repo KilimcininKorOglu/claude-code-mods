@@ -143,6 +143,11 @@ Examples, none of them from this project:
 - "Staging still runs 3.4.1 until the migration is done." Keep as a state:
   short_lived, with the date it is expected to end.
 
+Leave out of a memory text the day the fact was learned or decided ("as of
+today", "decided on 18.11.2026"): the entry records when it was written. Keep a
+date that is part of the fact: a deadline, an expiry, or the day something
+started or was released.
+
 A state is a fact a later session needs that holds now and will change: a
 version a server runs, a service that is down, a workaround until a fix. Keep
 it with "persistence": "short_lived" and "expiresAt", the ISO date it is
