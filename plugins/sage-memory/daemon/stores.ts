@@ -4,6 +4,7 @@ import { isProjectKey, layoutOf, projectDirOf } from '../hooks/shared/layout.ts'
 import type { ProjectRef } from '../hooks/shared/protocol.ts'
 import { writeAtomic } from './files.ts'
 import { log, messageOf } from './log.ts'
+import { mergeSameRoot } from './merge.ts'
 import { nestedRefs, projectRefs } from './nested.ts'
 import { applyPragmas, migrate } from './schema.ts'
 
@@ -123,14 +124,17 @@ export function createStores(dir: string): Stores {
     if (!isProjectKey(ref.key)) throw new Error(`not a project key: ${JSON.stringify(ref.key)}`)
     const projectDir = projectDirOf(dir, ref.key)
     mkdirSync(projectDir, { recursive: true, mode: 0o700 })
+    const store = use(ref.key, `${projectDir}/sage.db`, ref.root)
     if (roots.get(ref.key) !== ref.root) {
       recordProject(dir, ref)
       roots.set(ref.key, ref.root)
+      mergeSameRoot(dir, ref, projectRefs(dir), store, close)
+      listed = { at: 0, refs: [] }
     }
-    return use(ref.key, `${projectDir}/sage.db`, ref.root)
+    return store
   }
 
-  const close = (name: string): void => {
+  function close(name: string): void {
     open.get(name)?.db.close()
     open.delete(name)
   }
