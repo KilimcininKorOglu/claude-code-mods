@@ -220,6 +220,48 @@ export function mergeWarned(tracks: Tracks, stored: Tracks): Tracks {
   return next
 }
 
+/**
+ * The last read of the usage endpoint, shared by every session of the account through the store, so
+ * the account sends one read per interval however many sessions run. `at` is the last attempt, `readAt`
+ * the read the `limits` come from, and `until` the end of a wait the endpoint asked for with a 429.
+ */
+export type ScopedRecord = { at: number; readAt?: number; limits: SessionRateLimit[]; until?: number }
+
+const isLimit = (v: unknown): v is SessionRateLimit => {
+  const l = v as Partial<SessionRateLimit> | null
+  return l !== null && typeof l === 'object' && typeof l.kind === 'string' && typeof l.percentUsed === 'number'
+}
+const optionalNumber = (v: unknown): boolean => v === undefined || typeof v === 'number'
+
+/** A stored record, or undefined when the store holds none or one of an unknown shape. */
+export function parseScopedRecord(value: unknown): ScopedRecord | undefined {
+  const r = value as Partial<ScopedRecord> | null
+  if (r === null || typeof r !== 'object' || typeof r.at !== 'number') return undefined
+  if (!optionalNumber(r.readAt) || !optionalNumber(r.until) || !Array.isArray(r.limits) || !r.limits.every(isLimit)) return undefined
+  return r as ScopedRecord
+}
+
+/** How long to wait after a 429 when the endpoint names no time. */
+export const RATE_LIMIT_WAIT = 15 * MINUTE
+
+/**
+ * The wait a `Retry-After` header asks for, in seconds or as an HTTP date, kept between one minute and
+ * six hours; a missing or unreadable header waits `RATE_LIMIT_WAIT`.
+ */
+export function retryAfterMs(value: string | undefined, now: number): number {
+  const text = value?.trim() ?? ''
+  const asked = /^\d+$/.test(text) ? Number(text) * 1000 : Date.parse(text) - now
+  if (!Number.isFinite(asked)) return RATE_LIMIT_WAIT
+  return Math.min(6 * HOUR, Math.max(MINUTE, asked))
+}
+
+/** Whether a session reads the endpoint now: not while a wait runs, and not before the interval passed. */
+export function isScopedDue(record: ScopedRecord | undefined, now: number, interval: number): boolean {
+  if (record === undefined) return true
+  if (record.until !== undefined && now < record.until) return false
+  return now - record.at >= interval
+}
+
 /** The usage percentages the model is told about, once per limit cycle each in every session. */
 export const MODEL_THRESHOLDS: readonly number[] = [80, 90, 95]
 

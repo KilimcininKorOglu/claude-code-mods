@@ -36,7 +36,7 @@ type World = {
   /** The session's credential: null on an API key or a gateway, as the engine answers there. */
   auth: SessionAuthorization
   /** The usage endpoint's status and body, and the requests it received. */
-  usage: { status: number; body: string }
+  usage: { status: number; body: string; retryAfter?: string }
   fetches: { url: string; auth?: string; beta?: string }[]
 }
 
@@ -63,7 +63,8 @@ function seatEndpoint(on: On, w: World): void {
   on('session.authorize', () => ({ value: w.auth }))
   on('http.fetch', (_, e) => {
     w.fetches.push({ url: e.url, auth: e.init?.auth, beta: e.init?.headers?.['anthropic-beta'] })
-    return { value: { status: w.usage.status, ok: w.usage.status < 300, headers: {}, text: w.usage.body } }
+    const headers: Record<string, string> = w.usage.retryAfter === undefined ? {} : { 'retry-after': w.usage.retryAfter }
+    return { value: { status: w.usage.status, ok: w.usage.status < 300, headers, text: w.usage.body } }
   })
 }
 
@@ -458,20 +459,63 @@ describe('limit-watch', () => {
     expect(text).toContain('- Fable 7-day limit: 25% used, resets')
   })
 
-  test('the usage endpoint is read at most every five minutes, never by the idle timer, and always by the tool', async ($, on) => {
+  test('the usage endpoint is read at most every five minutes, never by the idle timer, and the tool keeps the interval', async ($, on) => {
     const w = world(on)
     w.auth = { handle: 'h1', kind: 'bearer' }
     await $.session.start({ ...session, isInteractive: true })
     await $.turn.complete(turn())
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
     expect(w.fetches).toHaveLength(1)
     await w.clock.advance(10 * 60_000)
     expect(w.fetches).toHaveLength(1)
     w.usage.body = usageBody(30)
-    await $.turn.complete(turn())
+    await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
     expect(w.fetches).toHaveLength(2)
     expect(w.statuses.at(-1)).toContain('7d Fable 30%')
+  })
+
+  test('every session and a reload share one read of the usage endpoint per five minutes through the store', async ($, on) => {
+    // Another session of the account read the endpoint a minute ago and stored what it got.
+    const shared = { at: T0 - 60_000, readAt: T0 - 60_000, limits: [{ kind: 'seven_day:Fable', percentUsed: 44, resetsAt: '2026-09-20T00:00:00Z' }] }
+    const w = world(on, { scoped: shared })
+    w.auth = { handle: 'h1', kind: 'bearer' }
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
     await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    expect(w.fetches).toEqual([])
+    expect(w.statuses.at(-1)).toContain('7d Fable 44%')
+    await w.clock.advance(5 * 60_000)
+    await $.turn.complete(turn())
+    expect(w.fetches).toHaveLength(1)
+    expect(w.statuses.at(-1)).toContain('7d Fable 25%')
+  })
+
+  test('a 429 keeps the last reading with its time and waits as long as Retry-After asks, in every session', async ($, on) => {
+    const w = world(on)
+    w.auth = { handle: 'h1', kind: 'bearer' }
+    w.setLimits([fiveHour(23)])
+    await $.session.start(session)
+    await w.clock.advance(5 * 60_000)
+    w.usage = { status: 429, body: 'rate limited', retryAfter: '1800' }
+    await $.turn.complete(turn())
+    expect(w.fetches).toHaveLength(2)
+    expect(w.logs).toHaveLength(1)
+    expect(w.logs[0]).toMatch(/^cannot read the per-model limits: HTTP 429; the reading of \S+ stays, and the next read is at \S+$/)
+    expect(w.statuses.at(-1)).toContain('7d Fable 25%')
+    const text = String((await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)).result)
+    expect(text).toContain('- Fable 7-day limit: 25% used')
+    expect(text).toContain('The per-model limits are as read at ')
+    expect(text).toContain('the last read of the usage endpoint failed: HTTP 429.')
+    // The wait is stored, so it holds past the five minutes and for a session that starts now.
+    await w.clock.advance(20 * 60_000)
+    await $.turn.complete(turn())
+    expect(w.fetches).toHaveLength(2)
+    expect(w.store.scoped).toMatchObject({ until: T0 + 5 * 60_000 + 1_800_000 })
+    await w.clock.advance(11 * 60_000)
+    w.usage = { status: 200, body: usageBody(30) }
+    await $.turn.complete(turn())
     expect(w.fetches).toHaveLength(3)
+    expect(w.statuses.at(-1)).toContain('7d Fable 30%')
   })
 
   test('a session with no first-party OAuth credential sends nothing to the usage endpoint', async ($, on) => {
@@ -484,19 +528,23 @@ describe('limit-watch', () => {
     expect(w.logs).toEqual([])
   })
 
-  test('a failed endpoint read is logged once, drops the per-model limit and keeps the others', async ($, on) => {
+  test('a failed endpoint read other than a 429 is logged once, drops the per-model limit and keeps the others', async ($, on) => {
     const w = world(on)
     w.auth = { handle: 'h1', kind: 'bearer' }
     w.setLimits([fiveHour(23)])
     await $.session.start(session)
     expect(w.statuses.at(-1)).toContain('7d Fable 25%')
-    w.usage.status = 429
+    w.usage.status = 500
+    await w.clock.advance(5 * 60_000)
     await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
+    await w.clock.advance(5 * 60_000)
     await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
-    expect(w.logs).toEqual(['cannot read the per-model limits: HTTP 429'])
+    expect(w.fetches).toHaveLength(3)
+    expect(w.logs).toEqual(['cannot read the per-model limits: HTTP 500'])
     expect(w.statuses.at(-1)).toContain('5h 23%')
     expect(w.statuses.at(-1)).not.toContain('Fable')
     w.usage = { status: 200, body: '{"five_hour":null}' }
+    await w.clock.advance(5 * 60_000)
     await $.tool.call({ tool: 'mcp__limit-watch__limits' } as never)
     expect(w.logs.at(-1)).toBe('cannot read the per-model limits: the answer has no limits list')
   })

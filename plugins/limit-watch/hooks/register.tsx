@@ -5,6 +5,7 @@ import {
   barColor,
   clockText,
   durationText,
+  isScopedDue,
   markWarned,
   mergeWarned,
   modelNoteText,
@@ -12,11 +13,13 @@ import {
   noteLevels,
   limitPace,
   paceText,
+  parseScopedRecord,
   parseTracks,
   percentText,
   profile,
   record,
   resetTime,
+  retryAfterMs,
   scopedLimits,
   sidebarLines,
   statusLine,
@@ -47,11 +50,20 @@ const TOOL_OFF = 'limit-watch is off, so it reads no limits; the person turns it
  */
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage'
 const USAGE_BETA = 'oauth-2025-04-20'
-/** The usage endpoint is read at most this often, and never by the idle timer. */
+/** The account reads the usage endpoint at most this often over all its sessions, and never by the idle timer. */
 const SCOPED_MS = 5 * 60_000
+/** The store key of the shared last read of the usage endpoint. */
+const SCOPED_KEY = 'scoped'
 
-/** How a sample treats the usage endpoint: not at all, when the last read is old enough, or always. */
-type ScopedRead = 'none' | 'due' | 'fresh'
+/** How a sample treats the usage endpoint: not at all, or when the account's last read is old enough. */
+type ScopedRead = 'none' | 'due'
+
+/** A usage endpoint answer that was not a success, with the wait a 429 asked for. */
+class EndpointError extends Error {
+  constructor(readonly status: number, readonly retryAfter: string | undefined) {
+    super(`HTTP ${status}`)
+  }
+}
 
 type Elements = ReturnType<EngineInterface['ui']['resolve']>
 
@@ -67,7 +79,7 @@ type State = {
   drawn: boolean
   lastError?: string
   scoped: readonly SessionRateLimit[]
-  scopedAt?: number
+  scopedReadAt?: number
   scopedError?: string
   noted: Record<string, Noted>
   pending: string[]
@@ -151,30 +163,63 @@ async function fetchScoped($: EngineInterface): Promise<SessionRateLimit[]> {
   const auth = await $.session.authorize()
   if (auth === null || auth.kind !== 'bearer') return []
   const response = await $.http.fetch(USAGE_URL, { auth: auth.handle, headers: { 'anthropic-beta': USAGE_BETA } })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  if (!response.ok) throw new EndpointError(response.status, response.headers['retry-after'])
   const limits = scopedLimits(JSON.parse(response.text))
   if (limits === undefined) throw new Error('the answer has no limits list')
   return limits
 }
 
 /**
- * Reads the per-model limits again when `read` asks for it. A failed read is logged once per error
- * text and drops the per-model limits, so an old reading is never shown as the current one; the
- * limits `$.session.usage()` reports stay.
+ * Reads the per-model limits again when `read` asks for it and the account's last read, shared through
+ * the store, is old enough. Every sample first takes what the store holds, so a read another session
+ * made, or one from before a reload, shows here without a request of its own. The attempt is stored
+ * before the request goes, so the other sessions skip theirs.
  */
 async function refreshScoped($: EngineInterface, state: State, now: number, read: ScopedRead): Promise<void> {
-  const isDue = state.scopedAt === undefined || now - state.scopedAt >= SCOPED_MS
-  if (read === 'none' || (read === 'due' && !isDue)) return
-  state.scopedAt = now
-  try {
-    state.scoped = await fetchScoped($)
-    state.scopedError = undefined
-  } catch (err) {
-    const text = err instanceof Error ? err.message : String(err)
-    if (text !== state.scopedError) $.ui.log(`cannot read the per-model limits: ${text}`)
-    state.scopedError = text
-    state.scoped = []
+  const shared = parseScopedRecord(await $.store.get(SCOPED_KEY))
+  if (shared !== undefined) {
+    state.scoped = shared.limits
+    state.scopedReadAt = shared.readAt
   }
+  if (read === 'none' || !isScopedDue(shared, now, SCOPED_MS)) return
+  await $.store.set(SCOPED_KEY, { ...shared, at: now, limits: state.scoped, until: undefined })
+  try {
+    const limits = await fetchScoped($)
+    state.scoped = limits
+    state.scopedReadAt = now
+    state.scopedError = undefined
+    await $.store.set(SCOPED_KEY, { at: now, readAt: now, limits })
+  } catch (err) {
+    await scopedFailed($, state, now, err)
+  }
+}
+
+/**
+ * A failed read is logged once per error text. A 429 keeps the last reading and stores the wait the
+ * endpoint asked for, so no session of the account asks again before it ends. Any other failure drops
+ * the per-model limits, so an old reading is never shown as the current one; the limits
+ * `$.session.usage()` reports stay.
+ */
+async function scopedFailed($: EngineInterface, state: State, now: number, err: unknown): Promise<void> {
+  const text = err instanceof Error ? err.message : String(err)
+  if (err instanceof EndpointError && err.status === 429) {
+    const until = now + retryAfterMs(err.retryAfter, now)
+    await $.store.set(SCOPED_KEY, { at: now, readAt: state.scopedReadAt, limits: state.scoped, until })
+    if (text !== state.scopedError) $.ui.log(`cannot read the per-model limits: ${text}; ${keptText(state, until, now)}`)
+  } else {
+    state.scoped = []
+    state.scopedReadAt = undefined
+    await $.store.set(SCOPED_KEY, { at: now, limits: [] })
+    if (text !== state.scopedError) $.ui.log(`cannot read the per-model limits: ${text}`)
+  }
+  state.scopedError = text
+}
+
+/** What stays during a 429 wait, and when the next read goes. */
+function keptText(state: State, until: number, now: number): string {
+  const next = `the next read is at ${clockText(until, now)}`
+  if (state.scopedReadAt === undefined || state.scoped.length === 0) return next
+  return `the reading of ${clockText(state.scopedReadAt, now)} stays, and ${next}`
 }
 
 /**
@@ -254,12 +299,17 @@ async function runCommand($: EngineInterface, state: State, args: string): Promi
 }
 
 /**
- * The tool's answer: a fresh sample, so the model reads the limits as they stand now. A watcher
- * turned off samples nothing, here as on its timer.
+ * The tool's answer: a new sample, so the model reads the limits as they stand now. The usage endpoint
+ * keeps the account's interval here too, and a reading kept through a failed read names its time. A
+ * watcher turned off samples nothing, here as on its timer.
  */
 async function serveTool($: EngineInterface, state: State): Promise<string> {
-  await sample($, state, 'fresh')
-  return state.enabled ? toolText(state.limits, state.tracks, await $.clock.now()) : TOOL_OFF
+  await sample($, state, 'due')
+  if (!state.enabled) return TOOL_OFF
+  const now = await $.clock.now()
+  const text = toolText(state.limits, state.tracks, now)
+  if (state.scopedError === undefined || state.scopedReadAt === undefined || state.scoped.length === 0) return text
+  return `${text}\nThe per-model limits are as read at ${clockText(state.scopedReadAt, now)}; the last read of the usage endpoint failed: ${state.scopedError}.`
 }
 
 export const register: Register = on => {
