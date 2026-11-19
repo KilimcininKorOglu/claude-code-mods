@@ -191,6 +191,8 @@ type State = {
   polling: boolean
   /** The connection under way, which a hook that needs the daemon waits for. */
   connecting?: Promise<void>
+  /** When the last connection failed, so a later prompt tries again once a minute at most. */
+  failedAt?: number
   /** A relaunch after the daemon went away, shared by every request that found it gone. */
   relinking?: Promise<void>
   /** Whether the system prompt carries the plugin's note; fixed at a session's start and at /clear. */
@@ -444,6 +446,7 @@ async function linkUp($: EngineInterface, state: State): Promise<void> {
     state.link = { state: 'ready', pid: daemon.pid, embedding: status.embedding, setup: status.setup }
   } catch (err) {
     state.link = { state: 'failed', error: errorText(err) }
+    state.failedAt = await $.clock.now()
   }
   await show($, state)
 }
@@ -451,6 +454,20 @@ async function linkUp($: EngineInterface, state: State): Promise<void> {
 /** Waits for this window's connection, starting it when none began: a command can come before session.start's. */
 async function linked($: EngineInterface, state: State): Promise<void> {
   if (state.enabled) await (state.connecting ?? connect($, state))
+}
+
+/** The least time between two tries of a connection that failed. */
+const RELINK_MS = 60_000
+
+/**
+ * Tries a failed connection again, at most once a minute. A git or a node that the engine cut at its
+ * limit while the window opened would otherwise leave the whole session without memories; the store
+ * is still chosen only from git's own answer.
+ */
+async function retryLink($: EngineInterface, state: State): Promise<void> {
+  if (!state.enabled || state.link.state !== 'failed') return
+  if ((await $.clock.now()) - (state.failedAt ?? 0) < RELINK_MS) return
+  await connect($, state)
 }
 
 /** Follows a setup job every 2 s until it ends, and shows each step. */
@@ -2134,6 +2151,7 @@ export const register: Register = on => {
     const r = await next(e)
     const call = callOfTool(e, r)
     if (!succeeded(r) || !isReminding(call)) return r
+    await guarded($, 'connecting again', () => retryLink($, state))
     // Counted before this call's own reminder joins the loop, so a memory is not used by the call that brought it.
     await guarded($, 'counting the used memories', () => countUse($, state, e.agentId ?? MAIN_LOOP, 'tool_anchor', reminded => actedOn(call, reminded)))
     // A compaction in the middle of a turn started the main loop over: its first file tool brings the global rules back.
@@ -2143,6 +2161,7 @@ export const register: Register = on => {
 
   on('prompt.submit', async ($, e, next) => {
     if (isTyped(e)) {
+      await guarded($, 'connecting again', () => retryLink($, state))
       state.worth = true
       state.asked = noted(state.asked, e.text, MAX_ASKED)
     }

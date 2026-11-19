@@ -33,6 +33,8 @@ const OFF = { embedding: { state: 'off' }, setup: { state: 'idle' } }
  */
 type World = {
   node: string
+  /** Whether git does not finish, as when the engine cuts it at its time limit. */
+  gitDown?: true
   routes: Map<string, unknown>
   argvs: string[][]
   fetches: { url: string; socketPath?: string; auth?: string; body: Record<string, unknown> }[]
@@ -127,6 +129,7 @@ function world(on: On): World {
   on('fs.read', (_, e) => ({ value: e.path.endsWith('server.json') ? JSON.stringify({ token: 'secret-token' }) : (w.files.get(e.path) ?? '') }))
   on('process.run', (_, e) => {
     w.argvs.push([...e.argv])
+    if (e.argv[0] === 'git' && w.gitDown === true) throw new Error('git did not finish in time')
     if (e.argv[0] === 'git') {
       const common = e.argv.includes('--git-common-dir')
       return { value: { exitCode: 0, stdout: common ? '/src/my app/.git\n' : '/src/my app\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -286,6 +289,21 @@ describe('sage-memory', () => {
     await $.session.start(START)
     expect(w.lines.at(-1)).toBe('daemon failed: needs Node.js 22.18 or later with built-in TypeScript and node:sqlite; found v20.11.0')
     expect(w.argvs.some(a => a.includes('--dir'))).toBe(false)
+  })
+
+  withSidebar('a connection a slow git failed is tried again at a typed prompt, at most once a minute', async ($, on) => {
+    const w = world(on)
+    w.gitDown = true
+    await $.session.start(START)
+    expect(w.lines.at(-1)).toMatch(/^daemon failed: /)
+    w.gitDown = undefined
+    // Within the minute nothing is tried again, so a git that keeps failing does not run at every prompt.
+    await $.prompt.submit(typed('first question'))
+    expect(w.argvs.some(a => a.includes('--dir'))).toBe(false)
+    await w.clock.advance(60_000)
+    await $.prompt.submit(typed('second question'))
+    expect(w.argvs.some(a => a.includes('--dir'))).toBe(true)
+    expect(w.lines.some(line => line.startsWith('daemon ready · my app'))).toBe(true)
   })
 
   withSidebar('off stored: nothing runs, and /sage-memory on connects and stores it', async ($, on) => {
