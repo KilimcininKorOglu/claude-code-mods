@@ -48,14 +48,20 @@ const SUB = `${DIR}/${SID}/subagents/agent-a1.jsonl`
 type Line = { text: string; kind?: string; parts?: { text: string; kind?: string }[] }
 
 /** The world: what git prints, what the usage says, the files, the store, and what the person saw. */
-type World = { live: number[]; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false }; gitRuns: number; percent?: number; usageDown: boolean; settings: Record<string, unknown>; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
+type World = { live: number[]; psDown: boolean; stepUsage: TurnUsage | null; git: { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: false; isStderrTruncated: false }; gitRuns: number; percent?: number; usageDown: boolean; settings: Record<string, unknown>; files: Map<string, string>; store: Record<string, unknown>; statuses: (string | undefined)[]; logs: string[]; bar: { open: boolean; lines: Line[][] }; clock: MockClock }
+
+/** `ps -o pid= -p <pids>`: the pids that still run, or a run that did not finish in time. */
+function psRun(w: World) {
+  if (w.psDown) throw new Error('$.process.run(ps) aborted: still running after 10000ms')
+  return { value: { isStdoutTruncated: false as const, isStderrTruncated: false as const, exitCode: 0, stdout: w.live.map(p => `  ${p}\n`).join(''), stderr: '' } }
+}
 
 /** One transcript row of a model response, as the engine writes one per content block. */
 const response = (id: string | undefined, input: number, output: number, thinking?: number): string =>
   JSON.stringify({ type: 'assistant', message: { ...(id === undefined ? {} : { id }), role: 'assistant', usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10, ...(thinking === undefined ? {} : { output_tokens_details: { thinking_tokens: thinking } }) } } })
 
 function world(on: On, store: Record<string, unknown> = {}): World {
-  const w: World = { live: [], stepUsage: null, git: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, settings: {}, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
+  const w: World = { live: [], psDown: false, stepUsage: null, git: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: CLEAN, stderr: '' }, gitRuns: 0, percent: 12, usageDown: false, settings: {}, files: new Map(), store: { ...store }, statuses: [], logs: [], bar: { open: false, lines: [] }, clock: mock.clock(on, { now: T0 }) }
   mock.env(on, { HOME: '/Users/u' })
   on('store.get', (_, e) => ({ value: w.store[e.key] }))
   on('store.set', (_, e) => { w.store[e.key] = e.value; return { value: undefined } })
@@ -92,7 +98,7 @@ function world(on: On, store: Record<string, unknown> = {}): World {
   on('process.run', (_, e) => {
     // `tail -c <n> <path>`: the transcript's last n characters, for the effort its last response recorded.
     if (e.argv[0] === 'tail') return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: (w.files.get(e.argv[3] ?? '') ?? '').slice(-Number(e.argv[2])), stderr: '' } }
-    if (e.argv[0] === 'ps') return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: w.live.map(p => `  ${p}\n`).join(''), stderr: '' } }
+    if (e.argv[0] === 'ps') return psRun(w)
     if (e.argv.join(' ') !== 'git status --porcelain=v2 --branch') throw new Error(`unexpected ${e.argv.join(' ')}`)
     w.gitRuns += 1
     // A git with a Turkish locale words its message in Turkish unless the run asks for the C locale.
@@ -246,6 +252,29 @@ describe('session-watch', () => {
     const lines = w.bar.lines.at(-1) ?? []
     expect(lines.at(-3)).toEqual({ text: 'sessions: 2 others · 1 busy · 1 idle', parts: [{ text: 'sessions: 2 others' }, { text: ' · ' }, { text: '1 busy', kind: 'warn' }, { text: ' · 1 idle', kind: 'dim' }] })
     expect(lines.at(-2)).toEqual({ text: '  cors-fix', kind: 'dim' })
+  })
+
+  withSidebar('a ps that does not finish costs the sessions line alone: the section is still drawn with the last list, and the cause is said once', async ($, on) => {
+    const w = world(on)
+    seatSidebar(on, w)
+    w.bar.open = true
+    const reg = '/Users/u/.claude/sessions'
+    w.files.set(`${reg}/100.json`, JSON.stringify({ pid: 100, sessionId: SID, status: 'busy', cwd: '/work' }))
+    w.files.set(`${reg}/200.json`, JSON.stringify({ pid: 200, sessionId: 's-2', status: 'busy', name: 'cors-fix', cwd: '/x/sso' }))
+    w.live = [100, 200]
+    await started($, w)
+    const drawn = w.bar.lines.length
+    w.psDown = true
+    w.percent = 40
+    await $.turn.complete(turn())
+    await $.turn.complete(turn())
+    const lines = w.bar.lines.at(-1) ?? []
+    expect(w.bar.lines.length).toBeGreaterThan(drawn)
+    expect(lines[0]?.text).toContain('ctx 40%')
+    expect(lines.at(-2)).toEqual({ text: '  cors-fix', kind: 'dim' })
+    // A throwing world hook reaches the mod as `no implementation for <event>`, so only the line's start is fixed.
+    expect(w.logs).toHaveLength(1)
+    expect(w.logs[0]).toMatch(/^the other sessions were not read, the last list stays: /)
   })
 
   test('kept totals stand without a reading of the transcripts; another session keeps its own, and a value missing a count reads as none', async ($, on) => {

@@ -16,7 +16,7 @@ const GIT_COMMAND = /\bgit\b/
  * What the hooks share: the repository the session started in, the session id, the token totals, the main
  * loop's last effort setting and the effort that request went out with, the engine's version, the last git state, and the last refresh error.
  */
-type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; sent?: Effort; last?: Split; tailError?: string; version: string; git?: GitState; lastError?: string; follow: Map<string, Follow> }
+type State = { root: string; sid: string; split: Split; seeding: boolean; effort: Effort; sent?: Effort; last?: Split; tailError?: string; version: string; git?: GitState; lastError?: string; others?: OtherSession[]; othersError?: string; follow: Map<string, Follow> }
 
 /** A transcript and its size when the reading began. */
 type Transcript = { path: string; size: number }
@@ -221,8 +221,17 @@ async function readOthers($: EngineInterface, state: State): Promise<OtherSessio
     const s = otherSessionOf(String(await $.fs.read(`${dir}/${f.name}`)), state.sid)
     if (s !== undefined) found.push(s)
   }
-  const live = await livePids($, found.map(s => s.pid))
-  return found.filter(s => live.has(s.pid))
+  try {
+    const live = await livePids($, found.map(s => s.pid))
+    state.others = found.filter(s => live.has(s.pid))
+    state.othersError = undefined
+  } catch (err) {
+    // A `ps` that does not finish in time costs this line alone; the rest of the section is still drawn.
+    const text = `the other sessions were not read, the last list stays: ${err instanceof Error ? err.message : String(err)}`
+    if (text !== state.othersError) $.ui.log(text)
+    state.othersError = text
+  }
+  return state.others ?? []
 }
 
 /** Everything the section shows, read now. */
