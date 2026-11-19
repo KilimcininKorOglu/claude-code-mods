@@ -113,8 +113,8 @@ export function goInfo(latestJson: unknown, list: string, oldestJson?: unknown):
   return { latest, versions: versions.length === 0 ? [latest] : versions, ...(created === undefined ? {} : { created }) }
 }
 
-/** The oldest version in a Go proxy `@v/list`, whose `.info` gives the first publish time. */
-export const goOldest = (list: string): string | undefined => [...list.split('\n').map(v => v.trim()).filter(v => v !== '')].sort(compareVersions)[0]
+/** The versions of a Go proxy `@v/list`, oldest first; the first whose `.info` answers gives the first publish time. */
+export const goOldestFirst = (list: string): string[] => [...list.split('\n').map(v => v.trim()).filter(v => v !== '')].sort(compareVersions)
 
 export function cratesInfo(json: unknown): Info | undefined {
   const doc = obj(json)

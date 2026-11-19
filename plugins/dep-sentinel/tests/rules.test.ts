@@ -1,7 +1,7 @@
 import { describe, expect, test, tier } from 'claude-code/testing'
 
 import { distance, lookAlike } from '../hooks/popular'
-import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry'
+import { compareVersions, cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldestFirst, latestInMajor, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl } from '../hooks/registry'
 import { denyText, failureLines, gateText, isGuarded, modeOf, reasonLines, registryReasonParts, skippedLines, targetVersion, textOf, vulnParts, type Reason } from '../hooks/rules'
 
 tier('user')
@@ -38,7 +38,7 @@ describe('registry answers', () => {
       .toEqual({ latest: '2.32.3', versions: ['0.1', '2.32.3'], created: Date.parse('2011-02-14T00:00:00Z') })
     expect(goInfo({ Version: 'v1.12.0', Time: '2026-02-28T10:10:09Z' }, 'v1.9.0\nv1.3.0\n', { Version: 'v1.3.0', Time: '2018-08-14T00:00:00Z' }))
       .toEqual({ latest: 'v1.12.0', versions: ['v1.9.0', 'v1.3.0'], created: Date.parse('2018-08-14T00:00:00Z') })
-    expect(goOldest('v1.9.0\nv1.10.0\nv1.3.0\n')).toBe('v1.3.0')
+    expect(goOldestFirst('v1.9.0\nv1.10.0\nv1.3.0\n')).toEqual(['v1.3.0', 'v1.9.0', 'v1.10.0'])
     expect(cratesInfo({ crate: { max_stable_version: '1.0.229', created_at: '2014-12-05T20:20:39Z' }, versions: [{ num: '1.0.229' }, { num: '1.0.1', yanked: true }] }))
       .toEqual({ latest: '1.0.229', versions: ['1.0.229'], created: Date.parse('2014-12-05T20:20:39Z') })
     expect(packagistInfo({ packages: { 'a/b': [{ version: '3.0.0-RC1', time: '2026-01-01T00:00:00+00:00' }, { version: 'v2.1.0', time: '2025-01-01T00:00:00+00:00' }, { version: '1.0.0', time: '2019-01-01T00:00:00+00:00' }] } }, 'a/b'))

@@ -164,6 +164,19 @@ describe('dep-sentinel', () => {
     expect(w.asked[0]).toBe('https://proxy.golang.org/golang.org/x/tools/cmd/goimports/@latest')
   })
 
+  test('a listed Go version whose .info answers 404 is skipped for the next oldest one', async ($, on) => {
+    const w = world(on)
+    const base = 'https://proxy.golang.org/example.com/tool/v2'
+    w.answers.set(`${base}/@latest`, { status: 200, body: { Version: 'v2.30.0', Time: '2026-11-18T00:00:00Z' } })
+    w.answers.set(`${base}/@v/list`, { status: 200, body: 'v2.1.0\nv2.2.0\nv2.3.0\nv2.30.0' })
+    // The proxy answers plain text for a listed version whose go.mod lacks the /v2 suffix.
+    w.answers.set(`${base}/@v/v2.1.0.info`, { status: 404, body: 'not found: example.com/tool/v2@v2.1.0: invalid version' })
+    w.answers.set(`${base}/@v/v2.2.0.info`, { status: 404, body: 'not found: example.com/tool/v2@v2.2.0: invalid version' })
+    w.answers.set(`${base}/@v/v2.3.0.info`, { status: 200, body: { Version: 'v2.3.0', Time: '2019-01-01T00:00:00Z' } })
+    // A latest-only publish time would read the module as published a day ago and deny it as new.
+    expect(await $.tool.call({ tool: 'Bash', command: 'go install example.com/tool/v2/cmd/tool@latest' })).toEqual({ result: 'ok' })
+  })
+
   test('a network failure lets the install run with a note; the skip prefix and off check nothing', async ($, on) => {
     const w = world(on)
     w.down = true

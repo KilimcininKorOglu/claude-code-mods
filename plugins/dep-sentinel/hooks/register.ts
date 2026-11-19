@@ -1,7 +1,7 @@
 import type {} from '../types/sidebar'
 import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
 import { planOf, type Install } from './parse'
-import { cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldest, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl, type Info } from './registry'
+import { cratesInfo, FETCH_BODY_LIMIT, goInfo, goOldestFirst, npmInfo, npmViewInfo, osvVulns, packagistInfo, pypiInfo, reachedFetchLimit, registryUrl, type Info } from './registry'
 import {
   checkedLog,
   denyText,
@@ -93,13 +93,28 @@ async function goModule($: EngineInterface, p: Install): Promise<Info | undefine
     const latest = await fetchText($, `${base}@latest`)
     if (latest.status === 200) {
       const list = (await fetchText($, `${base}@v/list`)).text
-      const oldest = goOldest(list)
-      const info = oldest === undefined ? undefined : JSON.parse((await fetchText($, `${base}@v/${oldest}.info`)).text) as unknown
-      return goInfo(JSON.parse(latest.text), list, info)
+      return goInfo(JSON.parse(latest.text), list, await goFirstInfo($, base, list))
     }
     path = path.slice(0, path.lastIndexOf('/'))
   }
   return undefined
+}
+
+/** How many of the oldest versions are asked for their `.info` before the first publish time is given up. */
+const GO_INFO_TRIES = 5
+
+/**
+ * The `.info` of the oldest version the proxy can describe. The proxy lists versions it answers 404 for
+ * (a v2.1.0 whose go.mod lacks the `/v2` suffix answers `not found: ... invalid version`), so such a
+ * version is skipped. None found leaves the time unknown (`{}`) rather than the latest's, which would read
+ * an old module as a new one.
+ */
+async function goFirstInfo($: EngineInterface, base: string, list: string): Promise<unknown> {
+  for (const version of goOldestFirst(list).slice(0, GO_INFO_TRIES)) {
+    const r = await fetchText($, `${base}@v/${version}.info`)
+    if (r.status === 200) return JSON.parse(r.text) as unknown
+  }
+  return goOldestFirst(list).length === 0 ? undefined : {}
 }
 
 /** How long `npm view` may take; it answers in about a second for next's 24 MiB document (measured). */
