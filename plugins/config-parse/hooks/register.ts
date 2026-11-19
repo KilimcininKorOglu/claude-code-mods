@@ -1,5 +1,5 @@
 import type {} from '../types/sidebar'
-import type { EngineInterface, Register, ToolCallResult } from 'claude-code'
+import type { EngineInterface, ProcessRunResult, Register, ToolCallResult } from 'claude-code'
 import { denyText, doneLines, doneLog, envError, goneLines, goneLog, isCommit, isGuarded, isJsonc, isMissingTool, isNarrowable, jsoncText, jsonError, kindOf, logText, modeOf, noteText, openNote, pythonCode, pythonError, sectionKey, shownPath, sidebarLines, type Kind, type Line, type Mode } from './parse'
 
 const ENABLED_KEY = 'enabled'
@@ -59,7 +59,14 @@ async function fileText($: EngineInterface, state: State, path: string): Promise
 /** The parse error python found, or undefined when the file parses or this machine cannot parse the kind. */
 async function pythonCheck($: EngineInterface, state: State, kind: 'yaml' | 'toml', path: string): Promise<string | undefined> {
   if (state.skipped.has(kind)) return undefined
-  const r = await $.process.run(['python3', '-c', pythonCode(kind), path], { timeoutMs: 10_000 })
+  let r: ProcessRunResult
+  try {
+    r = await $.process.run(['python3', '-c', pythonCode(kind), path], { timeoutMs: 10_000 })
+  } catch (err) {
+    // python3 that did not finish in time is no parse result: the file reads as unread, so the edit and the gate go on.
+    $.ui.log(`${kind.toUpperCase()} file ${path} was not checked: ${err instanceof Error ? err.message : String(err)}`)
+    return UNREAD
+  }
   if (r.exitCode === 0) return undefined
   if (!isMissingTool(r.stderr)) return pythonError(r.stderr)
   state.skipped.add(kind)

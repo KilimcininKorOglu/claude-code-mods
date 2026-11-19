@@ -43,6 +43,7 @@ type World = {
   gone?: true
   unreadable?: true
   python: { exitCode: number; stderr: string }
+  pythonDown?: true
   staged: string[]
   argv: (readonly string[])[]
   logs: string[]
@@ -72,6 +73,7 @@ function world(on: On): World {
       const out = e.argv.includes('--show-toplevel') ? `${w.top}\n` : w.staged.join('\0')
       return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: out, stderr: '' } }
     }
+    if (w.pythonDown === true) throw new Error('python3 did not finish in time')
     return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: w.python.exitCode, stdout: '', stderr: w.python.stderr } }
   })
   on('tool.call', { tool: 'Edit' }, () => ({ result: 'ok' }) as never)
@@ -133,6 +135,16 @@ describe('config-parse', () => {
     expect(python(w)[0]?.at(-1)).toBe(`${ROOT}/.github/workflows/ci.yml`)
     expect(r.context?.[0]).toContain('does not parse as YAML after this edit: yaml.scanner.ScannerError: mapping values are not allowed here')
     expect(w.logs).toEqual(['.github/workflows/ci.yml does not parse as YAML: yaml.scanner.ScannerError: mapping values are not allowed here'])
+  })
+
+  test('a python run that does not finish leaves the edit as it is: no note, no finding, and the reason said', async ($, on) => {
+    const w = world(on)
+    await started($)
+    w.pythonDown = true
+    const r = await edit($, 'deploy.yml')
+    expect(r.context).toBe(undefined)
+    expect(w.logs).toHaveLength(1)
+    expect(w.logs[0]).toMatch(/^YAML file .*deploy\.yml was not checked: /)
   })
 
   test('a missing python module skips that kind, says so once, and sends no note', async ($, on) => {
