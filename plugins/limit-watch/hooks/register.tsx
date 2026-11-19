@@ -351,12 +351,12 @@ export const register: Register = on => {
   // A passed level reaches the main loop's model at its next tool result, in the middle of its work, or
   // with the next prompt when no tool runs first. A subagent's result does not take it: the main loop
   // decides whether to stop.
-  on('tool.call', async ($, e, next) => {
+  on('tool.call', async (_, e, next) => {
     const r = await next(e)
     if (e.agentId !== undefined || state.pending.length === 0) return r
     return withNotes(r, takeNotes(state))
   })
-  on('prompt.submit', async ($, e, next) => {
+  on('prompt.submit', async (_, e, next) => {
     const notes = takeNotes(state)
     return next(notes.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...notes] })
   })
