@@ -223,10 +223,20 @@ async function withPlanFlags($: EngineInterface, command: string, plan: Plan): P
 /** The repository the session started in (its root where git does not answer) and the config directory. */
 async function locate($: EngineInterface): Promise<Places> {
   const root = await $.session.root()
-  const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: root, timeoutMs: 5_000 })
   const home = (await $.env.get('HOME')) ?? ''
   const config = ((await $.env.get('CLAUDE_CONFIG_DIR')) ?? `${home}/.claude`).replace(/\/+$/, '')
-  return { repo: top.exitCode === 0 ? top.stdout.trim() : root, config, home }
+  return { repo: await topLevelOf($, root), config, home }
+}
+
+/** git's top level of `root`, or `root` itself where git fails or does not finish in time, so session.start goes on. */
+async function topLevelOf($: EngineInterface, root: string): Promise<string> {
+  try {
+    const top = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd: root, timeoutMs: 5_000 })
+    return top.exitCode === 0 ? top.stdout.trim() : root
+  } catch {
+    // A git that the engine cut at the limit is no reason to leave the mod without its command.
+    return root
+  }
 }
 
 /** The two rule files: `<repo>/.bash-diet/filters.json` and `<config>/bash-diet/filters.json`. */

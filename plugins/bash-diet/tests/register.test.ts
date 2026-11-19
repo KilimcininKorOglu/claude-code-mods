@@ -22,6 +22,8 @@ type World = {
   mtimes: Map<string, number>
   /** Whether the session start ran to its end and registered the command. */
   registered: boolean
+  /** Whether git does not finish, as when the engine cuts it at its time limit. */
+  gitDown?: true
   now: number
   /** The store every window shares, which a test writes as another window. */
   store: Map<string, unknown>
@@ -50,7 +52,10 @@ function world(on: On): World {
     if (e.argv[0] === 'cat' && text !== undefined && text !== '') yield { stream: 'stdout' as const, text }
     return { value: { code: text === undefined ? 1 : 0, signal: null } }
   })
-  on('process.run', (_, e) => ({ value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }))
+  on('process.run', (_, e) => {
+    if (w.gitDown === true && e.argv[0] === 'git') throw new Error('git did not finish in time')
+    return { value: { isStdoutTruncated: false, isStderrTruncated: false, exitCode: 0, stdout: e.argv.includes('--show-toplevel') ? '/Users/u/app\n' : '', stderr: '' } }
+  })
   on('fs.exists', (_, e) => ({ value: w.files.has(e.path) || [...w.files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
   on('fs.stat', (_, e) => ({ value: { kind: 'file', size: w.files.get(e.path)?.length ?? 0, mtimeMs: w.mtimes.get(e.path) ?? 1, isLink: false } }))
   on('fs.write', (_, e) => { put(w, e.path, e.text); return { value: undefined } })
@@ -121,6 +126,15 @@ describe('bash-diet', () => {
     expect((await $.command.run(run(''))).text).toMatch(/^on · 1 result\(s\) shrunk/)
     expect(w.logs).toEqual([])
     expect(w.registered).toBe(true)
+  })
+
+  test('a git that does not finish at session start leaves the command registered and the filter working', async ($, on) => {
+    const w = world(on)
+    w.gitDown = true
+    await started($)
+    expect(w.registered).toBe(true)
+    w.stdout = NOISY
+    expect(stdoutOf(await bash($, './build.sh'))).toBe('step\nretrying (×40)\ndone')
   })
 
   test('output a filter cannot shrink comes back as it was', async ($, on) => {
