@@ -45,6 +45,12 @@ Tool'un açıklaması, modelden tool'u uzun ya da maliyetli bir işten önce ya 
 
 Her uyarı, limitin her döngüsünde yalnız bir kez yazılır. Aynı döngüdeki yeni bir session uyarıyı tekrarlamaz. Aynı anda açık olan ikinci bir session da tekrarlamaz: mod her örnekte, uyarmadan önce uyarılmış seviyeleri store'dan yeniden okur. Ancak tam aynı anda örnek alan iki session'ın ikisi de uyarı yazabilir. Limit reset olduktan sonra uyarılar yeniden yazılır.
 
+**Modele bir not.** Bir limit %80, %90 ve %95'i geçtiğinde modele bir not gider. Böylece model durumu işinin ortasında öğrenir:
+
+    limit-watch: the account's 5-hour limit passed 90% (now 91%), resets 22:40 (in 1h 5m). Tell the user, and read the limits with mcp__limit-watch__limits before you start new long or costly work.
+
+Not, ana loop'un bir sonraki tool sonucuyla gelir. Önce hiçbir tool çalışmazsa not bir sonraki prompt ile gelir. Limit birden fazla seviyeyi birden geçerse yalnız en yüksek seviye bildirilir. Her seviye, her session'da limitin her döngüsünde bir kez bildirilir, çünkü her session'ın modeli kendi notuna ihtiyaç duyar. Başka bir session'ın store'a yazdığı uyarı bu notu engellemez. Bir subagent'ın tool sonucu notu almaz. Not modeli bilgilendirir, hiçbir işi durdurmaz.
+
 ## Sayılar nasıl hesaplanır
 
 - `$.session.usage()` her limiti `{ kind, percentUsed, resetsAt }` olarak verir. Bu değerler son API cevabından okunur. limit-watch bu değerleri session başında, her ana loop turn'ünden sonra, interaktif bir session'da her 60 saniyede bir ve `/limit-watch` pane'i açtığında okur. Session başında ya da timer'da başarısız olan bir okuma, log'a bir kez `cannot read the usage limits: <error>` olarak yazılır. 60 saniyelik timer çalışmaya devam eder.
@@ -77,14 +83,14 @@ Modu yerel bir checkout'tan tek bir session için yüklemek için:
 
 Claude Code 2.1.325 üzerinde `claude plugin validate` ile doğrulandı:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane} (default matcher key: plugin)
+    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, tool.call, prompt.submit, command.run{command=limit-watch}, ui.render{component=Pane} (default matcher key: plugin)
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.http.fetch (via fetchScoped), $.session.authorize (via fetchScoped), $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
 Reach L3: network'e erişir.
 
-    1. Okur:         $.session.usage'ın rate-limit window'larını (tür, kullanılan yüzde, reset zamanı); hesabın usage endpoint'indeki modele özel haftalık limitleri; yedi hook'unun event payload'larını
+    1. Okur:         $.session.usage'ın rate-limit window'larını (tür, kullanılan yüzde, reset zamanı); hesabın usage endpoint'indeki modele özel haftalık limitleri; dokuz hook'unun event payload'larını
     2. Çalıştırır:   hiçbir şey; interaktif bir session'da 60 saniyelik bir timer
-    3. Gönderir:     session çalışırken en fazla 5 dakikada bir ve her tool çağrısında https://api.anthropic.com/api/oauth/usage adresine bir GET; session'ın credential'ını engine ekler ve mod onu hiçbir zaman görmez; model mcp__limit-watch__limits çağırdığında okuma modelin context'ine girer
+    3. Gönderir:     session çalışırken en fazla 5 dakikada bir ve her tool çağrısında https://api.anthropic.com/api/oauth/usage adresine bir GET; session'ın credential'ını engine ekler ve mod onu hiçbir zaman görmez; model mcp__limit-watch__limits çağırdığında okuma modelin context'ine girer; geçilen seviyeyi bildiren not da ana loop'un bir sonraki tool sonucuyla ya da prompt'uyla context'e girer
     4. Saklar:       her limitin örneklerini ve uyarılmış seviyelerini $.store içinde, her limit için en fazla 1500 örnek; saklanan açık/kapalı ayarını
     5. Düşman girdi: kullanım değerleri ve endpoint'in JSON'u; bilinmeyen biçimde bir cevap ve bilinmeyen biçimde saklanmış bir değer bildirilir, hiçbir zaman güvenilir kabul edilmez
 

@@ -8,6 +8,7 @@ import {
   mergeWarned,
   limitPace,
   newThresholds,
+  noteLevels,
   pace,
   profile,
   record,
@@ -199,6 +200,19 @@ describe('thresholds', () => {
     expect(first).toEqual([95, 80])
     tracks = markWarned(tracks, 'five_hour', first)
     expect(newThresholds(tracks.five_hour ?? { samples: [], warned: [] }, 98)).toEqual([])
+  })
+
+  test('the model is told about 80, 90 and 95% once each per cycle, highest new level first', async () => {
+    const first = noteLevels(undefined, fiveHour(91))
+    expect(first.levels).toEqual([90, 80])
+    const again = noteLevels(first.noted, fiveHour(94, '2026-09-18T15:03:00Z'))
+    expect(again.levels).toEqual([])
+    expect(noteLevels(again.noted, fiveHour(95)).levels).toEqual([95])
+    expect(noteLevels(again.noted, fiveHour(82, '2026-09-18T20:00:00Z')).levels).toEqual([80])
+    // Without a reset time, a percentage that fell under a told level is a new cycle.
+    const noReset = noteLevels(undefined, fiveHour(85, undefined))
+    expect(noteLevels(noReset.noted, fiveHour(10, undefined)).levels).toEqual([])
+    expect(noteLevels(noteLevels(noReset.noted, fiveHour(10, undefined)).noted, fiveHour(81, undefined)).levels).toEqual([80])
   })
 
   test("another session's warnings join only within one cycle", async () => {

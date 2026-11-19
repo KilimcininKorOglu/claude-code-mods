@@ -7,7 +7,9 @@ import {
   durationText,
   markWarned,
   mergeWarned,
+  modelNoteText,
   newThresholds,
+  noteLevels,
   limitPace,
   paceText,
   parseTracks,
@@ -20,6 +22,7 @@ import {
   statusLine,
   toolText,
   warningText,
+  type Noted,
   type Tracks,
 } from './limits'
 
@@ -66,6 +69,8 @@ type State = {
   scoped: readonly SessionRateLimit[]
   scopedAt?: number
   scopedError?: string
+  noted: Record<string, Noted>
+  pending: string[]
 }
 
 /** Logs each threshold the last sample passed for the first time in its cycle, and marks it. */
@@ -78,6 +83,29 @@ function warn($: EngineInterface, state: State, now: number): void {
     $.ui.log(warningText(limit, top, now))
     state.tracks = markWarned(state.tracks, limit.kind, levels)
   }
+}
+
+/**
+ * Queues a note for the model about each level a limit passed for the first time in this session's
+ * cycle. Only the highest new level is told; the next tool result or prompt of the main loop carries it.
+ */
+function queueNotes(state: State, now: number): void {
+  for (const limit of state.limits) {
+    const { noted, levels } = noteLevels(state.noted[limit.kind], limit)
+    state.noted[limit.kind] = noted
+    const top = levels.at(0)
+    if (top !== undefined) state.pending.push(modelNoteText(limit, top, now))
+  }
+}
+
+/** A tool result with the notes after its own context texts, so the model reads them right after it. */
+function withNotes<R extends { context?: readonly string[] }>(r: R, notes: readonly string[]): R {
+  return { ...r, context: [...(r.context ?? []), ...notes] }
+}
+
+/** The queued notes, once: the queue is empty afterwards. */
+function takeNotes(state: State): string[] {
+  return state.pending.splice(0)
 }
 
 /** Writes the reading into the shared sidebar; false when the sidebar mod is absent or closed. */
@@ -169,6 +197,7 @@ async function sample($: EngineInterface, state: State, read: ScopedRead): Promi
   state.tracks = record(state.tracks, state.limits, now)
   state.tracks = mergeWarned(state.tracks, parseTracks(await $.store.get(TRACKS_KEY)) ?? {})
   warn($, state, now)
+  queueNotes(state, now)
   await $.store.set(TRACKS_KEY, state.tracks)
   // The sidebar takes the reading while it is open; otherwise the status line shows it, as before.
   $.ui.status((await toSidebar($, state, now)) ? undefined : statusLine(state.limits, state.tracks, now))
@@ -234,7 +263,7 @@ async function serveTool($: EngineInterface, state: State): Promise<string> {
 }
 
 export const register: Register = on => {
-  const state: State = { limits: [], tracks: {}, enabled: true, drawn: false, scoped: [] }
+  const state: State = { limits: [], tracks: {}, enabled: true, drawn: false, scoped: [], noted: {}, pending: [] }
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
@@ -268,6 +297,19 @@ export const register: Register = on => {
   on('tool.describe', { tool: /^mcp__limit-watch__limits$/ }, async (_, e, next) => ({ ...(await next(e)), isDeferred: false }))
   on('tool.check', { tool: /^mcp__limit-watch__limits$/ }, async () => ({ decision: 'allow' as const }))
   on('tool.call', { tool: /^mcp__limit-watch__limits$/ }, async $ => ({ result: await serveTool($, state) }))
+
+  // A passed level reaches the main loop's model at its next tool result, in the middle of its work, or
+  // with the next prompt when no tool runs first. A subagent's result does not take it: the main loop
+  // decides whether to stop.
+  on('tool.call', async ($, e, next) => {
+    const r = await next(e)
+    if (e.agentId !== undefined || state.pending.length === 0) return r
+    return withNotes(r, takeNotes(state))
+  })
+  on('prompt.submit', async ($, e, next) => {
+    const notes = takeNotes(state)
+    return next(notes.length === 0 ? e : { ...e, context: [...(e.context ?? []), ...notes] })
+  })
 
   // The engine prints the plugin name in front of command text and log lines, so the texts do not repeat it.
   on('command.run', { command: 'limit-watch' }, async ($, e) => ({ text: await runCommand($, state, String(e.args ?? '')) }))

@@ -45,6 +45,12 @@ Its description tells the model to call it before long or costly work, or when y
 
 Each warning comes once per limit cycle. A new session in the same cycle does not repeat it, and neither does a second session open at the same time: each sample reads the warned levels from the store again before it warns. Two sessions that sample in the same instant can still both warn. After the limit resets, the warnings come again.
 
+**A note to the model** when a limit passes 80%, 90% and 95%, so the model learns about it in the middle of its work:
+
+    limit-watch: the account's 5-hour limit passed 90% (now 91%), resets 22:40 (in 1h 5m). Tell the user, and read the limits with mcp__limit-watch__limits before you start new long or costly work.
+
+The note comes with the next tool result of the main loop, or with the next prompt when no tool runs first. A jump past more than one level tells only the highest one. Each level is told once per limit cycle in each session, because each session's model needs its own note; the warning another session stored does not hold it back. A subagent's tool result does not take the note. The note informs the model and stops nothing.
+
 ## How the numbers are made
 
 - `$.session.usage()` gives each limit as `{ kind, percentUsed, resetsAt }`, read from the last API response. limit-watch reads it at session start, after every main-loop turn, every 60 seconds in an interactive session, and when `/limit-watch` opens the pane. A read that fails at session start or on the timer is logged once as `cannot read the usage limits: <error>`, and the 60 second timer keeps running.
@@ -77,14 +83,14 @@ Load it from a local checkout for one session:
 
 Validated with `claude plugin validate` on Claude Code 2.1.325:
 
-    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, command.run{command=limit-watch}, ui.render{component=Pane} (default matcher key: plugin)
+    ❯ ./register.tsx hooks: session.start, turn.complete, tool.describe{tool=/"^mcp__limit-watch__limits$"/}, tool.check{tool=/"^mcp__limit-watch__limits$"/}, tool.call{tool=/"^mcp__limit-watch__limits$"/}, tool.call, prompt.submit, command.run{command=limit-watch}, ui.render{component=Pane} (default matcher key: plugin)
     ❯ ./register.tsx calls: $.clock.every, $.clock.now, $.command.register, $.http.fetch (via fetchScoped), $.session.authorize (via fetchScoped), $.session.usage (via sample), $.sidebar.clear (via clearDrawings), $.sidebar.set (via toSidebar), $.store.get, $.store.set (via runCommand, sample), $.tool.register, $.ui.close (via clearDrawings, runCommand), $.ui.invalidate (via sample), $.ui.log, $.ui.open (via runCommand), $.ui.panes (via clearDrawings, runCommand), $.ui.resolve, $.ui.status (via clearDrawings, sample)
 
 Reach L3, network.
 
-    1. Reads:    the rate-limit windows of $.session.usage (kind, percent used, reset time); the per-model weekly limits of the account's usage endpoint; the event payloads of its seven hooks
+    1. Reads:    the rate-limit windows of $.session.usage (kind, percent used, reset time); the per-model weekly limits of the account's usage endpoint; the event payloads of its nine hooks
     2. Runs:     nothing; one 60 second timer in an interactive session
-    3. Sends:    one GET to https://api.anthropic.com/api/oauth/usage at most every 5 minutes while the session works, and on each tool call; the engine adds the session's credential, which the mod never sees; the reading goes into the model's context when the model calls mcp__limit-watch__limits
+    3. Sends:    one GET to https://api.anthropic.com/api/oauth/usage at most every 5 minutes while the session works, and on each tool call; the engine adds the session's credential, which the mod never sees; the reading goes into the model's context when the model calls mcp__limit-watch__limits, and a note naming the passed level goes into it with the next tool result or prompt of the main loop
     4. Persists: the samples and the warned levels of each limit in $.store, at most 1500 samples per limit, and the stored on/off setting
     5. Hostile input: the usage figures and the endpoint's JSON; an answer of an unknown shape and a stored value of an unknown shape are reported, never trusted
 

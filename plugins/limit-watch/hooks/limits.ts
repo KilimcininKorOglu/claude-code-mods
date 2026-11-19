@@ -201,7 +201,7 @@ export function newThresholds(track: Track, percent: number): number[] {
 }
 
 /** Two tracks of one limit belong to one cycle when their reset times differ by no more than the jitter. */
-function isSameCycle(a: Track, b: Track): boolean {
+function isSameCycle(a: Pick<Track, 'resetsAt'>, b: Pick<Track, 'resetsAt'>): boolean {
   if (a.resetsAt === undefined || b.resetsAt === undefined) return a.resetsAt === b.resetsAt
   return Math.abs(Date.parse(a.resetsAt) - Date.parse(b.resetsAt)) <= RESET_JITTER
 }
@@ -218,6 +218,25 @@ export function mergeWarned(tracks: Tracks, stored: Tracks): Tracks {
     next[kind] = { ...track, warned: [...new Set([...track.warned, ...other.warned])] }
   }
   return next
+}
+
+/** The usage percentages the model is told about, once per limit cycle each in every session. */
+export const MODEL_THRESHOLDS: readonly number[] = [80, 90, 95]
+
+/** The levels the model of this session was told about for one limit, and the cycle they belong to. */
+export type Noted = { resetsAt?: string; levels: number[] }
+
+/**
+ * The levels of one reading the model was not told about yet, highest first, and what is noted after
+ * it. A new reset time starts the cycle over; so does a percentage that fell under a noted level,
+ * which is how a limit without a reset time shows its new cycle. Kept per session, not in the store,
+ * because each session's model needs its own note.
+ */
+export function noteLevels(prev: Noted | undefined, limit: SessionRateLimit): { noted: Noted; levels: number[] } {
+  const same = prev !== undefined && isSameCycle(prev, { resetsAt: limit.resetsAt })
+  const kept = same ? prev.levels.filter(l => limit.percentUsed >= l) : []
+  const levels = MODEL_THRESHOLDS.filter(t => limit.percentUsed >= t && !kept.includes(t)).sort((a, b) => b - a)
+  return { noted: { resetsAt: limit.resetsAt, levels: [...kept, ...levels] }, levels }
 }
 
 export function markWarned(tracks: Tracks, kind: string, levels: readonly number[]): Tracks {
@@ -342,6 +361,11 @@ function limitReading(limit: SessionRateLimit, tracks: Tracks, now: number): str
 export function toolText(limits: readonly SessionRateLimit[], tracks: Tracks, now: number): string {
   if (limits.length === 0) return 'No usage limits reported. A session on an API key reports none.'
   return [`Usage limits at ${clockText(now, now)} local time:`, ...limits.map(l => `- ${limitReading(l, tracks, now)}`)].join('\n')
+}
+
+/** The note the model reads when a limit passed a level: what happened, and what to do about it. */
+export function modelNoteText(limit: SessionRateLimit, level: number, now: number): string {
+  return `limit-watch: the account's ${warningText(limit, level, now)}. Tell the user, and read the limits with mcp__limit-watch__limits before you start new long or costly work.`
 }
 
 export function warningText(limit: SessionRateLimit, level: number, now: number): string {

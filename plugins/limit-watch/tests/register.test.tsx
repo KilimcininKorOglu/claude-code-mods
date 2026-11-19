@@ -384,6 +384,51 @@ describe('limit-watch', () => {
     expect(w.statuses.at(-1)).toContain('5h 23%')
   })
 
+  test('the main loop model is told once per level at 80, 90 and 95%, at its next tool result or prompt', async ($, on) => {
+    const w = world(on)
+    on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+    const prompts: (readonly string[] | undefined)[] = []
+    on('prompt.submit', (_, e) => {
+      prompts.push(e.context)
+      return { text: e.text, context: e.context }
+    })
+    const bash = async (agentId?: string) => (await $.tool.call({ tool: 'Bash', command: 'ls', agentId } as never)).context ?? []
+    w.setLimits([fiveHour(70)])
+    await $.session.start(session)
+    expect(await bash()).toEqual([])
+    // A jump past 80 and 90 tells only the highest level, in the middle of the work.
+    w.setLimits([fiveHour(91)])
+    await $.turn.complete(turn())
+    expect(await bash('sub-1')).toEqual([])
+    const notes = await bash()
+    expect(notes).toHaveLength(1)
+    expect(notes[0]).toContain("limit-watch: the account's 5-hour limit passed 90% (now 91%), resets ")
+    expect(notes[0]).toContain('Tell the user')
+    expect(await bash()).toEqual([])
+    w.setLimits([fiveHour(93)])
+    await $.turn.complete(turn())
+    expect(await bash()).toEqual([])
+    // With no tool call first, the next prompt carries the note.
+    w.setLimits([fiveHour(96)])
+    await $.turn.complete(turn())
+    await $.prompt.submit({ text: 'devam', origin: { kind: 'composer' }, wait: false })
+    expect(prompts.at(-1)?.some(c => c.includes('5-hour limit passed 95% (now 96%)'))).toBe(true)
+    // A new cycle tells the model again.
+    w.setLimits([fiveHour(81, '2026-09-18T20:00:00Z')])
+    await $.turn.complete(turn())
+    expect((await bash()).join()).toContain('5-hour limit passed 80% (now 81%)')
+  })
+
+  test("another session's stored warning does not keep this session's model from its note", async ($, on) => {
+    const stored = { five_hour: { resetsAt: RESET, samples: [{ at: T0 - 60_000, percent: 81 }], warned: [80] } }
+    const w = world(on, { tracks: stored })
+    on('tool.call', { tool: 'Bash' }, () => ({ result: 'ok' }) as never)
+    w.setLimits([fiveHour(83)])
+    await $.session.start(session)
+    expect(w.logs.filter(l => l.includes('passed'))).toEqual([])
+    expect(((await $.tool.call({ tool: 'Bash', command: 'ls' } as never)).context ?? []).join()).toContain('5-hour limit passed 80% (now 83%)')
+  })
+
   test('the model reads the limits as they stand now through a listed tool that asks no approval', async ($, on) => {
     const w = world(on)
     w.setLimits([fiveHour(23)])
